@@ -16,7 +16,7 @@ RUN npm run build
 # =============================================================================
 # Stage 2: Backend Build
 # =============================================================================
-FROM golang:1.24 AS backend-builder
+FROM golang:1.24-bookworm AS backend-builder
 
 # CGO 빌드를 위한 컴파일러 도구 설치
 RUN apt-get update && apt-get install -y --no-install-recommends \
