@@ -16,10 +16,12 @@ RUN npm run build
 # =============================================================================
 # Stage 2: Backend Build
 # =============================================================================
-FROM golang:1.24-alpine AS backend-builder
+FROM golang:1.24 AS backend-builder
 
-# CGO를 위한 C 컴파일러 설치
-RUN apk add --no-cache gcc musl-dev
+# CGO 빌드를 위한 컴파일러 도구 설치
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -40,12 +42,17 @@ RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o /app/kumiho ./cmd/server
 # =============================================================================
 # Stage 3: Runtime
 # =============================================================================
-FROM alpine:3.20
+FROM debian:bookworm-slim
 
 # 런타임 의존성 설치 및 non-root 사용자 생성
-RUN apk add --no-cache ca-certificates tzdata su-exec shadow \
-    && addgroup -S appgroup \
-    && adduser -S appuser -G appgroup
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    gosu \
+    passwd \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r appgroup \
+    && useradd -r -g appgroup appuser
 
 WORKDIR /app
 
@@ -70,4 +77,3 @@ ENV TZ=Asia/Seoul
 
 # 실행 (entrypoint 스크립트가 root로 시작하여 PUID/PGID 처리 후 appuser로 전환)
 ENTRYPOINT ["/app/entrypoint.sh"]
-

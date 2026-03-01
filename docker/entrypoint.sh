@@ -1,6 +1,22 @@
 #!/bin/sh
 set -e
 
+# 권한 전환 실행기(gosu 우선, su-exec 폴백)
+run_as() {
+    if command -v gosu >/dev/null 2>&1; then
+        gosu "$@"
+        return
+    fi
+
+    if command -v su-exec >/dev/null 2>&1; then
+        su-exec "$@"
+        return
+    fi
+
+    echo "ERROR: neither gosu nor su-exec is available in container." >&2
+    exit 1
+}
+
 # PUID와 PGID 환경변수 확인 (기본값: 1000)
 USER_ID=${PUID:-1000}
 GROUP_ID=${PGID:-1000}
@@ -37,7 +53,7 @@ chown -R "$USER_ID":"$GROUP_ID" /app/config /app/data
 # 권한 체크 (사용자 편의성)
 # 만약 /books 디렉토리가 읽기 권한이 없다면 경고 메시지 출력
 if [ -d "/books" ]; then
-    if ! su-exec "$USER_ID":"$GROUP_ID" test -r "/books"; then
+    if ! run_as "$USER_ID":"$GROUP_ID" test -r "/books"; then
         echo "----------------------------------------------------------------------"
         echo "⚠️  WARNING: Permission issue detected on /books"
         echo "Kumiho is running as UID:$USER_ID / GID:$GROUP_ID,"
@@ -51,5 +67,5 @@ if [ -d "/books" ]; then
     fi
 fi
 
-# su-exec를 사용하여 특정 UID/GID 권한으로 실제 바이너리 실행
-exec su-exec "$USER_ID":"$GROUP_ID" ./kumiho "$@"
+# 특정 UID/GID 권한으로 실제 바이너리 실행
+exec run_as "$USER_ID":"$GROUP_ID" ./kumiho "$@"
