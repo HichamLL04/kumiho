@@ -97,18 +97,44 @@
       "loading": "設定を読み込み中...",
       "reset_button": "リセット",
       "reset_tooltip": "すべての設定をリセット",
+      "subsections": {
+        "display": "表示設定",
+        "input": "入力設定",
+        "metadata": "メタデータ設定"
+      },
       "global": {
-        "title": "全体設定",
-        "reading_mode_label": "デフォルト表示モード",
-        "reading_mode_desc": "ビューアを開いたときのデフォルトの表示モードを選択します。",
+        "title": "画像/PDF 全体設定",
+        "reading_mode_label": "デフォルトページモード",
+        "reading_mode_desc": "ビューアを開いたときのデフォルトのページモードを選択します。",
         "reading_direction_label": "読み取り方向",
         "reading_direction_desc": "ページのめくる方向を設定します。",
         "click_direction_label": "次へ進むクリック",
         "click_direction_desc": "画面のどちら側をクリックして次のページに進むか設定します。",
         "keyboard_direction_label": "次へ進むキーボード",
         "keyboard_direction_desc": "どの矢印キーで次のページに進むか設定します。",
+        "wheel_direction_label": "次へ進むホイール",
+        "wheel_direction_desc": "マウスホイール入力で次ページへ進む方向を設定します。",
         "fit_mode_label": "画像合わせ",
         "fit_mode_desc": "画像を画面にどのように合わせるか設定します。"
+      },
+      "epub": {
+        "title": "EPUB ビューア全体設定",
+        "render_mode_label": "デフォルト表示モード",
+        "render_mode_desc": "シリーズ上書きがない場合に適用されます。可能であれば auto を推奨します。",
+        "theme_label": "デフォルトテーマ",
+        "theme_desc": "シリーズ上書きがない場合の EPUB 既定テーマです。",
+        "spread_label": "デフォルトページモード",
+        "spread_desc": "画面幅に応じた自動 1/2 ページか、常に 1 ページ表示を選択します。",
+        "spread_auto": "自動（幅に応じて 1/2 ページ）",
+        "spread_none": "常に 1 ページ",
+        "wheel_direction_label": "次へ進むホイール",
+        "wheel_direction_desc": "マウスホイールで次ページへ移動する方向を設定します。",
+        "keyboard_direction_label": "次へ進むキーボード",
+        "keyboard_direction_desc": "キーボード矢印で次ページへ移動する方向を設定します。",
+        "click_direction_label": "次へ進むクリック",
+        "click_direction_desc": "クリックで次ページに進む領域の方向を設定します。",
+        "title_override_label": "EPUB タイトル上書き",
+        "title_override_desc": "再スキャン時、EPUB メタデータの title があればシリーズ名に反映します。無効時はパスベースのタイトルへ戻します。"
       },
       "mode": {
         "single": "1ページ表示",
@@ -155,7 +181,11 @@
       },
       "reset_modal": {
         "title": "ビューア設定のリセット",
-        "message": "すべてのビューア設定（表示モード、方向、詳細設定など）が初期化されます。続けますか？"
+        "message": "すべてのビューア設定（表示モード、方向、詳細設定など）が初期化されます。続けますか？",
+        "image_pdf_title": "画像/PDF 設定のリセット",
+        "image_pdf_message": "画像/PDF ビューア設定（表示モード、方向、詳細設定など）が初期化されます。続けますか？",
+        "epub_title": "EPUB 設定のリセット",
+        "epub_message": "EPUB グローバル設定（表示モード、テーマ、ページモード、入力方向）が初期化されます。続けますか？"
       },
       "toast": {
         "load_failed": "設定の読み込みに失敗しました。",
@@ -487,6 +517,7 @@
     },
     "metainfo": {
       "authors": "作家",
+      "original_title": "原題",
       "publisher": "出版社",
       "publication_year": "発行年"
     },
@@ -533,6 +564,14 @@
         "authors_placeholder": "例: 作家1, 作家2",
         "publication_year": "連載期間",
         "publication_year_placeholder": "例: 2020-2023, 1997~",
+        "original_title": "原題",
+        "original_title_placeholder": "例: A Common-Sense Guide to Data Structures and Algorithms",
+        "publisher": "出版社",
+        "publisher_placeholder": "例: ギルバット",
+        "published_at": "刊行日",
+        "published_at_placeholder": "例: 2021-12-01",
+        "isbn": "ISBN",
+        "isbn_placeholder": "例: 979-11-6521-810-2",
         "status": "連載状態",
         "tags": "タグ (カンマ区切り)",
         "tags_placeholder": "例: ファンタジー, アクション",
@@ -562,10 +601,17 @@
     }
   },
   "viewer": {
+    "error": {
+      "load_failed": "チャプターの読み込みに失敗しました: {{error}}"
+    },
     "session": {
       "force_logout_title": "セッションの終了",
       "force_logout_message": "別のデバイスでビューアが開かれたため、現在のセッションは終了します。",
       "connection_limit_message": "接続数の上限に達したため、現在のセッションは終了します。"
+    },
+    "series_end": {
+      "title": "この本は最後まで到達しました。",
+      "message": "確認を押すと前の画面に戻ります。"
     },
     "header": {
       "back": "戻る",
@@ -573,7 +619,16 @@
       "exit_fullscreen": "全画面表示終了",
       "settings": "ビューア設定",
       "bgm_on": "BGMオン",
-      "bgm_off": "BGMオフ"
+      "bgm_off": "BGMオフ",
+      "zoom_in": "拡大",
+      "zoom_out": "縮小",
+      "zoom_reset": "拡大をリセット",
+      "toc": "目次"
+    },
+    "toc": {
+      "title": "目次",
+      "close": "閉じる",
+      "empty": "目次がありません。"
     },
     "settings": {
       "title": "⚙️ 閲覧設定",
@@ -604,6 +659,11 @@
         "rtl_mobile": "右へスワイプ (次へ)",
         "rtl_desktop": "左矢印"
       },
+      "wheel_direction": {
+        "label": "マウスホイール方向",
+        "down": "ホイール下",
+        "up": "ホイール上"
+      },
       "fit_mode": {
         "label": "画像合わせ",
         "screen": "画面",
@@ -616,7 +676,25 @@
         "black": "黒",
         "dark_gray": "濃い灰色",
         "gray": "灰色",
-        "white": "白"
+        "white": "白色"
+      },
+      "page_transition": {
+        "label": "ページ切り替えアニメーション",
+        "desc": "ページ切り替え時に使用するアニメーション効果を選択します。",
+        "slide": "スライド",
+        "fade": "フェード",
+        "none": "なし"
+      },
+      "transition": {
+        "title": "ページ切り替えアニメーション",
+        "slide": "スライド",
+        "fade": "フェード",
+        "none": "なし"
+      },
+      "pdf_zoom_controls": {
+        "label": "PDF上部の拡大ボタン",
+        "show": "表示",
+        "hide": "非表示"
       }
     },
     "footer": {
@@ -642,6 +720,81 @@
       "aria_prev_chapter": "前のチャプターへ移動",
       "aria_next_chapter": "次のチャプターへ移動",
       "no_title": "タイトルなし"
+    }
+  },
+  "epub_viewer": {
+    "error": {
+      "load_failed": "EPUBの読み込みに失敗しました"
+    },
+    "loading": "EPUB読み込み中...",
+    "header": {
+      "back": "戻る",
+      "fullscreen": "全画面",
+      "exit_fullscreen": "全画面終了",
+      "settings": "ビューアー設定",
+      "toc": "目次"
+    },
+    "toc": {
+      "title": "目次",
+      "empty": "目次情報が見つかりません"
+    },
+    "settings": {
+      "title": "⚙️ EPUB設定",
+      "font_size": {
+        "label": "文字サイズ"
+      },
+      "font_family": {
+        "label": "フォント",
+        "original": "オリジナル",
+        "serif": "セリフ",
+        "sans_serif": "ゴシック"
+      },
+      "render_mode": {
+        "label": "表示モード",
+        "auto": "自動",
+        "book": "一般書籍",
+        "comic": "マンガ",
+        "typography_limited": "マンガ（固定レイアウト）モードでは文字サイズ・行間の反映が制限される場合があります。"
+      },
+      "line_height": {
+        "label": "行間"
+      },
+      "theme": {
+        "label": "テーマ",
+        "light": "ライト",
+        "dark": "ダーク",
+        "sepia": "セピア"
+      },
+      "input_controls": {
+        "wheel_label": "次ページマウスホイール",
+        "wheel_down": "ホイール下",
+        "wheel_up": "ホイール上",
+        "keyboard_label": "次ページキーボード",
+        "keyboard_right": "右",
+        "keyboard_left": "左",
+        "click_label": "次ページクリック",
+        "click_right": "右エリア",
+        "click_left": "左エリア"
+      },
+      "flow": {
+        "label": "レイアウト",
+        "paginated": "ページ",
+        "scrolled": "スクロール"
+      }
+    },
+    "footer": {
+      "prev": "前へ",
+      "next": "次へ",
+      "first_page": "最初のページ",
+      "prev_page": "前のページ",
+      "next_page": "次のページ",
+      "last_page": "最後のページ",
+      "progress": "進行バー",
+      "pages_1": "1ページ",
+      "pages_2": "2ページ"
+    },
+    "progress_marker": {
+      "navigate": "目次移動: {{label}}"
     }
   }
 }

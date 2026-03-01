@@ -79,26 +79,28 @@ func main() {
 		}
 	}
 
+	// 공통 서비스 초기화
+	seriesEnrichSvc := service.NewSeriesEnrichService(seriesRepo, chapterRepo, volumeRepo)
+
 	// 핸들러 초기화
 	authHandler := handler.NewAuthHandler(authService, cfg, hub)
 	userHandler := handler.NewUserHandler(authService)
 	libraryHandler := handler.NewLibraryHandler(ctx, libraryRepo, authService, fileScanner)
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
-	progressHandler := handler.NewProgressHandler(progressRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub)
+	progressHandler := handler.NewProgressHandler(progressRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
-	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, cfg)
+	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가
 	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo)
 	sseHandler := handler.NewSSEHandler(hub)
-
 
 	// 미들웨어 초기화
 	authMiddleware := middleware.NewAuthMiddleware(authService)
 
 	// Fiber 앱 생성
 	app := fiber.New(fiber.Config{
-		AppName:   "Kumiho API v0.8.3",
+		AppName:   "Kumiho API v0.10.0",
 		BodyLimit: 50 * 1024 * 1024, // 50MB
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -117,6 +119,7 @@ func main() {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     "http://localhost:5173, http://localhost:3000, http://127.0.0.1:5173, http://localhost:5174",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires",
+		ExposeHeaders:    "Accept-Ranges, Content-Range, Content-Length, Content-Disposition",
 		AllowMethods:     "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 		AllowCredentials: true,
 	}))
@@ -222,8 +225,12 @@ func main() {
 	chapters.Get("/:id", seriesHandler.GetChapter)
 	chapters.Get("/:chapterId/pages", seriesHandler.ListPages)
 	chapters.Get("/:chapterId/pages/:pageNumber/image", imageHandler.PageImageByNumber)
+	chapters.Get("/:chapterId/pdf", imageHandler.ServeChapterPDF)
+	chapters.Get("/:chapterId/epub", imageHandler.ServeChapterEpub)
 	chapters.Post("/:chapterId/analyze", imageHandler.AnalyzeChapterPages)
 	chapters.Get("/:chapterId/progress", progressHandler.GetChapterProgress)
+	chapters.Get("/:chapterId/epub-progress", progressHandler.GetEpubProgress)
+	chapters.Patch("/:chapterId/epub-progress", progressHandler.UpdateEpubProgress)
 	chapters.Post("/:chapterId/complete", progressHandler.MarkChapterComplete)
 	chapters.Delete("/:chapterId/progress", progressHandler.ResetChapterProgress)
 	chapters.Get("/:id/thumbnail", func(c *fiber.Ctx) error {
@@ -263,7 +270,6 @@ func main() {
 	stats := protected.Group("/stats")
 	stats.Get("/personal", statsHandler.GetPersonalStats)
 	stats.Post("/heartbeat", statsHandler.UpdateReadingTime)
-
 
 	// === Frontend Serving (SPA Support) ===
 	// API 라우트가 매칭되지 않은 모든 요청을 처리합니다.

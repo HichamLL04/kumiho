@@ -15,7 +15,15 @@ var (
 	validLanguages         = map[string]bool{"ko": true, "en": true, "ja": true}
 	validReadingModes      = map[string]bool{"single": true, "double": true, "vertical": true}
 	validReadingDirections = map[string]bool{"ltr": true, "rtl": true}
+	validViewerWheelDirs   = map[string]bool{"down": true, "up": true}
 	validFitModes          = map[string]bool{"screen": true, "width": true, "height": true, "original": true}
+	validEpubThemes        = map[string]bool{"light": true, "dark": true, "sepia": true}
+	validEpubFontFamilies  = map[string]bool{"original": true, "serif": true, "sans-serif": true}
+	validEpubRenderModes   = map[string]bool{"auto": true, "book": true, "comic": true}
+	validEpubSpreads       = map[string]bool{"auto": true, "none": true}
+	validEpubWheelDirs     = map[string]bool{"down": true, "up": true}
+	validEpubKeyboardDirs  = map[string]bool{"right": true, "left": true}
+	validEpubClickDirs     = map[string]bool{"right": true, "left": true}
 
 	// 사용자별로 저장 가능한 설정 키 목록 (여기에 포함되면 user_settings 테이블에 저장)
 	userSplittableSettings = map[string]bool{
@@ -25,6 +33,7 @@ var (
 		"viewer_reading_direction":  true,
 		"viewer_click_direction":    true,
 		"viewer_keyboard_direction": true,
+		"viewer_wheel_direction":    true,
 		"swipe_direction":           true, // 스와이프 방향 (전역)
 		"viewer_fit_mode":           true,
 		"viewer_preload_count":      true,
@@ -32,6 +41,15 @@ var (
 		"viewer_pull_sensitivity":   true,
 		"viewer_show_threshold":     true,
 		"bgm_enabled":               true,
+		"epub_font_size":            true,
+		"epub_font_family":          true,
+		"epub_line_height":          true,
+		"epub_theme":                true,
+		"epub_render_mode":          true,
+		"epub_spread":               true,
+		"epub_wheel_direction":      true,
+		"epub_keyboard_direction":   true,
+		"epub_click_direction":      true,
 	}
 )
 
@@ -162,6 +180,10 @@ func (h *SettingHandler) validateSettingValue(key, value string) error {
 		if !validReadingDirections[value] {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Invalid %s value", key))
 		}
+	case "viewer_wheel_direction":
+		if !validViewerWheelDirs[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid viewer_wheel_direction value")
+		}
 	case "viewer_fit_mode":
 		if !validFitModes[value] {
 			return fiber.NewError(fiber.StatusBadRequest, "Invalid viewer_fit_mode value")
@@ -206,6 +228,50 @@ func (h *SettingHandler) validateSettingValue(key, value string) error {
 	case "bgm_enabled":
 		if value != "true" && value != "false" {
 			return fiber.NewError(fiber.StatusBadRequest, "Invalid bgm_enabled value (must be 'true' or 'false')")
+		}
+	case "epub_font_size":
+		if !h.isValidNumber(value, 50, 150) {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_font_size value (must be 50-150)")
+		}
+	case "epub_font_family":
+		if !validEpubFontFamilies[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_font_family value")
+		}
+	case "epub_line_height":
+		if !h.isValidFloat(value, 1.2, 2.0) {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_line_height value (must be 1.2-2.0)")
+		}
+	case "epub_theme":
+		if !validEpubThemes[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_theme value")
+		}
+	case "epub_render_mode":
+		if !validEpubRenderModes[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_render_mode value")
+		}
+	case "epub_spread":
+		if !validEpubSpreads[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_spread value")
+		}
+	case "epub_wheel_direction":
+		if !validEpubWheelDirs[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_wheel_direction value")
+		}
+	case "epub_keyboard_direction":
+		if !validEpubKeyboardDirs[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_keyboard_direction value")
+		}
+	case "epub_click_direction":
+		if !validEpubClickDirs[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_click_direction value")
+		}
+	case "epub_wheel_navigation", "epub_keyboard_navigation":
+		if value != "true" && value != "false" {
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Invalid %s value (must be 'true' or 'false')", key))
+		}
+	case "epub_title_override":
+		if value != "true" && value != "false" {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_title_override value (must be 'true' or 'false')")
 		}
 	default:
 		// 보안을 위해 정의되지 않은 키는 거부합니다.

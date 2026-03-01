@@ -7,6 +7,9 @@ export interface Chapter {
   title: string;
   chapter_number: number;
   page_count: number;
+  total_bytes?: number;
+  total_positions?: number;
+  path?: string;
 }
 
 // 볼륨 정보
@@ -33,6 +36,7 @@ export interface AdjacentChapterInfo {
   nextChapterTitle: string | null;
   prevChapterTitle: string | null;
   isLastChapterOfVolume: boolean;
+  isAdjacentResolved: boolean;
 }
 
 // BGM 정보
@@ -45,4 +49,9 @@ export interface BGMInfo {
 export interface ViewerAnimationHandles {
   animateNext: () => void;
   animatePrev: () => void;
+  zoomIn?: () => void;
+  zoomOut?: () => void;
+  resetZoom?: () => void;
+  getZoomScale?: () => number;
+  jumpToDestination?: (destination?: string | unknown[] | null) => Promise<number | null>;
 }

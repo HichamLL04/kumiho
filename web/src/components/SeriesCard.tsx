@@ -1,9 +1,21 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Play, MoreVertical, BookCheck, BookX, CheckCircle2, Shield, Download, Music } from "lucide-react";
+import {
+  BookOpen,
+  Play,
+  MoreVertical,
+  BookCheck,
+  BookX,
+  CheckCircle2,
+  Shield,
+  Download,
+  Music,
+  FileText,
+} from "lucide-react";
 import { volumeAPI, seriesAPI, chapterAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
+import { normalizeExtensionBadge, parseSupportedExtension } from "../utils/extension";
 import type { Chapter, Series, Volume } from "../types/series";
 import { useViewerStore } from "../stores/viewerStore";
 import styles from "./SeriesCard.module.css";
@@ -13,12 +25,14 @@ export interface SeriesCardProps {
   type?: "series" | "volume";
   customSubtitle?: string;
   progress?: number;
-  // 계속 읽기 섹션용 추가 정보 (시리즈 모드일 때 사용함)
   chapterId?: string;
   volumeId?: string;
-  onStatusChange?: () => void; // 상태 변경 시 부모 컴포넌트에 알림
+  onStatusChange?: () => void | Promise<void>;
   progressStyle?: "overlay" | "bar";
   onDownload?: () => void;
+  showExtensionBadge?: boolean;
+  extensionBadgeText?: string | null;
+  extensionBadgePlacement?: "thumbnail" | "meta";
 }
 
 export function SeriesCard({
@@ -31,20 +45,29 @@ export function SeriesCard({
   onStatusChange,
   progressStyle = "bar",
   onDownload,
+  showExtensionBadge,
+  extensionBadgeText = null,
+  extensionBadgePlacement = "thumbnail",
 }: SeriesCardProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAlign, setMenuAlign] = useState<"right" | "left">("right");
+  const [menuMeasured, setMenuMeasured] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [forceShowProgress, setForceShowProgress] = useState(false); // 애니메이션을 위해 0%일 때도 강제로 렌더링 유지
+  const [forceShowProgress, setForceShowProgress] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [optimisticCompleted, setOptimisticCompleted] = useState<boolean | null>(null);
+  const [optimisticProgress, setOptimisticProgress] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const setIncognito = useViewerStore((state) => state.setIncognito);
 
-  // 명시적으로 전달된 progress가 있으면 사용하고,
-  // 없으면 시리즈/볼륨의 페이지 수 정보로 계산
   let calculatedProgress = progress;
-  if (calculatedProgress === undefined && item.read_page_count !== undefined && item.total_page_count) {
-    calculatedProgress = (item.read_page_count / item.total_page_count) * 100;
+  if (calculatedProgress === undefined && item.read_page_count !== undefined && item.total_page_count !== undefined) {
+    if (item.total_page_count > 0) {
+      calculatedProgress = (item.read_page_count / item.total_page_count) * 100;
+    }
   }
 
   const validProgress =
@@ -52,10 +75,18 @@ export function SeriesCard({
       ? Math.min(100, Math.max(0, isNaN(calculatedProgress) ? 0 : calculatedProgress))
       : null;
 
-  // 완독 상태 확인 (100% 도달 시)
-  const isCompleted = validProgress !== null && validProgress >= 100;
+  const displayProgress = optimisticProgress !== null ? optimisticProgress : validProgress;
+  const completionFromItem =
+    "is_completed" in item && typeof item.is_completed === "boolean" ? item.is_completed : undefined;
+  const isCompletedFromData =
+    completionFromItem !== undefined ? completionFromItem : displayProgress !== null && displayProgress >= 100;
+  const isCompleted = optimisticCompleted !== null ? optimisticCompleted : isCompletedFromData;
 
-  // 메뉴 외부 클릭 시 닫기
+  useEffect(() => {
+    setOptimisticCompleted(null);
+    setOptimisticProgress(null);
+  }, [item.id, completionFromItem, validProgress]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -72,7 +103,20 @@ export function SeriesCard({
     };
   }, [menuOpen]);
 
-  // 카드 클릭 처리
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    const menuEl = dropdownRef.current;
+    if (!menuEl) return;
+
+    const rect = menuEl.getBoundingClientRect();
+    if (rect.left < 8 || rect.right > window.innerWidth - 8) {
+      setMenuAlign("left");
+    } else {
+      setMenuAlign("right");
+    }
+    setMenuMeasured(true);
+  }, [menuOpen]);
+
   const handleCardClick = (e: React.MouseEvent) => {
     if (e.defaultPrevented || window.getSelection()?.toString()) return;
 
@@ -87,7 +131,6 @@ export function SeriesCard({
     setIsUpdating(true);
     try {
       if (type === "volume") {
-        // 볼륨 모드: 해당 볼륨의 첫 챕터(또는 이어보기 가능한 챕터)로 이동
         const chaptersRes = await volumeAPI.getChapters(item.id);
         const chapters = Array.isArray(chaptersRes.data) ? chaptersRes.data : chaptersRes.data.chapters || [];
 
@@ -95,11 +138,9 @@ export function SeriesCard({
           const sortedChapters = [...chapters].sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
 
           let targetChapter: Chapter | null = null;
-          // 뒤에서부터 탐색
           for (let i = sortedChapters.length - 1; i >= 0; i--) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const ch = sortedChapters[i] as any;
-            if (ch.reading_progress && ch.reading_progress.current_page > 0) {
+            const ch = sortedChapters[i] as Chapter & { reading_progress?: { current_page?: number } };
+            if (ch.reading_progress && (ch.reading_progress.current_page || 0) > 0) {
               targetChapter = sortedChapters[i];
               break;
             }
@@ -112,8 +153,6 @@ export function SeriesCard({
         return;
       }
 
-      // 시리즈 모드
-      // 2-1. 시리즈 진행도 조회
       const progressRes = await seriesAPI.getProgress(item.id);
       const targetProgress = progressRes.data?.progress;
 
@@ -122,7 +161,6 @@ export function SeriesCard({
         return;
       }
 
-      // 2-2. 진행도가 없으면 첫 번째 볼륨 조회
       const volumesRes = await seriesAPI.getVolumes(item.id);
       const volumes = volumesRes.data.volumes || [];
 
@@ -152,7 +190,6 @@ export function SeriesCard({
     }
   };
 
-  // 바로 읽기 버튼 클릭
   const handlePlayClick = async (e: React.MouseEvent, incognito = false) => {
     e.preventDefault();
     e.stopPropagation();
@@ -170,19 +207,23 @@ export function SeriesCard({
     }
   };
 
-  // 설정 메뉴 버튼 클릭
   const handleMenuClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!menuOpen) {
+      setMenuAlign("right");
+      setMenuMeasured(false);
+    }
     setMenuOpen(!menuOpen);
   };
 
-  // 읽은 것으로 표시 (완독 상태)
   const handleMarkAsRead = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setMenuOpen(false);
-    setForceShowProgress(true); // 애니메이션 시작 (0%에서 렌더링 유지)
+    setForceShowProgress(true);
+    setOptimisticCompleted(true);
+    setOptimisticProgress(100);
 
     setIsUpdating(true);
     try {
@@ -195,20 +236,23 @@ export function SeriesCard({
       } else if (type === "series") {
         await seriesAPI.markComplete(item.id);
       }
-      onStatusChange?.();
+      await Promise.resolve(onStatusChange?.());
     } catch (error) {
       console.error("Failed to mark as read:", error);
+      setOptimisticCompleted(null);
+      setOptimisticProgress(null);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // 읽지 않은 것으로 표시 (완독 상태 해제)
   const handleMarkAsUnread = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setMenuOpen(false);
-    setForceShowProgress(true); // 애니메이션 시작 (100% -> 0% 과정 표시)
+    setForceShowProgress(true);
+    setOptimisticCompleted(false);
+    setOptimisticProgress(0);
 
     setIsUpdating(true);
     try {
@@ -221,19 +265,28 @@ export function SeriesCard({
       } else if (type === "series") {
         await seriesAPI.resetProgress(item.id);
       }
-      onStatusChange?.();
+      await Promise.resolve(onStatusChange?.());
     } catch (error) {
       console.error("Failed to mark as unread:", error);
+      setOptimisticCompleted(null);
+      setOptimisticProgress(null);
     } finally {
-      setForceShowProgress(false); // 초기화 완료 후 강제 표시 해제 (0% 뱃지 제거)
+      setForceShowProgress(false);
       setIsUpdating(false);
     }
   };
 
-  // 메뉴 표시 여부: 항상 표시
   const showMenu = true;
+  const shouldShowExtensionBadge = showExtensionBadge ?? type === "volume";
+  const extensionBadge = shouldShowExtensionBadge
+    ? normalizeExtensionBadge(extensionBadgeText) ?? parseSupportedExtension(item.path)
+    : null;
+  const showMetaExtensionBadge = shouldShowExtensionBadge && extensionBadgePlacement === "meta" && !!extensionBadge;
+  const showThumbnailExtensionBadge =
+    shouldShowExtensionBadge && extensionBadgePlacement === "thumbnail" && !!extensionBadge;
+  const hasAudio = "has_audio" in item && item.has_audio;
+  const showOverlayProgress = progressStyle === "overlay" && displayProgress !== null && (displayProgress > 0 || forceShowProgress);
 
-  // 서브타이틀 결정
   let displaySubtitle = customSubtitle;
   if (!displaySubtitle && type === "volume" && "volume_number" in item) {
     if ((item as Volume).unit === "chapter") {
@@ -253,12 +306,18 @@ export function SeriesCard({
     >
       <div className={styles.seriesCover}>
         <div className={styles.seriesThumbnailWrapper}>
-          {item.thumbnail_url ? (
+          {item.thumbnail_url && !imageError ? (
             <img
               src={getAuthenticatedImageUrl(item.thumbnail_url)}
               alt={item.title}
               className={styles.seriesThumbnail}
               loading="lazy"
+              onError={() => setImageError(true)}
+            />
+          ) : item.path?.toLowerCase().endsWith(".pdf") ? (
+            <FileText
+              className={styles.seriesIcon}
+              size={48}
             />
           ) : (
             <BookOpen
@@ -266,7 +325,7 @@ export function SeriesCard({
               size={48}
             />
           )}
-          {/* 호버 오버레이 */}
+
           <div className={styles.seriesHoverOverlay}>
             <button
               className={styles.seriesPlayButton}
@@ -280,7 +339,6 @@ export function SeriesCard({
             </button>
           </div>
 
-          {/* 완독 상태 오버레이 (썸네일 어둡게 + 좌측 상단 체크 아이콘) */}
           {isCompleted && (
             <>
               <div className={styles.seriesCompletedOverlay} />
@@ -295,24 +353,34 @@ export function SeriesCard({
             </>
           )}
 
-          {/* 진행도 오버레이 (썸네일 하단) - overlay 스타일일 때만 표시 */}
-          {progressStyle === "overlay" && validProgress !== null && (validProgress > 0 || forceShowProgress) && (
+          {showOverlayProgress && (
             <div className={styles.seriesThumbnailProgressOverlay}>
-              <div className={styles.seriesThumbnailProgressInfo}>
-                {!isCompleted && (
-                  <span className={styles.seriesThumbnailProgressText}>{Math.floor(validProgress)}%</span>
+              <div
+                className={`${styles.seriesThumbnailProgressInfo} ${
+                  showThumbnailExtensionBadge ? styles.withExtensionBadge : ""
+                }`}
+              >
+                {showThumbnailExtensionBadge && (
+                  <span className={`${styles.seriesExtensionBadge} ${styles.seriesExtensionBadgeOverlay}`}>
+                    {extensionBadge}
+                  </span>
                 )}
+                {!isCompleted && <span className={styles.seriesThumbnailProgressText}>{Math.floor(displayProgress)}%</span>}
               </div>
               <div className={styles.seriesThumbnailProgressTrack}>
                 <div
                   className={`${styles.seriesThumbnailProgressFill} ${isCompleted ? styles.completed : ""}`}
-                  style={{ width: `${validProgress}%` }}
+                  style={{ width: `${displayProgress}%` }}
                 />
               </div>
             </div>
           )}
+
+          {showThumbnailExtensionBadge && !showOverlayProgress && (
+            <div className={styles.seriesExtensionBadge}>{extensionBadge}</div>
+          )}
         </div>
-        {/* 설정 메뉴 버튼 */}
+
         {showMenu && (
           <div
             className={styles.seriesMenuWrapper}
@@ -325,9 +393,12 @@ export function SeriesCard({
             >
               <MoreVertical size={18} />
             </button>
-            {/* 드롭다운 메뉴 */}
             {menuOpen && (
-              <div className={styles.seriesDropdownMenu}>
+              <div
+                ref={dropdownRef}
+                className={`${styles.seriesDropdownMenu} ${menuAlign === "left" ? styles.alignLeft : ""}`}
+                style={menuMeasured ? undefined : { opacity: 0, pointerEvents: "none" }}
+              >
                 <button
                   className={styles.seriesMenuItem}
                   onClick={handleMarkAsRead}
@@ -368,6 +439,7 @@ export function SeriesCard({
           </div>
         )}
       </div>
+
       <div className={styles.seriesInfo}>
         <h3
           className={styles.seriesTitle}
@@ -375,31 +447,37 @@ export function SeriesCard({
         >
           {item.title}
         </h3>
-        {/* 설명/메타 정보 표시 */}
-        {displaySubtitle ? (
-          <div className={styles.seriesMeta}>
-            <span>{displaySubtitle}</span>
-            {"has_audio" in item && item.has_audio && (
-              <Music
-                size={14}
-                className={styles.audioIcon}
-                style={{ marginLeft: "4px", verticalAlign: "middle" }}
-              />
+        {displaySubtitle || hasAudio || showMetaExtensionBadge ? (
+          <div
+            className={`${styles.seriesMeta} ${!displaySubtitle && !hasAudio && showMetaExtensionBadge ? styles.seriesMetaOnlyBadge : ""}`}
+          >
+            {(displaySubtitle || hasAudio) && (
+              <span className={styles.seriesMetaLeft}>
+                {displaySubtitle && <span>{displaySubtitle}</span>}
+                {hasAudio && (
+                  <Music
+                    size={14}
+                    className={styles.audioIcon}
+                    style={{ marginLeft: "4px", verticalAlign: "middle" }}
+                  />
+                )}
+              </span>
+            )}
+            {showMetaExtensionBadge && (
+              <span className={`${styles.seriesExtensionBadge} ${styles.seriesExtensionBadgeMeta}`}>{extensionBadge}</span>
             )}
           </div>
-        ) : progressStyle === "bar" && validProgress !== null ? (
-          // bar 스타일인데 customSubtitle이 없으면 퍼센트 표시
+        ) : progressStyle === "bar" && displayProgress !== null ? (
           <div className={styles.seriesMeta}>
-            <span>{Math.floor(validProgress)}%</span>
+            <span>{Math.floor(displayProgress)}%</span>
           </div>
         ) : null}
 
-        {/* 진행도 바 (Bottom 스타일) */}
-        {progressStyle === "bar" && validProgress !== null && (
+        {progressStyle === "bar" && displayProgress !== null && (
           <div className={styles.seriesProgressTrack}>
             <div
               className={`${styles.seriesProgressFill} ${isCompleted ? styles.completed : ""}`}
-              style={{ width: `${validProgress}%` }}
+              style={{ width: `${displayProgress}%` }}
             />
           </div>
         )}

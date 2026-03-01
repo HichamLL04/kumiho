@@ -97,18 +97,44 @@
       "loading": "Loading settings...",
       "reset_button": "Reset",
       "reset_tooltip": "Reset all settings",
+      "subsections": {
+        "display": "Display Settings",
+        "input": "Input Settings",
+        "metadata": "Metadata Settings"
+      },
       "global": {
-        "title": "Global Defaults",
-        "reading_mode_label": "Default View Mode",
-        "reading_mode_desc": "Select the default page viewing mode when opening the viewer.",
+        "title": "Image/PDF Global Defaults",
+        "reading_mode_label": "Default Page Mode",
+        "reading_mode_desc": "Select the default page mode when opening the viewer.",
         "reading_direction_label": "Reading Direction",
         "reading_direction_desc": "Set the default page turn direction.",
         "click_direction_label": "Next Page Click",
         "click_direction_desc": "Set which side of the screen turns to the next page.",
         "keyboard_direction_label": "Next Page Keyboard",
         "keyboard_direction_desc": "Set which arrow key turns to the next page.",
+        "wheel_direction_label": "Next Page Wheel",
+        "wheel_direction_desc": "Set mouse wheel direction for moving to the next page.",
         "fit_mode_label": "Image Fit",
         "fit_mode_desc": "Set how images are fitted to the screen by default."
+      },
+      "epub": {
+        "title": "EPUB Viewer Global Defaults",
+        "render_mode_label": "Default View Mode",
+        "render_mode_desc": "Applied when there is no series override. Using auto is recommended.",
+        "theme_label": "Default Theme",
+        "theme_desc": "Applied as the EPUB default theme when there is no series override.",
+        "spread_label": "Default Page Mode",
+        "spread_desc": "Choose auto 1/2-page by viewport width or always single-page mode.",
+        "spread_auto": "Auto (1/2 pages by width)",
+        "spread_none": "Always Single Page",
+        "wheel_direction_label": "Next Page Wheel",
+        "wheel_direction_desc": "Set the next-page direction for mouse wheel input.",
+        "keyboard_direction_label": "Next Page Keyboard",
+        "keyboard_direction_desc": "Set the next-page direction for keyboard arrows.",
+        "click_direction_label": "Next Page Click",
+        "click_direction_desc": "Set which side click moves to the next page.",
+        "title_override_label": "EPUB Title Override",
+        "title_override_desc": "On rescan, apply EPUB metadata title to series title when available. Disable to restore path-based titles."
       },
       "mode": {
         "single": "Single Page",
@@ -155,7 +181,11 @@
       },
       "reset_modal": {
         "title": "Reset Viewer Settings",
-        "message": "All viewer settings (view mode, direction, advanced settings, etc.) will be reset to default. Continue?"
+        "message": "All viewer settings (view mode, direction, advanced settings, etc.) will be reset to default. Continue?",
+        "image_pdf_title": "Reset Image/PDF Settings",
+        "image_pdf_message": "Image/PDF viewer settings (view mode, direction, advanced settings, etc.) will be reset to default. Continue?",
+        "epub_title": "Reset EPUB Settings",
+        "epub_message": "EPUB global settings (view mode, theme, page mode, input directions) will be reset to default. Continue?"
       },
       "toast": {
         "load_failed": "Failed to load settings.",
@@ -490,6 +520,7 @@
     },
     "metainfo": {
       "authors": "Author",
+      "original_title": "Original",
       "publisher": "Publisher",
       "publication_year": "Year"
     },
@@ -536,6 +567,14 @@
         "authors_placeholder": "e.g. Author1, Author2",
         "publication_year": "Publication Period",
         "publication_year_placeholder": "e.g. 2020-2023, 1997~",
+        "original_title": "Original Title",
+        "original_title_placeholder": "e.g. A Common-Sense Guide to Data Structures and Algorithms",
+        "publisher": "Publisher",
+        "publisher_placeholder": "e.g. Gilbut",
+        "published_at": "Published Date",
+        "published_at_placeholder": "e.g. 2021-12-01",
+        "isbn": "ISBN",
+        "isbn_placeholder": "e.g. 979-11-6521-810-2",
         "status": "Status",
         "tags": "Tags (comma separated)",
         "tags_placeholder": "e.g. Fantasy, Action",
@@ -565,10 +604,17 @@
     }
   },
   "viewer": {
+    "error": {
+      "load_failed": "Failed to load chapter: {{error}}"
+    },
     "session": {
       "force_logout_title": "Session Terminated",
       "force_logout_message": "The viewer was opened on another device, so this session has been closed.",
       "connection_limit_message": "Connection limit reached. This session has been closed."
+    },
+    "series_end": {
+      "title": "You have reached the end of this book.",
+      "message": "Press confirm to return to the previous screen."
     },
     "header": {
       "back": "Back",
@@ -576,7 +622,16 @@
       "exit_fullscreen": "Exit Fullscreen",
       "settings": "Viewer Settings",
       "bgm_on": "BGM On",
-      "bgm_off": "BGM Off"
+      "bgm_off": "BGM Off",
+      "zoom_in": "Zoom In",
+      "zoom_out": "Zoom Out",
+      "zoom_reset": "Reset Zoom",
+      "toc": "Table of Contents"
+    },
+    "toc": {
+      "title": "Table of Contents",
+      "close": "Close",
+      "empty": "No table of contents available."
     },
     "settings": {
       "title": "⚙️ Reading Settings",
@@ -607,6 +662,11 @@
         "rtl_mobile": "Swipe Right (Next)",
         "rtl_desktop": "Left Arrow"
       },
+      "wheel_direction": {
+        "label": "Mouse Wheel Direction",
+        "down": "Wheel Down",
+        "up": "Wheel Up"
+      },
       "fit_mode": {
         "label": "Image Fit",
         "screen": "Screen",
@@ -615,17 +675,35 @@
         "original": "Original"
       },
       "background_color": {
-        "label": "Background",
+        "label": "Background Color",
         "black": "Black",
         "dark_gray": "Dark Gray",
         "gray": "Gray",
         "white": "White"
+      },
+      "page_transition": {
+        "label": "Page Transition Animation",
+        "desc": "Select the animation effect to use for page transitions.",
+        "slide": "Slide",
+        "fade": "Fade",
+        "none": "None"
+      },
+      "transition": {
+        "title": "Page Transition Animation",
+        "slide": "Slide",
+        "fade": "Fade",
+        "none": "None"
+      },
+      "pdf_zoom_controls": {
+        "label": "PDF Top Zoom Controls",
+        "show": "Show",
+        "hide": "Hide"
+      },
+      "footer": {
+        "pages_1": "1 Page",
+        "pages_2": "2 Pages",
+        "offset": "Offset"
       }
-    },
-    "footer": {
-      "pages_1": "1 Page",
-      "pages_2": "2 Pages",
-      "offset": "Offset"
     },
     "sync": {
       "title": "Sync Progress",
@@ -645,6 +723,82 @@
       "aria_prev_chapter": "Go to previous chapter",
       "aria_next_chapter": "Go to next chapter",
       "no_title": "No Title"
+    }
+  },
+  "epub_viewer": {
+    "error": {
+      "load_failed": "Failed to load EPUB"
+    },
+    "loading": "Loading EPUB...",
+    "header": {
+      "back": "Back",
+      "fullscreen": "Fullscreen",
+      "exit_fullscreen": "Exit Fullscreen",
+      "settings": "Viewer Settings",
+      "incognito": "Incognito Mode",
+      "toc": "Table of Contents"
+    },
+    "toc": {
+      "title": "Table of Contents",
+      "empty": "No table of contents found"
+    },
+    "settings": {
+      "title": "⚙️ EPUB Settings",
+      "font_size": {
+        "label": "Font Size"
+      },
+      "font_family": {
+        "label": "Font",
+        "original": "Original",
+        "serif": "Serif",
+        "sans_serif": "Sans-serif"
+      },
+      "render_mode": {
+        "label": "View Mode",
+        "auto": "Auto",
+        "book": "Book",
+        "comic": "Comic",
+        "typography_limited": "In comic (fixed layout) mode, font size and line spacing may have limited effect."
+      },
+      "line_height": {
+        "label": "Line Spacing"
+      },
+      "theme": {
+        "label": "Theme",
+        "light": "Light",
+        "dark": "Dark",
+        "sepia": "Sepia"
+      },
+      "input_controls": {
+        "wheel_label": "Next Page Mouse Wheel",
+        "wheel_down": "Wheel Down",
+        "wheel_up": "Wheel Up",
+        "keyboard_label": "Next Page Keyboard",
+        "keyboard_right": "Right",
+        "keyboard_left": "Left",
+        "click_label": "Next Page Click",
+        "click_right": "Right Zone",
+        "click_left": "Left Zone"
+      },
+      "flow": {
+        "label": "Layout",
+        "paginated": "Paginated",
+        "scrolled": "Scrolled"
+      }
+    },
+    "footer": {
+      "prev": "Prev",
+      "next": "Next",
+      "first_page": "First page",
+      "prev_page": "Previous page",
+      "next_page": "Next page",
+      "last_page": "Last page",
+      "progress": "Progress bar",
+      "pages_1": "1-page",
+      "pages_2": "2-page"
+    },
+    "progress_marker": {
+      "navigate": "Navigate TOC: {{label}}"
     }
   }
 }

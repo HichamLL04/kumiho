@@ -32,6 +32,7 @@ type SeriesHandler struct {
 	chapterCompletionRepo *repository.ChapterCompletionRepository
 	userSeriesSettingRepo repository.UserSeriesSettingRepository
 	config                *config.Config
+	seriesEnrichSvc       *service.SeriesEnrichService
 }
 
 func NewSeriesHandler(
@@ -45,6 +46,7 @@ func NewSeriesHandler(
 	chapterCompletionRepo *repository.ChapterCompletionRepository,
 	userSeriesSettingRepo repository.UserSeriesSettingRepository,
 	cfg *config.Config,
+	seriesEnrichSvc *service.SeriesEnrichService,
 ) *SeriesHandler {
 	return &SeriesHandler{
 		seriesRepo:            seriesRepo,
@@ -57,6 +59,7 @@ func NewSeriesHandler(
 		chapterCompletionRepo: chapterCompletionRepo,
 		userSeriesSettingRepo: userSeriesSettingRepo,
 		config:                cfg,
+		seriesEnrichSvc:       seriesEnrichSvc,
 	}
 }
 
@@ -68,6 +71,10 @@ type UpdateSeriesRequest struct {
 	Tags            *string `json:"tags"`
 	IsBookmarked    *bool   `json:"is_bookmarked"`
 	PublicationYear *string `json:"publication_year"`
+	OriginalTitle   *string `json:"original_title"`
+	Publisher       *string `json:"publisher"`
+	PublishedAt     *string `json:"published_at"`
+	ISBN            *string `json:"isbn"`
 }
 
 type UpdateVolumeRequest struct {
@@ -214,7 +221,8 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 
 	// 단독 북마크 업데이트인 경우, updated_at을 변경하지 않고 북마크 상태만 변경
 	if req.IsBookmarked != nil && req.Title == nil && req.Description == nil &&
-		req.Status == nil && req.Authors == nil && req.Tags == nil && req.PublicationYear == nil {
+		req.Status == nil && req.Authors == nil && req.Tags == nil && req.PublicationYear == nil &&
+		req.OriginalTitle == nil && req.Publisher == nil && req.PublishedAt == nil && req.ISBN == nil {
 
 		if err := h.seriesRepo.UpdateBookmark(nil, userID, series.ID, *req.IsBookmarked); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -252,6 +260,18 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	}
 	if req.PublicationYear != nil {
 		series.Metadata.PublicationYear = *req.PublicationYear
+	}
+	if req.OriginalTitle != nil {
+		series.Metadata.OriginalTitle = *req.OriginalTitle
+	}
+	if req.Publisher != nil {
+		series.Metadata.Publisher = *req.Publisher
+	}
+	if req.PublishedAt != nil {
+		series.Metadata.PublishedAt = *req.PublishedAt
+	}
+	if req.ISBN != nil {
+		series.Metadata.ISBN = *req.ISBN
 	}
 
 	// DB 업데이트
@@ -430,10 +450,10 @@ func (h *SeriesHandler) UploadVolumeThumbnail(c *fiber.Ctx) error {
 	// 파일명 결정: MD5(volume.Path)
 	hash := md5.Sum([]byte(volume.Path))
 	hashString := hex.EncodeToString(hash[:])
-	
+
 	// 저장 전 동일 해시의 기존 파일 삭제 (확장자 중복 방지)
 	h.deleteHashFiles(thumbnailsDir, hashString)
-	
+
 	path := filepath.Join(thumbnailsDir, fmt.Sprintf("%s%s", hashString, ext))
 
 	// 파일 저장
@@ -469,7 +489,7 @@ func (h *SeriesHandler) UploadVolumeThumbnailFromURL(c *fiber.Ctx) error {
 			"error": "access denied",
 		})
 	}
-	
+
 	volume, err := h.volumeRepo.FindByID(nil, id)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -545,14 +565,13 @@ func (h *SeriesHandler) UploadVolumeThumbnailFromURL(c *fiber.Ctx) error {
 		})
 	}
 
-
 	// 파일명 결정: MD5(volume.Path)
 	hash := md5.Sum([]byte(volume.Path))
 	hashString := hex.EncodeToString(hash[:])
-	
+
 	// 저장 전 동일 해시의 기존 파일 삭제 (확장자 중복 방지)
 	h.deleteHashFiles(thumbnailsDir, hashString)
-	
+
 	path := filepath.Join(thumbnailsDir, fmt.Sprintf("%s%s", hashString, ext))
 
 	outFile, err := os.Create(path)
@@ -715,10 +734,10 @@ func (h *SeriesHandler) UploadThumbnail(c *fiber.Ctx) error {
 	// 파일명 결정: MD5(series.Path)
 	hash := md5.Sum([]byte(series.Path))
 	hashString := hex.EncodeToString(hash[:])
-	
+
 	// 저장 전 동일 해시의 기존 파일 삭제 (확장자 중복 방지)
 	h.deleteHashFiles(thumbnailsDir, hashString)
-	
+
 	path := filepath.Join(thumbnailsDir, fmt.Sprintf("%s%s", hashString, ext))
 
 	// 파일 저장
@@ -835,10 +854,10 @@ func (h *SeriesHandler) DownloadThumbnail(c *fiber.Ctx) error {
 	// 파일명 결정: MD5(series.Path)
 	hash := md5.Sum([]byte(series.Path))
 	hashString := hex.EncodeToString(hash[:])
-	
+
 	// 저장 전 동일 해시의 기존 파일 삭제 (확장자 중복 방지)
 	h.deleteHashFiles(thumbnailsDir, hashString)
-	
+
 	path := filepath.Join(thumbnailsDir, fmt.Sprintf("%s%s", hashString, ext))
 
 	// 파일 생성 및 저장
@@ -970,16 +989,14 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 	result := make([]VolumeResponse, len(volumes))
 	for i := range volumes {
 		// 썸네일 URL 설정
-		// 썸네일 URL 설정
+		// 커스텀 썸네일이 없더라도 볼륨 썸네일 API를 사용해
+		// 이미지/PDF/EPUB 구조를 동일한 방식으로 처리합니다.
 		if volumes[i].ThumbnailPath != nil && *volumes[i].ThumbnailPath != "" {
 			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volumes[i].ID, time.Now().Unix())
 			volumes[i].ThumbnailURL = &url
 		} else {
-			pageID, err := h.volumeRepo.GetFirstPageID(nil, volumes[i].ID)
-			if err == nil && pageID != "" {
-				url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-				volumes[i].ThumbnailURL = &url
-			}
+			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volumes[i].ID, time.Now().Unix())
+			volumes[i].ThumbnailURL = &url
 		}
 
 		// 진행도 계산
@@ -1032,16 +1049,13 @@ func (h *SeriesHandler) GetVolume(c *fiber.Ctx) error {
 	}
 
 	// 썸네일 URL 설정
-	// 썸네일 URL 설정
+	// 커스텀 썸네일 유무와 관계없이 볼륨 썸네일 API를 기본 경로로 사용합니다.
 	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
 		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
 		volume.ThumbnailURL = &url
 	} else {
-		pageID, pErr := h.volumeRepo.GetFirstPageID(nil, volume.ID)
-		if pErr == nil && pageID != "" {
-			url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-			volume.ThumbnailURL = &url
-		}
+		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+		volume.ThumbnailURL = &url
 	}
 
 	// 페이지 진행도 계산 및 완독 상태 확인
@@ -1114,12 +1128,9 @@ func (h *SeriesHandler) ListChapters(c *fiber.Ctx) error {
 
 	// 썸네일 URL 및 완독 여부 설정
 	for i := range chapters {
-		// 챕터는 보통 별도 썸네일 파일이 없으므로 항상 첫 페이지를 썸네일로 사용
-		pageID, err := h.chapterRepo.GetFirstPageID(nil, chapters[i].ID)
-		if err == nil && pageID != "" {
-			url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-			chapters[i].ThumbnailURL = &url
-		}
+		// 챕터 썸네일 API를 사용해 이미지/PDF/EPUB 구조를 동일하게 처리
+		url := fmt.Sprintf("/api/v1/chapters/%s/thumbnail?t=%d", chapters[i].ID, time.Now().Unix())
+		chapters[i].ThumbnailURL = &url
 
 		// 완독 여부 설정
 		if completedMap != nil && completedMap[chapters[i].ID] {
@@ -1319,8 +1330,29 @@ func (h *SeriesHandler) UpdateViewerSettings(c *fiber.Ctx) error {
 	if req.ReadingMode != nil && *req.ReadingMode != "" && !h.isValidSetting("viewer_reading_mode", *req.ReadingMode) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid reading_mode"})
 	}
+	if req.EpubRenderMode != nil && *req.EpubRenderMode != "" && !h.isValidSetting("viewer_epub_render_mode", *req.EpubRenderMode) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_render_mode"})
+	}
+	if req.EpubTheme != nil && *req.EpubTheme != "" && !h.isValidSetting("viewer_epub_theme", *req.EpubTheme) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_theme"})
+	}
+	if req.EpubSpread != nil && *req.EpubSpread != "" && !h.isValidSetting("viewer_epub_spread", *req.EpubSpread) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_spread"})
+	}
+	if req.EpubWheelDirection != nil && *req.EpubWheelDirection != "" && !h.isValidSetting("viewer_epub_wheel_direction", *req.EpubWheelDirection) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_wheel_direction"})
+	}
+	if req.EpubKeyboardDirection != nil && *req.EpubKeyboardDirection != "" && !h.isValidSetting("viewer_epub_keyboard_direction", *req.EpubKeyboardDirection) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_keyboard_direction"})
+	}
+	if req.EpubClickDirection != nil && *req.EpubClickDirection != "" && !h.isValidSetting("viewer_epub_click_direction", *req.EpubClickDirection) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_click_direction"})
+	}
 	if req.ReadingDirection != nil && *req.ReadingDirection != "" && !h.isValidSetting("viewer_reading_direction", *req.ReadingDirection) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid reading_direction"})
+	}
+	if req.WheelDirection != nil && *req.WheelDirection != "" && !h.isValidSetting("viewer_wheel_direction", *req.WheelDirection) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid wheel_direction"})
 	}
 	if req.SwipeDirection != nil && *req.SwipeDirection != "" && !h.isValidSetting("viewer_swipe_direction", *req.SwipeDirection) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid swipe_direction"})
@@ -1352,41 +1384,12 @@ func (h *SeriesHandler) UpdateViewerSettings(c *fiber.Ctx) error {
 
 // enrichSeriesList 시리즈 목록 데이터 보정
 func (h *SeriesHandler) enrichSeriesList(seriesList []model.Series, userID string) {
-	for i := range seriesList {
-		h.enrichSingleSeries(&seriesList[i], userID)
-	}
+	h.seriesEnrichSvc.EnrichList(seriesList, userID)
 }
 
 // enrichSingleSeries 단일 시리즈 데이터 보정 (썸네일 URL, 진행도 계산)
 func (h *SeriesHandler) enrichSingleSeries(s *model.Series, userID string) {
-	// 썸네일 URL 설정
-	if s.ThumbnailPath != nil && *s.ThumbnailPath != "" {
-		url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", s.ID, s.UpdatedAt.Unix())
-		s.ThumbnailURL = &url
-	} else {
-		pageID, err := h.seriesRepo.GetFirstPageID(nil, s.ID)
-		if err == nil && pageID != "" {
-			url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-			s.ThumbnailURL = &url
-		}
-	}
-
-	// 진행도 계산
-	totalPages, err := h.seriesRepo.GetTotalPages(nil, s.ID)
-	if err != nil {
-		log.Printf("failed to get total pages for series %s: %v", s.ID, err)
-	} else {
-		s.TotalPageCount = totalPages
-	}
-
-	if userID != "" {
-		readPages, err := h.seriesRepo.GetReadPages(nil, userID, s.ID)
-		if err != nil {
-			log.Printf("failed to get read pages for user %s, series %s: %v", userID, s.ID, err)
-		} else {
-			s.ReadPageCount = readPages
-		}
-	}
+	h.seriesEnrichSvc.EnrichSingle(s, userID)
 }
 
 // Search 시리즈 검색
@@ -1437,6 +1440,18 @@ func (h *SeriesHandler) isValidSetting(key, value string) bool {
 	switch key {
 	case "viewer_reading_mode":
 		return value == "single" || value == "double" || value == "vertical"
+	case "viewer_epub_render_mode":
+		return value == "auto" || value == "book" || value == "comic"
+	case "viewer_epub_theme":
+		return value == "light" || value == "dark" || value == "sepia"
+	case "viewer_epub_spread":
+		return value == "auto" || value == "none"
+	case "viewer_epub_wheel_direction":
+		return value == "down" || value == "up"
+	case "viewer_epub_keyboard_direction", "viewer_epub_click_direction":
+		return value == "right" || value == "left"
+	case "viewer_wheel_direction":
+		return value == "down" || value == "up"
 	case "viewer_reading_direction", "viewer_click_direction", "viewer_keyboard_direction", "viewer_swipe_direction":
 		return value == "ltr" || value == "rtl"
 	case "viewer_fit_mode":
@@ -1445,6 +1460,7 @@ func (h *SeriesHandler) isValidSetting(key, value string) bool {
 		return true
 	}
 }
+
 // deleteHashFiles는 지정된 디렉토리에서 특정 해시값을 가진 모든 썸네일 파일(다양한 확장자)을 삭제합니다.
 func (h *SeriesHandler) deleteHashFiles(dir, hashString string) {
 	exts := []string{".jpg", ".png", ".webp", ".gif"}

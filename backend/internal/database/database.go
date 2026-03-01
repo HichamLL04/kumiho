@@ -94,6 +94,13 @@ func Migrate() error {
 		is_visible BOOLEAN DEFAULT 1,
 		default_view_mode TEXT DEFAULT 'single',
 		default_read_direction TEXT DEFAULT 'ltr',
+		default_page_transition TEXT DEFAULT 'slide',
+		default_epub_render_mode TEXT DEFAULT 'auto',
+		default_epub_theme TEXT DEFAULT 'light',
+		default_epub_spread TEXT DEFAULT 'auto',
+		default_epub_wheel_direction TEXT DEFAULT 'down',
+		default_epub_keyboard_direction TEXT DEFAULT 'right',
+		default_epub_click_direction TEXT DEFAULT 'right',
 		sort_order INTEGER DEFAULT 0,
 		scan_status TEXT DEFAULT 'IDLE',
 		last_scan_result TEXT DEFAULT '',
@@ -122,7 +129,11 @@ func Migrate() error {
 		status TEXT DEFAULT 'ONGOING',
 		authors TEXT DEFAULT '',
 		tags TEXT DEFAULT '',
-		publication_year TEXT DEFAULT ''
+		publication_year TEXT DEFAULT '',
+		original_title TEXT DEFAULT '',
+		publisher TEXT DEFAULT '',
+		published_at TEXT DEFAULT '',
+		isbn TEXT DEFAULT ''
 	);
 
 	-- 볼륨 (권/시즌)
@@ -150,6 +161,8 @@ func Migrate() error {
 		chapter_number INTEGER NOT NULL,
 		path TEXT NOT NULL,
 		page_count INTEGER DEFAULT 0,
+		total_bytes INTEGER DEFAULT 0,
+		total_positions INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -171,11 +184,14 @@ func Migrate() error {
 		chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
 		current_page INTEGER NOT NULL DEFAULT 0,
 		total_pages INTEGER NOT NULL DEFAULT 0,
+		current_position INTEGER DEFAULT 0,
+		total_positions INTEGER DEFAULT 0,
 		progress_percent REAL DEFAULT 0.0,
 		device_id TEXT,
 		device_name TEXT,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		read_time_seconds INTEGER DEFAULT 0,
+		current_cfi TEXT, -- EPUB용 CFI (migrateEpubCFI 대응)
 		UNIQUE(user_id, chapter_id)
 	);
 
@@ -209,7 +225,14 @@ func Migrate() error {
 		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
 		reading_mode TEXT,
+		epub_render_mode TEXT,
+		epub_theme TEXT,
+		epub_spread TEXT,
+		epub_wheel_direction TEXT,
+		epub_keyboard_direction TEXT,
+		epub_click_direction TEXT,
 		reading_direction TEXT,
+		wheel_direction TEXT,
 		swipe_direction TEXT,
 		click_direction TEXT,
 		keyboard_direction TEXT,
@@ -302,6 +325,9 @@ func Migrate() error {
 	// 11. 볼륨 메타데이터 컬럼 추가 (description, authors, publication_year)
 	migrateVolumesMetadata()
 
+	// 11-1. 시리즈 메타데이터 컬럼 추가 (original_title, publisher, published_at, isbn)
+	migrateSeriesMetadataColumns()
+
 	// 12. 챕터 완독 테이블 추가
 	migrateChapterCompletions()
 
@@ -322,6 +348,24 @@ func Migrate() error {
 
 	// 18. 사용자별 시리즈 설정에 터치 스와이프 방향 추가
 	migrateSwipeDirection()
+
+	// 18-1. 사용자별 시리즈 설정에 마우스 휠 방향 추가
+	migrateWheelDirection()
+
+	// 19. EPUB 위치 복원용 current_cfi 컬럼 추가
+	migrateEpubCFI()
+
+	// 20. EPUB 가상 포지션 관련 컬럼 추가
+	migrateEpubVirtualPositions()
+
+	// 21. 사용자별 시리즈 설정에 EPUB 렌더 모드 추가
+	migrateEpubRenderMode()
+
+	// 22. 사용자별 시리즈 설정에 EPUB 오버라이드 컬럼 추가
+	migrateEpubSeriesSettings()
+
+	// 23. 라이브러리 EPUB 기본값 컬럼 추가
+	migrateLibraryEpubDefaults()
 
 	return nil
 }
@@ -383,7 +427,7 @@ func migrateChapterCompletions() {
 		fmt.Printf("Failed to create chapter_completions table: %v\n", err)
 		return
 	}
-	
+
 	// 인덱스 생성
 	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_chapter_completions_user ON chapter_completions(user_id)`)
 	if err != nil {
@@ -393,7 +437,7 @@ func migrateChapterCompletions() {
 	if err != nil {
 		fmt.Printf("Failed to create index on chapter_completions(chapter_id): %v\n", err)
 	}
-	
+
 	fmt.Println("Migrated database: added chapter_completions table.")
 }
 
@@ -472,7 +516,11 @@ func migrateSeriesMetadata() {
 			status TEXT DEFAULT 'ONGOING',
 			authors TEXT DEFAULT '',
 			tags TEXT DEFAULT '',
-			publication_year TEXT DEFAULT ''
+			publication_year TEXT DEFAULT '',
+			original_title TEXT DEFAULT '',
+			publisher TEXT DEFAULT '',
+			published_at TEXT DEFAULT '',
+			isbn TEXT DEFAULT ''
 		)
 	`)
 	if err != nil {
@@ -489,6 +537,42 @@ func migrateSeriesMetadata() {
 		`)
 		if err != nil {
 			fmt.Printf("Note: series_metadata data migration skip or partial: %v\n", err)
+		}
+	}
+}
+
+// migrateSeriesMetadataColumns series_metadata 테이블에 EPUB 확장 메타데이터 컬럼 추가
+func migrateSeriesMetadataColumns() {
+	if !columnExists("series_metadata", "original_title") {
+		_, err := DB.Exec(`ALTER TABLE series_metadata ADD COLUMN original_title TEXT DEFAULT ''`)
+		if err != nil {
+			fmt.Printf("Migration error (series_metadata.original_title): %v\n", err)
+		} else {
+			fmt.Println("Migrated series_metadata table: added original_title column.")
+		}
+	}
+	if !columnExists("series_metadata", "publisher") {
+		_, err := DB.Exec(`ALTER TABLE series_metadata ADD COLUMN publisher TEXT DEFAULT ''`)
+		if err != nil {
+			fmt.Printf("Migration error (series_metadata.publisher): %v\n", err)
+		} else {
+			fmt.Println("Migrated series_metadata table: added publisher column.")
+		}
+	}
+	if !columnExists("series_metadata", "published_at") {
+		_, err := DB.Exec(`ALTER TABLE series_metadata ADD COLUMN published_at TEXT DEFAULT ''`)
+		if err != nil {
+			fmt.Printf("Migration error (series_metadata.published_at): %v\n", err)
+		} else {
+			fmt.Println("Migrated series_metadata table: added published_at column.")
+		}
+	}
+	if !columnExists("series_metadata", "isbn") {
+		_, err := DB.Exec(`ALTER TABLE series_metadata ADD COLUMN isbn TEXT DEFAULT ''`)
+		if err != nil {
+			fmt.Printf("Migration error (series_metadata.isbn): %v\n", err)
+		} else {
+			fmt.Println("Migrated series_metadata table: added isbn column.")
 		}
 	}
 }
@@ -759,6 +843,12 @@ func migrateSystemLibrary() {
 			fmt.Printf("Migration error (libraries.default_read_direction): %v\n", err)
 		}
 	}
+	if !columnExists("libraries", "default_page_transition") {
+		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_page_transition TEXT DEFAULT 'slide'`)
+		if err != nil {
+			fmt.Printf("Migration error (libraries.default_page_transition): %v\n", err)
+		}
+	}
 
 	// 3. is_visible 컬럼 추가
 	if !columnExists("libraries", "is_visible") {
@@ -774,8 +864,8 @@ func migrateSystemLibrary() {
 	err := DB.QueryRow(`SELECT COUNT(*) FROM libraries WHERE id = 'system-likes'`).Scan(&exists)
 	if err == nil && exists == 0 {
 		_, err := DB.Exec(`
-			INSERT INTO libraries (id, name, path, type, is_visible, default_view_mode, default_read_direction, created_at, updated_at, sort_order)
-			VALUES ('system-likes', '좋아요한 시리즈', 'SYSTEM://LIKES', 'SYSTEM', 1, 'single', 'ltr', datetime('now'), datetime('now'), 0)
+			INSERT INTO libraries (id, name, path, type, is_visible, default_view_mode, default_read_direction, default_page_transition, created_at, updated_at, sort_order)
+			VALUES ('system-likes', '좋아요한 시리즈', 'SYSTEM://LIKES', 'SYSTEM', 1, 'single', 'ltr', 'slide', datetime('now'), datetime('now'), 0)
 		`)
 		if err != nil {
 			fmt.Printf("Failed to create system library: %v\n", err)
@@ -1160,7 +1250,6 @@ func migrateProgressToChapterBased() {
 		return
 	}
 
-
 	// 3. 기존 데이터 복사 (모든 레코드 보존, 챕터 단위로 저장됨)
 	// UNIQUE 제약조건 충돌 방지를 위해 INSERT OR IGNORE 사용
 	_, err = tx.ExecContext(ctx, `
@@ -1199,13 +1288,13 @@ func migrateProgressToChapterBased() {
 		fmt.Printf("Failed to recreate progress index (user): %v\n", err)
 		return
 	}
-	
+
 	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`)
 	if err != nil {
 		fmt.Printf("Failed to recreate progress index (series): %v\n", err)
 		return
 	}
-	
+
 	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_chapter ON reading_progress(chapter_id)`)
 	if err != nil {
 		fmt.Printf("Failed to recreate progress index (chapter): %v\n", err)
@@ -1226,14 +1315,14 @@ func migrateProgressToChapterBased() {
 func fixReadingProgressUniqueIndex() {
 	// 인덱스 정보를 확인하여 Partial Index인지 확인하기는 복잡하므로,
 	// 그냥 안전하게 삭제 후 재생성 시도 (IF EXISTS / IF NOT EXISTS 활용)
-	
+
 	// 하지만 매번 실행하면 비효율적이므로, 별도의 마이그레이션 확인용 로직이 없으니
 	// 일단 항상 실행하되, 실제 변경 필요 여부를 인덱스 SQL로 판단하면 좋겠지만
 	// 여기서는 간단히 Drop & Create 전략 사용 (데이터 무결성 영향 없음)
-	
+
 	// 단, 이미 올바른 인덱스가 있는지 확인할 방법이 마땅치 않으므로
 	// 에러 무시하고 강제 실행
-	
+
 	ctx := context.Background()
 	conn, err := DB.Conn(ctx)
 	if err != nil {
@@ -1459,6 +1548,177 @@ func migrateSwipeDirection() {
 			fmt.Printf("Migration error (user_series_settings.swipe_direction): %v\n", err)
 		} else {
 			fmt.Println("Migrated user_series_settings table: added swipe_direction column.")
+		}
+	}
+}
+
+// migrateWheelDirection 사용자별 시리즈 설정에 wheel_direction 컬럼 추가
+func migrateWheelDirection() {
+	if !columnExists("user_series_settings", "wheel_direction") {
+		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN wheel_direction TEXT`)
+		if err != nil {
+			fmt.Printf("Migration error (user_series_settings.wheel_direction): %v\n", err)
+		} else {
+			fmt.Println("Migrated user_series_settings table: added wheel_direction column.")
+		}
+	}
+}
+
+// migrateEpubRenderMode 사용자별 시리즈 설정에 epub_render_mode 컬럼 추가
+func migrateEpubRenderMode() {
+	if !columnExists("user_series_settings", "epub_render_mode") {
+		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_render_mode TEXT`)
+		if err != nil {
+			fmt.Printf("Migration error (user_series_settings.epub_render_mode): %v\n", err)
+		} else {
+			fmt.Println("Migrated user_series_settings table: added epub_render_mode column.")
+		}
+	}
+}
+
+// migrateEpubSeriesSettings 사용자별 시리즈 설정에 EPUB 오버라이드 컬럼 추가
+func migrateEpubSeriesSettings() {
+	if !columnExists("user_series_settings", "epub_theme") {
+		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_theme TEXT`)
+		if err != nil {
+			fmt.Printf("Migration error (user_series_settings.epub_theme): %v\n", err)
+		} else {
+			fmt.Println("Migrated user_series_settings table: added epub_theme column.")
+		}
+	}
+	if !columnExists("user_series_settings", "epub_spread") {
+		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_spread TEXT`)
+		if err != nil {
+			fmt.Printf("Migration error (user_series_settings.epub_spread): %v\n", err)
+		} else {
+			fmt.Println("Migrated user_series_settings table: added epub_spread column.")
+		}
+	}
+	if !columnExists("user_series_settings", "epub_wheel_direction") {
+		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_wheel_direction TEXT`)
+		if err != nil {
+			fmt.Printf("Migration error (user_series_settings.epub_wheel_direction): %v\n", err)
+		} else {
+			fmt.Println("Migrated user_series_settings table: added epub_wheel_direction column.")
+		}
+	}
+	if !columnExists("user_series_settings", "epub_keyboard_direction") {
+		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_keyboard_direction TEXT`)
+		if err != nil {
+			fmt.Printf("Migration error (user_series_settings.epub_keyboard_direction): %v\n", err)
+		} else {
+			fmt.Println("Migrated user_series_settings table: added epub_keyboard_direction column.")
+		}
+	}
+	if !columnExists("user_series_settings", "epub_click_direction") {
+		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_click_direction TEXT`)
+		if err != nil {
+			fmt.Printf("Migration error (user_series_settings.epub_click_direction): %v\n", err)
+		} else {
+			fmt.Println("Migrated user_series_settings table: added epub_click_direction column.")
+		}
+	}
+}
+
+// migrateLibraryEpubDefaults libraries 테이블에 EPUB 기본값 컬럼 추가
+func migrateLibraryEpubDefaults() {
+	if !columnExists("libraries", "default_epub_render_mode") {
+		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_render_mode TEXT DEFAULT 'auto'`)
+		if err != nil {
+			fmt.Printf("Migration error (libraries.default_epub_render_mode): %v\n", err)
+		} else {
+			fmt.Println("Migrated libraries table: added default_epub_render_mode column.")
+		}
+	}
+	if !columnExists("libraries", "default_epub_theme") {
+		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_theme TEXT DEFAULT 'light'`)
+		if err != nil {
+			fmt.Printf("Migration error (libraries.default_epub_theme): %v\n", err)
+		} else {
+			fmt.Println("Migrated libraries table: added default_epub_theme column.")
+		}
+	}
+	if !columnExists("libraries", "default_epub_spread") {
+		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_spread TEXT DEFAULT 'auto'`)
+		if err != nil {
+			fmt.Printf("Migration error (libraries.default_epub_spread): %v\n", err)
+		} else {
+			fmt.Println("Migrated libraries table: added default_epub_spread column.")
+		}
+	}
+	if !columnExists("libraries", "default_epub_wheel_direction") {
+		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_wheel_direction TEXT DEFAULT 'down'`)
+		if err != nil {
+			fmt.Printf("Migration error (libraries.default_epub_wheel_direction): %v\n", err)
+		} else {
+			fmt.Println("Migrated libraries table: added default_epub_wheel_direction column.")
+		}
+	}
+	if !columnExists("libraries", "default_epub_keyboard_direction") {
+		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_keyboard_direction TEXT DEFAULT 'right'`)
+		if err != nil {
+			fmt.Printf("Migration error (libraries.default_epub_keyboard_direction): %v\n", err)
+		} else {
+			fmt.Println("Migrated libraries table: added default_epub_keyboard_direction column.")
+		}
+	}
+	if !columnExists("libraries", "default_epub_click_direction") {
+		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_click_direction TEXT DEFAULT 'right'`)
+		if err != nil {
+			fmt.Printf("Migration error (libraries.default_epub_click_direction): %v\n", err)
+		} else {
+			fmt.Println("Migrated libraries table: added default_epub_click_direction column.")
+		}
+	}
+}
+
+// migrateEpubCFI reading_progress 테이블에 current_cfi 컬럼 추가 (EPUB 위치 복원용)
+func migrateEpubCFI() {
+	if !columnExists("reading_progress", "current_cfi") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN current_cfi TEXT`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.current_cfi): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added current_cfi column.")
+		}
+	}
+}
+
+// migrateEpubVirtualPositions EPUB 가상 포지션 관련 컬럼 추가
+func migrateEpubVirtualPositions() {
+	// chapters 테이블
+	if !columnExists("chapters", "total_bytes") {
+		_, err := DB.Exec(`ALTER TABLE chapters ADD COLUMN total_bytes INTEGER DEFAULT 0`)
+		if err != nil {
+			fmt.Printf("Migration error (chapters.total_bytes): %v\n", err)
+		} else {
+			fmt.Println("Migrated chapters table: added total_bytes column.")
+		}
+	}
+	if !columnExists("chapters", "total_positions") {
+		_, err := DB.Exec(`ALTER TABLE chapters ADD COLUMN total_positions INTEGER DEFAULT 0`)
+		if err != nil {
+			fmt.Printf("Migration error (chapters.total_positions): %v\n", err)
+		} else {
+			fmt.Println("Migrated chapters table: added total_positions column.")
+		}
+	}
+
+	// reading_progress 테이블
+	if !columnExists("reading_progress", "current_position") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN current_position INTEGER DEFAULT 0`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.current_position): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added current_position column.")
+		}
+	}
+	if !columnExists("reading_progress", "total_positions") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN total_positions INTEGER DEFAULT 0`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.total_positions): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added total_positions column.")
 		}
 	}
 }

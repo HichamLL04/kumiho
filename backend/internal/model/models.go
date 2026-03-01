@@ -26,20 +26,27 @@ type User struct {
 
 // Library 라이브러리 모델
 type Library struct {
-	ID                   string     `json:"id"`
-	Name                 string     `json:"name"`
-	Path                 string     `json:"path"`
-	DefaultViewMode      string     `json:"default_view_mode" db:"default_view_mode"`
-	DefaultReadDirection string     `json:"default_read_direction" db:"default_read_direction"`
-	SortOrder            int        `json:"sort_order" db:"sort_order"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
-	LastScannedAt        *time.Time `json:"last_scanned_at,omitempty"`
-	ScanStatus           string     `json:"scan_status" db:"scan_status"`           // "IDLE", "SCANNING", "ERROR"
-	LastScanResult       string     `json:"last_scan_result" db:"last_scan_result"` // 스캔 결과 요약
-	Type                 string     `json:"type" db:"type"`                         // "LOCAL", "SYSTEM"
-	IsVisible            bool       `json:"is_visible" db:"is_visible"`
-	ScanExcludes         string     `json:"scan_excludes" db:"scan_excludes"` // comma-separated patterns
+	ID                     string     `json:"id"`
+	Name                   string     `json:"name"`
+	Path                   string     `json:"path"`
+	DefaultViewMode        string     `json:"default_view_mode" db:"default_view_mode"`
+	DefaultReadDirection   string     `json:"default_read_direction" db:"default_read_direction"`
+	DefaultPageTransition  string     `json:"default_page_transition" db:"default_page_transition"`
+	DefaultEpubRenderMode  string     `json:"default_epub_render_mode" db:"default_epub_render_mode"`
+	DefaultEpubTheme       string     `json:"default_epub_theme" db:"default_epub_theme"`
+	DefaultEpubSpread      string     `json:"default_epub_spread" db:"default_epub_spread"`
+	DefaultEpubWheelDir    string     `json:"default_epub_wheel_direction" db:"default_epub_wheel_direction"`
+	DefaultEpubKeyboardDir string     `json:"default_epub_keyboard_direction" db:"default_epub_keyboard_direction"`
+	DefaultEpubClickDir    string     `json:"default_epub_click_direction" db:"default_epub_click_direction"`
+	SortOrder              int        `json:"sort_order" db:"sort_order"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
+	LastScannedAt          *time.Time `json:"last_scanned_at,omitempty"`
+	ScanStatus             string     `json:"scan_status" db:"scan_status"`           // "IDLE", "SCANNING", "ERROR"
+	LastScanResult         string     `json:"last_scan_result" db:"last_scan_result"` // 스캔 결과 요약
+	Type                   string     `json:"type" db:"type"`                         // "LOCAL", "SYSTEM"
+	IsVisible              bool       `json:"is_visible" db:"is_visible"`
+	ScanExcludes           string     `json:"scan_excludes" db:"scan_excludes"` // comma-separated patterns
 }
 
 // Series 시리즈 모델 (범용 컨테이너)
@@ -72,16 +79,20 @@ type SeriesMetadata struct {
 	Authors         string `json:"authors" db:"authors"` // JSON string or comma-separated
 	Tags            string `json:"tags" db:"tags"`       // JSON string or comma-separated
 	PublicationYear string `json:"publication_year" db:"publication_year"`
+	OriginalTitle   string `json:"original_title" db:"original_title"`
+	Publisher       string `json:"publisher" db:"publisher"`
+	PublishedAt     string `json:"published_at" db:"published_at"`
+	ISBN            string `json:"isbn" db:"isbn"`
 }
 
 // Volume 볼륨(권) 모델
 type Volume struct {
-	ID             string    `json:"id"`
-	SeriesID       string    `json:"series_id"`
-	Title          string    `json:"title"`
-	VolumeNumber   int       `json:"volume_number"`
-	Path           string    `json:"path"`
-	ThumbnailPath  *string   `json:"thumbnail_path,omitempty"`
+	ID              string    `json:"id"`
+	SeriesID        string    `json:"series_id"`
+	Title           string    `json:"title"`
+	VolumeNumber    int       `json:"volume_number"`
+	Path            string    `json:"path"`
+	ThumbnailPath   *string   `json:"thumbnail_path,omitempty"`
 	ThumbnailURL    *string   `json:"thumbnail_url,omitempty" db:"-"`
 	HasAudio        bool      `json:"has_audio" db:"has_audio"`
 	Unit            string    `json:"unit" db:"unit"` // "volume" or "chapter"
@@ -96,16 +107,18 @@ type Volume struct {
 
 // Chapter 챕터 모델
 type Chapter struct {
-	ID            string    `json:"id"`
-	VolumeID      string    `json:"volume_id"`
-	Title         string    `json:"title"`
-	ChapterNumber int       `json:"chapter_number"`
-	Path          string    `json:"path"`
-	PageCount     int       `json:"page_count"`
-	ThumbnailURL  *string   `json:"thumbnail_url,omitempty" db:"-"`
-	IsRead        bool      `json:"is_read" db:"-"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID             string    `json:"id"`
+	VolumeID       string    `json:"volume_id"`
+	Title          string    `json:"title"`
+	ChapterNumber  int       `json:"chapter_number"`
+	Path           string    `json:"path"`
+	PageCount      int       `json:"page_count"`
+	TotalBytes     int64     `json:"total_bytes" db:"total_bytes"`         // EPUB 등에서 가상 포지션 계산용 (HTML 합계)
+	TotalPositions int       `json:"total_positions" db:"total_positions"` // 가상 포지션 총수 (6KB = 1포지션)
+	ThumbnailURL   *string   `json:"thumbnail_url,omitempty" db:"-"`
+	IsRead         bool      `json:"is_read" db:"-"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // Page 페이지 모델
@@ -127,9 +140,12 @@ type ReadingProgress struct {
 	ChapterID       *string   `json:"chapter_id,omitempty"`
 	CurrentPage     int       `json:"current_page"`
 	TotalPages      int       `json:"total_pages"`
+	CurrentPosition int       `json:"current_position" db:"current_position"` // 가상 포지션 중심 위치
+	TotalPositions  int       `json:"total_positions" db:"total_positions"`   // 가상 포지션 총수
 	ProgressPercent float64   `json:"progress_percent"`
 	DeviceID        *string   `json:"device_id,omitempty"`
 	DeviceName      *string   `json:"device_name,omitempty"`
+	CurrentCFI      *string   `json:"current_cfi,omitempty"`
 	ReadTimeSeconds int       `json:"read_time_seconds"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -179,14 +195,21 @@ type UserSetting struct {
 
 // UserSeriesSetting 사용자별 시리즈 개별 설정 모델
 type UserSeriesSetting struct {
-	UserID            string    `json:"user_id"`
-	SeriesID          string    `json:"series_id"`
-	ReadingMode       *string   `json:"reading_mode,omitempty"`
-	ReadingDirection  *string   `json:"reading_direction,omitempty"`
-	SwipeDirection    *string   `json:"swipe_direction,omitempty"`
-	ClickDirection    *string   `json:"click_direction,omitempty"`
-	KeyboardDirection *string   `json:"keyboard_direction,omitempty"`
-	FitMode           *string   `json:"fit_mode,omitempty"`
-	BackgroundColor   *string   `json:"background_color,omitempty"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	UserID                string    `json:"user_id"`
+	SeriesID              string    `json:"series_id"`
+	ReadingMode           *string   `json:"reading_mode,omitempty"`
+	EpubRenderMode        *string   `json:"epub_render_mode,omitempty"`        // "auto" | "book" | "comic"
+	EpubTheme             *string   `json:"epub_theme,omitempty"`              // "light" | "dark" | "sepia"
+	EpubSpread            *string   `json:"epub_spread,omitempty"`             // "auto" | "none"
+	EpubWheelDirection    *string   `json:"epub_wheel_direction,omitempty"`    // "down" | "up"
+	EpubKeyboardDirection *string   `json:"epub_keyboard_direction,omitempty"` // "right" | "left"
+	EpubClickDirection    *string   `json:"epub_click_direction,omitempty"`    // "right" | "left"
+	ReadingDirection      *string   `json:"reading_direction,omitempty"`
+	WheelDirection        *string   `json:"wheel_direction,omitempty"` // "down" | "up"
+	SwipeDirection        *string   `json:"swipe_direction,omitempty"`
+	ClickDirection        *string   `json:"click_direction,omitempty"`
+	KeyboardDirection     *string   `json:"keyboard_direction,omitempty"`
+	FitMode               *string   `json:"fit_mode,omitempty"`
+	BackgroundColor       *string   `json:"background_color,omitempty"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }

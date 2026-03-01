@@ -1,18 +1,22 @@
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useViewerStore } from "../../stores/viewerStore";
-import { seriesAPI } from "../../api/client";
+import { seriesAPI, settingAPI } from "../../api/client";
 import { toast } from "react-hot-toast";
 import styles from "./ViewerSettings.module.css";
 import { isMobile } from "../../utils/device";
 
 interface ViewerSettingsProps {
   onClose: () => void;
+  showPdfControlsOption?: boolean;
 }
 
-export function ViewerSettings({ onClose }: ViewerSettingsProps) {
+export function ViewerSettings({ onClose, showPdfControlsOption = false }: ViewerSettingsProps) {
   const { t } = useTranslation();
   const isMobileDevice = isMobile();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [hasScrollbar, setHasScrollbar] = useState(false);
   const {
     settings,
     currentSeriesId,
@@ -20,10 +24,19 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
     setReadingDirection,
     setClickDirection,
     setKeyboardDirection,
+    setWheelDirection,
     setSwipeDirection,
     setFitMode,
     setBackgroundColor,
+    setPageTransition,
+    setShowPdfZoomControls,
   } = useViewerStore();
+
+  const updateScrollbarState = useCallback(() => {
+    const contentEl = contentRef.current;
+    if (!contentEl) return;
+    setHasScrollbar(contentEl.scrollHeight > contentEl.clientHeight + 1);
+  }, []);
 
   // 설정 변경 및 서버 동기화 핸들러
   const updateSetting = async <T extends string | number | boolean>(
@@ -33,6 +46,27 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
   ) => {
     // 1. 스토어 상태 즉시 업데이트 (반응성 확보)
     storeFn(value);
+
+    // page_transition / show_pdf_zoom_controls는 전역 Setting API로 저장
+    // (시리즈 개별 설정 API에는 아직 해당 필드가 없어 무시될 수 있음)
+    if (key === "page_transition") {
+      try {
+        await settingAPI.update("viewer_page_transition", { value: String(value) });
+      } catch (error) {
+        console.error("Failed to sync viewer_page_transition to server:", error);
+        toast.error(t("viewer.settings.alert.save_failed"));
+      }
+      return;
+    }
+    if (key === "show_pdf_zoom_controls") {
+      try {
+        await settingAPI.update("viewer_show_pdf_zoom_controls", { value: value ? "true" : "false" });
+      } catch (error) {
+        console.error("Failed to sync viewer_show_pdf_zoom_controls to server:", error);
+        toast.error(t("viewer.settings.alert.save_failed"));
+      }
+      return;
+    }
 
     // 2. 시리즈 개별 설정인 경우 서버에 저장
     if (currentSeriesId) {
@@ -44,6 +78,39 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
       }
     }
   };
+
+  useEffect(() => {
+    const contentEl = contentRef.current;
+    if (!contentEl) return;
+
+    updateScrollbarState();
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateScrollbarState();
+    });
+    resizeObserver.observe(contentEl);
+
+    const mutationObserver = new MutationObserver(() => {
+      updateScrollbarState();
+    });
+    mutationObserver.observe(contentEl, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    window.addEventListener("resize", updateScrollbarState);
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", updateScrollbarState);
+    };
+  }, [updateScrollbarState]);
+
+  useEffect(() => {
+    updateScrollbarState();
+  }, [updateScrollbarState, settings, showPdfControlsOption, isMobileDevice]);
 
   return (
     <div
@@ -57,14 +124,24 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
         <div className={styles.settingsHeader}>
           <span className={styles.settingsTitle}>{t("viewer.settings.title")}</span>
           <button
+            type="button"
             className={styles.settingsClose}
             onClick={onClose}
+            aria-label={t("common.close", { defaultValue: "닫기" })}
+            title={t("common.close", { defaultValue: "닫기" })}
           >
-            <X size={20} />
+            <X
+              size={20}
+              aria-hidden="true"
+            />
           </button>
         </div>
 
-        <div className={styles.settingsSection}>
+        <div
+          ref={contentRef}
+          className={`${styles.settingsContent} ${!hasScrollbar ? styles.noScrollbar : ""}`}
+        >
+          <div className={styles.settingsSection}>
           <div className={styles.settingsLabel}>{t("viewer.settings.reading_mode.label")}</div>
           <div className={styles.settingsOptions}>
             <button
@@ -86,9 +163,9 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
               {t("viewer.settings.reading_mode.vertical")}
             </button>
           </div>
-        </div>
+          </div>
 
-        <div className={styles.settingsSection}>
+          <div className={styles.settingsSection}>
           <div className={styles.settingsLabel}>{t("viewer.settings.reading_direction.label")}</div>
           <div className={styles.settingsOptions}>
             <button
@@ -104,9 +181,9 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
               {t("viewer.settings.reading_direction.rtl")}
             </button>
           </div>
-        </div>
+          </div>
 
-        <div className={styles.settingsSection}>
+          <div className={styles.settingsSection}>
           <div className={styles.settingsLabel}>{t("viewer.settings.click_direction.label")}</div>
           <div className={styles.settingsOptions}>
             <button
@@ -122,9 +199,27 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
               {t("viewer.settings.click_direction.left")}
             </button>
           </div>
-        </div>
+          </div>
 
-        <div className={styles.settingsSection}>
+          <div className={styles.settingsSection}>
+          <div className={styles.settingsLabel}>{t("viewer.settings.wheel_direction.label")}</div>
+          <div className={styles.settingsOptions}>
+            <button
+              className={`${styles.optionBtn} ${settings.wheelDirection === "down" ? styles.selected : ""}`}
+              onClick={() => updateSetting("wheel_direction", "down", setWheelDirection)}
+            >
+              {t("viewer.settings.wheel_direction.down")}
+            </button>
+            <button
+              className={`${styles.optionBtn} ${settings.wheelDirection === "up" ? styles.selected : ""}`}
+              onClick={() => updateSetting("wheel_direction", "up", setWheelDirection)}
+            >
+              {t("viewer.settings.wheel_direction.up")}
+            </button>
+          </div>
+          </div>
+
+          <div className={styles.settingsSection}>
           <div className={styles.settingsLabel}>
             {isMobileDevice
               ? t("viewer.settings.nav_direction.label_mobile")
@@ -170,9 +265,9 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
               )}
             </button>
           </div>
-        </div>
+          </div>
 
-        <div className={styles.settingsSection}>
+          <div className={styles.settingsSection}>
           <div className={styles.settingsLabel}>{t("viewer.settings.fit_mode.label")}</div>
           <div className={styles.settingsOptions}>
             <button
@@ -200,9 +295,9 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
               {t("viewer.settings.fit_mode.original")}
             </button>
           </div>
-        </div>
+          </div>
 
-        <div className={styles.settingsSection}>
+          <div className={styles.settingsSection}>
           <div className={styles.settingsLabel}>{t("viewer.settings.background_color.label")}</div>
           <div className={styles.colorOptions}>
             <button
@@ -234,6 +329,51 @@ export function ViewerSettings({ onClose }: ViewerSettingsProps) {
               title={t("viewer.settings.background_color.white")}
             />
           </div>
+          </div>
+
+          <div className={styles.settingsSection}>
+          <div className={styles.settingsLabel}>{t("viewer.settings.page_transition.label")}</div>
+          <div className={styles.settingsOptions}>
+            <button
+              className={`${styles.optionBtn} ${settings.pageTransition === "slide" ? styles.selected : ""}`}
+              onClick={() => updateSetting("page_transition", "slide", setPageTransition)}
+            >
+              {t("viewer.settings.page_transition.slide")}
+            </button>
+            <button
+              className={`${styles.optionBtn} ${settings.pageTransition === "fade" ? styles.selected : ""}`}
+              onClick={() => updateSetting("page_transition", "fade", setPageTransition)}
+            >
+              {t("viewer.settings.page_transition.fade")}
+            </button>
+            <button
+              className={`${styles.optionBtn} ${settings.pageTransition === "none" ? styles.selected : ""}`}
+              onClick={() => updateSetting("page_transition", "none", setPageTransition)}
+            >
+              {t("viewer.settings.page_transition.none")}
+            </button>
+          </div>
+          </div>
+
+          {showPdfControlsOption && (
+            <div className={styles.settingsSection}>
+              <div className={styles.settingsLabel}>{t("viewer.settings.pdf_zoom_controls.label")}</div>
+              <div className={styles.settingsOptions}>
+                <button
+                  className={`${styles.optionBtn} ${settings.showPdfZoomControls ? styles.selected : ""}`}
+                  onClick={() => updateSetting("show_pdf_zoom_controls", true, setShowPdfZoomControls)}
+                >
+                  {t("viewer.settings.pdf_zoom_controls.show")}
+                </button>
+                <button
+                  className={`${styles.optionBtn} ${!settings.showPdfZoomControls ? styles.selected : ""}`}
+                  onClick={() => updateSetting("show_pdf_zoom_controls", false, setShowPdfZoomControls)}
+                >
+                  {t("viewer.settings.pdf_zoom_controls.hide")}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

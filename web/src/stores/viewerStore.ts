@@ -12,12 +12,16 @@ export type ReadingDirection = "ltr" | "rtl";
 // 이미지 맞춤 모드
 export type FitMode = "screen" | "width" | "height" | "original";
 
+// 페이지 전환 애니메이션 타입
+export type PageTransitionType = "slide" | "fade" | "none";
+
 // 뷰어 설정
 export interface ViewerSettings {
   readingMode: ReadingMode;
   readingDirection: ReadingDirection;
   clickDirection: ReadingDirection;
   keyboardDirection: ReadingDirection;
+  wheelDirection: "down" | "up";
   fitMode: FitMode;
   preloadCount: number;
   pullThreshold: number; // 당기기 감도
@@ -26,6 +30,8 @@ export interface ViewerSettings {
   backgroundColor: string; // 배경색
   pageOffset: number; // 페이지 오프셋 (0 또는 1)
   swipeDirection: ReadingDirection; // 스와이프 방향 (모바일/터치용)
+  pageTransition: PageTransitionType; // 페이지 전환 애니메이션
+  showPdfZoomControls: boolean; // PDF 상단 확대 버튼 표시 여부
 }
 
 // 뷰어 상태
@@ -71,12 +77,15 @@ interface ViewerState {
   togglePageOffset: () => void;
   setFitMode: (mode: FitMode) => void;
   setKeyboardDirection: (direction: ReadingDirection) => void;
+  setWheelDirection: (direction: "down" | "up") => void;
   setSwipeDirection: (direction: ReadingDirection) => void;
   setBackgroundColor: (color: string) => void;
   setPreloadCount: (count: number) => void;
   setPullThreshold: (threshold: number) => void;
   setPullSensitivity: (sensitivity: number) => void;
   setShowThreshold: (threshold: number) => void;
+  setPageTransition: (transition: PageTransitionType) => void;
+  setShowPdfZoomControls: (show: boolean) => void;
 
   // 다음 챕터 데이터 캐시
   nextChapterData: {
@@ -92,6 +101,7 @@ const defaultSettings: ViewerSettings = {
   readingDirection: "ltr",
   clickDirection: "ltr",
   keyboardDirection: "ltr",
+  wheelDirection: "down",
   pageOffset: 0,
   fitMode: "screen",
   backgroundColor: "#000000",
@@ -100,6 +110,8 @@ const defaultSettings: ViewerSettings = {
   pullSensitivity: 0.6,
   showThreshold: 10,
   swipeDirection: "ltr",
+  pageTransition: "slide",
+  showPdfZoomControls: true,
 };
 
 export const useViewerStore = create<ViewerState>()(
@@ -276,6 +288,23 @@ export const useViewerStore = create<ViewerState>()(
           return updates;
         }),
 
+      setWheelDirection: (direction) =>
+        set((state) => {
+          const newSettings = { ...state.settings, wheelDirection: direction };
+          const updates: Partial<ViewerState> = { settings: newSettings };
+
+          if (state.currentSeriesId) {
+            updates.seriesSettings = {
+              ...state.seriesSettings,
+              [state.currentSeriesId]: {
+                ...(state.seriesSettings[state.currentSeriesId] || {}),
+                wheelDirection: direction,
+              },
+            };
+          }
+          return updates;
+        }),
+
       setSwipeDirection: (direction) =>
         set((state) => {
           const newSettings = { ...state.settings, swipeDirection: direction };
@@ -328,6 +357,28 @@ export const useViewerStore = create<ViewerState>()(
       setShowThreshold: (threshold) =>
         set((state) => ({
           settings: { ...state.settings, showThreshold: threshold },
+        })),
+
+      setPageTransition: (transition) =>
+        set((state) => {
+          const newSettings = { ...state.settings, pageTransition: transition };
+          const updates: Partial<ViewerState> = { settings: newSettings };
+
+          if (state.currentSeriesId) {
+            updates.seriesSettings = {
+              ...state.seriesSettings,
+              [state.currentSeriesId]: {
+                ...(state.seriesSettings[state.currentSeriesId] || {}),
+                pageTransition: transition,
+              },
+            };
+          }
+          return updates;
+        }),
+
+      setShowPdfZoomControls: (show) =>
+        set((state) => ({
+          settings: { ...state.settings, showPdfZoomControls: show },
         })),
 
       initPage: (page, total) =>

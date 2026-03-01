@@ -1,0 +1,97 @@
+.viewerWrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+.viewerWrapper.vertical {
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.viewerWrapper:not(.vertical) {
+  overflow: hidden;
+}
+
+.canvasContainer {
+  display: flex;
+  margin: 0 auto;
+}
+
+.pageWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.vertical .pageWrapper {
+  margin-bottom: 20px;
+}
+
+.loadingContainer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  gap: 16px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.textLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  opacity: 0.2;
+  line-height: 1;
+  text-rendering: optimizeLegibility;
+  color: transparent;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  z-index: 1;
+}
+
+.textLayer ::selection {
+  background: blue;
+  color: transparent;
+}
+
+.textLayer br {
+  display: none;
+}
+
+.textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+/* Improve text selection for better highlighting */
+.textLayer span[role="presentation"] {
+  position: absolute;
+  color: transparent;
+  line-height: 1;
+  pointer-events: auto;
+}

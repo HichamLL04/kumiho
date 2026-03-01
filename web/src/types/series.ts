@@ -4,6 +4,10 @@ export interface EbookMetadata {
   authors: string;
   tags: string;
   publication_year: string;
+  original_title: string;
+  publisher: string;
+  published_at: string;
+  isbn: string;
 }
 
 export interface Series {
@@ -46,6 +50,8 @@ export interface Chapter {
   chapter_number: number;
   path: string;
   page_count: number;
+  total_bytes?: number;
+  total_positions?: number;
   thumbnail_url?: string;
   is_read?: boolean;
   created_at: string;
@@ -69,7 +75,10 @@ export interface ReadingProgress {
   chapter_id?: string;
   current_page: number;
   total_pages: number;
+  current_position?: number;
+  total_positions?: number;
   progress_percent: number;
+  current_cfi?: string;
   updated_at: string;
 }
 
@@ -86,6 +95,10 @@ export interface SeriesProgressSummary {
   current_chapter_number: number;
   /** 시리즈의 전체 화 수 */
   total_chapters: number;
+  /** 시리즈의 전체 페이지 수 */
+  total_pages?: number;
+  /** 시리즈에서 읽은 전체 페이지 수 */
+  read_pages?: number;
 }
 
 export interface Library {
