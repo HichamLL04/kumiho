@@ -5,7 +5,7 @@
 ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/aha-hyeong/kumiho?style=flat-square&label=version)
 ![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/ahahyeong/kumiho?style=flat-square)
 ![GitHub](https://img.shields.io/github/license/aha-hyeong/kumiho?style=flat-square)
-![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)
+![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)
 ![React](https://img.shields.io/badge/React-Vite-61DAFB?style=flat-square&logo=react)
 
 **초경량, 고성능 개인 호스팅 웹 미디어 서버**</br>
@@ -21,9 +21,9 @@
 
 ## 🌐 Language(지원 언어)
 
-- [한국어 (Korean)](#korean)
 - [English](#english)
 - [日本語](#japanese)
+- [한국어 (Korean)](#korean)
 
 > **The primary language is Korean, and translations may not be perfect.**<br>Feedback is welcome and will be reflected as much as possible.
 >
@@ -34,113 +34,10 @@
 ---
 
 > [!IMPORTANT]
-> **v0.9.0 보안 강화 및 중대 변경 사항 (Breaking Change)**
-> 이번 업데이트는 보안 향상을 위해 컨테이너 실행 권한을 `root`에서 일반 사용자(`appuser`)로 변경하였습니다.
-> **기존 사용자 유의사항**: 썸네일이 깨지거나 "Permission Denied" 에러가 발생하는 경우, 반드시 `PUID`와 `PGID` 환경변수를 자신의 계정 ID(터미널에서 `id` 명령어로 확인)로 설정해 주시기 바랍니다.
-
----
-
-<a name="korean"></a>
-
-## 🇰🇷 구미호(Kumiho) 소개
-
-<strong>구미호(Kumiho)</strong>는 만화, 소설 등 개인 소장 도서 파일을 관리하고 스트리밍할 수 있는 웹 기반 미디어 서버입니다.
-
-기존 솔루션들에서 불편함을 느낀 개발자가 본인의 편의를 위해 우선적으로 개발했습니다. **Golang**으로 작성되어 가볍고 빠릅니다.
-
-### ✨ 주요 특징
-
-| 특징                      | 설명                                                                                           |
-| :------------------------ | :--------------------------------------------------------------------------------------------- |
-| **🚀 압도적인 속도**      | Golang 기반의 네이티브 바이너리로 실행됩니다. JVM 오버헤드가 없으며 스캔 속도가 매우 빠릅니다. |
-| **📂 파일 시스템 미러링** | 복잡한 메타데이터 관리 없이도, 내 폴더 구조 그대로(Tree View) 라이브러리를 보여줍니다.         |
-| **⚡ 가벼운 리소스**      | 저사양 NAS에서도 메모리 점유율 걱정 없이 쾌적하게 구동됩니다.                                  |
-| **📱 반응형 웹 뷰어**     | PC, 태블릿, 모바일 어디서든 끊김 없는 스트리밍 뷰어를 제공합니다. (Webtoon 모드 지원)          |
-| **🎵 몰입형 BGM 재생**    | 시리즈 폴더 내에 작품 파일명과 동일한 오디오 파일(`.mp3`)이 있으면 감상 시 자동 재생됩니다.    |
-
-### 지원 포맷
-
-| 분류         | 지원 확장자                                      |
-| :----------- | :----------------------------------------------- |
-| **이미지**   | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
-| **아카이브** | `.zip`, `.cbz`                                   |
-
-> 📁 **폴더 구조**: 폴더 내 이미지 파일들, 또는 아카이브 파일을 자동으로 인식하여 볼륨/챕터로 구성합니다.
-
-#### 🔜 지원 예정
-
-| 분류         | 예정 확장자                   |
-| :----------- | :---------------------------- |
-| **아카이브** | `.cbr`, `.rar`, `.cb7`, `.7z` |
-| **전자책**   | `.epub`, `.pdf`, `.txt`       |
-
-- `comicInfo.xml` 지원
-  - 메타데이터 관리 지원
-- `OPDS` 기능
-  - 모바일 뷰어 앱 지원
-
-### 🛠 설치 방법 (Docker)
-
-#### Docker Compose (권장)
-
-```yaml
-version: "3.8"
-services:
-  kumiho:
-    image: ahahyeong/kumiho:latest
-    container_name: kumiho
-    restart: unless-stopped
-    ports:
-      - "9999:9999" # 외부포트:내부포트
-    volumes:
-      - ./data:/app/data # DB 및 데이터 (필수)
-      - ./config:/app/config # 설정 (선택)
-      - ./books:/books # 도서 라이브러리 경로
-    environment:
-      - PUID=1000 # 유저 ID (id 명령어로 확인 가능)
-      - PGID=1000 # 그룹 ID
-      - TZ=Asia/Seoul
-      - JWT_SECRET=your_secret_key # 보안을 위한 비밀키 설정
-```
-
-#### Docker Run
-
-```bash
-docker run -d \
-  --name kumiho \
-  -p 9999:9999 \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/config:/app/config \
-  -v $(pwd)/books:/books \
-  -e PUID=1000 \
-  -e PGID=1000 \
-  -e TZ=Asia/Seoul \
-  -e JWT_SECRET=your_secret_key \
-  --restart unless-stopped \
-  ahahyeong/kumiho:latest
-```
-
-### 📂 라이브러리 경로 설정 가이드
-
-Docker Compose 설정에서 `volumes`에 `./books:/books`로 마운트한 경우, Kumiho 설정 페이지에서는 **컨테이너 내부 경로**인 `/books`를 입력해야 합니다.
-
-![라이브러리 경로 설정](docs/images/library-settings.png)
-
-1. **설정 > 라이브러리** 탭으로 이동합니다.
-2. **Add New Library** 버튼을 클릭합니다.
-3. **Set Path** 필드에 `/books`를 입력합니다. (호스트 경로인 `./books`가 아닙니다!)
-
-## 🐞 버그 제보 및 기능 요청
-
-- [GitHub Issues](https://github.com/aha-hyeong/kumiho/issues)
-- ahahyeong@gmail.com
-
----
-
-> [!IMPORTANT]
 > **v0.9.0 Security Enhancement & Breaking Change**
 > For improved security, the container execution privilege has been changed from `root` to a standard user (`appuser`).
 > **Note for existing users**: If thumbnails are broken or you encounter "Permission Denied" errors, please ensure you set the `PUID` and `PGID` environment variables to match your account IDs (check with the `id` command in your terminal).
+> **v0.10.x Docker update**: Docker base images were changed for CGO/native-library compatibility. Please re-pull the image and recreate the container when updating.
 
 ---
 
@@ -168,6 +65,7 @@ It was originally developed by a developer for personal convenience, after feeli
 | :----------- | :----------------------------------------------- |
 | **Images**   | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
 | **Archives** | `.zip`, `.cbz`                                   |
+| **E-books**  | `.epub`, `.pdf`                                  |
 
 > 📁 **Folder Structure**: Automatically recognizes image files in folders or archive files and organizes them into volumes/chapters.
 
@@ -176,7 +74,7 @@ It was originally developed by a developer for personal convenience, after feeli
 | Category     | Planned Extensions            |
 | :----------- | :---------------------------- |
 | **Archives** | `.cbr`, `.rar`, `.cb7`, `.7z` |
-| **E-books**  | `.epub`, `.pdf`, `.txt`       |
+| **E-books**  | `.txt`                        |
 
 - Support `comicInfo.xml`
   - Metadata management interaction
@@ -244,7 +142,8 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 > [!IMPORTANT]
 > **v0.9.0 セキュリティ強化および重大な変更 (Breaking Change)**
 > セキュリティ向上のため、コンテナの実行権限を `root` から一般ユーザー (`appuser`) に変更しました。
-> **既存ユーザーの方へ**: サムネイルが表示されない、または "Permission Denied" エ러が発生する場合は、必ず `PUID` と `PGID` 環境変数を自身のユーザー ID（ターミナルで `id` コマンドで確認）に設定してください。
+> **既存ユーザーの方へ**: サムネイルが表示されない、または "Permission Denied" エラーが発生する場合は、必ず `PUID` と `PGID` 環境変数を自身のユーザー ID（ターミナルで `id` コマンドで確認）に設定してください。
+> **v0.10.x Docker更新**: CGO/ネイティブライブラリ互換性のため、Dockerベースイメージを変更しました。更新時はイメージを再Pullし、コンテナを再作成してください。
 
 ---
 
@@ -272,6 +171,7 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 | :------------- | :----------------------------------------------- |
 | **画像**       | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
 | **アーカイブ** | `.zip`, `.cbz`                                   |
+| **電子書籍**   | `.epub`, `.pdf`                                  |
 
 > 📁 **フォルダ構造**: フォルダ内の画像ファイル、またはアーカイブファイルを自動的に認識し、巻/チャプターとして構成します。
 
@@ -280,7 +180,7 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 | 分類           | 予定拡張子                    |
 | :------------- | :---------------------------- |
 | **アーカイブ** | `.cbr`, `.rar`, `.cb7`, `.7z` |
-| **電子書籍**   | `.epub`, `.pdf`, `.txt`       |
+| **電子書籍**   | `.txt`                        |
 
 - `comicInfo.xml` 対応
   - メタデータ管理の連携
@@ -342,3 +242,111 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 
 - [GitHub Issues](https://github.com/aha-hyeong/kumiho/issues)
 - ahahyeong@gmail.com
+
+---
+
+> [!IMPORTANT]
+> **v0.9.0 보안 강화 및 중대 변경 사항 (Breaking Change)**
+> 이번 업데이트는 보안 향상을 위해 컨테이너 실행 권한을 `root`에서 일반 사용자(`appuser`)로 변경하였습니다.
+> **기존 사용자 유의사항**: 썸네일이 깨지거나 "Permission Denied" 에러가 발생하는 경우, 반드시 `PUID`와 `PGID` 환경변수를 자신의 계정 ID(터미널에서 `id` 명령어로 확인)로 설정해 주시기 바랍니다.
+> **v0.10.x Docker 업데이트**: CGO/네이티브 라이브러리 호환성을 위해 Docker 베이스 이미지를 변경했습니다. 업데이트 시 이미지를 다시 pull하고 컨테이너를 recreate 해주세요.
+
+---
+
+<a name="korean"></a>
+
+## 🇰🇷 구미호(Kumiho) 소개
+
+<strong>구미호(Kumiho)</strong>는 만화, 소설 등 개인 소장 도서 파일을 관리하고 스트리밍할 수 있는 웹 기반 미디어 서버입니다.
+
+기존 솔루션들에서 불편함을 느낀 개발자가 본인의 편의를 위해 우선적으로 개발했습니다. **Golang**으로 작성되어 가볍고 빠릅니다.
+
+### ✨ 주요 특징
+
+| 특징                      | 설명                                                                                           |
+| :------------------------ | :--------------------------------------------------------------------------------------------- |
+| **🚀 압도적인 속도**      | Golang 기반의 네이티브 바이너리로 실행됩니다. JVM 오버헤드가 없으며 스캔 속도가 매우 빠릅니다. |
+| **📂 파일 시스템 미러링** | 복잡한 메타데이터 관리 없이도, 내 폴더 구조 그대로(Tree View) 라이브러리를 보여줍니다.         |
+| **⚡ 가벼운 리소스**      | 저사양 NAS에서도 메모리 점유율 걱정 없이 쾌적하게 구동됩니다.                                  |
+| **📱 반응형 웹 뷰어**     | PC, 태블릿, 모바일 어디서든 끊김 없는 스트리밍 뷰어를 제공합니다. (Webtoon 모드 지원)          |
+| **🎵 몰입형 BGM 재생**    | 시리즈 폴더 내에 작품 파일명과 동일한 오디오 파일(`.mp3`)이 있으면 감상 시 자동 재생됩니다.    |
+
+### 지원 포맷
+
+| 분류         | 지원 확장자                                      |
+| :----------- | :----------------------------------------------- |
+| **이미지**   | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
+| **아카이브** | `.zip`, `.cbz`                                   |
+| **전자책**   | `.epub`, `.pdf`                                  |
+
+> 📁 **폴더 구조**: 폴더 내 이미지 파일들, 또는 아카이브 파일을 자동으로 인식하여 볼륨/챕터로 구성합니다.
+
+#### 🔜 지원 예정
+
+| 분류         | 예정 확장자                   |
+| :----------- | :---------------------------- |
+| **아카이브** | `.cbr`, `.rar`, `.cb7`, `.7z` |
+| **전자책**   | `.txt`                        |
+
+- `comicInfo.xml` 지원
+  - 메타데이터 관리 지원
+- `OPDS` 기능
+  - 모바일 뷰어 앱 지원
+
+### 🛠 설치 방법 (Docker)
+
+#### Docker Compose (권장)
+
+```yaml
+version: "3.8"
+services:
+  kumiho:
+    image: ahahyeong/kumiho:latest
+    container_name: kumiho
+    restart: unless-stopped
+    ports:
+      - "9999:9999" # 외부포트:내부포트
+    volumes:
+      - ./data:/app/data # DB 및 데이터 (필수)
+      - ./config:/app/config # 설정 (선택)
+      - ./books:/books # 도서 라이브러리 경로
+    environment:
+      - PUID=1000 # 유저 ID (id 명령어로 확인 가능)
+      - PGID=1000 # 그룹 ID
+      - TZ=Asia/Seoul
+      - JWT_SECRET=your_secret_key # 보안을 위한 비밀키 설정
+```
+
+#### Docker Run
+
+```bash
+docker run -d \
+  --name kumiho \
+  -p 9999:9999 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/config:/app/config \
+  -v $(pwd)/books:/books \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -e TZ=Asia/Seoul \
+  -e JWT_SECRET=your_secret_key \
+  --restart unless-stopped \
+  ahahyeong/kumiho:latest
+```
+
+### 📂 라이브러리 경로 설정 가이드
+
+Docker Compose 설정에서 `volumes`에 `./books:/books`로 마운트한 경우, Kumiho 설정 페이지에서는 **컨테이너 내부 경로**인 `/books`를 입력해야 합니다.
+
+![라이브러리 경로 설정](docs/images/library-settings.png)
+
+1. **설정 > 라이브러리** 탭으로 이동합니다.
+2. **Add New Library** 버튼을 클릭합니다.
+3. **Set Path** 필드에 `/books`를 입력합니다. (호스트 경로인 `./books`가 아닙니다!)
+
+## 🐞 버그 제보 및 기능 요청
+
+- [GitHub Issues](https://github.com/aha-hyeong/kumiho/issues)
+- ahahyeong@gmail.com
+
+---
