@@ -81,6 +81,38 @@ It was originally developed by a developer for personal convenience, after feeli
 - OPDS Support
   - Mobile viewer application support
 
+### 📁 Recommended Library Structure
+
+#### 1) Series folder with volume/chapter files directly
+
+```text
+/books
+└── My Series
+    ├── 001.zip
+    ├── 002.pdf
+    └── 003.epub
+```
+
+#### 2) Series folder with chapter/volume subfolders
+
+```text
+/books
+└── My Series
+    ├── Chapter 01
+    │   ├── 001.zip
+    │   └── 002.zip
+    ├── Chapter 02
+    │   └── 001.pdf
+    └── Chapter 03
+        └── 001.epub
+```
+
+### 🎵 BGM Auto-Play Rule
+
+- Supported audio formats: `.mp3`, `.ogg`, `.wav`, `.flac`, `.m4a`
+- BGM auto-plays when the audio file has the same base filename as the currently opened volume/chapter file.
+- Example: `001.zip` ↔ `001.mp3`, `001.epub` ↔ `001.mp3`
+
 ### 🛠 Installation (Docker)
 
 #### Docker Compose (Recommended)
@@ -187,6 +219,38 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 - OPDS 対応
   - モバイルビューアアプリ対応
 
+### 📁 推奨ライブラリ構成
+
+#### 1) シリーズ直下に巻/チャプターファイルを配置
+
+```text
+/books
+└── My Series
+    ├── 001.zip
+    ├── 002.pdf
+    └── 003.epub
+```
+
+#### 2) シリーズ配下にチャプター(または巻)フォルダを分けて配置
+
+```text
+/books
+└── My Series
+    ├── Chapter 01
+    │   ├── 001.zip
+    │   └── 002.zip
+    ├── Chapter 02
+    │   └── 001.pdf
+    └── Chapter 03
+        └── 001.epub
+```
+
+### 🎵 BGM自動再生ルール
+
+- 対応オーディオ形式: `.mp3`, `.ogg`, `.wav`, `.flac`, `.m4a`
+- 閲覧中の巻/チャプターファイルと同じベース名のオーディオがある場合、自動再生されます。
+- 例: `001.zip` ↔ `001.mp3`, `001.epub` ↔ `001.mp3`
+
 ### 🛠 インストール方法 (Docker)
 
 #### Docker Compose (推奨)
@@ -292,6 +356,38 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
   - 메타데이터 관리 지원
 - `OPDS` 기능
   - 모바일 뷰어 앱 지원
+
+### 📁 추천 라이브러리 구조
+
+#### 1) 시리즈 폴더 바로 아래에 권/챕터 파일 배치
+
+```text
+/books
+└── My Series
+    ├── 001.zip
+    ├── 002.pdf
+    └── 003.epub
+```
+
+#### 2) 시리즈 폴더 아래에 챕터(또는 권) 폴더를 나눠서 배치
+
+```text
+/books
+└── My Series
+    ├── Chapter 01
+    │   ├── 001.zip
+    │   └── 002.zip
+    ├── Chapter 02
+    │   └── 001.pdf
+    └── Chapter 03
+        └── 001.epub
+```
+
+### 🎵 BGM 자동 재생 규칙
+
+- 지원 오디오 형식: `.mp3`, `.ogg`, `.wav`, `.flac`, `.m4a`
+- 현재 읽는 볼륨/챕터 파일과 베이스 파일명이 동일한 오디오 파일이 있으면 자동 재생됩니다.
+- 예시: `001.zip` ↔ `001.mp3`, `001.epub` ↔ `001.mp3`
 
 ### 🛠 설치 방법 (Docker)
 
