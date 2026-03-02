@@ -15,7 +15,8 @@ interface UseViewerZoomParams {
   doubleTapZoomZone?: "any" | "center";
 }
 
-const DOUBLE_TAP_DELAY = 300;
+const DOUBLE_TAP_DELAY = 450;
+const SINGLE_TAP_DEFER_DELAY = 180;
 const ZOOM_NAVIGATION_LOCK_SCALE = 1.01;
 const ACCIDENTAL_ZOOM_RESET_MAX_SCALE = 1.2;
 const BASE_DRAG_THRESHOLD_PX = 5;
@@ -147,6 +148,11 @@ export function useViewerZoom({
       if (xRatio < 0.3) zone = "left";
       else if (xRatio > 0.7) zone = "right";
 
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+      }
+
       const nativeEvent = e.nativeEvent;
       const isMouseNativeEvent = nativeEvent instanceof MouseEvent;
       const isDoubleByDetail = isMouseNativeEvent && nativeEvent.detail === 2;
@@ -154,11 +160,6 @@ export function useViewerZoom({
       const isDoubleTapZoomAllowed = doubleTapZoomZone === "any" || zone === "center";
 
       if ((isDoubleByDetail || isDoubleByTime) && isDoubleTapZoomAllowed) {
-        if (clickTimeoutRef.current) {
-          clearTimeout(clickTimeoutRef.current);
-          clickTimeoutRef.current = null;
-        }
-
         if (isVerticalMode && onVerticalZoomToggle) {
           const clientY = "changedTouches" in e ? e.changedTouches[0].clientY : (e as React.MouseEvent).clientY;
           const targetEl = e.target instanceof HTMLElement ? e.target : null;
@@ -193,47 +194,48 @@ export function useViewerZoom({
           }
         }
       } else if (deferSingleTapForDoubleTap) {
-        // First Tap - Wait for potential second tap
-        clickTimeoutRef.current = setTimeout(() => {
-          clickTimeoutRef.current = null;
+        // If text is selected (e.g. user just finished text drag), keep it and do nothing
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) {
+          lastTapTimeRef.current = now;
+          return;
+        }
 
-          // If text is selected (e.g. user just finished text drag), keep it and do nothing
-          const selection = window.getSelection();
-          if (selection && !selection.isCollapsed) {
+        if (zone === "center") {
+          clickTimeoutRef.current = setTimeout(() => {
+            clickTimeoutRef.current = null;
+            useViewerStore.getState().toggleUI();
+            // 단일 탭 동작이 확정된 뒤에는 이전 탭을 더블탭 후보에서 제외
+            lastTapTimeRef.current = 0;
+          }, SINGLE_TAP_DEFER_DELAY);
+        } else {
+          // 좌/우 영역: 즉시 페이지 이동 (딜레이 없음)
+          let currentScale = 1;
+          if (refToUse.current) {
+            currentScale = refToUse.current.instance.transformState.scale;
+          }
+
+          if (currentScale > ZOOM_NAVIGATION_LOCK_SCALE) {
+            if (
+              doubleTapZoomZone === "center" &&
+              currentScale <= ACCIDENTAL_ZOOM_RESET_MAX_SCALE &&
+              refToUse.current
+            ) {
+              refToUse.current.resetTransform(120);
+              setIsZoomed(false);
+            }
+            lastTapTimeRef.current = now;
             return;
           }
 
-          if (zone === "center") {
-            useViewerStore.getState().toggleUI();
+          if (zone === "left") {
+            if (isRTL) onNext();
+            else onPrev();
           } else {
-            // Prevent nav if zoomed
-            let currentScale = 1;
-            if (refToUse.current) {
-              currentScale = refToUse.current.instance.transformState.scale;
-            }
-
-            if (currentScale > ZOOM_NAVIGATION_LOCK_SCALE) {
-              if (
-                doubleTapZoomZone === "center" &&
-                currentScale <= ACCIDENTAL_ZOOM_RESET_MAX_SCALE &&
-                refToUse.current
-              ) {
-                // 이미지 뷰어에서 의도치 않은 미세 확대 상태는 자동 복귀
-                refToUse.current.resetTransform(120);
-                setIsZoomed(false);
-              }
-              return;
-            }
-
-            if (zone === "left") {
-              if (isRTL) onNext();
-              else onPrev();
-            } else {
-              if (isRTL) onPrev();
-              else onNext();
-            }
+            if (isRTL) onPrev();
+            else onNext();
           }
-        }, DOUBLE_TAP_DELAY);
+        }
       } else {
         // Image viewer path: handle single tap immediately without waiting for double-tap window
         const selection = window.getSelection();
