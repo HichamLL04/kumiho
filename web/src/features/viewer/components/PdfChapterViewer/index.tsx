@@ -443,6 +443,8 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
           } catch (firstErr) {
             // 1차 실패한 loadingTask의 리소스를 정리한다.
             activeLoadingTask?.destroy();
+            // 언마운트(또는 chapterId 변경) 이후에는 재시도를 수행하지 않는다.
+            if (!isMounted) return;
             console.warn("PDF load failed, retrying with worker disabled", firstErr);
             pdf = await loadPdf(true);
           }
