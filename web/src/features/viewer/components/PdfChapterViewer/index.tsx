@@ -9,18 +9,19 @@ declare global {
   }
 }
 const NEEDS_TOHEX_POLYFILL = typeof Uint8Array.prototype.toHex !== "function";
-// 메인 스레드와 워커 래퍼 양쪽에서 동일한 폴리필을 사용한다.
-// 드리프트를 방지하기 위해 문자열 코드를 단일 상수로 관리한다.
-const TOHEX_POLYFILL_CODE = `if(typeof Uint8Array.prototype.toHex!=="function"){Object.defineProperty(Uint8Array.prototype,"toHex",{value:function(){let h="";for(let i=0;i<this.length;i++)h+=this[i].toString(16).padStart(2,"0");return h},writable:true,configurable:true,enumerable:false});}`;
+// 메인 스레드와 워커 래퍼 양쪽에서 동일한 구현을 사용한다.
+// 단일 함수에서 .toString()으로 워커 문자열을 생성하여 드리프트를 방지한다.
+const TOHEX_POLYFILL_IMPL = function (this: Uint8Array): string {
+  let hex = "";
+  for (let i = 0; i < this.length; i++) {
+    hex += this[i].toString(16).padStart(2, "0");
+  }
+  return hex;
+};
+const TOHEX_POLYFILL_CODE = `if(typeof Uint8Array.prototype.toHex!=="function"){Object.defineProperty(Uint8Array.prototype,"toHex",{value:${TOHEX_POLYFILL_IMPL.toString()},writable:true,configurable:true,enumerable:false});}`;
 if (NEEDS_TOHEX_POLYFILL) {
   Object.defineProperty(Uint8Array.prototype, "toHex", {
-    value: function (this: Uint8Array): string {
-      let hex = "";
-      for (let i = 0; i < this.length; i++) {
-        hex += this[i].toString(16).padStart(2, "0");
-      }
-      return hex;
-    },
+    value: TOHEX_POLYFILL_IMPL,
     writable: true,
     configurable: true,
     enumerable: false,
@@ -113,9 +114,9 @@ if (NEEDS_TOHEX_POLYFILL) {
     const blobUrl = URL.createObjectURL(blob);
     pdfjsLib.GlobalWorkerOptions.workerSrc = blobUrl;
     // pdf.js가 워커를 생성할 때마다 workerSrc를 참조하므로 앱 수명 동안 유지해야 한다.
-    // 페이지 언로드 시 브라우저가 자동 해제하지만, 명시적으로도 정리한다.
+    // 모바일/bfcache 환경에서는 unload가 호출되지 않을 수 있으므로 pagehide를 사용한다.
     if (typeof window !== "undefined") {
-      window.addEventListener("unload", () => URL.revokeObjectURL(blobUrl), { once: true });
+      window.addEventListener("pagehide", () => URL.revokeObjectURL(blobUrl), { once: true });
     }
   } else {
     // 테스트/비브라우저 환경(JSDOM 등)에서는 blob 기반 워커 구성이 불가능하므로

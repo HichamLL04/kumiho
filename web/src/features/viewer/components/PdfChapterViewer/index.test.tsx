@@ -248,11 +248,17 @@ describe("PdfChapterViewer PDF load logic", () => {
     await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(5));
   });
 
-  it("calls onDocumentLoad(0) when load fails", async () => {
-    mockGetDocument.mockReturnValue({
-      promise: Promise.reject(new Error("Total failure")),
-      destroy: vi.fn(),
-    });
+  it("calls onDocumentLoad(0) when both load attempts fail", async () => {
+    // 1차(disableWorker:false)와 재시도(disableWorker:true) 모두 실패하는 시나리오
+    mockGetDocument
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("First failure")),
+        destroy: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("Retry failure")),
+        destroy: vi.fn(),
+      });
 
     const onDocumentLoad = vi.fn();
     render(
@@ -264,6 +270,9 @@ describe("PdfChapterViewer PDF load logic", () => {
     );
 
     await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(0));
+    expect(mockGetDocument).toHaveBeenCalledTimes(2);
+    expect(mockGetDocument.mock.calls[0][0]).toMatchObject({ disableWorker: false });
+    expect(mockGetDocument.mock.calls[1][0]).toMatchObject({ disableWorker: true });
   });
 
   it("retries with disableWorker:true on first load failure", async () => {
