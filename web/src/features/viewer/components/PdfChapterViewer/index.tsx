@@ -127,17 +127,14 @@ if (NEEDS_TOHEX_POLYFILL) {
       // pdf.js가 워커를 생성할 때마다 workerSrc를 참조하므로 앱 수명 동안 유지해야 한다.
       // 모바일/bfcache 환경에서는 unload가 호출되지 않을 수 있으므로 pagehide를 사용한다.
       if (typeof window !== "undefined") {
-        window.addEventListener(
-          "pagehide",
-          (event: PageTransitionEvent) => {
-            // bfcache로 페이지가 보존된 경우(event.persisted === true)에는
-            // 복원 후에도 workerSrc가 유효해야 하므로 revoke를 건너뛴다.
-            if (!event.persisted) {
-              URL.revokeObjectURL(blobUrl);
-            }
-          },
-          { once: true },
-        );
+        const handlePageHide = (event: PageTransitionEvent) => {
+          // bfcache로 페이지가 보존된 경우(event.persisted === true)에는
+          // 복원 후에도 workerSrc가 유효해야 하므로 revoke를 건너뛴다.
+          if (event.persisted) return;
+          URL.revokeObjectURL(blobUrl);
+          window.removeEventListener("pagehide", handlePageHide);
+        };
+        window.addEventListener("pagehide", handlePageHide);
       }
     } else {
       pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
