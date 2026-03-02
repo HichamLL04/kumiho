@@ -106,27 +106,40 @@ if (NEEDS_TOHEX_POLYFILL) {
     typeof URL.createObjectURL === "function";
 
   if (canUseBlobWorker) {
-    const absoluteWorkerUrl = new URL(pdfWorker, globalThis.location?.origin ?? "http://localhost").href;
-    // static import는 blob URL 모듈에서 cross-origin 제약으로 실패할 수 있다.
-    // dynamic import()를 사용하여 폴리필 적용 후 실제 워커를 로드한다.
-    const wrapperCode = `${TOHEX_POLYFILL_CODE}\nimport("${absoluteWorkerUrl}");`;
-    const blob = new Blob([wrapperCode], { type: "text/javascript" });
-    const blobUrl = URL.createObjectURL(blob);
-    pdfjsLib.GlobalWorkerOptions.workerSrc = blobUrl;
-    // pdf.js가 워커를 생성할 때마다 workerSrc를 참조하므로 앱 수명 동안 유지해야 한다.
-    // 모바일/bfcache 환경에서는 unload가 호출되지 않을 수 있으므로 pagehide를 사용한다.
-    if (typeof window !== "undefined") {
-      window.addEventListener(
-        "pagehide",
-        (event: PageTransitionEvent) => {
-          // bfcache로 페이지가 보존된 경우(event.persisted === true)에는
-          // 복원 후에도 workerSrc가 유효해야 하므로 revoke를 건너뛴다.
-          if (!event.persisted) {
-            URL.revokeObjectURL(blobUrl);
-          }
-        },
-        { once: true },
-      );
+    // location.origin이 "null"인 환경(file://, sandbox iframe 등)에서는
+    // new URL()이 실패할 수 있으므로 try/catch로 방어한다.
+    let absoluteWorkerUrl: string | null = null;
+    try {
+      const base = (typeof document !== "undefined" && document.baseURI) || globalThis.location?.href;
+      if (base) absoluteWorkerUrl = new URL(pdfWorker, base).href;
+    } catch {
+      // URL 구성 실패 시 blob 워커를 건너뛴다.
+    }
+
+    if (absoluteWorkerUrl) {
+      // static import는 blob URL 모듈에서 cross-origin 제약으로 실패할 수 있다.
+      // dynamic import()를 사용하여 폴리필 적용 후 실제 워커를 로드한다.
+      const wrapperCode = `${TOHEX_POLYFILL_CODE}\nimport("${absoluteWorkerUrl}");`;
+      const blob = new Blob([wrapperCode], { type: "text/javascript" });
+      const blobUrl = URL.createObjectURL(blob);
+      pdfjsLib.GlobalWorkerOptions.workerSrc = blobUrl;
+      // pdf.js가 워커를 생성할 때마다 workerSrc를 참조하므로 앱 수명 동안 유지해야 한다.
+      // 모바일/bfcache 환경에서는 unload가 호출되지 않을 수 있으므로 pagehide를 사용한다.
+      if (typeof window !== "undefined") {
+        window.addEventListener(
+          "pagehide",
+          (event: PageTransitionEvent) => {
+            // bfcache로 페이지가 보존된 경우(event.persisted === true)에는
+            // 복원 후에도 workerSrc가 유효해야 하므로 revoke를 건너뛴다.
+            if (!event.persisted) {
+              URL.revokeObjectURL(blobUrl);
+            }
+          },
+          { once: true },
+        );
+      }
+    } else {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
     }
   } else {
     // 테스트/비브라우저 환경(JSDOM 등)에서는 blob 기반 워커 구성이 불가능하므로
