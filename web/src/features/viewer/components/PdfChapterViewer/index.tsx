@@ -5,18 +5,26 @@ import React, { useEffect, useRef, useState, useCallback, useMemo, forwardRef, u
 // 네이티브 지원 여부를 폴리필 적용 전에 저장해야 워커 비활성화 판단에 사용할 수 있다.
 declare global {
   interface Uint8Array {
-    toHex?: () => string;
+    toHex?(this: Uint8Array): string;
   }
 }
 const NEEDS_TOHEX_POLYFILL = typeof Uint8Array.prototype.toHex !== "function";
+// 메인 스레드와 워커 래퍼 양쪽에서 동일한 폴리필을 사용한다.
+// 드리프트를 방지하기 위해 문자열 코드를 단일 상수로 관리한다.
+const TOHEX_POLYFILL_CODE = `if(typeof Uint8Array.prototype.toHex!=="function"){Object.defineProperty(Uint8Array.prototype,"toHex",{value:function(){let h="";for(let i=0;i<this.length;i++)h+=this[i].toString(16).padStart(2,"0");return h},writable:true,configurable:true,enumerable:false});}`;
 if (NEEDS_TOHEX_POLYFILL) {
-  Uint8Array.prototype.toHex = function (this: Uint8Array) {
-    let hex = "";
-    for (let i = 0; i < this.length; i++) {
-      hex += this[i].toString(16).padStart(2, "0");
-    }
-    return hex;
-  };
+  Object.defineProperty(Uint8Array.prototype, "toHex", {
+    value: function (this: Uint8Array): string {
+      let hex = "";
+      for (let i = 0; i < this.length; i++) {
+        hex += this[i].toString(16).padStart(2, "0");
+      }
+      return hex;
+    },
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
 }
 
 import * as pdfjsLib from "pdfjs-dist";
@@ -98,10 +106,9 @@ if (NEEDS_TOHEX_POLYFILL) {
 
   if (canUseBlobWorker) {
     const absoluteWorkerUrl = new URL(pdfWorker, globalThis.location?.origin ?? "http://localhost").href;
-    const polyfillCode = `if(typeof Uint8Array.prototype.toHex!=="function"){Uint8Array.prototype.toHex=function(){let h="";for(let i=0;i<this.length;i++)h+=this[i].toString(16).padStart(2,"0");return h};}`;
     // static import는 blob URL 모듈에서 cross-origin 제약으로 실패할 수 있다.
     // dynamic import()를 사용하여 폴리필 적용 후 실제 워커를 로드한다.
-    const wrapperCode = `${polyfillCode}\nimport("${absoluteWorkerUrl}");`;
+    const wrapperCode = `${TOHEX_POLYFILL_CODE}\nimport("${absoluteWorkerUrl}");`;
     const blob = new Blob([wrapperCode], { type: "text/javascript" });
     const blobUrl = URL.createObjectURL(blob);
     pdfjsLib.GlobalWorkerOptions.workerSrc = blobUrl;
