@@ -79,7 +79,9 @@ export function SeriesCard({
   const completionFromItem =
     "is_completed" in item && typeof item.is_completed === "boolean" ? item.is_completed : undefined;
   const isCompletedFromData =
-    completionFromItem !== undefined ? completionFromItem : displayProgress !== null && displayProgress >= 100;
+    completionFromItem !== undefined
+      ? completionFromItem && (displayProgress === null || displayProgress >= 100)
+      : displayProgress !== null && displayProgress >= 100;
   const isCompleted = optimisticCompleted !== null ? optimisticCompleted : isCompletedFromData;
 
   useEffect(() => {

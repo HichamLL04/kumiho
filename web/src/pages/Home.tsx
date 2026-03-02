@@ -28,6 +28,7 @@ interface RecentProgress {
   thumbnail_url?: string;
   volume_id?: string;
   volume_number?: number;
+  volume_unit?: string;
   volume_title?: string;
   volume_chapter_count?: number;
   chapter_id?: string;
@@ -293,19 +294,24 @@ export function HomePage() {
             };
 
             // 진행도 텍스트 생성
-            // 1. 권 정보가 있으면 "X권"만 표시 (화 정보 제외)
-            // 2. 권 정보가 없고 챕터만 있으면 "X화" 표시
-            // 3. 둘 다 없으면 "X페이지" 표시
+            // 1. volume_unit이 chapter면 "X화" 기준으로 표시
+            // 2. volume/chapter가 함께 있으면 상황에 따라 "X권" 또는 "X권 - Y화" 표시
+            // 3. 챕터만 있으면 "X화", 둘 다 없으면 "X페이지" 표시
             let subtitle = "";
             if (progress.volume_id && progress.chapter_id) {
-              // 볼륨 내 챕터가 1개뿐인 경우 볼륨 정보만 표시
-              if (progress.volume_chapter_count === 1) {
+              if (progress.volume_unit === "chapter") {
+                subtitle = t("series.unit.chapter", { count: progress.volume_number });
+              } else if (progress.volume_chapter_count === 1) {
+                // 볼륨 내 챕터가 1개뿐인 경우 볼륨 정보만 표시
                 subtitle = t("series.unit.volume", { count: progress.volume_number });
               } else {
                 subtitle = `${t("series.unit.volume", { count: progress.volume_number })} - ${t("series.unit.chapter", { count: progress.chapter_number })}`;
               }
             } else if (progress.volume_id) {
-              subtitle = t("series.unit.volume", { count: progress.volume_number });
+              subtitle =
+                progress.volume_unit === "chapter"
+                  ? t("series.unit.chapter", { count: progress.volume_number })
+                  : t("series.unit.volume", { count: progress.volume_number });
             } else if (progress.chapter_id) {
               subtitle = t("series.unit.chapter", { count: progress.chapter_number });
             } else {

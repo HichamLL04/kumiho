@@ -648,6 +648,7 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 		SeriesTitle        string  `json:"series_title"`
 		ThumbnailURL       *string `json:"thumbnail_url"`
 		VolumeNumber       int     `json:"volume_number"`
+		VolumeUnit         string  `json:"volume_unit"`
 		VolumeTitle        string  `json:"volume_title"`
 		VolumeChapterCount int     `json:"volume_chapter_count"`
 		ChapterNumber      int     `json:"chapter_number"`
@@ -687,6 +688,7 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 				if volume, _ := h.volumeRepo.FindByID(nil, targetVolumeID); volume != nil {
 					result[i].VolumeID = &volume.ID
 					result[i].VolumeNumber = volume.VolumeNumber
+					result[i].VolumeUnit = volume.Unit
 					result[i].VolumeTitle = volume.Title
 
 					if count, err := h.chapterRepo.CountByVolumeID(nil, volume.ID); err == nil {

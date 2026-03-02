@@ -97,6 +97,10 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
         setIsLoading(true);
         setError(null);
         setChapter(null);
+        setSeriesId(null);
+        setVolumeId(null);
+        volumeIdRef.current = null;
+        setCurrentSeriesId(null);
         // [Fix] 새 챕터 로딩 시 기존 상태 초기화 (Stale Data 방지)
         initPage(1, 0);
 
