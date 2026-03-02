@@ -417,15 +417,6 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
         if (!activePdfDoc) return;
 
         try {
-          // 기존 렌더링 작업 취소
-          const existingTask = renderTasksRef.current.get(pageNum);
-          if (existingTask) {
-            existingTask.cancel();
-          }
-
-          const page = await activePdfDoc.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 1 });
-
           const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
           const containerHeight =
             readingMode === "vertical"
@@ -434,7 +425,20 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
 
           // 모바일에서 레이아웃이 아직 확정되지 않아 크기가 0인 경우 렌더링 건너뜀
           // ResizeObserver가 크기 확정 시 재렌더링을 트리거함
-          if (containerWidth <= 1 || containerHeight <= 1) return;
+          if (containerWidth <= 1 || containerHeight <= 1) {
+            renderTasksRef.current.delete(pageNum);
+            return;
+          }
+
+          // 기존 렌더링 작업 취소
+          const existingTask = renderTasksRef.current.get(pageNum);
+          if (existingTask) {
+            existingTask.cancel();
+            renderTasksRef.current.delete(pageNum);
+          }
+
+          const page = await activePdfDoc.getPage(pageNum);
+          const viewport = page.getViewport({ scale: 1 });
 
           const availableWidth =
             readingMode === "double" && displayPages.length > 1 ? containerWidth / 2 : containerWidth;

@@ -251,8 +251,11 @@ describe("PdfChapterViewer resize observer", () => {
     Object.defineProperty(container, "clientWidth", { configurable: true, get: () => 480 });
     Object.defineProperty(container, "clientHeight", { configurable: true, get: () => 800 });
 
+    vi.useFakeTimers();
     MockResizeObserver.instances[0]?.trigger(480, 800);
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    vi.advanceTimersByTime(180);
+    await vi.runOnlyPendingTimersAsync();
+    vi.useRealTimers();
 
     await waitFor(() => {
       expect(mockPdfGetPage.mock.calls.length).toBeGreaterThan(renderCallsBeforeResize);

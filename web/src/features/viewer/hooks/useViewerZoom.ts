@@ -156,7 +156,7 @@ export function useViewerZoom({
       const nativeEvent = e.nativeEvent;
       const isMouseNativeEvent = nativeEvent instanceof MouseEvent;
       const isDoubleByDetail = isMouseNativeEvent && nativeEvent.detail === 2;
-      const isDoubleByTime = now - lastTapTimeRef.current < DOUBLE_TAP_DELAY;
+      const isDoubleByTime = deferSingleTapForDoubleTap && now - lastTapTimeRef.current < DOUBLE_TAP_DELAY;
       const isDoubleTapZoomAllowed = doubleTapZoomZone === "any" || zone === "center";
 
       if ((isDoubleByDetail || isDoubleByTime) && isDoubleTapZoomAllowed) {
@@ -205,6 +205,8 @@ export function useViewerZoom({
           clickTimeoutRef.current = setTimeout(() => {
             clickTimeoutRef.current = null;
             useViewerStore.getState().toggleUI();
+            // 단일 탭 동작이 확정된 뒤에는 이전 탭을 더블탭 후보에서 제외
+            lastTapTimeRef.current = 0;
           }, SINGLE_TAP_DEFER_DELAY);
         } else {
           // 좌/우 영역: 즉시 페이지 이동 (딜레이 없음)
