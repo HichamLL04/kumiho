@@ -86,6 +86,7 @@ docker-data/
 # AI Agent (로컬 전용)
 # =============
 .agent/
+.claude/
 
 *.db
 *.db-shm

@@ -222,6 +222,160 @@ describe("PdfChapterViewer wheel navigation", () => {
   });
 });
 
+describe("PdfChapterViewer PDF load logic", () => {
+  const createMockPdf = (numPages = 3) => {
+    // PdfChapterViewer는 문서 로드 직후 pdf.getPage()를 호출하므로
+    // 기본 페이지 mock을 설정하여 렌더링 중 TypeError를 방지한다.
+    mockPdfGetPage.mockResolvedValue(createMockPdfPage());
+    return {
+      numPages,
+      getPage: mockPdfGetPage,
+      getOutline: vi.fn(async () => null),
+    };
+  };
+
+  it("calls onDocumentLoad with numPages on successful load", async () => {
+    const mockPdf = createMockPdf(5);
+    mockGetDocument.mockReturnValue({
+      promise: Promise.resolve(mockPdf),
+      destroy: vi.fn(),
+    });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-1"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(5));
+  });
+
+  it("calls onDocumentLoad(0) when both load attempts fail", async () => {
+    // 1차(disableWorker:false)와 재시도(disableWorker:true) 모두 실패하는 시나리오
+    mockGetDocument
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("First failure")),
+        destroy: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("Retry failure")),
+        destroy: vi.fn(),
+      });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-fail"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(0));
+    expect(mockGetDocument).toHaveBeenCalledTimes(2);
+    expect(mockGetDocument.mock.calls[0][0]).toMatchObject({ disableWorker: false });
+    expect(mockGetDocument.mock.calls[1][0]).toMatchObject({ disableWorker: true });
+  });
+
+  it("retries with disableWorker:true on first load failure", async () => {
+    const mockPdf = createMockPdf(3);
+    const destroyFn = vi.fn();
+    mockGetDocument
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("Worker failed")),
+        destroy: destroyFn,
+      })
+      .mockReturnValueOnce({
+        promise: Promise.resolve(mockPdf),
+        destroy: vi.fn(),
+      });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-retry"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(3));
+    expect(mockGetDocument).toHaveBeenCalledTimes(2);
+    // 1차 시도는 disableWorker: false
+    expect(mockGetDocument.mock.calls[0][0]).toMatchObject({ disableWorker: false });
+    // 재시도 시 disableWorker: true
+    expect(mockGetDocument.mock.calls[1][0]).toMatchObject({ disableWorker: true });
+    // 1차 실패한 loadingTask가 destroy로 정리되었는지 확인
+    expect(destroyFn).toHaveBeenCalled();
+  });
+
+  it("includes JWT Authorization header when access_token looks like JWT", async () => {
+    const jwtToken = "eyJhbGciOi.eyJzdWIiOi.signature";
+    const getItemSpy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation((key: string) =>
+        key === "access_token" ? jwtToken : null,
+      );
+
+    try {
+      const mockPdf = createMockPdf(1);
+      mockGetDocument.mockReturnValue({
+        promise: Promise.resolve(mockPdf),
+        destroy: vi.fn(),
+      });
+
+      const onDocumentLoad = vi.fn();
+      render(
+        <PdfChapterViewer
+          {...baseProps}
+          chapterId="chapter-jwt"
+          onDocumentLoad={onDocumentLoad}
+        />,
+      );
+
+      await waitFor(() => expect(onDocumentLoad).toHaveBeenCalled());
+      expect(mockGetDocument.mock.calls[0][0]).toMatchObject({
+        httpHeaders: { Authorization: `Bearer ${jwtToken}` },
+      });
+    } finally {
+      getItemSpy.mockRestore();
+    }
+  });
+
+  it("does not include Authorization header when access_token is not JWT-like", async () => {
+    const getItemSpy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation((key: string) =>
+        key === "access_token" ? "not-a-jwt" : null,
+      );
+
+    try {
+      const mockPdf = createMockPdf(1);
+      mockGetDocument.mockReturnValue({
+        promise: Promise.resolve(mockPdf),
+        destroy: vi.fn(),
+      });
+
+      const onDocumentLoad = vi.fn();
+      render(
+        <PdfChapterViewer
+          {...baseProps}
+          chapterId="chapter-no-jwt"
+          onDocumentLoad={onDocumentLoad}
+        />,
+      );
+
+      await waitFor(() => expect(onDocumentLoad).toHaveBeenCalled());
+      expect(mockGetDocument.mock.calls[0][0]).not.toHaveProperty("httpHeaders");
+    } finally {
+      getItemSpy.mockRestore();
+    }
+  });
+});
+
 describe("PdfChapterViewer resize observer", () => {
   it("rerenders when container size changes from zero to valid size", async () => {
     mockPdfGetPage.mockResolvedValue(createMockPdfPage());

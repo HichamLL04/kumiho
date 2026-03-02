@@ -1,4 +1,33 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
+
+// Polyfill: Uint8Array.prototype.toHex (Chrome 137+)
+// pdfjs-dist v5 uses this internally; Samsung Internet (Chrome 136) lacks it.
+// 네이티브 지원 여부를 폴리필 적용 전에 저장해야 워커 비활성화 판단에 사용할 수 있다.
+declare global {
+  interface Uint8Array {
+    toHex?(this: Uint8Array): string;
+  }
+}
+const NEEDS_TOHEX_POLYFILL = typeof Uint8Array.prototype.toHex !== "function";
+// 메인 스레드와 워커 래퍼 양쪽에서 동일한 구현을 사용한다.
+// 단일 함수에서 .toString()으로 워커 문자열을 생성하여 드리프트를 방지한다.
+const TOHEX_POLYFILL_IMPL = function (this: Uint8Array): string {
+  let hex = "";
+  for (let i = 0; i < this.length; i++) {
+    hex += this[i].toString(16).padStart(2, "0");
+  }
+  return hex;
+};
+const TOHEX_POLYFILL_CODE = `if(typeof Uint8Array.prototype.toHex!=="function"){Object.defineProperty(Uint8Array.prototype,"toHex",{value:${TOHEX_POLYFILL_IMPL.toString()},writable:true,configurable:true,enumerable:false});}`;
+if (NEEDS_TOHEX_POLYFILL) {
+  Object.defineProperty(Uint8Array.prototype, "toHex", {
+    value: TOHEX_POLYFILL_IMPL,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
@@ -28,6 +57,13 @@ interface PDFJSOutline {
   dest?: string | unknown[] | null;
   items?: PDFJSOutline[] | null;
 }
+
+type PdfGetDocumentOptions = {
+  url: string;
+  withCredentials: boolean;
+  disableWorker: boolean;
+  httpHeaders?: Record<string, string>;
+};
 
 const resolveOutline = async (
   pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -60,7 +96,57 @@ const resolveOutline = async (
   return result;
 };
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+if (NEEDS_TOHEX_POLYFILL) {
+  // 워커도 별도 스레드이므로 동일 폴리필이 필요하다.
+  // 폴리필 코드를 앞에 붙인 래퍼 모듈을 blob URL로 만들어 workerSrc로 사용한다.
+  const canUseBlobWorker =
+    typeof window !== "undefined" &&
+    typeof Blob !== "undefined" &&
+    typeof URL !== "undefined" &&
+    typeof URL.createObjectURL === "function";
+
+  if (canUseBlobWorker) {
+    // location.origin이 "null"인 환경(file://, sandbox iframe 등)에서는
+    // new URL()이 실패할 수 있으므로 try/catch로 방어한다.
+    let absoluteWorkerUrl: string | null = null;
+    try {
+      const base = (typeof document !== "undefined" && document.baseURI) || globalThis.location?.href;
+      if (base) absoluteWorkerUrl = new URL(pdfWorker, base).href;
+    } catch {
+      // URL 구성 실패 시 blob 워커를 건너뛴다.
+    }
+
+    if (absoluteWorkerUrl) {
+      // static import는 blob URL 모듈에서 cross-origin 제약으로 실패할 수 있다.
+      // dynamic import()를 사용하여 폴리필 적용 후 실제 워커를 로드한다.
+      // top-level await로 워커 모듈 로드 완료까지 블로킹하여 메시지 유실을 방지한다.
+      const wrapperCode = `${TOHEX_POLYFILL_CODE}\nawait import("${absoluteWorkerUrl}");`;
+      const blob = new Blob([wrapperCode], { type: "text/javascript" });
+      const blobUrl = URL.createObjectURL(blob);
+      pdfjsLib.GlobalWorkerOptions.workerSrc = blobUrl;
+      // pdf.js가 워커를 생성할 때마다 workerSrc를 참조하므로 앱 수명 동안 유지해야 한다.
+      // 모바일/bfcache 환경에서는 unload가 호출되지 않을 수 있으므로 pagehide를 사용한다.
+      if (typeof window !== "undefined") {
+        const handlePageHide = (event: PageTransitionEvent) => {
+          // bfcache로 페이지가 보존된 경우(event.persisted === true)에는
+          // 복원 후에도 workerSrc가 유효해야 하므로 revoke를 건너뛴다.
+          if (event.persisted) return;
+          URL.revokeObjectURL(blobUrl);
+          window.removeEventListener("pagehide", handlePageHide);
+        };
+        window.addEventListener("pagehide", handlePageHide);
+      }
+    } else {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+    }
+  } else {
+    // 테스트/비브라우저 환경(JSDOM 등)에서는 blob 기반 워커 구성이 불가능하므로
+    // 기본 workerSrc로 폴백하여 크래시를 방지한다.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+  }
+} else {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+}
 
 declare global {
   interface Window {
@@ -154,6 +240,9 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
     const renderPageRef = useRef<
       ((pageNum: number, canvas: HTMLCanvasElement, textLayerContainer: HTMLDivElement | null, renderQualityScale?: number) => Promise<void>) | null
     >(null);
+    const onDocumentLoadRef = useRef(onDocumentLoad);
+    const onOutlineLoadRef = useRef(onOutlineLoad);
+    const successfulLoadChapterIdRef = useRef<string | null>(null);
 
     // Zoom and Navigation handlers
     const animateNextRef = useRef<(() => void) | null>(null);
@@ -267,6 +356,18 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
     const displayPages = getDisplayPages();
 
     useEffect(() => {
+      onDocumentLoadRef.current = onDocumentLoad;
+    }, [onDocumentLoad]);
+
+    useEffect(() => {
+      onOutlineLoadRef.current = onOutlineLoad;
+    }, [onOutlineLoad]);
+
+    useEffect(() => {
+      successfulLoadChapterIdRef.current = null;
+    }, [chapterId]);
+
+    useEffect(() => {
       initialPageSyncDoneRef.current = false;
       suppressPageChangeRef.current = false;
       suppressReleaseTokenRef.current += 1;
@@ -312,65 +413,113 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
     useEffect(() => {
       let isMounted = true;
       const renderTasks = renderTasksRef.current;
+      let activeLoadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
 
       if (!chapterId) {
-        onDocumentLoad(0);
+        onDocumentLoadRef.current(0);
         return;
       }
 
       const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
       const url = `${API_BASE_URL}/chapters/${chapterId}/pdf`;
+      const requestedChapterId = chapterId;
 
-      // Pass Bearer token if available in localStorage for non-cookie auth environments
-      let getDocumentOptions: Parameters<typeof pdfjsLib.getDocument>[0] = { url, withCredentials: true };
-      try {
-        if (typeof window !== "undefined" && window.localStorage) {
-          const token = window.localStorage.getItem("access_token") ?? window.localStorage.getItem("token");
-          if (token) {
-            getDocumentOptions = {
-              ...getDocumentOptions,
-              httpHeaders: {
-                Authorization: `Bearer ${token}`,
-              },
-            };
+      const buildGetDocumentOptions = (disableWorker: boolean): PdfGetDocumentOptions => {
+        // Pass Bearer token only when a valid-looking access token exists.
+        // Legacy `token` key can contain stale/non-JWT values and break PDF-only requests.
+        let options: PdfGetDocumentOptions = { url, withCredentials: true, disableWorker };
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            const token = window.localStorage.getItem("access_token");
+            const isLikelyJwt = typeof token === "string" && token.split(".").length === 3;
+            if (isLikelyJwt) {
+              options = {
+                ...options,
+                httpHeaders: {
+                  Authorization: `Bearer ${token}`,
+                },
+              };
+            }
           }
+        } catch {
+          // Ignore localStorage errors (e.g. private mode)
         }
-      } catch {
-        // Ignore localStorage errors (e.g. private mode)
-      }
+        return options;
+      };
 
-      const loadingTask = pdfjsLib.getDocument(getDocumentOptions);
+      const loadPdf = async (disableWorker: boolean): Promise<pdfjsLib.PDFDocumentProxy> => {
+        const loadingTask = pdfjsLib.getDocument(
+          buildGetDocumentOptions(disableWorker) as Parameters<typeof pdfjsLib.getDocument>[0],
+        );
+        activeLoadingTask = loadingTask;
+        return loadingTask.promise;
+      };
 
-      loadingTask.promise
-        .then((pdf) => {
+      const startLoad = async () => {
+        try {
+          let pdf: pdfjsLib.PDFDocumentProxy;
+          try {
+            // blob 래퍼로 워커에 폴리필을 주입하므로 기본적으로 워커를 사용한다.
+            pdf = await loadPdf(false);
+          } catch (firstErr) {
+            // 1차 실패한 loadingTask의 리소스를 정리한다.
+            activeLoadingTask?.destroy();
+            // 언마운트(또는 chapterId 변경) 이후에는 재시도를 수행하지 않는다.
+            if (!isMounted) return;
+            console.warn("PDF load failed, retrying with worker disabled", firstErr);
+            pdf = await loadPdf(true);
+          }
+
           if (!isMounted) return;
           setPdfDoc(pdf);
-          setLoadedChapterId(chapterId);
-          onDocumentLoad(pdf.numPages);
+          setLoadedChapterId(requestedChapterId);
+          successfulLoadChapterIdRef.current = requestedChapterId;
+          onDocumentLoadRef.current(pdf.numPages);
           pdf
             .getOutline()
             .then(async (outline) => {
-              if (isMounted && onOutlineLoad && outline) {
+              if (isMounted && onOutlineLoadRef.current && outline) {
                 const resolved = await resolveOutline(pdf, outline);
-                if (isMounted) onOutlineLoad(resolved);
+                if (isMounted) onOutlineLoadRef.current?.(resolved);
               }
             })
             .catch((err) => console.error("PDF outline load error:", err));
-        })
-        .catch((err) => {
-          console.error("PDF load error:", err);
+        } catch (err) {
+          // 최종 실패한 loadingTask의 리소스(워커/네트워크)를 정리한다.
+          activeLoadingTask?.destroy();
+          const errObj = err as { name?: string; message?: string; status?: number; code?: string };
+          console.error("PDF load error:", {
+            chapterId: requestedChapterId,
+            name: errObj?.name,
+            message: errObj?.message,
+            status: errObj?.status,
+            code: errObj?.code,
+            raw: err,
+          });
           if (!isMounted) return;
-          setLoadedChapterId(chapterId);
-          onDocumentLoad(0);
-        });
+
+          // 모바일 환경에서 후속 네트워크 실패가 간헐적으로 발생해도
+          // 이미 성공적으로 로드된 챕터의 전체 페이지 수를 0으로 덮어쓰지 않도록 보호.
+          if (successfulLoadChapterIdRef.current === requestedChapterId) {
+            console.warn("Ignoring late PDF load failure after successful load:", requestedChapterId);
+            return;
+          }
+
+          setPdfDoc(null);
+          setLoadedChapterId(requestedChapterId);
+          onDocumentLoadRef.current(0);
+        }
+      };
+
+      void startLoad();
 
       return () => {
         isMounted = false;
-        loadingTask.destroy();
+        activeLoadingTask?.destroy();
         renderTasks.forEach((task) => task.cancel());
         renderTasks.clear();
       };
-    }, [chapterId, onDocumentLoad, onOutlineLoad]);
+    }, [chapterId]);
 
     const renderPages = (pages: number[]) =>
       pages.map((pageNum) => (
