@@ -464,6 +464,8 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
             })
             .catch((err) => console.error("PDF outline load error:", err));
         } catch (err) {
+          // 최종 실패한 loadingTask의 리소스(워커/네트워크)를 정리한다.
+          activeLoadingTask?.destroy();
           const errObj = err as { name?: string; message?: string; status?: number; code?: string };
           console.error("PDF load error:", {
             chapterId: requestedChapterId,

@@ -223,11 +223,16 @@ describe("PdfChapterViewer wheel navigation", () => {
 });
 
 describe("PdfChapterViewer PDF load logic", () => {
-  const createMockPdf = (numPages = 3) => ({
-    numPages,
-    getPage: mockPdfGetPage,
-    getOutline: vi.fn(async () => null),
-  });
+  const createMockPdf = (numPages = 3) => {
+    // PdfChapterViewer는 문서 로드 직후 pdf.getPage()를 호출하므로
+    // 기본 페이지 mock을 설정하여 렌더링 중 TypeError를 방지한다.
+    mockPdfGetPage.mockResolvedValue(createMockPdfPage());
+    return {
+      numPages,
+      getPage: mockPdfGetPage,
+      getOutline: vi.fn(async () => null),
+    };
+  };
 
   it("calls onDocumentLoad with numPages on successful load", async () => {
     const mockPdf = createMockPdf(5);
