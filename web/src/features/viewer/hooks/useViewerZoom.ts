@@ -15,7 +15,8 @@ interface UseViewerZoomParams {
   doubleTapZoomZone?: "any" | "center";
 }
 
-const DOUBLE_TAP_DELAY = 300;
+const DOUBLE_TAP_DELAY = 450;
+const SINGLE_TAP_DEFER_DELAY = 180;
 const ZOOM_NAVIGATION_LOCK_SCALE = 1.01;
 const ACCIDENTAL_ZOOM_RESET_MAX_SCALE = 1.2;
 const BASE_DRAG_THRESHOLD_PX = 5;
@@ -147,18 +148,18 @@ export function useViewerZoom({
       if (xRatio < 0.3) zone = "left";
       else if (xRatio > 0.7) zone = "right";
 
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+      }
+
       const nativeEvent = e.nativeEvent;
       const isMouseNativeEvent = nativeEvent instanceof MouseEvent;
       const isDoubleByDetail = isMouseNativeEvent && nativeEvent.detail === 2;
-      const isDoubleByTime = deferSingleTapForDoubleTap && now - lastTapTimeRef.current < DOUBLE_TAP_DELAY;
+      const isDoubleByTime = now - lastTapTimeRef.current < DOUBLE_TAP_DELAY;
       const isDoubleTapZoomAllowed = doubleTapZoomZone === "any" || zone === "center";
 
       if ((isDoubleByDetail || isDoubleByTime) && isDoubleTapZoomAllowed) {
-        if (clickTimeoutRef.current) {
-          clearTimeout(clickTimeoutRef.current);
-          clickTimeoutRef.current = null;
-        }
-
         if (isVerticalMode && onVerticalZoomToggle) {
           const clientY = "changedTouches" in e ? e.changedTouches[0].clientY : (e as React.MouseEvent).clientY;
           const targetEl = e.target instanceof HTMLElement ? e.target : null;
@@ -201,11 +202,10 @@ export function useViewerZoom({
         }
 
         if (zone === "center") {
-          // 중앙 영역: 더블탭 줌 감지를 위해 대기
           clickTimeoutRef.current = setTimeout(() => {
             clickTimeoutRef.current = null;
             useViewerStore.getState().toggleUI();
-          }, DOUBLE_TAP_DELAY);
+          }, SINGLE_TAP_DEFER_DELAY);
         } else {
           // 좌/우 영역: 즉시 페이지 이동 (딜레이 없음)
           let currentScale = 1;

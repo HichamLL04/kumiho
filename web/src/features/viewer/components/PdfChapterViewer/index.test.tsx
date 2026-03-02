@@ -1,16 +1,24 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 import { PdfChapterViewer } from "./index";
 
 let mockIsZoomed = false;
 let mockAnimateNext = vi.fn();
 let mockAnimatePrev = vi.fn();
+const mockPdfGetPage = vi.hoisted(() => vi.fn());
+const mockGetDocument = vi.hoisted(() => vi.fn());
 
 vi.mock("pdfjs-dist", () => ({
   GlobalWorkerOptions: {
     workerSrc: "",
+  },
+  getDocument: mockGetDocument,
+  TextLayer: class {
+    async render() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -55,14 +63,25 @@ vi.mock("../../hooks/useSwipe", () => ({
 }));
 
 vi.mock("../PageTransition", () => ({
-  PageTransition: ({ children, onWheel }: { children: ReactNode; onWheel?: (e: React.WheelEvent) => void }) => (
+  PageTransition: forwardRef<
+    HTMLDivElement,
+    {
+      children: ReactNode;
+      onWheel?: (e: React.WheelEvent) => void;
+      prevChildren?: ReactNode;
+      nextChildren?: ReactNode;
+    }
+  >(({ children, onWheel, prevChildren, nextChildren }, ref) => (
     <div
+      ref={ref}
       data-testid="pdf-page-transition"
       onWheel={onWheel}
     >
+      {prevChildren}
       {children}
+      {nextChildren}
     </div>
-  ),
+  )),
 }));
 
 vi.mock("react-zoom-pan-pinch", () => ({
@@ -82,10 +101,46 @@ const baseProps = {
   onPrev: vi.fn(),
 };
 
+const createMockPdfPage = () => ({
+  getViewport: vi.fn(({ scale }: { scale: number }) => ({ width: 100 * scale, height: 140 * scale })),
+  render: vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() })),
+  getTextContent: vi.fn(async () => ({ items: [], styles: {} })),
+});
+
+class MockResizeObserver {
+  static instances: MockResizeObserver[] = [];
+  private callback: ResizeObserverCallback;
+  observe = vi.fn();
+  disconnect = vi.fn();
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    MockResizeObserver.instances.push(this);
+  }
+
+  trigger(width: number, height: number) {
+    this.callback(
+      [{ contentRect: { width, height } } as ResizeObserverEntry],
+      this as unknown as ResizeObserver,
+    );
+  }
+}
+
+const originalResizeObserver = globalThis.ResizeObserver;
+
+beforeEach(() => {
+  globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+});
+
 afterEach(() => {
   mockIsZoomed = false;
   mockAnimateNext = vi.fn();
   mockAnimatePrev = vi.fn();
+  mockPdfGetPage.mockReset();
+  mockGetDocument.mockReset();
+  MockResizeObserver.instances = [];
+  globalThis.ResizeObserver = originalResizeObserver;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -164,5 +219,43 @@ describe("PdfChapterViewer wheel navigation", () => {
     fireEvent.wheel(container, { deltaY: 100, deltaX: 0 });
 
     expect(mockAnimateNext).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("PdfChapterViewer resize observer", () => {
+  it("rerenders when container size changes from zero to valid size", async () => {
+    mockPdfGetPage.mockResolvedValue(createMockPdfPage());
+    mockGetDocument.mockReturnValue({
+      promise: Promise.resolve({
+        numPages: 1,
+        getPage: mockPdfGetPage,
+        getOutline: vi.fn(async () => null),
+      }),
+      destroy: vi.fn(),
+    });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-1"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(MockResizeObserver.instances.length).toBeGreaterThan(0));
+
+    const renderCallsBeforeResize = mockPdfGetPage.mock.calls.length;
+    const container = screen.getByTestId("pdf-page-transition");
+    Object.defineProperty(container, "clientWidth", { configurable: true, get: () => 480 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, get: () => 800 });
+
+    MockResizeObserver.instances[0]?.trigger(480, 800);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    await waitFor(() => {
+      expect(mockPdfGetPage.mock.calls.length).toBeGreaterThan(renderCallsBeforeResize);
+    });
   });
 });
