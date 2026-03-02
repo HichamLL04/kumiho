@@ -266,59 +266,99 @@ describe("PdfChapterViewer PDF load logic", () => {
     await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(0));
   });
 
-  it("includes JWT Authorization header when access_token looks like JWT", async () => {
-    const jwtToken = "eyJhbGciOi.eyJzdWIiOi.signature";
-    const originalGetItem = Storage.prototype.getItem;
-    Storage.prototype.getItem = (key: string) =>
-      key === "access_token" ? jwtToken : null;
-
-    const mockPdf = createMockPdf(1);
-    mockGetDocument.mockReturnValue({
-      promise: Promise.resolve(mockPdf),
-      destroy: vi.fn(),
-    });
+  it("retries with disableWorker:true on first load failure", async () => {
+    const mockPdf = createMockPdf(3);
+    const destroyFn = vi.fn();
+    mockGetDocument
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("Worker failed")),
+        destroy: destroyFn,
+      })
+      .mockReturnValueOnce({
+        promise: Promise.resolve(mockPdf),
+        destroy: vi.fn(),
+      });
 
     const onDocumentLoad = vi.fn();
     render(
       <PdfChapterViewer
         {...baseProps}
-        chapterId="chapter-jwt"
+        chapterId="chapter-retry"
         onDocumentLoad={onDocumentLoad}
       />,
     );
 
-    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalled());
-    expect(mockGetDocument.mock.calls[0][0]).toMatchObject({
-      httpHeaders: { Authorization: `Bearer ${jwtToken}` },
-    });
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(3));
+    expect(mockGetDocument).toHaveBeenCalledTimes(2);
+    // 1차 시도는 disableWorker: false
+    expect(mockGetDocument.mock.calls[0][0]).toMatchObject({ disableWorker: false });
+    // 재시도 시 disableWorker: true
+    expect(mockGetDocument.mock.calls[1][0]).toMatchObject({ disableWorker: true });
+    // 1차 실패한 loadingTask가 destroy로 정리되었는지 확인
+    expect(destroyFn).toHaveBeenCalled();
+  });
 
-    Storage.prototype.getItem = originalGetItem;
+  it("includes JWT Authorization header when access_token looks like JWT", async () => {
+    const jwtToken = "eyJhbGciOi.eyJzdWIiOi.signature";
+    const getItemSpy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation((key: string) =>
+        key === "access_token" ? jwtToken : null,
+      );
+
+    try {
+      const mockPdf = createMockPdf(1);
+      mockGetDocument.mockReturnValue({
+        promise: Promise.resolve(mockPdf),
+        destroy: vi.fn(),
+      });
+
+      const onDocumentLoad = vi.fn();
+      render(
+        <PdfChapterViewer
+          {...baseProps}
+          chapterId="chapter-jwt"
+          onDocumentLoad={onDocumentLoad}
+        />,
+      );
+
+      await waitFor(() => expect(onDocumentLoad).toHaveBeenCalled());
+      expect(mockGetDocument.mock.calls[0][0]).toMatchObject({
+        httpHeaders: { Authorization: `Bearer ${jwtToken}` },
+      });
+    } finally {
+      getItemSpy.mockRestore();
+    }
   });
 
   it("does not include Authorization header when access_token is not JWT-like", async () => {
-    const originalGetItem = Storage.prototype.getItem;
-    Storage.prototype.getItem = (key: string) =>
-      key === "access_token" ? "not-a-jwt" : null;
+    const getItemSpy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation((key: string) =>
+        key === "access_token" ? "not-a-jwt" : null,
+      );
 
-    const mockPdf = createMockPdf(1);
-    mockGetDocument.mockReturnValue({
-      promise: Promise.resolve(mockPdf),
-      destroy: vi.fn(),
-    });
+    try {
+      const mockPdf = createMockPdf(1);
+      mockGetDocument.mockReturnValue({
+        promise: Promise.resolve(mockPdf),
+        destroy: vi.fn(),
+      });
 
-    const onDocumentLoad = vi.fn();
-    render(
-      <PdfChapterViewer
-        {...baseProps}
-        chapterId="chapter-no-jwt"
-        onDocumentLoad={onDocumentLoad}
-      />,
-    );
+      const onDocumentLoad = vi.fn();
+      render(
+        <PdfChapterViewer
+          {...baseProps}
+          chapterId="chapter-no-jwt"
+          onDocumentLoad={onDocumentLoad}
+        />,
+      );
 
-    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalled());
-    expect(mockGetDocument.mock.calls[0][0]).not.toHaveProperty("httpHeaders");
-
-    Storage.prototype.getItem = originalGetItem;
+      await waitFor(() => expect(onDocumentLoad).toHaveBeenCalled());
+      expect(mockGetDocument.mock.calls[0][0]).not.toHaveProperty("httpHeaders");
+    } finally {
+      getItemSpy.mockRestore();
+    }
   });
 });
 

@@ -103,7 +103,13 @@ if (NEEDS_TOHEX_POLYFILL) {
     // dynamic import()를 사용하여 폴리필 적용 후 실제 워커를 로드한다.
     const wrapperCode = `${polyfillCode}\nimport("${absoluteWorkerUrl}");`;
     const blob = new Blob([wrapperCode], { type: "text/javascript" });
-    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+    const blobUrl = URL.createObjectURL(blob);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = blobUrl;
+    // pdf.js가 워커를 생성할 때마다 workerSrc를 참조하므로 앱 수명 동안 유지해야 한다.
+    // 페이지 언로드 시 브라우저가 자동 해제하지만, 명시적으로도 정리한다.
+    if (typeof window !== "undefined") {
+      window.addEventListener("unload", () => URL.revokeObjectURL(blobUrl), { once: true });
+    }
   } else {
     // 테스트/비브라우저 환경(JSDOM 등)에서는 blob 기반 워커 구성이 불가능하므로
     // 기본 workerSrc로 폴백하여 크래시를 방지한다.
@@ -424,14 +430,13 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
         try {
           let pdf: pdfjsLib.PDFDocumentProxy;
           try {
-            pdf = await loadPdf(NEEDS_TOHEX_POLYFILL);
+            // blob 래퍼로 워커에 폴리필을 주입하므로 기본적으로 워커를 사용한다.
+            pdf = await loadPdf(false);
           } catch (firstErr) {
-            if (!NEEDS_TOHEX_POLYFILL) {
-              console.warn("PDF load failed, retrying with worker disabled", firstErr);
-              pdf = await loadPdf(true);
-            } else {
-              throw firstErr;
-            }
+            // 1차 실패한 loadingTask의 리소스를 정리한다.
+            activeLoadingTask?.destroy();
+            console.warn("PDF load failed, retrying with worker disabled", firstErr);
+            pdf = await loadPdf(true);
           }
 
           if (!isMounted) return;
