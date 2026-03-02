@@ -185,7 +185,7 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
         onNext: handleAnimatedNext,
         onPrev: handleAnimatedPrev,
         isVerticalMode: readingMode === "vertical",
-        deferSingleTapForDoubleTap: false,
+        deferSingleTapForDoubleTap: true,
         doubleTapZoomZone: "center",
         onVerticalZoomToggle: (isZoomingIn: boolean, anchor) => {
           const content = getVerticalScrollContainer();
@@ -427,6 +427,10 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
             readingMode === "vertical"
               ? containerRef.current?.parentElement?.clientHeight || window.innerHeight
               : containerRef.current?.clientHeight || window.innerHeight;
+
+          // 모바일에서 레이아웃이 아직 확정되지 않아 크기가 0인 경우 렌더링 건너뜀
+          // ResizeObserver가 크기 확정 시 재렌더링을 트리거함
+          if (containerWidth <= 1 || containerHeight <= 1) return;
 
           const availableWidth =
             readingMode === "double" && displayPages.length > 1 ? containerWidth / 2 : containerWidth;
@@ -741,7 +745,7 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
       verticalZoomScale,
     ]);
 
-    // 창 크기 조절 대응
+    // 창 크기 조절 대응 + 모바일 레이아웃 지연 대응 (ResizeObserver)
     useEffect(() => {
       const handleResize = () => {
         const pagesToRender = readingMode === "vertical" ? Array.from(activeVisiblePages) : displayPages;
@@ -753,7 +757,34 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
       };
 
       window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
+
+      // ResizeObserver: 모바일에서 컨테이너 크기가 0→유효값으로 변할 때만 재렌더링
+      // 디바운스로 UI 토글 등에 의한 즉시 재렌더링이 더블클릭 감지를 방해하지 않도록 함
+      let resizeObserver: ResizeObserver | null = null;
+      let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+      const container = containerRef.current;
+      let lastWidth = container?.clientWidth ?? 0;
+      let lastHeight = container?.clientHeight ?? 0;
+      if (container) {
+        resizeObserver = new ResizeObserver((entries) => {
+          const entry = entries[0];
+          if (!entry) return;
+          const { width, height } = entry.contentRect;
+          if (width > 1 && height > 1 && (Math.abs(width - lastWidth) > 1 || Math.abs(height - lastHeight) > 1)) {
+            lastWidth = width;
+            lastHeight = height;
+            if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+            resizeDebounceTimer = setTimeout(handleResize, 150);
+          }
+        });
+        resizeObserver.observe(container);
+      }
+
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+        resizeObserver?.disconnect();
+      };
     }, [displayPages, activeVisiblePages, renderPage, readingMode]);
 
     // Swipe Hook

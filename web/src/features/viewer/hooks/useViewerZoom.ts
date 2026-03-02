@@ -193,47 +193,47 @@ export function useViewerZoom({
           }
         }
       } else if (deferSingleTapForDoubleTap) {
-        // First Tap - Wait for potential second tap
-        clickTimeoutRef.current = setTimeout(() => {
-          clickTimeoutRef.current = null;
+        // If text is selected (e.g. user just finished text drag), keep it and do nothing
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) {
+          lastTapTimeRef.current = now;
+          return;
+        }
 
-          // If text is selected (e.g. user just finished text drag), keep it and do nothing
-          const selection = window.getSelection();
-          if (selection && !selection.isCollapsed) {
+        if (zone === "center") {
+          // 중앙 영역: 더블탭 줌 감지를 위해 대기
+          clickTimeoutRef.current = setTimeout(() => {
+            clickTimeoutRef.current = null;
+            useViewerStore.getState().toggleUI();
+          }, DOUBLE_TAP_DELAY);
+        } else {
+          // 좌/우 영역: 즉시 페이지 이동 (딜레이 없음)
+          let currentScale = 1;
+          if (refToUse.current) {
+            currentScale = refToUse.current.instance.transformState.scale;
+          }
+
+          if (currentScale > ZOOM_NAVIGATION_LOCK_SCALE) {
+            if (
+              doubleTapZoomZone === "center" &&
+              currentScale <= ACCIDENTAL_ZOOM_RESET_MAX_SCALE &&
+              refToUse.current
+            ) {
+              refToUse.current.resetTransform(120);
+              setIsZoomed(false);
+            }
+            lastTapTimeRef.current = now;
             return;
           }
 
-          if (zone === "center") {
-            useViewerStore.getState().toggleUI();
+          if (zone === "left") {
+            if (isRTL) onNext();
+            else onPrev();
           } else {
-            // Prevent nav if zoomed
-            let currentScale = 1;
-            if (refToUse.current) {
-              currentScale = refToUse.current.instance.transformState.scale;
-            }
-
-            if (currentScale > ZOOM_NAVIGATION_LOCK_SCALE) {
-              if (
-                doubleTapZoomZone === "center" &&
-                currentScale <= ACCIDENTAL_ZOOM_RESET_MAX_SCALE &&
-                refToUse.current
-              ) {
-                // 이미지 뷰어에서 의도치 않은 미세 확대 상태는 자동 복귀
-                refToUse.current.resetTransform(120);
-                setIsZoomed(false);
-              }
-              return;
-            }
-
-            if (zone === "left") {
-              if (isRTL) onNext();
-              else onPrev();
-            } else {
-              if (isRTL) onPrev();
-              else onNext();
-            }
+            if (isRTL) onPrev();
+            else onNext();
           }
-        }, DOUBLE_TAP_DELAY);
+        }
       } else {
         // Image viewer path: handle single tap immediately without waiting for double-tap window
         const selection = window.getSelection();
