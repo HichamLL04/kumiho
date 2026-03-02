@@ -507,6 +507,7 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
             return;
           }
 
+          setPdfDoc(null);
           setLoadedChapterId(requestedChapterId);
           onDocumentLoadRef.current(0);
         }
