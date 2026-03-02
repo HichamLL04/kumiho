@@ -119,7 +119,8 @@ if (NEEDS_TOHEX_POLYFILL) {
     if (absoluteWorkerUrl) {
       // static import는 blob URL 모듈에서 cross-origin 제약으로 실패할 수 있다.
       // dynamic import()를 사용하여 폴리필 적용 후 실제 워커를 로드한다.
-      const wrapperCode = `${TOHEX_POLYFILL_CODE}\nimport("${absoluteWorkerUrl}");`;
+      // top-level await로 워커 모듈 로드 완료까지 블로킹하여 메시지 유실을 방지한다.
+      const wrapperCode = `${TOHEX_POLYFILL_CODE}\nawait import("${absoluteWorkerUrl}");`;
       const blob = new Blob([wrapperCode], { type: "text/javascript" });
       const blobUrl = URL.createObjectURL(blob);
       pdfjsLib.GlobalWorkerOptions.workerSrc = blobUrl;
