@@ -28,6 +28,7 @@ interface RecentProgress {
   thumbnail_url?: string;
   volume_id?: string;
   volume_number?: number;
+  volume_unit?: string;
   volume_title?: string;
   volume_chapter_count?: number;
   chapter_id?: string;
@@ -298,14 +299,19 @@ export function HomePage() {
             // 3. 둘 다 없으면 "X페이지" 표시
             let subtitle = "";
             if (progress.volume_id && progress.chapter_id) {
-              // 볼륨 내 챕터가 1개뿐인 경우 볼륨 정보만 표시
-              if (progress.volume_chapter_count === 1) {
+              if (progress.volume_unit === "chapter") {
+                subtitle = t("series.unit.chapter", { count: progress.volume_number });
+              } else if (progress.volume_chapter_count === 1) {
+                // 볼륨 내 챕터가 1개뿐인 경우 볼륨 정보만 표시
                 subtitle = t("series.unit.volume", { count: progress.volume_number });
               } else {
                 subtitle = `${t("series.unit.volume", { count: progress.volume_number })} - ${t("series.unit.chapter", { count: progress.chapter_number })}`;
               }
             } else if (progress.volume_id) {
-              subtitle = t("series.unit.volume", { count: progress.volume_number });
+              subtitle =
+                progress.volume_unit === "chapter"
+                  ? t("series.unit.chapter", { count: progress.volume_number })
+                  : t("series.unit.volume", { count: progress.volume_number });
             } else if (progress.chapter_id) {
               subtitle = t("series.unit.chapter", { count: progress.chapter_number });
             } else {

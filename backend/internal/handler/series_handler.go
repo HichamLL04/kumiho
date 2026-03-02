@@ -1014,7 +1014,9 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 			volumes[i].ReadPageCount = readPages
 		}
 
-		isCompleted := completedVolumeIDs[volumes[i].ID]
+		// 완독 플래그가 있더라도 실제 집계 진행도가 100% 미만이면 완독 표시를 하지 않음.
+		// stale completion 레코드로 인해 시리즈 페이지가 100%로 고정되는 케이스를 방지.
+		isCompleted := completedVolumeIDs[volumes[i].ID] && (totalPages <= 0 || readPages >= totalPages)
 		// 완독 상태지만 읽은 페이지가 0인 경우 (예: 직접 완독 처리했으나 진행도 업데이트 실패 등) 100%로 보정
 		if isCompleted && readPages == 0 && totalPages > 0 {
 			volumes[i].ReadPageCount = totalPages
