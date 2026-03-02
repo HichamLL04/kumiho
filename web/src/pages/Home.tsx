@@ -294,9 +294,9 @@ export function HomePage() {
             };
 
             // 진행도 텍스트 생성
-            // 1. 권 정보가 있으면 "X권"만 표시 (화 정보 제외)
-            // 2. 권 정보가 없고 챕터만 있으면 "X화" 표시
-            // 3. 둘 다 없으면 "X페이지" 표시
+            // 1. volume_unit이 chapter면 "X화" 기준으로 표시
+            // 2. volume/chapter가 함께 있으면 상황에 따라 "X권" 또는 "X권 - Y화" 표시
+            // 3. 챕터만 있으면 "X화", 둘 다 없으면 "X페이지" 표시
             let subtitle = "";
             if (progress.volume_id && progress.chapter_id) {
               if (progress.volume_unit === "chapter") {
