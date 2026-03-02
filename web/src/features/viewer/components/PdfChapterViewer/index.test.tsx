@@ -222,6 +222,106 @@ describe("PdfChapterViewer wheel navigation", () => {
   });
 });
 
+describe("PdfChapterViewer PDF load logic", () => {
+  const createMockPdf = (numPages = 3) => ({
+    numPages,
+    getPage: mockPdfGetPage,
+    getOutline: vi.fn(async () => null),
+  });
+
+  it("calls onDocumentLoad with numPages on successful load", async () => {
+    const mockPdf = createMockPdf(5);
+    mockGetDocument.mockReturnValue({
+      promise: Promise.resolve(mockPdf),
+      destroy: vi.fn(),
+    });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-1"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(5));
+  });
+
+  it("calls onDocumentLoad(0) when load fails", async () => {
+    mockGetDocument.mockReturnValue({
+      promise: Promise.reject(new Error("Total failure")),
+      destroy: vi.fn(),
+    });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-fail"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(0));
+  });
+
+  it("includes JWT Authorization header when access_token looks like JWT", async () => {
+    const jwtToken = "eyJhbGciOi.eyJzdWIiOi.signature";
+    const originalGetItem = Storage.prototype.getItem;
+    Storage.prototype.getItem = (key: string) =>
+      key === "access_token" ? jwtToken : null;
+
+    const mockPdf = createMockPdf(1);
+    mockGetDocument.mockReturnValue({
+      promise: Promise.resolve(mockPdf),
+      destroy: vi.fn(),
+    });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-jwt"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalled());
+    expect(mockGetDocument.mock.calls[0][0]).toMatchObject({
+      httpHeaders: { Authorization: `Bearer ${jwtToken}` },
+    });
+
+    Storage.prototype.getItem = originalGetItem;
+  });
+
+  it("does not include Authorization header when access_token is not JWT-like", async () => {
+    const originalGetItem = Storage.prototype.getItem;
+    Storage.prototype.getItem = (key: string) =>
+      key === "access_token" ? "not-a-jwt" : null;
+
+    const mockPdf = createMockPdf(1);
+    mockGetDocument.mockReturnValue({
+      promise: Promise.resolve(mockPdf),
+      destroy: vi.fn(),
+    });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-no-jwt"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalled());
+    expect(mockGetDocument.mock.calls[0][0]).not.toHaveProperty("httpHeaders");
+
+    Storage.prototype.getItem = originalGetItem;
+  });
+});
+
 describe("PdfChapterViewer resize observer", () => {
   it("rerenders when container size changes from zero to valid size", async () => {
     mockPdfGetPage.mockResolvedValue(createMockPdfPage());

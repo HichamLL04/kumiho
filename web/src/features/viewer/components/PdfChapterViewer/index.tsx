@@ -90,13 +90,25 @@ const resolveOutline = async (
 if (NEEDS_TOHEX_POLYFILL) {
   // 워커도 별도 스레드이므로 동일 폴리필이 필요하다.
   // 폴리필 코드를 앞에 붙인 래퍼 모듈을 blob URL로 만들어 workerSrc로 사용한다.
-  const absoluteWorkerUrl = new URL(pdfWorker, globalThis.location?.origin ?? "http://localhost").href;
-  const polyfillCode = `if(typeof Uint8Array.prototype.toHex!=="function"){Uint8Array.prototype.toHex=function(){let h="";for(let i=0;i<this.length;i++)h+=this[i].toString(16).padStart(2,"0");return h};}`;
-  // static import는 blob URL 모듈에서 cross-origin 제약으로 실패할 수 있다.
-  // dynamic import()를 사용하여 폴리필 적용 후 실제 워커를 로드한다.
-  const wrapperCode = `${polyfillCode}\nimport("${absoluteWorkerUrl}");`;
-  const blob = new Blob([wrapperCode], { type: "text/javascript" });
-  pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  const canUseBlobWorker =
+    typeof window !== "undefined" &&
+    typeof Blob !== "undefined" &&
+    typeof URL !== "undefined" &&
+    typeof URL.createObjectURL === "function";
+
+  if (canUseBlobWorker) {
+    const absoluteWorkerUrl = new URL(pdfWorker, globalThis.location?.origin ?? "http://localhost").href;
+    const polyfillCode = `if(typeof Uint8Array.prototype.toHex!=="function"){Uint8Array.prototype.toHex=function(){let h="";for(let i=0;i<this.length;i++)h+=this[i].toString(16).padStart(2,"0");return h};}`;
+    // static import는 blob URL 모듈에서 cross-origin 제약으로 실패할 수 있다.
+    // dynamic import()를 사용하여 폴리필 적용 후 실제 워커를 로드한다.
+    const wrapperCode = `${polyfillCode}\nimport("${absoluteWorkerUrl}");`;
+    const blob = new Blob([wrapperCode], { type: "text/javascript" });
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  } else {
+    // 테스트/비브라우저 환경(JSDOM 등)에서는 blob 기반 워커 구성이 불가능하므로
+    // 기본 workerSrc로 폴백하여 크래시를 방지한다.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+  }
 } else {
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 }
