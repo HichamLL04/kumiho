@@ -86,6 +86,8 @@ export function useViewerNavigation({
 
   // 다음 페이지/챕터 핸들러
   const handleNext = useCallback(async () => {
+    // PDF가 아직 로딩 중이면 네비게이션 무시 (totalPages=0일 때 "책 끝남" 오판 방지)
+    if (totalPages <= 0) return;
     if (currentPage < totalPages) {
       // 2장 보기 모드일 때 오프셋 설정에 따라 이동 간격(step) 계산
       let step = 1;
@@ -140,6 +142,8 @@ export function useViewerNavigation({
 
   // 이전 페이지/챕터 핸들러
   const handlePrev = useCallback(async () => {
+    // PDF가 아직 로딩 중이면 네비게이션 무시
+    if (totalPages <= 0) return;
     if (currentPage > 1) {
       // 2장 보기 모드일 때 오프셋 설정에 따라 이동 간격(step) 계산
       let step = 1;
@@ -177,6 +181,7 @@ export function useViewerNavigation({
     }
   }, [
     currentPage,
+    totalPages,
     goToPage,
     showPrevHint,
     prevChapterId,

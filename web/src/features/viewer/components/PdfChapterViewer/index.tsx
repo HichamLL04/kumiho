@@ -150,6 +150,10 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
     const verticalZoomScaleRef = useRef(1);
     const verticalAnchorAlignTimerRef = useRef<number | null>(null);
     const lastWheelNavAtRef = useRef(0);
+    const resizePagesRef = useRef<number[]>([]);
+    const renderPageRef = useRef<
+      ((pageNum: number, canvas: HTMLCanvasElement, textLayerContainer: HTMLDivElement | null, renderQualityScale?: number) => Promise<void>) | null
+    >(null);
 
     // Zoom and Navigation handlers
     const animateNextRef = useRef<(() => void) | null>(null);
@@ -185,7 +189,7 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
         onNext: handleAnimatedNext,
         onPrev: handleAnimatedPrev,
         isVerticalMode: readingMode === "vertical",
-        deferSingleTapForDoubleTap: false,
+        deferSingleTapForDoubleTap: true,
         doubleTapZoomZone: "center",
         onVerticalZoomToggle: (isZoomingIn: boolean, anchor) => {
           const content = getVerticalScrollContainer();
@@ -413,20 +417,28 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
         if (!activePdfDoc) return;
 
         try {
-          // 기존 렌더링 작업 취소
+          // 기존 렌더링 작업 취소는 모든 경로에서 먼저 보장
           const existingTask = renderTasksRef.current.get(pageNum);
           if (existingTask) {
             existingTask.cancel();
+            renderTasksRef.current.delete(pageNum);
+          }
+
+          const containerWidth = containerRef.current?.clientWidth ?? window.innerWidth;
+          const containerHeight =
+            readingMode === "vertical"
+              ? containerRef.current?.parentElement?.clientHeight ?? window.innerHeight
+              : containerRef.current?.clientHeight ?? window.innerHeight;
+
+          // 모바일에서 레이아웃이 아직 확정되지 않아 크기가 0인 경우 렌더링 건너뜀
+          // ResizeObserver가 크기 확정 시 재렌더링을 트리거함
+          if (containerWidth <= 1 || containerHeight <= 1) {
+            renderTasksRef.current.delete(pageNum);
+            return;
           }
 
           const page = await activePdfDoc.getPage(pageNum);
           const viewport = page.getViewport({ scale: 1 });
-
-          const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
-          const containerHeight =
-            readingMode === "vertical"
-              ? containerRef.current?.parentElement?.clientHeight || window.innerHeight
-              : containerRef.current?.clientHeight || window.innerHeight;
 
           const availableWidth =
             readingMode === "double" && displayPages.length > 1 ? containerWidth / 2 : containerWidth;
@@ -515,6 +527,22 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
       },
       [activePdfDoc, fitMode, readingMode, displayPages.length, verticalZoomScale],
     );
+
+    useEffect(() => {
+      renderPageRef.current = renderPage;
+    }, [renderPage]);
+
+    const rerenderCurrentPages = useCallback(() => {
+      const pagesToRender = resizePagesRef.current;
+      const renderPageFn = renderPageRef.current;
+      if (!renderPageFn) return;
+
+      pagesToRender.forEach((pageNum) => {
+        const canvas = canvasesRef.current.get(pageNum);
+        const textLayer = textLayersRef.current.get(pageNum);
+        if (canvas) renderPageFn(pageNum, canvas, textLayer || null, lastZoomRerenderScaleRef.current);
+      });
+    }, []);
 
     useEffect(
       () => () => {
@@ -718,6 +746,10 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
       return fallbackPages;
     }, [readingMode, visiblePages, displayPages, currentPage, preloadCount]);
 
+    useEffect(() => {
+      resizePagesRef.current = readingMode === "vertical" ? Array.from(activeVisiblePages) : displayPages;
+    }, [readingMode, activeVisiblePages, displayPages]);
+
     // 현재 페이지(들) 렌더링
     useEffect(() => {
       if (!activePdfDoc || loading) return;
@@ -741,20 +773,38 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
       verticalZoomScale,
     ]);
 
-    // 창 크기 조절 대응
+    // 창 크기 조절 대응 + 모바일 레이아웃 지연 대응 (ResizeObserver)
     useEffect(() => {
-      const handleResize = () => {
-        const pagesToRender = readingMode === "vertical" ? Array.from(activeVisiblePages) : displayPages;
-        pagesToRender.forEach((pageNum) => {
-          const canvas = canvasesRef.current.get(pageNum);
-          const textLayer = textLayersRef.current.get(pageNum);
-          if (canvas) renderPage(pageNum, canvas, textLayer || null, lastZoomRerenderScaleRef.current);
-        });
-      };
+      window.addEventListener("resize", rerenderCurrentPages);
 
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
-    }, [displayPages, activeVisiblePages, renderPage, readingMode]);
+      // ResizeObserver: 모바일에서 컨테이너 크기가 0→유효값으로 변할 때만 재렌더링
+      // 디바운스로 UI 토글 등에 의한 즉시 재렌더링이 더블클릭 감지를 방해하지 않도록 함
+      let resizeObserver: ResizeObserver | null = null;
+      let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+      const container = containerRef.current;
+      let lastWidth = container?.clientWidth ?? 0;
+      let lastHeight = container?.clientHeight ?? 0;
+      if (container) {
+        resizeObserver = new ResizeObserver((entries) => {
+          const entry = entries[0];
+          if (!entry) return;
+          const { width, height } = entry.contentRect;
+          if (width > 1 && height > 1 && (Math.abs(width - lastWidth) > 1 || Math.abs(height - lastHeight) > 1)) {
+            lastWidth = width;
+            lastHeight = height;
+            if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+            resizeDebounceTimer = setTimeout(rerenderCurrentPages, 150);
+          }
+        });
+        resizeObserver.observe(container);
+      }
+
+      return () => {
+        window.removeEventListener("resize", rerenderCurrentPages);
+        if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+        resizeObserver?.disconnect();
+      };
+    }, [rerenderCurrentPages, loading]);
 
     // Swipe Hook
     const { onTouchStart, onTouchMove, onTouchEnd, swipeOffset, isAnimating, animateNext, animatePrev } = useSwipe({
@@ -997,10 +1047,14 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
             wheel={{ disabled: false, activationKeys: ["Control"] }}
             doubleClick={{ disabled: true }}
             panning={{ disabled: !isZoomed, excluded: ["span"] }}
+            zoomAnimation={{ animationTime: 240, animationType: "easeOut" }}
             onTransformed={(_, state) => {
               setIsZoomed(state.scale > 1.01);
               handleZoomStop(state.scale);
               onZoomChange?.(state.scale);
+            }}
+            onZoomStop={(zoomRef) => {
+              handleZoomStop(zoomRef.state.scale);
             }}
           >
             <TransformComponent
