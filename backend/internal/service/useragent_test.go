@@ -45,6 +45,16 @@ func TestShouldUsePdfImageFallback(t *testing.T) {
 			ua:   "Mozilla/5.0 (iPad; CPU OS 15_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/117.0.0.0 Mobile/15E148 Safari/604.1",
 			want: false,
 		},
+		{
+			name: "iPad Firefox",
+			ua:   "Mozilla/5.0 (iPad; CPU OS 15_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/117.0 Mobile/15E148 Safari/605.1.15",
+			want: false,
+		},
+		{
+			name: "iPad Edge",
+			ua:   "Mozilla/5.0 (iPad; CPU OS 15_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/117.2045.43 Mobile/15E148 Safari/605.1.15",
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
