@@ -3,11 +3,13 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"container/list"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
+	"image/jpeg"
 	"io"
 	"log"
 	"os"
@@ -17,15 +19,16 @@ import (
 	"sync"
 	"time"
 
-	_ "image/gif"  // GIF 디코딩 지원
-	_ "image/jpeg" // JPEG 디코딩 지원
-	_ "image/png"  // PNG 디코딩 지원
+	_ "image/gif" // GIF 디코딩 지원
+	_ "image/png" // PNG 디코딩 지원
 
 	"github.com/disintegration/imaging"
+	"github.com/gen2brain/go-fitz"
 	"github.com/gofiber/fiber/v2"
 	_ "golang.org/x/image/bmp"  // BMP 디코딩 지원
 	_ "golang.org/x/image/tiff" // TIFF 디코딩 지원
 	_ "golang.org/x/image/webp" // WebP 디코딩 지원
+	"golang.org/x/sync/singleflight"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
@@ -44,6 +47,16 @@ type ImageHandler struct {
 	config               *config.Config
 	pdfThumbFailMu       sync.Mutex
 	pdfThumbFailCooldown map[string]time.Time
+	pdfPageCacheMu       sync.Mutex
+	pdfPageCache         map[string]*list.Element
+	pdfPageCacheList     *list.List
+	pdfPageCacheMaxSize  int
+	pdfPageSingleFlight  singleflight.Group
+}
+
+type pdfPageCacheEntry struct {
+	key  string
+	data []byte
 }
 
 func NewImageHandler(
@@ -62,6 +75,9 @@ func NewImageHandler(
 		authService:          authService,
 		config:               cfg,
 		pdfThumbFailCooldown: make(map[string]time.Time),
+		pdfPageCache:         make(map[string]*list.Element),
+		pdfPageCacheList:     list.New(),
+		pdfPageCacheMaxSize:  120,
 	}
 }
 
@@ -214,6 +230,128 @@ func (h *ImageHandler) resolveSecurePath(rawPath string) (string, error) {
 	}
 
 	return realFullPath, nil
+}
+
+func (h *ImageHandler) getPdfPageCache(key string) ([]byte, bool) {
+	h.pdfPageCacheMu.Lock()
+	defer h.pdfPageCacheMu.Unlock()
+
+	elem, ok := h.pdfPageCache[key]
+	if !ok {
+		return nil, false
+	}
+
+	h.pdfPageCacheList.MoveToFront(elem)
+	entry, ok := elem.Value.(*pdfPageCacheEntry)
+	if !ok || entry == nil {
+		return nil, false
+	}
+	buf := make([]byte, len(entry.data))
+	copy(buf, entry.data)
+	return buf, true
+}
+
+func (h *ImageHandler) setPdfPageCache(key string, data []byte) {
+	h.pdfPageCacheMu.Lock()
+	defer h.pdfPageCacheMu.Unlock()
+
+	if elem, ok := h.pdfPageCache[key]; ok {
+		entry, ok := elem.Value.(*pdfPageCacheEntry)
+		if !ok || entry == nil {
+			return
+		}
+		entry.data = make([]byte, len(data))
+		copy(entry.data, data)
+		h.pdfPageCacheList.MoveToFront(elem)
+		return
+	}
+
+	entry := &pdfPageCacheEntry{
+		key:  key,
+		data: make([]byte, len(data)),
+	}
+	copy(entry.data, data)
+	elem := h.pdfPageCacheList.PushFront(entry)
+	h.pdfPageCache[key] = elem
+
+	for h.pdfPageCacheList.Len() > h.pdfPageCacheMaxSize {
+		last := h.pdfPageCacheList.Back()
+		if last == nil {
+			break
+		}
+		h.pdfPageCacheList.Remove(last)
+		lastEntry, ok := last.Value.(*pdfPageCacheEntry)
+		if !ok || lastEntry == nil {
+			continue
+		}
+		delete(h.pdfPageCache, lastEntry.key)
+	}
+}
+
+var errPDFPageNotFound = errors.New("pdf page not found")
+
+func (h *ImageHandler) renderPDFPageImage(chapter *model.Chapter, pageNumber, width int) ([]byte, error) {
+	cacheKey := fmt.Sprintf("%s:%d:%d", chapter.ID, pageNumber, width)
+	if cached, ok := h.getPdfPageCache(cacheKey); ok {
+		return cached, nil
+	}
+
+	rendered, err, _ := h.pdfPageSingleFlight.Do(cacheKey, func() (interface{}, error) {
+		if cached, ok := h.getPdfPageCache(cacheKey); ok {
+			return cached, nil
+		}
+
+		realPDFPath, err := h.resolveSecurePath(chapter.Path)
+		if err != nil {
+			return nil, err
+		}
+
+		doc, err := fitz.New(realPDFPath)
+		if err != nil {
+			return nil, err
+		}
+		defer doc.Close()
+
+		pageCount := doc.NumPage()
+		if pageCount <= 0 {
+			return nil, errPDFPageNotFound
+		}
+		if pageNumber < 1 || pageNumber > pageCount {
+			return nil, errPDFPageNotFound
+		}
+
+		img, err := doc.Image(pageNumber - 1)
+		if err != nil {
+			return nil, err
+		}
+
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85}); err != nil {
+			return nil, err
+		}
+
+		renderedData := buf.Bytes()
+		if width > 0 {
+			resized, resizeErr := h.resizeImage(renderedData, width)
+			if resizeErr != nil {
+				// 리사이즈 실패 시 width 키로 원본 이미지를 캐싱하지 않도록 에러 반환
+				return nil, resizeErr
+			}
+			renderedData = resized
+		}
+
+		h.setPdfPageCache(cacheKey, renderedData)
+		return renderedData, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	data, ok := rendered.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("unexpected rendered pdf page data type")
+	}
+	return data, nil
 }
 
 // GetPageImage 페이지 이미지 서빙
@@ -811,6 +949,84 @@ func (h *ImageHandler) PageImageByNumber(c *fiber.Ctx) error {
 	}
 	width := c.QueryInt("width", 0)
 
+	// 챕터 정보 조회
+	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch chapter",
+		})
+	}
+	if chapter == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "chapter not found",
+		})
+	}
+
+	// 라이브러리 접근 권한 확인
+	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if err != nil || volume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume not found"})
+	}
+
+	role := middleware.GetUserRole(c)
+	userID := middleware.GetUserID(c)
+
+	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found"})
+	}
+
+	if role != model.RoleMaster {
+		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
+		if checkErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to check permissions",
+			})
+		}
+		allowed := false
+		for _, aid := range allowedIDs {
+			if aid == series.LibraryID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "access denied",
+			})
+		}
+	}
+
+	// PDF 챕터는 pages 테이블을 거치지 않고 페이지를 직접 렌더링한다.
+	if strings.HasSuffix(strings.ToLower(chapter.Path), ".pdf") {
+		imageData, renderErr := h.renderPDFPageImage(chapter, pageNumber, width)
+		if renderErr != nil {
+			if errors.Is(renderErr, errPDFPageNotFound) {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "page not found",
+				})
+			}
+			if errors.Is(renderErr, ErrInvalidPath) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "invalid file path",
+				})
+			}
+			if os.IsNotExist(renderErr) {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "file not found",
+				})
+			}
+			log.Printf("[IMAGE_HANDLER] failed to render pdf page image for chapter %s page %d: %v", chapterID, pageNumber, renderErr)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to render pdf page",
+			})
+		}
+
+		c.Set("Content-Type", "image/jpeg")
+		c.Set("Cache-Control", "public, max-age=31536000")
+		return c.Send(imageData)
+	}
+
 	pages, err := h.pageRepo.FindByChapterID(nil, chapterID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -825,14 +1041,6 @@ func (h *ImageHandler) PageImageByNumber(c *fiber.Ctx) error {
 	}
 
 	page := pages[pageNumber-1]
-
-	// 챕터 정보 조회
-	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to fetch chapter",
-		})
-	}
 
 	var imageData []byte
 	var contentType string

@@ -1165,6 +1165,15 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 		})
 	}
 
+	chapterPath := strings.ToLower(chapter.Path)
+	if strings.HasSuffix(chapterPath, ".pdf") {
+		renderMode := "pdf"
+		if service.ShouldUsePdfImageFallback(c.Get("User-Agent")) {
+			renderMode = "image"
+		}
+		chapter.RenderMode = &renderMode
+	}
+
 	return c.JSON(chapter)
 }
 
