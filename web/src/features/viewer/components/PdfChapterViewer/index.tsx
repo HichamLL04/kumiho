@@ -29,7 +29,7 @@ if (NEEDS_TOHEX_POLYFILL) {
 }
 
 import * as pdfjsLib from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.js?url";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { LoadingSpinner } from "../../../../components/common/LoadingSpinner";
 import { refreshAccessTokenForNonAxiosFlow } from "../../../../api/client";
@@ -497,7 +497,7 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
       const runLoadSequence = async (disableWorker: boolean): Promise<pdfjsLib.PDFDocumentProxy> => {
         try {
           return await loadWithPhase(disableWorker, false);
-        } catch (firstErr) {
+        } catch {
           if (!hasRetriedAfterRefresh) {
             hasRetriedAfterRefresh = true;
             try {
@@ -721,12 +721,22 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
               // PDF.js에서 내부적으로 사용하는 스케일 변수 설정
               textLayerContainer.style.setProperty("--scale-factor", targetScale.toString());
 
-              const textLayer = new pdfjsLib.TextLayer({
-                textContentSource,
-                container: textLayerContainer,
-                viewport: textViewport,
-              });
-              await textLayer.render();
+              const textLayerCtor = (pdfjsLib as unknown as {
+                TextLayer?: new (params: {
+                  textContentSource: unknown;
+                  container: HTMLDivElement;
+                  viewport: unknown;
+                }) => { render: () => Promise<void> };
+              }).TextLayer;
+
+              if (textLayerCtor) {
+                const textLayer = new textLayerCtor({
+                  textContentSource,
+                  container: textLayerContainer,
+                  viewport: textViewport,
+                });
+                await textLayer.render();
+              }
             }
           }
         } catch (err: unknown) {
@@ -994,7 +1004,7 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
       const container = containerRef.current;
       let lastWidth = container?.clientWidth ?? 0;
       let lastHeight = container?.clientHeight ?? 0;
-      if (container) {
+      if (container && typeof ResizeObserver === "function") {
         resizeObserver = new ResizeObserver((entries) => {
           const entry = entries[0];
           if (!entry) return;

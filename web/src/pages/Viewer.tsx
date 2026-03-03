@@ -45,12 +45,13 @@ export function ViewerPage() {
   const chapterPath = loaderData.chapter?.path?.toLowerCase() ?? "";
   const isPdf = chapterPath.endsWith(".pdf");
   const isEpub = chapterPath.endsWith(".epub");
+  const shouldUseImageRouteForPdf = isPdf && loaderData.chapter?.render_mode === "image";
 
   if (isEpub) {
     return <EpubViewerRoute loaderData={loaderData} />;
   }
 
-  if (isPdf) {
+  if (isPdf && !shouldUseImageRouteForPdf) {
     return <PdfViewerRoute loaderData={loaderData} />;
   }
 
