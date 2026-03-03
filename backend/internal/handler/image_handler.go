@@ -307,24 +307,19 @@ func (h *ImageHandler) renderPDFPageImage(chapter *model.Chapter, pageNumber, wi
 			return nil, err
 		}
 
-		pageCount := chapter.PageCount
-		if pageCount <= 0 {
-			var countErr error
-			pageCount, countErr = util.GetPdfPageCount(realPDFPath)
-			if countErr != nil {
-				return nil, countErr
-			}
-		}
-
-		if pageNumber < 1 || pageNumber > pageCount {
-			return nil, errPDFPageNotFound
-		}
-
 		doc, err := fitz.New(realPDFPath)
 		if err != nil {
 			return nil, err
 		}
 		defer doc.Close()
+
+		pageCount := doc.NumPage()
+		if pageCount <= 0 {
+			return nil, errPDFPageNotFound
+		}
+		if pageNumber < 1 || pageNumber > pageCount {
+			return nil, errPDFPageNotFound
+		}
 
 		img, err := doc.Image(pageNumber - 1)
 		if err != nil {
@@ -964,6 +959,41 @@ func (h *ImageHandler) PageImageByNumber(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "chapter not found",
 		})
+	}
+
+	// 라이브러리 접근 권한 확인
+	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if err != nil || volume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume not found"})
+	}
+
+	role := middleware.GetUserRole(c)
+	userID := middleware.GetUserID(c)
+
+	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found"})
+	}
+
+	if role != model.RoleMaster {
+		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
+		if checkErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to check permissions",
+			})
+		}
+		allowed := false
+		for _, aid := range allowedIDs {
+			if aid == series.LibraryID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "access denied",
+			})
+		}
 	}
 
 	// PDF 챕터는 pages 테이블을 거치지 않고 페이지를 직접 렌더링한다.

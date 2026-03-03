@@ -77,5 +77,20 @@ describe("ViewerPage routing by chapter type", () => {
     expect(screen.getByTestId("pdf-viewer-route")).toBeInTheDocument();
     expect(screen.queryByTestId("image-viewer-route")).not.toBeInTheDocument();
   });
-});
 
+  it("routes PDF chapter without render_mode to PdfViewerRoute by default", () => {
+    useChapterLoaderMock.mockReturnValue({
+      error: null,
+      isLoading: false,
+      chapter: {
+        id: "chapter-1",
+        path: "/books/sample.pdf",
+      },
+    });
+
+    renderPage();
+
+    expect(screen.getByTestId("pdf-viewer-route")).toBeInTheDocument();
+    expect(screen.queryByTestId("image-viewer-route")).not.toBeInTheDocument();
+  });
+});

@@ -21,6 +21,16 @@ func TestShouldUsePdfImageFallback(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "iPad Safari 15.7",
+			ua:   "Mozilla/5.0 (iPad; CPU OS 15_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.7 Mobile/15E148 Safari/604.1",
+			want: false,
+		},
+		{
+			name: "iPad Safari 14.8",
+			ua:   "Mozilla/5.0 (iPad; CPU OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.8 Mobile/15E148 Safari/604.1",
+			want: true,
+		},
+		{
 			name: "iPhone Safari 15.6",
 			ua:   "Mozilla/5.0 (iPhone; CPU iPhone OS 15_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1",
 			want: false,
