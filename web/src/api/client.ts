@@ -6,6 +6,35 @@ import type { Session } from "../types/session";
 // Docker 및 배포 환경에서 유연하게 대처하기 위해 기본값을 상대 경로로 설정합니다.
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
 
+export async function refreshAccessTokenForNonAxiosFlow(): Promise<{ accessToken: string; refreshToken?: string }> {
+  let response;
+  try {
+    // 1차: 쿠키 기반 refresh 시도
+    response = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
+  } catch (cookieError) {
+    // 2차: 쿠키 실패 시 localStorage의 refresh_token 폴백
+    const storedRefreshToken = localStorage.getItem("refresh_token");
+    if (!storedRefreshToken) throw cookieError;
+    response = await axios.post(
+      `${API_BASE_URL}/auth/refresh`,
+      { refresh_token: storedRefreshToken },
+      { withCredentials: true },
+    );
+  }
+
+  const { access_token, refresh_token } = response.data ?? {};
+  if (!access_token || typeof access_token !== "string") {
+    throw new Error("missing access_token in refresh response");
+  }
+
+  localStorage.setItem("access_token", access_token);
+  if (refresh_token && typeof refresh_token === "string") {
+    localStorage.setItem("refresh_token", refresh_token);
+  }
+
+  return { accessToken: access_token, refreshToken: refresh_token };
+}
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true, // 쿠키 자동 전송 (httpOnly 쿠키 인증용)
@@ -46,31 +75,10 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        // 1차: 쿠키 기반 refresh 시도 (refresh_token 쿠키가 자동으로 전송됨)
-        let response;
-        try {
-          response = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
-        } catch (cookieError) {
-          // 2차: 쿠키 실패 시 localStorage의 refresh_token으로 폴백
-          const storedRefreshToken = localStorage.getItem("refresh_token");
-          if (!storedRefreshToken) throw cookieError;
-          response = await axios.post(
-            `${API_BASE_URL}/auth/refresh`,
-            { refresh_token: storedRefreshToken },
-            { withCredentials: true },
-          );
-        }
-
-        const { access_token, refresh_token } = response.data;
-
-        // localStorage에도 저장 (모바일 앱 호환용)
-        localStorage.setItem("access_token", access_token);
-        if (refresh_token) {
-          localStorage.setItem("refresh_token", refresh_token);
-        }
+        const { accessToken } = await refreshAccessTokenForNonAxiosFlow();
 
         // 원래 요청에 새 토큰 추가 후 재시도
-        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
       } catch {
         // refresh 실패 시 로그아웃 처리

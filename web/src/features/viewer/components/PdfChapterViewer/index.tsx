@@ -32,6 +32,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { LoadingSpinner } from "../../../../components/common/LoadingSpinner";
+import { refreshAccessTokenForNonAxiosFlow } from "../../../../api/client";
 import {
   type ReadingMode,
   type ReadingDirection,
@@ -64,6 +65,12 @@ type PdfGetDocumentOptions = {
   disableWorker: boolean;
   httpHeaders?: Record<string, string>;
 };
+
+type PdfLoadPhase =
+  | "worker-on/main-url"
+  | "worker-on/query-token"
+  | "worker-off/main-url"
+  | "worker-off/query-token";
 
 const resolveOutline = async (
   pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -421,20 +428,27 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
       }
 
       const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
-      const url = `${API_BASE_URL}/chapters/${chapterId}/pdf`;
+      const basePdfUrl = `${API_BASE_URL}/chapters/${chapterId}/pdf`;
       const requestedChapterId = chapterId;
+      let hasRetriedAfterRefresh = false;
 
-      const buildGetDocumentOptions = (disableWorker: boolean): PdfGetDocumentOptions => {
+      const buildGetDocumentOptions = (disableWorker: boolean, preferQueryToken: boolean): PdfGetDocumentOptions => {
         // Pass Bearer token only when a valid-looking access token exists.
         // Legacy `token` key can contain stale/non-JWT values and break PDF-only requests.
-        let options: PdfGetDocumentOptions = { url, withCredentials: true, disableWorker };
+        let options: PdfGetDocumentOptions = {
+          url: basePdfUrl,
+          withCredentials: true,
+          disableWorker,
+        };
         try {
           if (typeof window !== "undefined" && window.localStorage) {
             const token = window.localStorage.getItem("access_token");
             const isLikelyJwt = typeof token === "string" && token.split(".").length === 3;
             if (isLikelyJwt) {
+              const queryUrl = `${basePdfUrl}?token=${encodeURIComponent(token)}`;
               options = {
                 ...options,
+                url: preferQueryToken ? queryUrl : basePdfUrl,
                 httpHeaders: {
                   Authorization: `Bearer ${token}`,
                 },
@@ -447,12 +461,54 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
         return options;
       };
 
-      const loadPdf = async (disableWorker: boolean): Promise<pdfjsLib.PDFDocumentProxy> => {
+      const loadPdf = async (
+        disableWorker: boolean,
+        preferQueryToken: boolean,
+      ): Promise<pdfjsLib.PDFDocumentProxy> => {
         const loadingTask = pdfjsLib.getDocument(
-          buildGetDocumentOptions(disableWorker) as Parameters<typeof pdfjsLib.getDocument>[0],
+          buildGetDocumentOptions(disableWorker, preferQueryToken) as Parameters<typeof pdfjsLib.getDocument>[0],
         );
         activeLoadingTask = loadingTask;
         return loadingTask.promise;
+      };
+
+      const getPhase = (disableWorker: boolean, preferQueryToken: boolean): PdfLoadPhase => {
+        if (!disableWorker && !preferQueryToken) return "worker-on/main-url";
+        if (!disableWorker && preferQueryToken) return "worker-on/query-token";
+        if (disableWorker && !preferQueryToken) return "worker-off/main-url";
+        return "worker-off/query-token";
+      };
+
+      const loadWithPhase = async (
+        disableWorker: boolean,
+        preferQueryToken: boolean,
+      ): Promise<pdfjsLib.PDFDocumentProxy> => {
+        const phase = getPhase(disableWorker, preferQueryToken);
+        try {
+          return await loadPdf(disableWorker, preferQueryToken);
+        } catch (err) {
+          activeLoadingTask?.destroy();
+          const wrappedError = err instanceof Error ? err : new Error(String(err));
+          (wrappedError as Error & { phase?: PdfLoadPhase }).phase = phase;
+          throw wrappedError;
+        }
+      };
+
+      const runLoadSequence = async (disableWorker: boolean): Promise<pdfjsLib.PDFDocumentProxy> => {
+        try {
+          return await loadWithPhase(disableWorker, false);
+        } catch (firstErr) {
+          if (!hasRetriedAfterRefresh) {
+            hasRetriedAfterRefresh = true;
+            try {
+              await refreshAccessTokenForNonAxiosFlow();
+              return await loadWithPhase(disableWorker, false);
+            } catch (refreshOrRetryErr) {
+              console.warn("PDF refresh/retry failed, trying query token fallback", refreshOrRetryErr);
+            }
+          }
+          return loadWithPhase(disableWorker, true);
+        }
       };
 
       const startLoad = async () => {
@@ -460,14 +516,12 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
           let pdf: pdfjsLib.PDFDocumentProxy;
           try {
             // blob 래퍼로 워커에 폴리필을 주입하므로 기본적으로 워커를 사용한다.
-            pdf = await loadPdf(false);
+            pdf = await runLoadSequence(false);
           } catch (firstErr) {
-            // 1차 실패한 loadingTask의 리소스를 정리한다.
-            activeLoadingTask?.destroy();
             // 언마운트(또는 chapterId 변경) 이후에는 재시도를 수행하지 않는다.
             if (!isMounted) return;
             console.warn("PDF load failed, retrying with worker disabled", firstErr);
-            pdf = await loadPdf(true);
+            pdf = await runLoadSequence(true);
           }
 
           if (!isMounted) return;
@@ -487,9 +541,16 @@ export const PdfChapterViewer = forwardRef<ViewerAnimationHandles, PdfChapterVie
         } catch (err) {
           // 최종 실패한 loadingTask의 리소스(워커/네트워크)를 정리한다.
           activeLoadingTask?.destroy();
-          const errObj = err as { name?: string; message?: string; status?: number; code?: string };
+          const errObj = err as {
+            name?: string;
+            message?: string;
+            status?: number;
+            code?: string;
+            phase?: PdfLoadPhase;
+          };
           console.error("PDF load error:", {
             chapterId: requestedChapterId,
+            phase: errObj?.phase ?? "worker-off/query-token",
             name: errObj?.name,
             message: errObj?.message,
             status: errObj?.status,
