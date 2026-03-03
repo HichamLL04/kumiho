@@ -243,7 +243,10 @@ func (h *ImageHandler) getPdfPageCache(key string) ([]byte, bool) {
 	}
 
 	h.pdfPageCacheList.MoveToFront(elem)
-	entry := elem.Value.(*pdfPageCacheEntry)
+	entry, ok := elem.Value.(*pdfPageCacheEntry)
+	if !ok || entry == nil {
+		return nil, false
+	}
 	buf := make([]byte, len(entry.data))
 	copy(buf, entry.data)
 	return buf, true
@@ -254,7 +257,10 @@ func (h *ImageHandler) setPdfPageCache(key string, data []byte) {
 	defer h.pdfPageCacheMu.Unlock()
 
 	if elem, ok := h.pdfPageCache[key]; ok {
-		entry := elem.Value.(*pdfPageCacheEntry)
+		entry, ok := elem.Value.(*pdfPageCacheEntry)
+		if !ok || entry == nil {
+			return
+		}
 		entry.data = make([]byte, len(data))
 		copy(entry.data, data)
 		h.pdfPageCacheList.MoveToFront(elem)
@@ -275,7 +281,10 @@ func (h *ImageHandler) setPdfPageCache(key string, data []byte) {
 			break
 		}
 		h.pdfPageCacheList.Remove(last)
-		lastEntry := last.Value.(*pdfPageCacheEntry)
+		lastEntry, ok := last.Value.(*pdfPageCacheEntry)
+		if !ok || lastEntry == nil {
+			continue
+		}
 		delete(h.pdfPageCache, lastEntry.key)
 	}
 }
