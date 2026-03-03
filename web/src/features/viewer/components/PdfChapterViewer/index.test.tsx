@@ -9,6 +9,7 @@ let mockAnimateNext = vi.fn();
 let mockAnimatePrev = vi.fn();
 const mockPdfGetPage = vi.hoisted(() => vi.fn());
 const mockGetDocument = vi.hoisted(() => vi.fn());
+const mockRefreshAccessTokenForNonAxiosFlow = vi.hoisted(() => vi.fn());
 
 vi.mock("pdfjs-dist", () => ({
   GlobalWorkerOptions: {
@@ -60,6 +61,10 @@ vi.mock("../../hooks/useSwipe", () => ({
     animateNext: mockAnimateNext,
     animatePrev: mockAnimatePrev,
   }),
+}));
+
+vi.mock("../../../../api/client", () => ({
+  refreshAccessTokenForNonAxiosFlow: mockRefreshAccessTokenForNonAxiosFlow,
 }));
 
 vi.mock("../PageTransition", () => ({
@@ -138,6 +143,7 @@ afterEach(() => {
   mockAnimatePrev = vi.fn();
   mockPdfGetPage.mockReset();
   mockGetDocument.mockReset();
+  mockRefreshAccessTokenForNonAxiosFlow.mockReset();
   MockResizeObserver.instances = [];
   globalThis.ResizeObserver = originalResizeObserver;
   vi.useRealTimers();
@@ -235,6 +241,7 @@ describe("PdfChapterViewer PDF load logic", () => {
   };
 
   it("calls onDocumentLoad with numPages on successful load", async () => {
+    mockRefreshAccessTokenForNonAxiosFlow.mockResolvedValue({ accessToken: "new-token" });
     const mockPdf = createMockPdf(5);
     mockGetDocument.mockReturnValue({
       promise: Promise.resolve(mockPdf),
@@ -254,14 +261,23 @@ describe("PdfChapterViewer PDF load logic", () => {
   });
 
   it("calls onDocumentLoad(0) when both load attempts fail", async () => {
-    // 1차(disableWorker:false)와 재시도(disableWorker:true) 모두 실패하는 시나리오
+    // worker on/off 각각 main/query 모두 실패하는 시나리오
+    mockRefreshAccessTokenForNonAxiosFlow.mockRejectedValue(new Error("refresh failed"));
     mockGetDocument
       .mockReturnValueOnce({
         promise: Promise.reject(new Error("First failure")),
         destroy: vi.fn(),
       })
       .mockReturnValueOnce({
-        promise: Promise.reject(new Error("Retry failure")),
+        promise: Promise.reject(new Error("Query token failure")),
+        destroy: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("Worker off failure")),
+        destroy: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("Worker off query failure")),
         destroy: vi.fn(),
       });
 
@@ -275,18 +291,26 @@ describe("PdfChapterViewer PDF load logic", () => {
     );
 
     await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(0));
-    expect(mockGetDocument).toHaveBeenCalledTimes(2);
+    expect(mockGetDocument).toHaveBeenCalledTimes(4);
     expect(mockGetDocument.mock.calls[0][0]).toMatchObject({ disableWorker: false });
-    expect(mockGetDocument.mock.calls[1][0]).toMatchObject({ disableWorker: true });
+    expect(mockGetDocument.mock.calls[1][0]).toMatchObject({ disableWorker: false });
+    expect(mockGetDocument.mock.calls[2][0]).toMatchObject({ disableWorker: true });
+    expect(mockGetDocument.mock.calls[3][0]).toMatchObject({ disableWorker: true });
+    expect(mockRefreshAccessTokenForNonAxiosFlow).toHaveBeenCalledTimes(1);
   });
 
   it("retries with disableWorker:true on first load failure", async () => {
+    mockRefreshAccessTokenForNonAxiosFlow.mockRejectedValue(new Error("refresh failed"));
     const mockPdf = createMockPdf(3);
     const destroyFn = vi.fn();
     mockGetDocument
       .mockReturnValueOnce({
         promise: Promise.reject(new Error("Worker failed")),
         destroy: destroyFn,
+      })
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("Query fallback failed")),
+        destroy: vi.fn(),
       })
       .mockReturnValueOnce({
         promise: Promise.resolve(mockPdf),
@@ -303,16 +327,20 @@ describe("PdfChapterViewer PDF load logic", () => {
     );
 
     await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(3));
-    expect(mockGetDocument).toHaveBeenCalledTimes(2);
+    expect(mockGetDocument).toHaveBeenCalledTimes(3);
     // 1차 시도는 disableWorker: false
     expect(mockGetDocument.mock.calls[0][0]).toMatchObject({ disableWorker: false });
-    // 재시도 시 disableWorker: true
-    expect(mockGetDocument.mock.calls[1][0]).toMatchObject({ disableWorker: true });
+    // 2차 시도는 worker-on/query-token
+    expect(mockGetDocument.mock.calls[1][0]).toMatchObject({ disableWorker: false });
+    // 3차 시도는 worker-off/main-url
+    expect(mockGetDocument.mock.calls[2][0]).toMatchObject({ disableWorker: true });
     // 1차 실패한 loadingTask가 destroy로 정리되었는지 확인
     expect(destroyFn).toHaveBeenCalled();
+    expect(mockRefreshAccessTokenForNonAxiosFlow).toHaveBeenCalledTimes(1);
   });
 
   it("includes JWT Authorization header when access_token looks like JWT", async () => {
+    mockRefreshAccessTokenForNonAxiosFlow.mockResolvedValue({ accessToken: "new-token" });
     const jwtToken = "eyJhbGciOi.eyJzdWIiOi.signature";
     const getItemSpy = vi
       .spyOn(Storage.prototype, "getItem")
@@ -346,6 +374,7 @@ describe("PdfChapterViewer PDF load logic", () => {
   });
 
   it("does not include Authorization header when access_token is not JWT-like", async () => {
+    mockRefreshAccessTokenForNonAxiosFlow.mockResolvedValue({ accessToken: "new-token" });
     const getItemSpy = vi
       .spyOn(Storage.prototype, "getItem")
       .mockImplementation((key: string) =>
@@ -373,6 +402,95 @@ describe("PdfChapterViewer PDF load logic", () => {
     } finally {
       getItemSpy.mockRestore();
     }
+  });
+
+  it("refreshes once and retries main URL successfully", async () => {
+    const mockPdf = createMockPdf(2);
+    mockRefreshAccessTokenForNonAxiosFlow.mockResolvedValue({ accessToken: "new-token" });
+    mockGetDocument
+      .mockReturnValueOnce({
+        promise: Promise.reject(new Error("Unauthorized")),
+        destroy: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        promise: Promise.resolve(mockPdf),
+        destroy: vi.fn(),
+      });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-refresh-success"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(2));
+    expect(mockRefreshAccessTokenForNonAxiosFlow).toHaveBeenCalledTimes(1);
+    expect(mockGetDocument).toHaveBeenCalledTimes(2);
+    expect(mockGetDocument.mock.calls[0][0].url).not.toContain("?token=");
+    expect(mockGetDocument.mock.calls[1][0].url).not.toContain("?token=");
+  });
+
+  it("falls back to query token URL after Authorization/main URL failure", async () => {
+    const jwtToken = "eyJhbGciOi.eyJzdWIiOi.signature";
+    const getItemSpy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation((key: string) =>
+        key === "access_token" ? jwtToken : null,
+      );
+
+    try {
+      const mockPdf = createMockPdf(4);
+      mockRefreshAccessTokenForNonAxiosFlow.mockRejectedValue(new Error("refresh failed"));
+      mockGetDocument
+        .mockReturnValueOnce({
+          promise: Promise.reject(new Error("401")),
+          destroy: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          promise: Promise.resolve(mockPdf),
+          destroy: vi.fn(),
+        });
+
+      const onDocumentLoad = vi.fn();
+      render(
+        <PdfChapterViewer
+          {...baseProps}
+          chapterId="chapter-query-fallback"
+          onDocumentLoad={onDocumentLoad}
+        />,
+      );
+
+      await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(4));
+      expect(mockRefreshAccessTokenForNonAxiosFlow).toHaveBeenCalledTimes(1);
+      expect(mockGetDocument.mock.calls[0][0].url).not.toContain("?token=");
+      expect(mockGetDocument.mock.calls[1][0].url).toContain("?token=");
+    } finally {
+      getItemSpy.mockRestore();
+    }
+  });
+
+  it("calls onDocumentLoad(0) when refresh fails and all fallbacks fail", async () => {
+    mockRefreshAccessTokenForNonAxiosFlow.mockRejectedValue(new Error("refresh failed"));
+    mockGetDocument
+      .mockReturnValueOnce({ promise: Promise.reject(new Error("1")), destroy: vi.fn() })
+      .mockReturnValueOnce({ promise: Promise.reject(new Error("2")), destroy: vi.fn() })
+      .mockReturnValueOnce({ promise: Promise.reject(new Error("3")), destroy: vi.fn() })
+      .mockReturnValueOnce({ promise: Promise.reject(new Error("4")), destroy: vi.fn() });
+
+    const onDocumentLoad = vi.fn();
+    render(
+      <PdfChapterViewer
+        {...baseProps}
+        chapterId="chapter-refresh-final-fail"
+        onDocumentLoad={onDocumentLoad}
+      />,
+    );
+
+    await waitFor(() => expect(onDocumentLoad).toHaveBeenCalledWith(0));
+    expect(mockRefreshAccessTokenForNonAxiosFlow).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -6,6 +6,7 @@ export interface Chapter {
   volume_id: string;
   title: string;
   chapter_number: number;
+  render_mode?: "pdf" | "image";
   page_count: number;
   total_bytes?: number;
   total_positions?: number;
