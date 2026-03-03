@@ -19,9 +19,8 @@ import (
 	"sync"
 	"time"
 
-	_ "image/gif"  // GIF 디코딩 지원
-	_ "image/jpeg" // JPEG 디코딩 지원
-	_ "image/png"  // PNG 디코딩 지원
+	_ "image/gif" // GIF 디코딩 지원
+	_ "image/png" // PNG 디코딩 지원
 
 	"github.com/disintegration/imaging"
 	"github.com/gen2brain/go-fitz"
@@ -334,9 +333,11 @@ func (h *ImageHandler) renderPDFPageImage(chapter *model.Chapter, pageNumber, wi
 		renderedData := buf.Bytes()
 		if width > 0 {
 			resized, resizeErr := h.resizeImage(renderedData, width)
-			if resizeErr == nil {
-				renderedData = resized
+			if resizeErr != nil {
+				// 리사이즈 실패 시 width 키로 원본 이미지를 캐싱하지 않도록 에러 반환
+				return nil, resizeErr
 			}
+			renderedData = resized
 		}
 
 		h.setPdfPageCache(cacheKey, renderedData)
