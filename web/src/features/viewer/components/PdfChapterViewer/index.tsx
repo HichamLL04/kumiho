@@ -29,7 +29,7 @@ if (NEEDS_TOHEX_POLYFILL) {
 }
 
 import * as pdfjsLib from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.js?url";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { LoadingSpinner } from "../../../../components/common/LoadingSpinner";
 import { refreshAccessTokenForNonAxiosFlow } from "../../../../api/client";
