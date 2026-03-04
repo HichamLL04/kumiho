@@ -1,4 +1,4 @@
-import type { MouseEvent, TouchEvent, RefObject } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type TouchEvent, type RefObject } from "react";
 import type { ReactZoomPanPinchContentRef } from "react-zoom-pan-pinch";
 import { SmartImageViewer } from "../../../../components/SmartImageViewer";
 
@@ -26,12 +26,31 @@ export const VerticalPage = ({
   styles,
   fitMode,
 }: VerticalPageProps) => {
-  // No local zoom state needed for vertical mode now
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [cachedHeight, setCachedHeight] = useState<number>(0);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || !("ResizeObserver" in window)) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const nextHeight = entries[0]?.contentRect.height ?? 0;
+      if (nextHeight > 0) {
+        setCachedHeight((prev) => (Math.abs(prev - nextHeight) > 1 ? nextHeight : prev));
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const shouldRenderImage = pageNum >= minAllowedPage && pageNum <= maxAllowedPage;
+  const placeholderHeight = cachedHeight > 0 ? cachedHeight : 300;
 
   return (
     <div
       id={`page-${pageNum}`}
+      ref={wrapperRef}
       className={styles.pageImageWrapper}
       onClick={(e) => handleContentClick(e, { current: null })} // Pass null ref
       style={{
@@ -57,7 +76,13 @@ export const VerticalPage = ({
       ) : (
         <div
           className={styles.pageLoadingPlaceholder}
-          style={{ minHeight: "300px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{
+            minHeight: `${placeholderHeight}px`,
+            height: `${placeholderHeight}px`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           <div className={styles.spinner} />
         </div>
