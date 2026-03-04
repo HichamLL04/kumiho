@@ -30,6 +30,11 @@ export function useViewerSync({
   const hasStarted = useRef(false);
   const initializedChapterKeyRef = useRef<string | null>(null);
   const resumeCheckInFlightRef = useRef(false);
+  const currentPageRef = useRef(currentPage);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
 
   const openTerminatedModal = useCallback(
     (reasonCode?: string) => {
@@ -85,7 +90,7 @@ export function useViewerSync({
       await viewerAPI.resumeCheck({
         series_id: seriesId || "",
         chapter_id: chapterId,
-        current_page: currentPage,
+        current_page: currentPageRef.current,
       });
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 409) {
@@ -97,7 +102,7 @@ export function useViewerSync({
     } finally {
       resumeCheckInFlightRef.current = false;
     }
-  }, [seriesId, chapterId, currentPage, openTerminatedModal]);
+  }, [seriesId, chapterId, openTerminatedModal]);
 
   useEffect(() => {
     if (!chapterId) return;

@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
 import { useTranslation } from "react-i18next";
@@ -44,6 +44,8 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
   } = useViewerStore();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
   usePreventBrowserZoom(true);
 
   // 인접 챕터 탐색
@@ -142,8 +144,12 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
 
   // 세션 종료 핸들러
   const handleTerminatedConfirm = useCallback(() => {
+    if (viewerFrom) {
+      navigate(viewerFrom);
+      return;
+    }
     navigate("/");
-  }, [navigate]);
+  }, [navigate, viewerFrom]);
 
   // 읽기 시간 측정 (활성화)
   useReadingTime(seriesId || undefined, true, chapterId as string);
