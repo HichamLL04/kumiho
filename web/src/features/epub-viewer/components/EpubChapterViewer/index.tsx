@@ -362,8 +362,23 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       const start = currentLocation?.start || location.start;
       const displayed = start?.displayed;
 
-      const chapterPage = displayed?.page || 0;
-      const chapterTotal = displayed?.total || 0;
+      let chapterPage = displayed?.page || 0;
+      let chapterTotal = displayed?.total || 0;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const manager = (rendition as any).manager;
+      if (manager && manager.isPaginated && manager.container) {
+        const scrollWidth = manager.container.scrollWidth;
+        const delta = manager.layout?.delta;
+        if (delta > 0 && scrollWidth > 0) {
+          const adjustedTotal = Math.ceil((scrollWidth - 3) / delta);
+          const newTotal = adjustedTotal > 0 ? adjustedTotal : 1;
+          if (newTotal < chapterTotal) {
+            chapterTotal = newTotal;
+          }
+          chapterPage = Math.max(1, Math.min(chapterPage, chapterTotal));
+        }
+      }
 
       const spine = book.spine as unknown as EpubjsSpine;
       const spineItems = spine.spineItems || [];
@@ -919,10 +934,100 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       return {
         next: () => {
           if (!renditionRef.current) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const manager = (renditionRef.current as any).manager;
+          if (manager && manager.isPaginated && manager.container) {
+            const dir = manager.settings?.direction;
+            const scrollLeft = manager.container.scrollLeft;
+            const scrollWidth = manager.container.scrollWidth;
+            const clientWidth = manager.container.clientWidth;
+            const delta = manager.layout?.delta || clientWidth;
+
+            if (dir === "ltr") {
+              if (scrollLeft + clientWidth < scrollWidth) {
+                const nextLeft = scrollLeft + delta;
+                if (nextLeft + clientWidth > scrollWidth) {
+                  const targetLeft = Math.max(0, scrollWidth - clientWidth);
+                  if (targetLeft - scrollLeft > 2) {
+                    withNavigation(() => {
+                      manager.container.scrollLeft = targetLeft;
+                      manager.updateOffset();
+                      const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
+                      if (loc) handleRelocated(loc);
+                      return Promise.resolve();
+                    });
+                    return;
+                  }
+                }
+              }
+            } else {
+              if (scrollLeft > 0) {
+                const nextLeft = scrollLeft - delta;
+                if (nextLeft < 0) {
+                  const targetLeft = 0;
+                  if (scrollLeft - targetLeft > 2) {
+                    withNavigation(() => {
+                      manager.container.scrollLeft = targetLeft;
+                      manager.updateOffset();
+                      const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
+                      if (loc) handleRelocated(loc);
+                      return Promise.resolve();
+                    });
+                    return;
+                  }
+                }
+              }
+            }
+          }
           withNavigation(() => renditionRef.current!.next());
         },
         prev: () => {
           if (!renditionRef.current) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const manager = (renditionRef.current as any).manager;
+          if (manager && manager.isPaginated && manager.container) {
+            const dir = manager.settings?.direction;
+            const scrollLeft = manager.container.scrollLeft;
+            const scrollWidth = manager.container.scrollWidth;
+            const clientWidth = manager.container.clientWidth;
+            const delta = manager.layout?.delta || clientWidth;
+
+            if (dir === "ltr") {
+              if (scrollLeft > 0) {
+                const prevLeft = scrollLeft - delta;
+                if (prevLeft < 0) {
+                  const targetLeft = 0;
+                  if (scrollLeft - targetLeft > 2) {
+                    withNavigation(() => {
+                      manager.container.scrollLeft = targetLeft;
+                      manager.updateOffset();
+                      const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
+                      if (loc) handleRelocated(loc);
+                      return Promise.resolve();
+                    });
+                    return;
+                  }
+                }
+              }
+            } else {
+              if (scrollLeft + clientWidth < scrollWidth) {
+                const prevLeft = scrollLeft + delta;
+                if (prevLeft + clientWidth > scrollWidth) {
+                  const targetLeft = Math.max(0, scrollWidth - clientWidth);
+                  if (targetLeft - scrollLeft > 2) {
+                    withNavigation(() => {
+                      manager.container.scrollLeft = targetLeft;
+                      manager.updateOffset();
+                      const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
+                      if (loc) handleRelocated(loc);
+                      return Promise.resolve();
+                    });
+                    return;
+                  }
+                }
+              }
+            }
+          }
           withNavigation(() => renditionRef.current!.prev());
         },
         goToCFI: (cfi: string) => {
