@@ -52,6 +52,8 @@ interface EpubChapterViewerProps {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    atStart?: boolean;
+    atEnd?: boolean;
   }) => void;
   onViewerClick?: () => void;
   onInitializationComplete?: () => void;
@@ -85,6 +87,8 @@ interface EpubjsLocation {
   end: {
     cfi: string;
   };
+  atStart?: boolean;
+  atEnd?: boolean;
 }
 
 interface EpubjsNavigationItem {
@@ -177,6 +181,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const effectiveLayoutRef = useRef<EpubRenderLayout>("book");
     const allowContentHeuristicRef = useRef(true);
     const autoLayoutLockedRef = useRef(false);
+    const isNavigatingRef = useRef(false);
     const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
     const isDraggingRef = useRef(false);
     const touchHandledRef = useRef(false);
@@ -345,6 +350,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     }, []);
 
     const handleRelocated = useCallback((location: EpubjsLocation) => {
+      if (isNavigatingRef.current) return;
       const rendition = renditionRef.current;
       const book = bookRef.current;
       if (!rendition || !book || !location?.start?.cfi) return;
@@ -400,6 +406,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         currentPosition,
         totalPositions,
         chapterHref,
+        atStart: location.atStart,
+        atEnd: location.atEnd,
       });
     }, []);
 
@@ -891,61 +899,72 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       applySettings(renditionRef.current, settings, effectiveLayout);
     }, [settings, applySettings]);
 
-    useImperativeHandle(ref, () => ({
-      next: () => {
-        renditionRef.current?.next();
-      },
-      prev: () => {
-        renditionRef.current?.prev();
-      },
-      goToCFI: (cfi: string) => {
-        if (!renditionRef.current) return;
-        renditionRef.current.display(cfi).then(() => {
+    useImperativeHandle(ref, () => {
+      const withNavigation = async (action: () => Promise<unknown> | void) => {
+        if (isNavigatingRef.current) return;
+        isNavigatingRef.current = true;
+        if (containerRef.current) containerRef.current.style.opacity = "0";
+        try {
+          await action();
+        } catch (err) {
+          console.error("[EpubChapterViewer] Navigation error:", err);
+        } finally {
+          isNavigatingRef.current = false;
+          if (containerRef.current) containerRef.current.style.opacity = "1";
           const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
           if (loc) handleRelocated(loc);
-        });
-      },
-      goToProgress: (ratio: number) => {
-        const rendition = renditionRef.current;
-        const book = bookRef.current;
-        if (!rendition || !book) return;
-
-        const clamped = Math.max(0, Math.min(1, ratio));
-        const locations = book.locations as unknown as EpubjsLocationsExtended;
-        const total = typeof locations.length === "function" ? locations.length() : 0;
-        let cfi: string | undefined = undefined;
-        if (total > 0) {
-          const targetIndex = Math.max(0, Math.min(total - 1, Math.round(clamped * (total - 1))));
-          cfi = book.locations.cfiFromLocation(targetIndex);
         }
-        if (!cfi && typeof locations.cfiFromPercentage === "function") {
-          cfi = locations.cfiFromPercentage(clamped);
-        }
-        if (!cfi) return;
+      };
 
-        rendition.display(cfi).then(() => {
-          const loc = rendition.currentLocation() as unknown as EpubjsLocation;
-          if (loc) handleRelocated(loc);
-        });
-      },
-      goToPage: (page: number) => {
-        const rendition = renditionRef.current;
-        const book = bookRef.current;
-        if (!rendition || !book) return;
+      return {
+        next: () => {
+          if (!renditionRef.current) return;
+          withNavigation(() => renditionRef.current!.next());
+        },
+        prev: () => {
+          if (!renditionRef.current) return;
+          withNavigation(() => renditionRef.current!.prev());
+        },
+        goToCFI: (cfi: string) => {
+          if (!renditionRef.current) return;
+          withNavigation(() => renditionRef.current!.display(cfi));
+        },
+        goToProgress: (ratio: number) => {
+          const rendition = renditionRef.current;
+          const book = bookRef.current;
+          if (!rendition || !book) return;
 
-        const total = book.locations.length();
-        if (total <= 0) return;
+          const clamped = Math.max(0, Math.min(1, ratio));
+          const locations = book.locations as unknown as EpubjsLocationsExtended;
+          const total = typeof locations.length === "function" ? locations.length() : 0;
+          let cfi: string | undefined = undefined;
+          if (total > 0) {
+            const targetIndex = Math.max(0, Math.min(total - 1, Math.round(clamped * (total - 1))));
+            cfi = book.locations.cfiFromLocation(targetIndex);
+          }
+          if (!cfi && typeof locations.cfiFromPercentage === "function") {
+            cfi = locations.cfiFromPercentage(clamped);
+          }
+          if (!cfi) return;
 
-        const clampedPage = Math.max(1, Math.min(total, page));
-        const cfi = book.locations.cfiFromLocation(clampedPage - 1);
-        if (!cfi) return;
+          withNavigation(() => rendition.display(cfi));
+        },
+        goToPage: (page: number) => {
+          const rendition = renditionRef.current;
+          const book = bookRef.current;
+          if (!rendition || !book) return;
 
-        rendition.display(cfi).then(() => {
-          const loc = rendition.currentLocation() as unknown as EpubjsLocation;
-          if (loc) handleRelocated(loc);
-        });
-      },
-    }));
+          const total = book.locations.length();
+          if (total <= 0) return;
+
+          const clampedPage = Math.max(1, Math.min(total, page));
+          const cfi = book.locations.cfiFromLocation(clampedPage - 1);
+          if (!cfi) return;
+
+          withNavigation(() => rendition.display(cfi));
+        },
+      };
+    });
 
     return (
       <div
@@ -956,6 +975,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         <div
           ref={containerRef}
           className={styles.viewer}
+          style={{ transition: "opacity 0.15s ease-out" }}
         />
         <div className={`${styles.chapterPageInfo} ${isUIVisible ? styles.hidden : ""}`}>
           {chapterTitle} - {Math.max(1, chapterPage || 1)}/{Math.max(1, chapterTotal || 1)}

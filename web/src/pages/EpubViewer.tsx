@@ -37,6 +37,8 @@ interface EpubViewerProps {
   isFullscreen: boolean;
   isIncognito: boolean;
   globalProgress: number;
+  isAtFirstPage: boolean;
+  isAtLastPage: boolean;
   toc: EpubTOCItem[];
   settings: EpubViewerSettings;
   onBack: () => void;
@@ -93,6 +95,8 @@ export function EpubViewer({
   isFullscreen,
   isIncognito,
   globalProgress,
+  isAtFirstPage,
+  isAtLastPage,
   toc,
   settings,
   onBack,
@@ -179,7 +183,7 @@ export function EpubViewer({
   );
 
   const handleNext = useCallback(() => {
-    const isAtEnd = totalPages > 0 && currentPage >= totalPages;
+    const isAtEnd = isAtLastPage || (totalPages > 0 && currentPage >= totalPages);
     if (isAtEnd) {
       if (!isEndNavigationReady) return;
       onReachedEndNext?.();
@@ -187,7 +191,7 @@ export function EpubViewer({
     }
     clearPendingProgress();
     viewerRef.current?.next();
-  }, [currentPage, totalPages, onReachedEndNext, isEndNavigationReady, clearPendingProgress]);
+  }, [isAtLastPage, currentPage, totalPages, onReachedEndNext, isEndNavigationReady, clearPendingProgress]);
 
   const handlePrev = useCallback(() => {
     clearPendingProgress();
@@ -525,8 +529,8 @@ export function EpubViewer({
           <div className={styles.footerControls}>
             <button
               className={styles.navBtn}
-              onClick={() => viewerRef.current?.goToPage?.(1)}
-              disabled={currentPage <= 1}
+              onClick={() => viewerRef.current?.goToProgress?.(0)}
+              disabled={isAtFirstPage}
               aria-label={t("epub_viewer.footer.first_page")}
             >
               <ChevronsLeft size={20} />
@@ -534,7 +538,7 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={handlePrev}
-              disabled={currentPage <= 1}
+              disabled={isAtFirstPage}
               aria-label={t("epub_viewer.footer.prev_page")}
             >
               <ChevronLeft size={20} />
@@ -642,15 +646,15 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={handleNext}
-              disabled={currentPage >= totalPages && totalPages > 0 && (!onReachedEndNext || !isEndNavigationReady)}
+              disabled={isAtLastPage && (!onReachedEndNext || !isEndNavigationReady)}
               aria-label={t("epub_viewer.footer.next_page")}
             >
               <ChevronRight size={20} />
             </button>
             <button
               className={styles.navBtn}
-              onClick={() => viewerRef.current?.goToPage?.(totalPages)}
-              disabled={currentPage >= totalPages && totalPages > 0}
+              onClick={() => viewerRef.current?.goToProgress?.(1)}
+              disabled={isAtLastPage}
               aria-label={t("epub_viewer.footer.last_page")}
             >
               <ChevronsRight size={20} />

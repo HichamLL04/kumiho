@@ -50,6 +50,8 @@ describe("EpubViewer UI", () => {
     isTOCOpen: false,
     isFullscreen: false,
     isIncognito: false,
+    isAtFirstPage: false,
+    isAtLastPage: false,
     toc: [],
     settings: {
       fontSize: 100,
@@ -85,15 +87,51 @@ describe("EpubViewer UI", () => {
   };
 
   const estimatedToc = [
-    { id: "toc-1", label: "Chapter 1", href: "chapter-1.xhtml", progressRatio: 0.25, progressPrecision: "estimated" as const },
-    { id: "toc-2", label: "Chapter 2", href: "chapter-2.xhtml", progressRatio: 0.5, progressPrecision: "estimated" as const },
-    { id: "toc-3", label: "Chapter 3", href: "chapter-3.xhtml", progressRatio: 0.75, progressPrecision: "estimated" as const },
+    {
+      id: "toc-1",
+      label: "Chapter 1",
+      href: "chapter-1.xhtml",
+      progressRatio: 0.25,
+      progressPrecision: "estimated" as const,
+    },
+    {
+      id: "toc-2",
+      label: "Chapter 2",
+      href: "chapter-2.xhtml",
+      progressRatio: 0.5,
+      progressPrecision: "estimated" as const,
+    },
+    {
+      id: "toc-3",
+      label: "Chapter 3",
+      href: "chapter-3.xhtml",
+      progressRatio: 0.75,
+      progressPrecision: "estimated" as const,
+    },
   ];
 
   const preciseToc = [
-    { id: "toc-1", label: "Chapter 1", href: "chapter-1.xhtml", progressRatio: 0.2, progressPrecision: "precise" as const },
-    { id: "toc-2", label: "Chapter 2", href: "chapter-2.xhtml", progressRatio: 0.45, progressPrecision: "precise" as const },
-    { id: "toc-3", label: "Chapter 3", href: "chapter-3.xhtml", progressRatio: 0.8, progressPrecision: "precise" as const },
+    {
+      id: "toc-1",
+      label: "Chapter 1",
+      href: "chapter-1.xhtml",
+      progressRatio: 0.2,
+      progressPrecision: "precise" as const,
+    },
+    {
+      id: "toc-2",
+      label: "Chapter 2",
+      href: "chapter-2.xhtml",
+      progressRatio: 0.45,
+      progressPrecision: "precise" as const,
+    },
+    {
+      id: "toc-3",
+      label: "Chapter 3",
+      href: "chapter-3.xhtml",
+      progressRatio: 0.8,
+      progressPrecision: "precise" as const,
+    },
   ];
 
   it("should display 0% progress in the footer when globalProgress is 0", () => {
@@ -190,9 +228,7 @@ describe("EpubViewer UI", () => {
   it("should move on progress bar background click", () => {
     render(
       <MemoryRouter>
-        <EpubViewer
-          {...defaultProps}
-        />
+        <EpubViewer {...defaultProps} />
       </MemoryRouter>,
     );
 
