@@ -11,6 +11,7 @@ import {
   type EpubRenderLayout,
 } from "../../utils/layoutMode";
 import styles from "./EpubChapterViewer.module.css";
+import { applyOldIOSSafariPointerEventFallback } from "./iosTouchFallback";
 
 export type { EpubRenderLayout } from "../../utils/layoutMode";
 
@@ -52,6 +53,8 @@ interface EpubChapterViewerProps {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    atStart?: boolean;
+    atEnd?: boolean;
   }) => void;
   onViewerClick?: () => void;
   onInitializationComplete?: () => void;
@@ -85,6 +88,8 @@ interface EpubjsLocation {
   end: {
     cfi: string;
   };
+  atStart?: boolean;
+  atEnd?: boolean;
 }
 
 interface EpubjsNavigationItem {
@@ -177,6 +182,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const effectiveLayoutRef = useRef<EpubRenderLayout>("book");
     const allowContentHeuristicRef = useRef(true);
     const autoLayoutLockedRef = useRef(false);
+    const isNavigatingRef = useRef(false);
     const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
     const isDraggingRef = useRef(false);
     const touchHandledRef = useRef(false);
@@ -345,6 +351,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     }, []);
 
     const handleRelocated = useCallback((location: EpubjsLocation) => {
+      if (isNavigatingRef.current) return;
       const rendition = renditionRef.current;
       const book = bookRef.current;
       if (!rendition || !book || !location?.start?.cfi) return;
@@ -356,8 +363,23 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       const start = currentLocation?.start || location.start;
       const displayed = start?.displayed;
 
-      const chapterPage = displayed?.page || 0;
-      const chapterTotal = displayed?.total || 0;
+      let chapterPage = displayed?.page || 0;
+      let chapterTotal = displayed?.total || 0;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const manager = (rendition as any).manager;
+      if (manager && manager.isPaginated && manager.container) {
+        const scrollWidth = manager.container.scrollWidth;
+        const delta = manager.layout?.delta;
+        if (delta > 0 && scrollWidth > 0) {
+          const adjustedTotal = Math.ceil((scrollWidth - 3) / delta);
+          const newTotal = adjustedTotal > 0 ? adjustedTotal : 1;
+          if (newTotal < chapterTotal) {
+            chapterTotal = newTotal;
+          }
+          chapterPage = Math.max(1, Math.min(chapterPage, chapterTotal));
+        }
+      }
 
       const spine = book.spine as unknown as EpubjsSpine;
       const spineItems = spine.spineItems || [];
@@ -400,6 +422,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         currentPosition,
         totalPositions,
         chapterHref,
+        atStart: location.atStart,
+        atEnd: location.atEnd,
       });
     }, []);
 
@@ -431,6 +455,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         const doc = contentWithDocument.document;
         if (!doc) return;
         if (contentDisposers.has(doc)) return;
+
+        // 구형 iOS Safari: iframe pointer-events를 none으로 설정하여
+        // 터치 이벤트가 부모 <main>으로 관통하도록 한다.
+        applyOldIOSSafariPointerEventFallback(doc);
 
         const currentSettings = settingsRef.current;
         if (currentSettings.renderMode === "auto") {
@@ -492,12 +520,67 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           }
         };
 
-        // iframe 내부 클릭 → UI 토글만 (페이지 이동은 외부 패딩 영역에서 처리)
+        // zone 판별 헬퍼: 전체 화면 기준 좌(0~30%) / 중앙(30~70%) / 우(70~100%)
+        const resolveZone = (clientX: number): "left" | "center" | "right" => {
+          const ratio = clientX / window.innerWidth;
+          if (ratio < 0.3) return "left";
+          if (ratio > 0.7) return "right";
+          return "center";
+        };
+
+        // zone에 따라 UI 토글 또는 페이지 이동 실행
+        const executeZoneAction = (zone: "left" | "center" | "right") => {
+          const currentSettings = settingsRef.current;
+          if (zone === "center") {
+            onViewerClickRef.current?.();
+            return;
+          }
+          // paginated 모드에서만 좌/우 클릭 페이지 이동
+          if (currentSettings.flow !== "paginated") return;
+          const isRTL = currentSettings.clickDirection === "left";
+          if (zone === "left") {
+            if (isRTL) onPageNextRef.current?.();
+            else onPagePrevRef.current?.();
+          } else {
+            if (isRTL) onPagePrevRef.current?.();
+            else onPageNextRef.current?.();
+          }
+        };
+
+        // 마우스 드래그 감지용 (텍스트 선택과 클릭 구분)
+        const mouseDownHandler = (event: MouseEvent) => {
+          pointerDownPosRef.current = { x: event.clientX, y: event.clientY };
+          isDraggingRef.current = false;
+        };
+
+        const mouseMoveHandler = (event: MouseEvent) => {
+          if (!pointerDownPosRef.current) return;
+          const dx = event.clientX - pointerDownPosRef.current.x;
+          const dy = event.clientY - pointerDownPosRef.current.y;
+          if (Math.sqrt(dx * dx + dy * dy) > 5) {
+            isDraggingRef.current = true;
+          }
+        };
+
+        // iframe 내부 클릭 → zone 기반 UI 토글 / 페이지 이동
         const clickHandler = (event: MouseEvent) => {
           if (touchHandledRef.current) {
             touchHandledRef.current = false;
             return;
           }
+
+          // 드래그(텍스트 선택) 후 클릭은 무시
+          if (isDraggingRef.current) {
+            isDraggingRef.current = false;
+            pointerDownPosRef.current = null;
+            return;
+          }
+          pointerDownPosRef.current = null;
+
+          // 텍스트가 선택된 상태면 클릭 무시 (선택 유지)
+          const iframeWindow = doc.defaultView;
+          const selection = iframeWindow?.getSelection();
+          if (selection && !selection.isCollapsed) return;
 
           const target = event.target as HTMLElement | null;
           const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
@@ -516,10 +599,15 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           const interactiveTarget = target?.closest("button, input, select, textarea, [contenteditable='true']");
           if (interactiveTarget) return;
 
-          onViewerClickRef.current?.();
+          // iframe 내부 클릭 좌표를 최상위 window 기준으로 변환
+          const iframe = doc.defaultView?.frameElement as HTMLIFrameElement | null;
+          const iframeRect = iframe?.getBoundingClientRect();
+          const absoluteX = (iframeRect?.left ?? 0) + event.clientX;
+
+          executeZoneAction(resolveZone(absoluteX));
         };
 
-        // iframe 내부 터치 → UI 토글만
+        // iframe 내부 터치 → zone 기반 UI 토글 / 페이지 이동
         const touchStartHandler = (event: TouchEvent) => {
           const touch = event.touches[0];
           if (!touch) return;
@@ -539,19 +627,54 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           }
         };
 
-        const touchEndHandler = () => {
+        const touchEndHandler = (event: TouchEvent) => {
           touchHandledRef.current = true;
           if (isDraggingRef.current) {
-            pointerDownPosRef.current = null;
             isDraggingRef.current = false;
+            const startPos = pointerDownPosRef.current;
+            pointerDownPosRef.current = null;
+
+            // 스와이프 감지: 수평 이동이 임계값(50px) 이상이고 수직보다 클 때
+            if (startPos) {
+              const touch = event.changedTouches[0];
+              if (touch) {
+                const dx = touch.clientX - startPos.x;
+                const dy = touch.clientY - startPos.y;
+                const SWIPE_THRESHOLD = 50;
+                if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+                  const currentSettings = settingsRef.current;
+                  if (currentSettings.flow !== "paginated") return;
+                  const isRTL = currentSettings.clickDirection === "left";
+                  // 왼쪽으로 스와이프(dx < 0) = LTR에서 다음 페이지
+                  const isSwipeLeft = dx < 0;
+                  if (isSwipeLeft) {
+                    if (isRTL) onPagePrevRef.current?.();
+                    else onPageNextRef.current?.();
+                  } else {
+                    if (isRTL) onPageNextRef.current?.();
+                    else onPagePrevRef.current?.();
+                  }
+                }
+              }
+            }
             return;
           }
+
+          // 터치 좌표를 최상위 window 기준으로 변환
+          const touch = event.changedTouches[0];
+          const clientX = touch?.clientX ?? pointerDownPosRef.current?.x ?? 0;
+          const iframe = doc.defaultView?.frameElement as HTMLIFrameElement | null;
+          const iframeRect = iframe?.getBoundingClientRect();
+          const absoluteX = (iframeRect?.left ?? 0) + clientX;
+
           pointerDownPosRef.current = null;
-          onViewerClickRef.current?.();
+          executeZoneAction(resolveZone(absoluteX));
         };
 
         doc.addEventListener("wheel", wheelHandler, { passive: false });
         doc.addEventListener("keydown", keydownHandler);
+        doc.addEventListener("mousedown", mouseDownHandler);
+        doc.addEventListener("mousemove", mouseMoveHandler);
         doc.addEventListener("click", clickHandler);
         doc.addEventListener("touchstart", touchStartHandler, { passive: true });
         doc.addEventListener("touchmove", touchMoveHandler, { passive: true });
@@ -560,6 +683,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         contentDisposers.set(doc, () => {
           doc.removeEventListener("wheel", wheelHandler);
           doc.removeEventListener("keydown", keydownHandler);
+          doc.removeEventListener("mousedown", mouseDownHandler);
+          doc.removeEventListener("mousemove", mouseMoveHandler);
           doc.removeEventListener("click", clickHandler);
           doc.removeEventListener("touchstart", touchStartHandler);
           doc.removeEventListener("touchmove", touchMoveHandler);
@@ -891,71 +1016,164 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       applySettings(renditionRef.current, settings, effectiveLayout);
     }, [settings, applySettings]);
 
-    useImperativeHandle(ref, () => ({
-      next: () => {
-        renditionRef.current?.next();
-      },
-      prev: () => {
-        renditionRef.current?.prev();
-      },
-      goToCFI: (cfi: string) => {
-        if (!renditionRef.current) return;
-        renditionRef.current.display(cfi).then(() => {
+    useImperativeHandle(ref, () => {
+      const withNavigation = async (action: () => Promise<unknown> | void) => {
+        if (isNavigatingRef.current) return;
+        isNavigatingRef.current = true;
+        if (containerRef.current) containerRef.current.style.opacity = "0";
+        try {
+          await action();
+        } catch (err) {
+          console.error("[EpubChapterViewer] Navigation error:", err);
+        } finally {
+          isNavigatingRef.current = false;
+          if (containerRef.current) containerRef.current.style.opacity = "1";
           const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
           if (loc) handleRelocated(loc);
-        });
-      },
-      goToProgress: (ratio: number) => {
-        const rendition = renditionRef.current;
-        const book = bookRef.current;
-        if (!rendition || !book) return;
-
-        const clamped = Math.max(0, Math.min(1, ratio));
-        const locations = book.locations as unknown as EpubjsLocationsExtended;
-        const total = typeof locations.length === "function" ? locations.length() : 0;
-        let cfi: string | undefined = undefined;
-        if (total > 0) {
-          const targetIndex = Math.max(0, Math.min(total - 1, Math.round(clamped * (total - 1))));
-          cfi = book.locations.cfiFromLocation(targetIndex);
         }
-        if (!cfi && typeof locations.cfiFromPercentage === "function") {
-          cfi = locations.cfiFromPercentage(clamped);
-        }
-        if (!cfi) return;
+      };
 
-        rendition.display(cfi).then(() => {
-          const loc = rendition.currentLocation() as unknown as EpubjsLocation;
-          if (loc) handleRelocated(loc);
-        });
-      },
-      goToPage: (page: number) => {
-        const rendition = renditionRef.current;
-        const book = bookRef.current;
-        if (!rendition || !book) return;
+      return {
+        next: () => {
+          if (!renditionRef.current) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const manager = (renditionRef.current as any).manager;
+          if (manager && manager.isPaginated && manager.container) {
+            const dir = manager.settings?.direction;
+            const scrollLeft = manager.container.scrollLeft;
+            const scrollWidth = manager.container.scrollWidth;
+            const clientWidth = manager.container.clientWidth;
+            const delta = manager.layout?.delta || clientWidth;
 
-        const total = book.locations.length();
-        if (total <= 0) return;
+            if (dir === "ltr") {
+              if (scrollLeft + clientWidth < scrollWidth) {
+                const nextLeft = scrollLeft + delta;
+                if (nextLeft + clientWidth > scrollWidth) {
+                  const targetLeft = Math.max(0, scrollWidth - clientWidth);
+                  if (targetLeft - scrollLeft > 2) {
+                    withNavigation(() => {
+                      manager.container.scrollLeft = targetLeft;
+                      manager.updateOffset();
+                      return Promise.resolve();
+                    });
+                    return;
+                  }
+                }
+              }
+            } else {
+              if (scrollLeft > 0) {
+                const nextLeft = scrollLeft - delta;
+                if (nextLeft < 0) {
+                  const targetLeft = 0;
+                  if (scrollLeft - targetLeft > 2) {
+                    withNavigation(() => {
+                      manager.container.scrollLeft = targetLeft;
+                      manager.updateOffset();
+                      return Promise.resolve();
+                    });
+                    return;
+                  }
+                }
+              }
+            }
+          }
+          withNavigation(() => renditionRef.current!.next());
+        },
+        prev: () => {
+          if (!renditionRef.current) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const manager = (renditionRef.current as any).manager;
+          if (manager && manager.isPaginated && manager.container) {
+            const dir = manager.settings?.direction;
+            const scrollLeft = manager.container.scrollLeft;
+            const scrollWidth = manager.container.scrollWidth;
+            const clientWidth = manager.container.clientWidth;
+            const delta = manager.layout?.delta || clientWidth;
 
-        const clampedPage = Math.max(1, Math.min(total, page));
-        const cfi = book.locations.cfiFromLocation(clampedPage - 1);
-        if (!cfi) return;
+            if (dir === "ltr") {
+              if (scrollLeft > 0) {
+                const prevLeft = scrollLeft - delta;
+                if (prevLeft < 0) {
+                  const targetLeft = 0;
+                  if (scrollLeft - targetLeft > 2) {
+                    withNavigation(() => {
+                      manager.container.scrollLeft = targetLeft;
+                      manager.updateOffset();
+                      return Promise.resolve();
+                    });
+                    return;
+                  }
+                }
+              }
+            } else {
+              if (scrollLeft + clientWidth < scrollWidth) {
+                const prevLeft = scrollLeft + delta;
+                if (prevLeft + clientWidth > scrollWidth) {
+                  const targetLeft = Math.max(0, scrollWidth - clientWidth);
+                  if (targetLeft - scrollLeft > 2) {
+                    withNavigation(() => {
+                      manager.container.scrollLeft = targetLeft;
+                      manager.updateOffset();
+                      return Promise.resolve();
+                    });
+                    return;
+                  }
+                }
+              }
+            }
+          }
+          withNavigation(() => renditionRef.current!.prev());
+        },
+        goToCFI: (cfi: string) => {
+          if (!renditionRef.current) return;
+          withNavigation(() => renditionRef.current!.display(cfi));
+        },
+        goToProgress: (ratio: number) => {
+          const rendition = renditionRef.current;
+          const book = bookRef.current;
+          if (!rendition || !book) return;
 
-        rendition.display(cfi).then(() => {
-          const loc = rendition.currentLocation() as unknown as EpubjsLocation;
-          if (loc) handleRelocated(loc);
-        });
-      },
-    }));
+          const clamped = Math.max(0, Math.min(1, ratio));
+          const locations = book.locations as unknown as EpubjsLocationsExtended;
+          const total = typeof locations.length === "function" ? locations.length() : 0;
+          let cfi: string | undefined = undefined;
+          if (total > 0) {
+            const targetIndex = Math.max(0, Math.min(total - 1, Math.round(clamped * (total - 1))));
+            cfi = book.locations.cfiFromLocation(targetIndex);
+          }
+          if (!cfi && typeof locations.cfiFromPercentage === "function") {
+            cfi = locations.cfiFromPercentage(clamped);
+          }
+          if (!cfi) return;
+
+          withNavigation(() => rendition.display(cfi));
+        },
+        goToPage: (page: number) => {
+          const rendition = renditionRef.current;
+          const book = bookRef.current;
+          if (!rendition || !book) return;
+
+          const total = book.locations.length();
+          if (total <= 0) return;
+
+          const clampedPage = Math.max(1, Math.min(total, page));
+          const cfi = book.locations.cfiFromLocation(clampedPage - 1);
+          if (!cfi) return;
+
+          withNavigation(() => rendition.display(cfi));
+        },
+      };
+    });
 
     return (
       <div
         className={styles.container}
         style={{ background: THEME_STYLES[settings.theme]?.background || "#fff" }}
-        data-epub-iframe-host="true"
       >
         <div
           ref={containerRef}
           className={styles.viewer}
+          style={{ transition: "opacity 0.15s ease-out" }}
         />
         <div className={`${styles.chapterPageInfo} ${isUIVisible ? styles.hidden : ""}`}>
           {chapterTitle} - {Math.max(1, chapterPage || 1)}/{Math.max(1, chapterTotal || 1)}

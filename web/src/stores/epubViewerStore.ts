@@ -35,6 +35,8 @@ interface EpubViewerState {
   isFullscreen: boolean;
   isIncognito: boolean;
   globalProgress: number; // 전체 도서 기준 진행률 (0~100)
+  isAtFirstPage: boolean;
+  isAtLastPage: boolean;
 
   // 설정
   settings: EpubViewerSettings;
@@ -44,6 +46,8 @@ interface EpubViewerState {
   setCurrentPage: (page: number) => void;
   setTotalPages: (total: number) => void;
   setGlobalProgress: (progress: number) => void;
+  setIsAtFirstPage: (isAtFirst: boolean) => void;
+  setIsAtLastPage: (isAtLast: boolean) => void;
   toggleUI: () => void;
   showUI: () => void;
   hideUI: () => void;
@@ -94,12 +98,16 @@ export const useEpubViewerStore = create<EpubViewerState>()(
       isFullscreen: false,
       isIncognito: false,
       globalProgress: 0,
+      isAtFirstPage: false,
+      isAtLastPage: false,
       settings: defaultSettings,
 
       setCurrentCFI: (cfi) => set({ currentCFI: cfi }),
       setCurrentPage: (page) => set({ currentPage: page }),
       setTotalPages: (total) => set({ totalPages: total }),
       setGlobalProgress: (progress) => set({ globalProgress: progress }),
+      setIsAtFirstPage: (isAtFirst) => set({ isAtFirstPage: isAtFirst }),
+      setIsAtLastPage: (isAtLast) => set({ isAtLastPage: isAtLast }),
 
       toggleUI: () => set((state) => ({ isUIVisible: !state.isUIVisible })),
       showUI: () => set({ isUIVisible: true }),
@@ -142,6 +150,8 @@ export const useEpubViewerStore = create<EpubViewerState>()(
           isFullscreen: false,
           isIncognito: false,
           globalProgress: 0,
+          isAtFirstPage: false,
+          isAtLastPage: false,
           settings: defaultSettings,
         }),
 

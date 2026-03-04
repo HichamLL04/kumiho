@@ -41,6 +41,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setCurrentPage,
     setTotalPages,
     setGlobalProgress,
+    setIsAtFirstPage,
+    setIsAtLastPage,
     toggleSettings,
     closeSettings,
     toggleTOC,
@@ -58,6 +60,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setWheelDirection,
     setKeyboardDirection,
     setClickDirection,
+    isAtFirstPage,
+    isAtLastPage,
   } = useEpubViewerStore();
 
   const [toc, setToc] = useState<EpubTOCItem[]>([]);
@@ -249,7 +253,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         const effectiveSpread =
-          (seriesSettings?.epub_spread as string | undefined) || libraryDefaults.default_epub_spread || spread || "auto";
+          (seriesSettings?.epub_spread as string | undefined) ||
+          libraryDefaults.default_epub_spread ||
+          spread ||
+          "auto";
         if (effectiveSpread === "auto" || effectiveSpread === "none") {
           setSpread(effectiveSpread);
         }
@@ -466,8 +473,12 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       currentPosition: number;
       totalPositions: number;
       chapterHref: string;
+      atStart?: boolean;
+      atEnd?: boolean;
     }) => {
       setCurrentCFI(location.cfi);
+      setIsAtFirstPage(location.atStart ?? false);
+      setIsAtLastPage(location.atEnd ?? false);
 
       // isInitializingRef.current 사용으로 stale closure 방지
       if (isInitializingRef.current) {
@@ -518,7 +529,17 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
       saveProgress(location);
     },
-    [setCurrentCFI, setCurrentPage, setTotalPages, setGlobalProgress, saveProgress, initialCFI, initialProgressRatio],
+    [
+      setCurrentCFI,
+      setCurrentPage,
+      setTotalPages,
+      setGlobalProgress,
+      setIsAtFirstPage,
+      setIsAtLastPage,
+      saveProgress,
+      initialCFI,
+      initialProgressRatio,
+    ],
   );
 
   const handleInitializationComplete = useCallback(() => {
@@ -729,6 +750,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         isTOCOpen={isTOCOpen}
         isFullscreen={isFullscreen}
         isIncognito={isIncognito}
+        isAtFirstPage={isAtFirstPage}
+        isAtLastPage={isAtLastPage}
         toc={toc}
         settings={settings}
         onBack={handleBack}

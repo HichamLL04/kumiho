@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo, type MouseEvent } from "react";
+import { isOldIOSSafari } from "../utils/browserDetect";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -37,6 +38,8 @@ interface EpubViewerProps {
   isFullscreen: boolean;
   isIncognito: boolean;
   globalProgress: number;
+  isAtFirstPage: boolean;
+  isAtLastPage: boolean;
   toc: EpubTOCItem[];
   settings: EpubViewerSettings;
   onBack: () => void;
@@ -55,6 +58,8 @@ interface EpubViewerProps {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    atStart?: boolean;
+    atEnd?: boolean;
   }) => void;
   onViewerClick: () => void; // iframe 내부 클릭 핸들러
   onFontSizeChange: (size: number) => void;
@@ -93,6 +98,8 @@ export function EpubViewer({
   isFullscreen,
   isIncognito,
   globalProgress,
+  isAtFirstPage,
+  isAtLastPage,
   toc,
   settings,
   onBack,
@@ -122,6 +129,8 @@ export function EpubViewer({
 }: EpubViewerProps) {
   const { t } = useTranslation();
   const viewerRef = useRef<EpubChapterViewerHandles>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const lastTouchTimeRef = useRef(0);
   const bgColor = THEME_BG[settings.theme] || "#ffffff";
   const [currentChapterHref, setCurrentChapterHref] = useState("");
   const [effectiveLayout, setEffectiveLayout] = useState<EpubRenderLayout>("book");
@@ -165,6 +174,8 @@ export function EpubViewer({
       currentPosition: number;
       totalPositions: number;
       chapterHref: string;
+      atStart?: boolean;
+      atEnd?: boolean;
     }) => {
       setCurrentChapterHref(location.chapterHref);
       if (location.chapterPage > 0) {
@@ -179,7 +190,7 @@ export function EpubViewer({
   );
 
   const handleNext = useCallback(() => {
-    const isAtEnd = totalPages > 0 && currentPage >= totalPages;
+    const isAtEnd = isAtLastPage || (totalPages > 0 && currentPage >= totalPages);
     if (isAtEnd) {
       if (!isEndNavigationReady) return;
       onReachedEndNext?.();
@@ -187,7 +198,7 @@ export function EpubViewer({
     }
     clearPendingProgress();
     viewerRef.current?.next();
-  }, [currentPage, totalPages, onReachedEndNext, isEndNavigationReady, clearPendingProgress]);
+  }, [isAtLastPage, currentPage, totalPages, onReachedEndNext, isEndNavigationReady, clearPendingProgress]);
 
   const handlePrev = useCallback(() => {
     clearPendingProgress();
@@ -320,27 +331,37 @@ export function EpubViewer({
 
   const handleMainClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
+      // 터치 직후 발생하는 Synthetic Click 무시 (500ms 이내)
+      if (Date.now() - lastTouchTimeRef.current < 500) return;
+
       const target = event.target as HTMLElement | null;
       if (!target) return;
-      if (target.closest("[data-epub-iframe-host='true']")) return;
 
       const interactive = target.closest("button, input, select, textarea, a[href], [contenteditable='true']");
       if (interactive) return;
 
-      const rect = event.currentTarget.getBoundingClientRect();
-      const width = Math.max(1, rect.width);
-      const xRatio = (event.clientX - rect.left) / width;
+      // 전체 화면 기준 zone 판별 (좌 0~30% / 중앙 30~70% / 우 70~100%)
+      const xRatio = event.clientX / window.innerWidth;
+
+      if (xRatio >= 0.3 && xRatio <= 0.7) {
+        // 중앙 클릭 → UI 토글
+        onViewerClick();
+        return;
+      }
+
       if (settings.flow !== "paginated") return;
 
-      // iframe 바깥(main) 클릭은 UI 토글 없이 페이지 이동만 처리
-      const isNext = settings.clickDirection === "right" ? xRatio >= 0.5 : xRatio < 0.5;
-      if (isNext) {
-        handleNext();
+      // 좌/우 클릭 → 페이지 이동
+      const isRTL = settings.clickDirection === "left";
+      if (xRatio < 0.3) {
+        if (isRTL) handleNext();
+        else handlePrev();
       } else {
-        handlePrev();
+        if (isRTL) handlePrev();
+        else handleNext();
       }
     },
-    [handleNext, handlePrev, settings.flow, settings.clickDirection],
+    [handleNext, handlePrev, onViewerClick, settings.flow, settings.clickDirection],
   );
 
   useEffect(() => {
@@ -368,6 +389,94 @@ export function EpubViewer({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [settings.keyboardDirection, settings.flow, handleNext, handlePrev]);
+
+  // === 구형 iOS Safari: <main>에 터치 이벤트 핸들러 등록 ===
+  // iframe pointer-events:none으로 터치가 관통하므로 부모에서 처리한다.
+  useEffect(() => {
+    if (!isOldIOSSafari()) return;
+    const mainEl = mainRef.current;
+    if (!mainEl) return;
+
+    let startPos: { x: number; y: number } | null = null;
+    let dragging = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      // UI 요소(헤더/푸터/설정/TOC) 위의 터치는 무시
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("header, footer, [data-epub-settings], [data-epub-toc]")) return;
+      startPos = { x: touch.clientX, y: touch.clientY };
+      dragging = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!startPos) return;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const dx = touch.clientX - startPos.x;
+      const dy = touch.clientY - startPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 8) dragging = true;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!startPos) return;
+
+      // 터치 완료 기록 (Synthetic click 무시용)
+      lastTouchTimeRef.current = Date.now();
+
+      if (dragging) {
+        // 스와이프 감지
+        const touch = e.changedTouches[0];
+        if (touch && settings.flow === "paginated") {
+          const dx = touch.clientX - startPos.x;
+          const dy = touch.clientY - startPos.y;
+          const SWIPE_THRESHOLD = 50;
+          if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+            const isRTL = settings.clickDirection === "left";
+            if (dx < 0) {
+              if (isRTL) handlePrev();
+              else handleNext();
+            } else {
+              if (isRTL) handleNext();
+              else handlePrev();
+            }
+          }
+        }
+        startPos = null;
+        dragging = false;
+        return;
+      }
+
+      // 탭: zone 기반 판별
+      const clientX = e.changedTouches[0]?.clientX ?? startPos.x;
+      const ratio = clientX / window.innerWidth;
+      startPos = null;
+
+      if (ratio >= 0.3 && ratio <= 0.7) {
+        onViewerClick();
+      } else if (settings.flow === "paginated") {
+        const isRTL = settings.clickDirection === "left";
+        if (ratio < 0.3) {
+          if (isRTL) handleNext();
+          else handlePrev();
+        } else {
+          if (isRTL) handlePrev();
+          else handleNext();
+        }
+      }
+    };
+
+    mainEl.addEventListener("touchstart", onTouchStart, { passive: true });
+    mainEl.addEventListener("touchmove", onTouchMove, { passive: true });
+    mainEl.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      mainEl.removeEventListener("touchstart", onTouchStart);
+      mainEl.removeEventListener("touchmove", onTouchMove);
+      mainEl.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [settings.flow, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
 
   return (
     <div
@@ -441,6 +550,7 @@ export function EpubViewer({
             onMouseLeave={onInteractionEnd}
           />
           <div
+            data-epub-settings
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={onInteractionStart}
             onMouseLeave={onInteractionEnd}
@@ -472,6 +582,7 @@ export function EpubViewer({
             onMouseLeave={onInteractionEnd}
           />
           <div
+            data-epub-toc
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={onInteractionStart}
             onMouseLeave={onInteractionEnd}
@@ -488,6 +599,7 @@ export function EpubViewer({
 
       {/* EPUB 뷰어 영역 */}
       <main
+        ref={mainRef}
         className={styles.main}
         onClick={handleMainClick}
       >
@@ -525,8 +637,8 @@ export function EpubViewer({
           <div className={styles.footerControls}>
             <button
               className={styles.navBtn}
-              onClick={() => viewerRef.current?.goToPage?.(1)}
-              disabled={currentPage <= 1}
+              onClick={() => viewerRef.current?.goToProgress?.(0)}
+              disabled={isAtFirstPage}
               aria-label={t("epub_viewer.footer.first_page")}
             >
               <ChevronsLeft size={20} />
@@ -534,7 +646,7 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={handlePrev}
-              disabled={currentPage <= 1}
+              disabled={isAtFirstPage}
               aria-label={t("epub_viewer.footer.prev_page")}
             >
               <ChevronLeft size={20} />
@@ -642,15 +754,15 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={handleNext}
-              disabled={currentPage >= totalPages && totalPages > 0 && (!onReachedEndNext || !isEndNavigationReady)}
+              disabled={isAtLastPage && (!onReachedEndNext || !isEndNavigationReady)}
               aria-label={t("epub_viewer.footer.next_page")}
             >
               <ChevronRight size={20} />
             </button>
             <button
               className={styles.navBtn}
-              onClick={() => viewerRef.current?.goToPage?.(totalPages)}
-              disabled={currentPage >= totalPages && totalPages > 0}
+              onClick={() => viewerRef.current?.goToProgress?.(1)}
+              disabled={isAtLastPage}
               aria-label={t("epub_viewer.footer.last_page")}
             >
               <ChevronsRight size={20} />
