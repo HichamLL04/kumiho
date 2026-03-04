@@ -546,6 +546,7 @@ export function EpubViewer({
             onMouseLeave={onInteractionEnd}
           />
           <div
+            data-epub-settings
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={onInteractionStart}
             onMouseLeave={onInteractionEnd}
@@ -577,6 +578,7 @@ export function EpubViewer({
             onMouseLeave={onInteractionEnd}
           />
           <div
+            data-epub-toc
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={onInteractionStart}
             onMouseLeave={onInteractionEnd}

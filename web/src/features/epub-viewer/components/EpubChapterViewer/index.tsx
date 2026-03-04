@@ -11,7 +11,7 @@ import {
   type EpubRenderLayout,
 } from "../../utils/layoutMode";
 import styles from "./EpubChapterViewer.module.css";
-import { isOldIOSSafari } from "../../../../utils/browserDetect";
+import { applyOldIOSSafariPointerEventFallback } from "./iosTouchFallback";
 
 export type { EpubRenderLayout } from "../../utils/layoutMode";
 
@@ -458,12 +458,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
         // 구형 iOS Safari: iframe pointer-events를 none으로 설정하여
         // 터치 이벤트가 부모 <main>으로 관통하도록 한다.
-        if (isOldIOSSafari()) {
-          const iframe = doc.defaultView?.frameElement as HTMLIFrameElement | null;
-          if (iframe) {
-            iframe.style.pointerEvents = "none";
-          }
-        }
+        applyOldIOSSafariPointerEventFallback(doc);
 
         const currentSettings = settingsRef.current;
         if (currentSettings.renderMode === "auto") {
