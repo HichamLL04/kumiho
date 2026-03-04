@@ -5,6 +5,7 @@ import { SmartImageViewer } from "../../../../components/SmartImageViewer";
 interface VerticalPageProps {
   pageNum: number;
   imageUrl: string;
+  pageHeightCache: Map<number, number>;
   minAllowedPage: number;
   maxAllowedPage: number;
   handleImageLoad: (pageNum: number) => void;
@@ -19,6 +20,7 @@ interface VerticalPageProps {
 export const VerticalPage = ({
   pageNum,
   imageUrl,
+  pageHeightCache,
   minAllowedPage,
   maxAllowedPage,
   handleImageLoad,
@@ -27,24 +29,30 @@ export const VerticalPage = ({
   fitMode,
 }: VerticalPageProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const [cachedHeight, setCachedHeight] = useState<number>(0);
+  const [cachedHeight, setCachedHeight] = useState<number>(() => pageHeightCache.get(pageNum) ?? 0);
+  const shouldRenderImage = pageNum >= minAllowedPage && pageNum <= maxAllowedPage;
 
   useEffect(() => {
+    if (!shouldRenderImage) return;
+
     const el = wrapperRef.current;
     if (!el || !("ResizeObserver" in window)) return;
 
     const observer = new ResizeObserver((entries) => {
       const nextHeight = entries[0]?.contentRect.height ?? 0;
       if (nextHeight > 0) {
-        setCachedHeight((prev) => (Math.abs(prev - nextHeight) > 1 ? nextHeight : prev));
+        setCachedHeight((prev) => {
+          if (Math.abs(prev - nextHeight) <= 1) return prev;
+          pageHeightCache.set(pageNum, nextHeight);
+          return nextHeight;
+        });
       }
     });
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [pageHeightCache, pageNum, shouldRenderImage]);
 
-  const shouldRenderImage = pageNum >= minAllowedPage && pageNum <= maxAllowedPage;
   const placeholderHeight = cachedHeight > 0 ? cachedHeight : 300;
 
   return (
