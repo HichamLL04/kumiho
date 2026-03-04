@@ -70,16 +70,22 @@ export function useVerticalScroll({
 
     const content = viewerContentRef.current;
 
+    let initialReleaseTimeoutId: number | null = null;
+    let retryReleaseTimeoutId: number | null = null;
+    let disposed = false;
+
     // 현재 페이지로 스크롤 이동 (외부 요인으로 변경된 경우만)
     if (!isInternalScrollRef.current) {
       // 마지막 페이지인 경우: 스크롤 컨테이너 맨 아래로 직접 이동
       if (currentPage === totalPages && content) {
         requestAnimationFrame(() => {
+          if (disposed) return;
           content.scrollTop = content.scrollHeight;
           // 마지막 페이지 스크롤 후에는 isInternalScrollRef를 true로 유지하여
           // IntersectionObserver가 중간 페이지를 감지해도 스크롤이 다시 이동하지 않도록 함
           isInternalScrollRef.current = true;
-          setTimeout(() => {
+          initialReleaseTimeoutId = window.setTimeout(() => {
+            if (disposed) return;
             isInitialScrollingRef.current = false;
           }, 150);
         });
@@ -88,11 +94,13 @@ export function useVerticalScroll({
         const pageEl = document.getElementById(`page-${currentPage}`);
         if (pageEl) {
           requestAnimationFrame(() => {
+            if (disposed) return;
             pageEl.scrollIntoView({ block: "start" });
             // 이미지 레이아웃 변동으로 초기 위치가 흔들릴 수 있어
             // 목표 페이지로 실제 스크롤되었는지 확인한 뒤 가드를 해제한다.
             let attempts = 0;
             const releaseGuard = () => {
+              if (disposed) return;
               const currentContent = viewerContentRef.current;
               if (!currentContent) {
                 isInitialScrollingRef.current = false;
@@ -102,14 +110,14 @@ export function useVerticalScroll({
               if (currentPage > 1 && currentContent.scrollTop <= 4 && attempts < 3) {
                 attempts += 1;
                 pageEl.scrollIntoView({ block: "start" });
-                window.setTimeout(releaseGuard, 120);
+                retryReleaseTimeoutId = window.setTimeout(releaseGuard, 120);
                 return;
               }
 
               isInitialScrollingRef.current = false;
             };
 
-            window.setTimeout(releaseGuard, 150);
+            initialReleaseTimeoutId = window.setTimeout(releaseGuard, 150);
           });
         } else {
           isInitialScrollingRef.current = false;
@@ -121,6 +129,16 @@ export function useVerticalScroll({
         isInternalScrollRef.current = false;
       }
     }
+
+    return () => {
+      disposed = true;
+      if (initialReleaseTimeoutId !== null) {
+        window.clearTimeout(initialReleaseTimeoutId);
+      }
+      if (retryReleaseTimeoutId !== null) {
+        window.clearTimeout(retryReleaseTimeoutId);
+      }
+    };
   }, [currentPage, totalPages, readingMode, isLoading, isInitialScrollingRef]);
 
   // 페이지 모드(한/두페이지)에서는 로딩 완료 시 즉시 가드 해제

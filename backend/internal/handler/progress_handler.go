@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -623,6 +624,17 @@ func (h *ProgressHandler) StartViewing(c *fiber.Ctx) error {
 	}
 	req.SeriesID = strings.TrimSpace(req.SeriesID)
 	req.ChapterID = strings.TrimSpace(req.ChapterID)
+	if err := h.validateViewerLeaseTarget(userID, req.SeriesID, req.ChapterID); err != nil {
+		var fiberErr *fiber.Error
+		if errors.As(err, &fiberErr) {
+			return c.Status(fiberErr.Code).JSON(fiber.Map{
+				"error": fiberErr.Message,
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to validate viewer target",
+		})
+	}
 
 	currentLease, err := h.viewerSessionRepo.GetByUserID(nil, userID)
 	if err != nil {
@@ -640,6 +652,11 @@ func (h *ProgressHandler) StartViewing(c *fiber.Ctx) error {
 	}
 
 	if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
+		if isViewerLeaseForeignKeyError(err) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "invalid series_id or chapter_id",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to acquire viewer session",
 		})
@@ -673,6 +690,17 @@ func (h *ProgressHandler) ResumeCheck(c *fiber.Ctx) error {
 	}
 	req.SeriesID = strings.TrimSpace(req.SeriesID)
 	req.ChapterID = strings.TrimSpace(req.ChapterID)
+	if err := h.validateViewerLeaseTarget(userID, req.SeriesID, req.ChapterID); err != nil {
+		var fiberErr *fiber.Error
+		if errors.As(err, &fiberErr) {
+			return c.Status(fiberErr.Code).JSON(fiber.Map{
+				"error": fiberErr.Message,
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to validate viewer target",
+		})
+	}
 
 	currentLease, err := h.viewerSessionRepo.GetByUserID(nil, userID)
 	if err != nil {
@@ -683,6 +711,11 @@ func (h *ProgressHandler) ResumeCheck(c *fiber.Ctx) error {
 
 	if currentLease == nil || h.viewerSessionRepo.IsExpired(currentLease, viewerSessionLeaseTTL, time.Now()) {
 		if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
+			if isViewerLeaseForeignKeyError(err) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "invalid series_id or chapter_id",
+				})
+			}
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "failed to renew viewer session",
 			})
@@ -700,6 +733,11 @@ func (h *ProgressHandler) ResumeCheck(c *fiber.Ctx) error {
 	}
 
 	if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
+		if isViewerLeaseForeignKeyError(err) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "invalid series_id or chapter_id",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to refresh viewer session",
 		})
@@ -726,6 +764,48 @@ func stringValue(v *string) string {
 		return ""
 	}
 	return *v
+}
+
+func (h *ProgressHandler) validateViewerLeaseTarget(userID, seriesID, chapterID string) error {
+	if seriesID == "" && chapterID == "" {
+		return nil
+	}
+
+	if seriesID != "" {
+		series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
+		if err != nil {
+			return err
+		}
+		if series == nil {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid series_id")
+		}
+	}
+
+	if chapterID != "" {
+		chapter, err := h.chapterRepo.FindByID(nil, chapterID)
+		if err != nil {
+			return err
+		}
+		if chapter == nil {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid chapter_id")
+		}
+
+		if seriesID != "" {
+			volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+			if err != nil {
+				return err
+			}
+			if volume == nil || volume.SeriesID != seriesID {
+				return fiber.NewError(fiber.StatusBadRequest, "chapter_id does not belong to series_id")
+			}
+		}
+	}
+
+	return nil
+}
+
+func isViewerLeaseForeignKeyError(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "foreign key constraint failed")
 }
 
 // GetAllProgress 모든 읽기 진행도 조회
