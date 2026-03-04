@@ -234,7 +234,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         >
           {displayPages.map((pageNum) => (
             <VerticalPage
-              key={pageNum}
+              key={`${chapterId}-${pageNum}`}
               pageNum={pageNum}
               imageUrl={getPageImageUrl(chapterId, pageNum)}
               pageHeightCache={verticalPageHeightCache}
