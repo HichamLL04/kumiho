@@ -413,6 +413,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
           >
             <ViewerContent
               ref={animationRef}
+              currentPage={currentPage}
               readingMode={settings.readingMode}
               readingDirection={settings.readingDirection}
               swipeDirection={settings.swipeDirection}

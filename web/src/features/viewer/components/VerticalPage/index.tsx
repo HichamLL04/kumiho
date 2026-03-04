@@ -5,6 +5,7 @@ import { SmartImageViewer } from "../../../../components/SmartImageViewer";
 interface VerticalPageProps {
   pageNum: number;
   imageUrl: string;
+  minAllowedPage: number;
   maxAllowedPage: number;
   handleImageLoad: (pageNum: number) => void;
   handleContentClick: (
@@ -18,6 +19,7 @@ interface VerticalPageProps {
 export const VerticalPage = ({
   pageNum,
   imageUrl,
+  minAllowedPage,
   maxAllowedPage,
   handleImageLoad,
   handleContentClick,
@@ -25,7 +27,7 @@ export const VerticalPage = ({
   fitMode,
 }: VerticalPageProps) => {
   // No local zoom state needed for vertical mode now
-  const shouldRenderImage = pageNum <= maxAllowedPage;
+  const shouldRenderImage = pageNum >= minAllowedPage && pageNum <= maxAllowedPage;
 
   return (
     <div

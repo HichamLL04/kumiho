@@ -275,6 +275,8 @@ export const progressAPI = {
 // Viewer API
 export const viewerAPI = {
   start: (data: { series_id: string; chapter_id: string }) => api.post("/viewer/start", data),
+  resumeCheck: (data: { series_id: string; chapter_id: string; current_page: number }) =>
+    api.post("/viewer/resume-check", data),
 };
 
 // Settings API

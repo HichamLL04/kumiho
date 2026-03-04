@@ -268,8 +268,19 @@ func Migrate() error {
 		PRIMARY KEY (user_id, date, series_id)
 	);
 
+	-- 현재 뷰어 소유권(lease)
+	CREATE TABLE IF NOT EXISTS viewer_sessions (
+		user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+		session_id TEXT NOT NULL,
+		series_id TEXT REFERENCES series(id) ON DELETE CASCADE,
+		chapter_id TEXT REFERENCES chapters(id) ON DELETE CASCADE,
+		last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	-- 인덱스
 	CREATE INDEX IF NOT EXISTS idx_daily_activity_user_date ON daily_activity(user_id, date);
+	CREATE INDEX IF NOT EXISTS idx_viewer_sessions_last_seen ON viewer_sessions(last_seen_at);
 	CREATE INDEX IF NOT EXISTS idx_series_library ON series(library_id);
 	CREATE INDEX IF NOT EXISTS idx_volumes_series ON volumes(series_id);
 	CREATE INDEX IF NOT EXISTS idx_chapters_volume ON chapters(volume_id);

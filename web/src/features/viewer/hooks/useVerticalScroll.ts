@@ -1,7 +1,7 @@
 // 세로 스크롤 모드 전용 훅
 
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
 import type { ReadingMode } from "../../../stores/viewerStore";
 
@@ -49,7 +49,9 @@ export function useVerticalScroll({
   isInitialScrollingRef,
 }: UseVerticalScrollParams): UseVerticalScrollReturn {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setCurrentPage } = useViewerStore();
+  const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
 
   const [pullOffset, setPullOffset] = useState(0);
   const [isTouching, setIsTouching] = useState(false);
@@ -87,9 +89,27 @@ export function useVerticalScroll({
         if (pageEl) {
           requestAnimationFrame(() => {
             pageEl.scrollIntoView({ block: "start" });
-            setTimeout(() => {
+            // 이미지 레이아웃 변동으로 초기 위치가 흔들릴 수 있어
+            // 목표 페이지로 실제 스크롤되었는지 확인한 뒤 가드를 해제한다.
+            let attempts = 0;
+            const releaseGuard = () => {
+              const currentContent = viewerContentRef.current;
+              if (!currentContent) {
+                isInitialScrollingRef.current = false;
+                return;
+              }
+
+              if (currentPage > 1 && currentContent.scrollTop <= 4 && attempts < 3) {
+                attempts += 1;
+                pageEl.scrollIntoView({ block: "start" });
+                window.setTimeout(releaseGuard, 120);
+                return;
+              }
+
               isInitialScrollingRef.current = false;
-            }, 150);
+            };
+
+            window.setTimeout(releaseGuard, 150);
           });
         } else {
           isInitialScrollingRef.current = false;
@@ -219,7 +239,10 @@ export function useVerticalScroll({
             saveProgress().then(() => {
               navigate(`/viewer/${prevChapterId}`, {
                 replace: true,
-                state: { preventComplete: true },
+                state: {
+                  preventComplete: true,
+                  ...(viewerFrom ? { from: viewerFrom } : {}),
+                },
               });
             });
             return 0;
@@ -237,7 +260,10 @@ export function useVerticalScroll({
             handleVolumeCompletion()
               .then(() => saveProgress())
               .then(() => {
-                navigate(`/viewer/${nextChapterId}`, { replace: true });
+                navigate(`/viewer/${nextChapterId}`, {
+                  replace: true,
+                  state: viewerFrom ? { from: viewerFrom } : undefined,
+                });
               });
             return 0;
           }
@@ -316,7 +342,10 @@ export function useVerticalScroll({
         saveProgress().then(() => {
           navigate(`/viewer/${prevChapterId}`, {
             replace: true,
-            state: { preventComplete: true },
+            state: {
+              preventComplete: true,
+              ...(viewerFrom ? { from: viewerFrom } : {}),
+            },
           });
         });
       } else if (currentOffset <= -pullThreshold && nextChapterId) {
@@ -325,7 +354,10 @@ export function useVerticalScroll({
         handleVolumeCompletion()
           .then(() => saveProgress())
           .then(() => {
-            navigate(`/viewer/${nextChapterId}`, { replace: true });
+            navigate(`/viewer/${nextChapterId}`, {
+              replace: true,
+              state: viewerFrom ? { from: viewerFrom } : undefined,
+            });
           });
       }
 
@@ -397,6 +429,7 @@ export function useVerticalScroll({
     handleVolumeCompletion,
     pullSensitivity,
     pullThreshold,
+    viewerFrom,
   ]);
 
   // 챕터 변경 시 상태 리셋 - flushSync를 사용하여 동기 업데이트

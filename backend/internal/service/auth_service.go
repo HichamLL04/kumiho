@@ -232,31 +232,23 @@ func (s *AuthService) GetSessionByID(sessionID string) (*model.Session, error) {
 func (s *AuthService) generateTokensWithSession(user *model.User, ctx *LoginContext) (*TokenResponse, error) {
 	var sessionID string
 
-	// 세션 생성 또는 재활용
+	// 세션 생성
+	// 로그인마다 고유 세션을 발급해 브라우저/클라이언트 단위 제어를 명확히 한다.
+	// (기존 "user+browser+os+ip" 재활용은 브라우저 식별 오차 시 같은 세션으로 합쳐질 수 있음)
 	if ctx != nil {
 		deviceInfo := ParseUserAgent(ctx.UserAgent)
 
-		// 동일 기기의 기존 세션이 있는지 확인
-		existingSession, _ := s.sessionRepo.FindByUserAndDevice(nil, user.ID, deviceInfo.Browser, deviceInfo.OS, ctx.IPAddress)
-
-		if existingSession != nil {
-			// 기존 세션 재활용: 만료 시간, IP, 마지막 활동 시간 갱신
-			sessionID = existingSession.ID
-			_ = s.sessionRepo.UpdateSessionInfo(nil, sessionID, ctx.IPAddress, time.Now().Add(7*24*time.Hour))
-		} else {
-			// 새 세션 생성
-			session := &model.Session{
-				UserID:     user.ID,
-				DeviceName: deviceInfo.DeviceName,
-				DeviceType: deviceInfo.DeviceType,
-				Browser:    deviceInfo.Browser,
-				OS:         deviceInfo.OS,
-				IPAddress:  ctx.IPAddress,
-				ExpiresAt:  time.Now().Add(7 * 24 * time.Hour),
-			}
-			if err := s.sessionRepo.Create(nil, session); err == nil {
-				sessionID = session.ID
-			}
+		session := &model.Session{
+			UserID:     user.ID,
+			DeviceName: deviceInfo.DeviceName,
+			DeviceType: deviceInfo.DeviceType,
+			Browser:    deviceInfo.Browser,
+			OS:         deviceInfo.OS,
+			IPAddress:  ctx.IPAddress,
+			ExpiresAt:  time.Now().Add(7 * 24 * time.Hour),
+		}
+		if err := s.sessionRepo.Create(nil, session); err == nil {
+			sessionID = session.ID
 		}
 	}
 

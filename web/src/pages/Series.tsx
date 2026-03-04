@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslation, Trans } from "react-i18next";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { Folder } from "lucide-react";
 import { Header } from "../components/headers/Header";
 import { SubHeader } from "../components/headers/SubHeader";
@@ -20,6 +20,8 @@ export function SeriesPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const viewerFrom = `${location.pathname}${location.search}`;
   const [series, setSeries] = useState<Series | null>(null);
 
   const handleUpdate = (updated: Series | Volume) => {
@@ -208,7 +210,7 @@ export function SeriesPage() {
               onAlert={showAlert}
               onPlay={async () => {
                 if (progress && progress.chapter_id) {
-                  navigate(`/viewer/${progress.chapter_id}`);
+                  navigate(`/viewer/${progress.chapter_id}`, { state: { from: viewerFrom } });
                 } else if (volumes.length > 0) {
                   const sortedVolumes = [...volumes].sort((a, b) => a.volume_number - b.volume_number);
                   const firstVolume = sortedVolumes[0];
@@ -221,7 +223,7 @@ export function SeriesPage() {
                       const sortedChapters = [...chapters].sort(
                         (a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number,
                       );
-                      navigate(`/viewer/${sortedChapters[0].id}`);
+                      navigate(`/viewer/${sortedChapters[0].id}`, { state: { from: viewerFrom } });
                     } else {
                       openVolume(firstVolume);
                     }

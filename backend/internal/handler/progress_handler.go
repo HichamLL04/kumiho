@@ -19,6 +19,7 @@ import (
 
 type ProgressHandler struct {
 	progressRepo          *repository.ReadingProgressRepository
+	viewerSessionRepo     *repository.ViewerSessionRepository
 	seriesRepo            *repository.SeriesRepository
 	authService           *service.AuthService
 	volumeRepo            *repository.VolumeRepository
@@ -30,9 +31,11 @@ type ProgressHandler struct {
 }
 
 const completionThresholdPercent = 98.0
+const viewerSessionLeaseTTL = 90 * time.Second
 
 func NewProgressHandler(
 	progressRepo *repository.ReadingProgressRepository,
+	viewerSessionRepo *repository.ViewerSessionRepository,
 	seriesRepo *repository.SeriesRepository,
 	authService *service.AuthService,
 	volumeRepo *repository.VolumeRepository,
@@ -44,6 +47,7 @@ func NewProgressHandler(
 ) *ProgressHandler {
 	return &ProgressHandler{
 		progressRepo:          progressRepo,
+		viewerSessionRepo:     viewerSessionRepo,
 		seriesRepo:            seriesRepo,
 		authService:           authService,
 		volumeRepo:            volumeRepo,
@@ -77,6 +81,17 @@ type UpdateEpubProgressRequest struct {
 	TotalPositions  int     `json:"total_positions"`
 	ProgressPercent float64 `json:"progress_percent"`
 	CurrentCFI      string  `json:"current_cfi"`
+}
+
+type StartViewingRequest struct {
+	SeriesID  string `json:"series_id"`
+	ChapterID string `json:"chapter_id"`
+}
+
+type ResumeCheckRequest struct {
+	SeriesID    string `json:"series_id"`
+	ChapterID   string `json:"chapter_id"`
+	CurrentPage int    `json:"current_page"`
 }
 
 // GetProgress 시리즈별 읽기 진행도 조회
@@ -345,6 +360,7 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 			"error": "failed to update progress",
 		})
 	}
+	h.touchViewerLease(userID, c, seriesID, stringValue(req.ChapterID))
 
 	// 완독 상태 해제 체크
 	h.removeCompletionIfIncomplete(userID, req.VolumeID, req.CurrentPage, req.TotalPages)
@@ -457,6 +473,7 @@ func (h *ProgressHandler) UpdateEpubProgress(c *fiber.Ctx) error {
 			"error": "failed to update epub progress",
 		})
 	}
+	h.touchViewerLease(userID, c, volume.SeriesID, chapterID)
 
 	h.removeCompletionIfIncomplete(userID, &volumeID, currentPage, totalPages)
 
@@ -564,6 +581,7 @@ func (h *ProgressHandler) UpdateProgressWSReplacement(c *fiber.Ctx) error {
 			"error": "failed to update progress",
 		})
 	}
+	h.touchViewerLease(userID, c, req.SeriesID, req.ChapterID)
 
 	// 완독 상태 해제 체크
 	h.removeCompletionIfIncomplete(userID, volumeID, req.CurrentPage, totalPages)
@@ -595,13 +613,121 @@ func (h *ProgressHandler) StartViewing(c *fiber.Ctx) error {
 		})
 	}
 
-	// 현재 세션을 제외한 다른 세션에 FORCE_LOGOUT 전송
-	h.sseHub.ForceLogoutOtherSessions(userID, sessionID)
-	log.Printf("[StartViewing] ForceLogout triggered: user=%s, session=%s", userID, sessionID)
+	req := StartViewingRequest{}
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "invalid request body",
+			})
+		}
+	}
+	req.SeriesID = strings.TrimSpace(req.SeriesID)
+	req.ChapterID = strings.TrimSpace(req.ChapterID)
+
+	currentLease, err := h.viewerSessionRepo.GetByUserID(nil, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query viewer session",
+		})
+	}
+
+	tookOver := currentLease != nil &&
+		currentLease.SessionID != sessionID &&
+		!h.viewerSessionRepo.IsExpired(currentLease, viewerSessionLeaseTTL, time.Now())
+	if tookOver {
+		h.sseHub.ForceLogoutOtherSessions(userID, sessionID)
+		log.Printf("[StartViewing] takeover force logout: user=%s, new_session=%s, prev_session=%s", userID, sessionID, currentLease.SessionID)
+	}
+
+	if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to acquire viewer session",
+		})
+	}
 
 	return c.JSON(fiber.Map{
-		"message": "viewer started",
+		"message":   "viewer started",
+		"owner":     true,
+		"took_over": tookOver,
 	})
+}
+
+// ResumeCheck 화면 복귀 시 뷰어 소유권 재검증
+// POST /api/v1/viewer/resume-check
+func (h *ProgressHandler) ResumeCheck(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	sessionID, _ := c.Locals("sessionID").(string)
+	if sessionID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "session ID is required",
+		})
+	}
+
+	req := ResumeCheckRequest{}
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "invalid request body",
+			})
+		}
+	}
+	req.SeriesID = strings.TrimSpace(req.SeriesID)
+	req.ChapterID = strings.TrimSpace(req.ChapterID)
+
+	currentLease, err := h.viewerSessionRepo.GetByUserID(nil, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query viewer session",
+		})
+	}
+
+	if currentLease == nil || h.viewerSessionRepo.IsExpired(currentLease, viewerSessionLeaseTTL, time.Now()) {
+		if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to renew viewer session",
+			})
+		}
+		return c.JSON(fiber.Map{
+			"owner": true,
+		})
+	}
+
+	if currentLease.SessionID != sessionID {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"code":              "VIEWER_TAKEN_OVER",
+			"owner":             false,
+			"owner_session_id":  currentLease.SessionID,
+			"active_series_id":  currentLease.SeriesID,
+			"active_chapter_id": currentLease.ChapterID,
+		})
+	}
+
+	if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to refresh viewer session",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"owner": true,
+	})
+}
+
+func (h *ProgressHandler) touchViewerLease(userID string, c *fiber.Ctx, seriesID, chapterID string) {
+	sessionID, _ := c.Locals("sessionID").(string)
+	if userID == "" || sessionID == "" {
+		return
+	}
+	if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, strings.TrimSpace(seriesID), strings.TrimSpace(chapterID)); err != nil {
+		log.Printf("[ViewerLease] touch failed: user=%s, session=%s, err=%v", userID, sessionID, err)
+	}
+}
+
+func stringValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }
 
 // GetAllProgress 모든 읽기 진행도 조회

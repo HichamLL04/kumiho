@@ -11,6 +11,7 @@ import { type ReadingMode, type ReadingDirection, type PageTransitionType } from
 import type { ViewerAnimationHandles } from "../../types";
 
 interface ViewerContentProps {
+  currentPage?: number;
   readingMode: ReadingMode;
   readingDirection: ReadingDirection;
   swipeDirection?: ReadingDirection;
@@ -34,6 +35,7 @@ interface ViewerContentProps {
 export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentProps>(
   (
     {
+      currentPage = 1,
       readingMode,
       readingDirection,
       swipeDirection,
@@ -206,6 +208,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
     const VERTICAL_MAX_WIDTH = "760px";
 
     if (readingMode === "vertical") {
+      const minRenderPage = Math.max(1, currentPage - 3);
+
       return (
         <div
           style={{
@@ -229,6 +233,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
               pageNum={pageNum}
               imageUrl={getPageImageUrl(chapterId, pageNum)}
               maxAllowedPage={maxAllowedPage}
+              minAllowedPage={minRenderPage}
               handleImageLoad={handleImageLoad}
               handleContentClick={handleContentClick}
               styles={styles}

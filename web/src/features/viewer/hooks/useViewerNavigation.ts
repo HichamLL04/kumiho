@@ -1,7 +1,7 @@
 // 뷰어 네비게이션 훅 (키보드, 클릭, 페이지 이동)
 
 import { useEffect, useCallback, useState, useRef, type RefObject } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
 import type { PageMeta } from "../types";
 import type { ReadingDirection, ReadingMode } from "../../../stores/viewerStore";
@@ -60,7 +60,9 @@ export function useViewerNavigation({
   onReachedSeriesEnd,
 }: UseViewerNavigationParams): UseViewerNavigationReturn {
   const navigate = useNavigate();
+  const location = useLocation();
   const { goToPage } = useViewerStore();
+  const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
 
   /*
    * 힌트 상태를 boolean이 아닌 '힌트가 발동된 챕터 ID'로 관리합니다.
@@ -109,7 +111,10 @@ export function useViewerNavigation({
       if (showNextHint && nextChapterId) {
         // 이미 힌트가 떠있으면 이동 전 현재 진행도 즉시 저장
         await saveProgress();
-        navigate(`/viewer/${nextChapterId}`, { replace: true });
+        navigate(`/viewer/${nextChapterId}`, {
+          replace: true,
+          state: viewerFrom ? { from: viewerFrom } : undefined,
+        });
       } else if (nextChapterId) {
         // 기존 타이머 정리
         if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
@@ -138,6 +143,7 @@ export function useViewerNavigation({
     pageMetaMap,
     currentChapterId,
     onReachedSeriesEnd,
+    viewerFrom,
   ]);
 
   // 이전 페이지/챕터 핸들러
@@ -166,7 +172,10 @@ export function useViewerNavigation({
         await saveProgress();
         navigate(`/viewer/${prevChapterId}`, {
           replace: true,
-          state: { preventComplete: true },
+          state: {
+            preventComplete: true,
+            ...(viewerFrom ? { from: viewerFrom } : {}),
+          },
         });
       } else if (prevChapterId) {
         // 기존 타이머 정리
@@ -191,6 +200,7 @@ export function useViewerNavigation({
     pageOffset,
     pageMetaMap,
     currentChapterId,
+    viewerFrom,
   ]);
 
   // 뒤로가기

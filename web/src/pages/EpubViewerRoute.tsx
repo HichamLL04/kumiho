@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEpubViewerStore, type EpubFontFamily, type EpubRenderMode } from "../stores/epubViewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
@@ -11,6 +11,7 @@ import { AlertModal } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { useAdjacentChapters } from "../features/viewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
+import { useViewerSync } from "../hooks/useViewerSync";
 
 interface EpubViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
@@ -77,6 +78,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const isInteractingRef = useRef(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
   const initFallbackTimerRef = useRef<number | null>(null);
@@ -84,6 +87,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     volumeId,
     chapterId,
     seriesId,
+  });
+  const { terminatedInfo } = useViewerSync({
+    seriesId: seriesId || "",
+    chapterId: chapter?.id,
+    currentPage,
+    isLoading,
+    enablePageProgressSync: false,
   });
 
   // 초기화: 진행도 로딩 후에만 뷰어 렌더링
@@ -705,11 +715,21 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
   const handleNextAtEnd = useCallback(() => {
     if (nextChapterId) {
-      navigate(`/viewer/${nextChapterId}`);
+      navigate(`/viewer/${nextChapterId}`, {
+        state: viewerFrom ? { from: viewerFrom } : undefined,
+      });
       return;
     }
     handleReachedSeriesEnd();
-  }, [nextChapterId, navigate, handleReachedSeriesEnd]);
+  }, [nextChapterId, navigate, handleReachedSeriesEnd, viewerFrom]);
+
+  const handleTerminatedConfirm = useCallback(() => {
+    if (viewerFrom) {
+      navigate(viewerFrom);
+      return;
+    }
+    navigate("/");
+  }, [navigate, viewerFrom]);
 
   const handleToggleFullscreen = useCallback(() => {
     try {
@@ -780,6 +800,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         isEndNavigationReady={isAdjacentResolved}
         onInteractionStart={handleInteractionStart}
         onInteractionEnd={handleInteractionEnd}
+      />
+      <AlertModal
+        isOpen={terminatedInfo.isOpen}
+        type="warning"
+        title={t("viewer.session.force_logout_title")}
+        message={terminatedInfo.reason}
+        onConfirm={handleTerminatedConfirm}
       />
       <AlertModal
         isOpen={showSeriesEndModal}
