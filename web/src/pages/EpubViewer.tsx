@@ -139,6 +139,18 @@ export function EpubViewer({
   const [pendingProgressRatio, setPendingProgressRatio] = useState<number | null>(null);
   const [chapterPageDisplay, setChapterPageDisplay] = useState(1);
   const [chapterTotalDisplay, setChapterTotalDisplay] = useState(1);
+  const isTouchDebugEnabled = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("debug-touch") === "1";
+  }, []);
+
+  const getZoneRatio = useCallback((clientX: number, element: HTMLElement | null): number => {
+    const rect = element?.getBoundingClientRect();
+    if (rect && rect.width > 0) {
+      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    }
+    return Math.max(0, Math.min(1, clientX / Math.max(window.innerWidth, 1)));
+  }, []);
 
   const currentTocLabel = useMemo(() => {
     const currentBase = currentChapterHref.split("#")[0];
@@ -340,8 +352,19 @@ export function EpubViewer({
       const interactive = target.closest("button, input, select, textarea, a[href], [contenteditable='true']");
       if (interactive) return;
 
-      // 전체 화면 기준 zone 판별 (좌 0~30% / 중앙 30~70% / 우 70~100%)
-      const xRatio = event.clientX / window.innerWidth;
+      // main 영역 기준 zone 판별 (좌 0~30% / 중앙 30~70% / 우 70~100%)
+      const xRatio = getZoneRatio(event.clientX, event.currentTarget);
+
+      if (isTouchDebugEnabled) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        console.info("[EpubViewer][touch-debug] main click", {
+          clientX: event.clientX,
+          ratio: Number(xRatio.toFixed(4)),
+          rectLeft: rect.left,
+          rectWidth: rect.width,
+          windowInnerWidth: window.innerWidth,
+        });
+      }
 
       if (xRatio >= 0.3 && xRatio <= 0.7) {
         // 중앙 클릭 → UI 토글
@@ -361,7 +384,7 @@ export function EpubViewer({
         else handleNext();
       }
     },
-    [handleNext, handlePrev, onViewerClick, settings.flow, settings.clickDirection],
+    [getZoneRatio, handleNext, handlePrev, isTouchDebugEnabled, onViewerClick, settings.flow, settings.clickDirection],
   );
 
   useEffect(() => {
@@ -450,8 +473,19 @@ export function EpubViewer({
 
       // 탭: zone 기반 판별
       const clientX = e.changedTouches[0]?.clientX ?? startPos.x;
-      const ratio = clientX / window.innerWidth;
+      const ratio = getZoneRatio(clientX, mainEl);
       startPos = null;
+
+      if (isTouchDebugEnabled) {
+        const rect = mainEl.getBoundingClientRect();
+        console.info("[EpubViewer][touch-debug] main touchend", {
+          clientX,
+          ratio: Number(ratio.toFixed(4)),
+          rectLeft: rect.left,
+          rectWidth: rect.width,
+          windowInnerWidth: window.innerWidth,
+        });
+      }
 
       if (ratio >= 0.3 && ratio <= 0.7) {
         onViewerClick();
@@ -476,7 +510,15 @@ export function EpubViewer({
       mainEl.removeEventListener("touchmove", onTouchMove);
       mainEl.removeEventListener("touchend", onTouchEnd);
     };
-  }, [settings.flow, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
+  }, [getZoneRatio, isTouchDebugEnabled, settings.flow, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
+
+  useEffect(() => {
+    if (!isTouchDebugEnabled) return;
+    console.info("[EpubViewer][touch-debug] enabled", {
+      isOldIOSSafari: isOldIOSSafari(),
+      userAgent: navigator.userAgent,
+    });
+  }, [isTouchDebugEnabled]);
 
   return (
     <div
