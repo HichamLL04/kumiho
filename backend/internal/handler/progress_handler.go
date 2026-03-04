@@ -718,7 +718,8 @@ func (h *ProgressHandler) touchViewerLease(userID string, c *fiber.Ctx, seriesID
 	if userID == "" || sessionID == "" {
 		return
 	}
-	if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, strings.TrimSpace(seriesID), strings.TrimSpace(chapterID)); err != nil {
+	_, err := h.viewerSessionRepo.TouchIfOwner(nil, userID, sessionID, strings.TrimSpace(seriesID), strings.TrimSpace(chapterID))
+	if err != nil {
 		log.Printf("[ViewerLease] touch failed: user=%s, session=%s, err=%v", userID, sessionID, err)
 	}
 }

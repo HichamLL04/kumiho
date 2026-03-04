@@ -13,6 +13,7 @@ interface ViewerSyncProps {
 }
 
 const RESUME_CHECK_INTERVAL_MS = 30_000;
+const RESUME_CHECK_MIN_INTERVAL_MS = 1_500;
 
 export function useViewerSync({
   seriesId,
@@ -31,6 +32,7 @@ export function useViewerSync({
   const initializedChapterKeyRef = useRef<string | null>(null);
   const resumeCheckInFlightRef = useRef(false);
   const currentPageRef = useRef(currentPage);
+  const lastResumeCheckAtRef = useRef(0);
 
   useEffect(() => {
     currentPageRef.current = currentPage;
@@ -83,8 +85,14 @@ export function useViewerSync({
   }, [subscribe, openTerminatedModal]);
 
   // 1-2. 백그라운드/화면 꺼짐 복귀 보완: 복귀 이벤트에서 소유권 재검증
-  const runResumeCheck = useCallback(async () => {
+  const runResumeCheck = useCallback(async (options?: { force?: boolean }) => {
+    const force = options?.force === true;
     if (!chapterId || resumeCheckInFlightRef.current) return;
+    const now = Date.now();
+    if (!force && now - lastResumeCheckAtRef.current < RESUME_CHECK_MIN_INTERVAL_MS) {
+      return;
+    }
+    lastResumeCheckAtRef.current = now;
     resumeCheckInFlightRef.current = true;
     try {
       await viewerAPI.resumeCheck({
@@ -108,7 +116,7 @@ export function useViewerSync({
     if (!chapterId) return;
 
     // 뷰어가 준비되는 즉시 1회 검증 (모바일 복귀 이벤트 누락 보완)
-    void runResumeCheck();
+    void runResumeCheck({ force: true });
 
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {

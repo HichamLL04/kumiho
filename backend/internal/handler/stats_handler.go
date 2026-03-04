@@ -208,7 +208,7 @@ func (h *StatsHandler) UpdateReadingTime(c *fiber.Ctx) error {
 
 	sessionID, _ := c.Locals("sessionID").(string)
 	if sessionID != "" {
-		if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
+		if _, err := h.viewerSessionRepo.TouchIfOwner(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
 			// lease touch 실패는 읽기 시간 기록의 실패로 취급하지 않음
 			log.Printf("[StatsHandler] viewer lease touch failed: user=%s, session=%s, err=%v", userID, sessionID, err)
 		}

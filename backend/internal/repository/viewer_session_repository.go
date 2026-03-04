@@ -76,19 +76,27 @@ func (r *ViewerSessionRepository) Upsert(q database.Queryer, userID, sessionID, 
 	return err
 }
 
-func (r *ViewerSessionRepository) TouchByUser(q database.Queryer, userID, sessionID, seriesID, chapterID string) error {
+// TouchIfOwner updates lease heartbeat only when the current owner session matches.
+// It never changes session ownership.
+func (r *ViewerSessionRepository) TouchIfOwner(q database.Queryer, userID, sessionID, seriesID, chapterID string) (bool, error) {
 	db := database.GetQueryer(q)
-	_, err := db.Exec(
+	result, err := db.Exec(
 		`UPDATE viewer_sessions
-		 SET session_id = ?,
-		     series_id = ?,
+		 SET series_id = ?,
 		     chapter_id = ?,
 		     last_seen_at = datetime('now'),
 		     updated_at = datetime('now')
-		 WHERE user_id = ?`,
-		sessionID, nullableString(seriesID), nullableString(chapterID), userID,
+		 WHERE user_id = ? AND session_id = ?`,
+		nullableString(seriesID), nullableString(chapterID), userID, sessionID,
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
 }
 
 func (r *ViewerSessionRepository) IsExpired(s *ViewerSession, ttl time.Duration, now time.Time) bool {

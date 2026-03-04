@@ -204,4 +204,43 @@ describe("useViewerSync", () => {
       expect(result.current.terminatedInfo.reason).toBe("viewer.session.force_logout_message");
     });
   });
+
+  it("throttles rapid touchstart resume-check calls", async () => {
+    let now = 0;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      renderHook(() =>
+        useViewerSync({
+          seriesId: "series-1",
+          chapterId: "chapter-1",
+          currentPage: 10,
+          isLoading: false,
+        }),
+      );
+
+      await waitFor(() => {
+        expect(mocks.viewerResumeCheck).toHaveBeenCalledTimes(1);
+      });
+      mocks.viewerResumeCheck.mockClear(); // ignore initial force check call
+      now = 5000;
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+
+      window.dispatchEvent(new Event("touchstart"));
+      window.dispatchEvent(new Event("touchstart"));
+      window.dispatchEvent(new Event("touchstart"));
+
+      await waitFor(() => {
+        expect(mocks.viewerResumeCheck).toHaveBeenCalledTimes(1);
+      });
+
+      now += 1600;
+      window.dispatchEvent(new Event("touchstart"));
+
+      await waitFor(() => {
+        expect(mocks.viewerResumeCheck).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
 });
