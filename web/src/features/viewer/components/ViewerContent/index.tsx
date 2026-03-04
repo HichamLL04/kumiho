@@ -98,7 +98,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       readingDirection,
       swipeDirection,
       isZoomed,
-      threshold: 80,
+      threshold: 40,
       containerRef,
       gap: PAGE_GAP,
       duration: 300,
