@@ -58,6 +58,8 @@ interface EpubViewerProps {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    atStart?: boolean;
+    atEnd?: boolean;
   }) => void;
   onViewerClick: () => void; // iframe 내부 클릭 핸들러
   onFontSizeChange: (size: number) => void;
@@ -172,6 +174,8 @@ export function EpubViewer({
       currentPosition: number;
       totalPositions: number;
       chapterHref: string;
+      atStart?: boolean;
+      atEnd?: boolean;
     }) => {
       setCurrentChapterHref(location.chapterHref);
       if (location.chapterPage > 0) {

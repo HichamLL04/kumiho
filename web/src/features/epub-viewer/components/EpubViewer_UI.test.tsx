@@ -497,7 +497,7 @@ describe("EpubViewer UI", () => {
     expect(viewerPrevSpy).not.toHaveBeenCalled();
   });
 
-  it("should ignore touches on header and footer elements", () => {
+  it("should ignore touches on elements matched by header/footer guard inside main", () => {
     isOldIOSSafariMock.mockReturnValue(true);
     const props = createDefaultProps();
 
@@ -507,15 +507,16 @@ describe("EpubViewer UI", () => {
       </MemoryRouter>,
     );
 
-    const header = container.querySelector("header");
-    const footer = container.querySelector("footer");
-    expect(header).not.toBeNull();
-    expect(footer).not.toBeNull();
+    const main = getMain(container);
+    const blockedHeader = document.createElement("header");
+    const blockedFooter = document.createElement("footer");
+    main.appendChild(blockedHeader);
+    main.appendChild(blockedFooter);
 
-    touchStart(header as Element, 500, 80);
-    touchEnd(header as Element, 500, 80);
-    touchStart(footer as Element, 500, 730);
-    touchEnd(footer as Element, 500, 730);
+    touchStart(blockedHeader, 500, 80);
+    touchEnd(blockedHeader, 500, 80);
+    touchStart(blockedFooter, 500, 730);
+    touchEnd(blockedFooter, 500, 730);
 
     expect(props.onViewerClick).not.toHaveBeenCalled();
     expect(viewerNextSpy).not.toHaveBeenCalled();
@@ -586,5 +587,28 @@ describe("EpubViewer UI", () => {
 
     expect(viewerNextSpy).toHaveBeenCalledTimes(1);
     expect(onReachedEndNext).not.toHaveBeenCalled();
+  });
+
+  it("should call onReachedEndNext when isAtLastPage is true even if currentPage is less than totalPages", () => {
+    const props = createDefaultProps();
+    const onReachedEndNext = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <EpubViewer
+          {...props}
+          currentPage={5}
+          totalPages={10}
+          isAtLastPage
+          onReachedEndNext={onReachedEndNext}
+          isEndNavigationReady
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByLabelText("epub_viewer.footer.next_page"));
+
+    expect(onReachedEndNext).toHaveBeenCalledTimes(1);
+    expect(viewerNextSpy).not.toHaveBeenCalled();
   });
 });

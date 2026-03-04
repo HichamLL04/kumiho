@@ -1054,8 +1054,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                     withNavigation(() => {
                       manager.container.scrollLeft = targetLeft;
                       manager.updateOffset();
-                      const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
-                      if (loc) handleRelocated(loc);
                       return Promise.resolve();
                     });
                     return;
@@ -1071,8 +1069,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                     withNavigation(() => {
                       manager.container.scrollLeft = targetLeft;
                       manager.updateOffset();
-                      const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
-                      if (loc) handleRelocated(loc);
                       return Promise.resolve();
                     });
                     return;
@@ -1103,8 +1099,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                     withNavigation(() => {
                       manager.container.scrollLeft = targetLeft;
                       manager.updateOffset();
-                      const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
-                      if (loc) handleRelocated(loc);
                       return Promise.resolve();
                     });
                     return;
@@ -1120,8 +1114,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                     withNavigation(() => {
                       manager.container.scrollLeft = targetLeft;
                       manager.updateOffset();
-                      const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
-                      if (loc) handleRelocated(loc);
                       return Promise.resolve();
                     });
                     return;
@@ -1177,7 +1169,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       <div
         className={styles.container}
         style={{ background: THEME_STYLES[settings.theme]?.background || "#fff" }}
-        data-epub-iframe-host="true"
       >
         <div
           ref={containerRef}
