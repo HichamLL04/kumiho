@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
@@ -209,6 +210,7 @@ func (h *StatsHandler) UpdateReadingTime(c *fiber.Ctx) error {
 	if sessionID != "" {
 		if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
 			// lease touch 실패는 읽기 시간 기록의 실패로 취급하지 않음
+			log.Printf("[StatsHandler] viewer lease touch failed: user=%s, session=%s, err=%v", userID, sessionID, err)
 		}
 	}
 
