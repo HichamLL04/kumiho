@@ -186,6 +186,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
     const isDraggingRef = useRef(false);
     const touchHandledRef = useRef(false);
+    const touchDebugEnabledRef = useRef(false);
     const lastAppliedSpreadRef = useRef<"auto" | "none" | null>(null);
     const contentDisposersRef = useRef<Map<Document, () => void>>(new Map());
     const tocRefreshSeqRef = useRef(0);
@@ -217,6 +218,15 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     useEffect(() => {
       settingsRef.current = settings;
     }, [settings]);
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      touchDebugEnabledRef.current = new URLSearchParams(window.location.search).get("debug-touch") === "1";
+      if (touchDebugEnabledRef.current) {
+        console.info("[EpubChapterViewer][touch-debug] enabled", {
+          userAgent: navigator.userAgent,
+        });
+      }
+    }, []);
 
     const applySettings = useCallback((rendition: Rendition, s: EpubViewerSettings, layout: EpubRenderLayout) => {
       const theme = THEME_STYLES[s.theme] || THEME_STYLES.light;
@@ -520,11 +530,26 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           }
         };
 
-        // zone 판별 헬퍼: 전체 화면 기준 좌(0~30%) / 중앙(30~70%) / 우(70~100%)
+        // zone 판별 헬퍼: 뷰어 컨테이너 기준 좌(0~30%) / 중앙(30~70%) / 우(70~100%)
         const resolveZone = (clientX: number): "left" | "center" | "right" => {
-          const ratio = clientX / window.innerWidth;
-          if (ratio < 0.3) return "left";
-          if (ratio > 0.7) return "right";
+          const containerRect = containerRef.current?.getBoundingClientRect();
+          const ratio =
+            containerRect && containerRect.width > 0
+              ? (clientX - containerRect.left) / containerRect.width
+              : clientX / Math.max(window.innerWidth, 1);
+          const clampedRatio = Math.max(0, Math.min(1, ratio));
+
+          if (touchDebugEnabledRef.current) {
+            console.info("[EpubChapterViewer][touch-debug] resolveZone", {
+              clientX,
+              ratio: Number(clampedRatio.toFixed(4)),
+              containerLeft: containerRect?.left ?? null,
+              containerWidth: containerRect?.width ?? null,
+              windowInnerWidth: window.innerWidth,
+            });
+          }
+          if (clampedRatio < 0.3) return "left";
+          if (clampedRatio > 0.7) return "right";
           return "center";
         };
 
