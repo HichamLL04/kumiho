@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -809,42 +808,29 @@ func (h *ProgressHandler) validateViewerLeaseTarget(userID, seriesID, chapterID 
 }
 
 func (h *ProgressHandler) isValidViewerSeries(userID, seriesID string) (bool, error) {
-	var exists int
-	err := database.DB.QueryRow(
-		`SELECT 1
-		 FROM series s
-		 JOIN libraries l ON s.library_id = l.id
-		 JOIN user_libraries ul ON l.id = ul.library_id
-		 WHERE s.id = ? AND ul.user_id = ?
-		 LIMIT 1`,
-		seriesID, userID,
-	).Scan(&exists)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
+	series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
 	if err != nil {
 		return false, err
 	}
-	return true, nil
+	return series != nil, nil
 }
 
 func (h *ProgressHandler) findViewerChapterSeriesID(chapterID string) (string, bool, error) {
-	var seriesID string
-	err := database.DB.QueryRow(
-		`SELECT v.series_id
-		 FROM chapters c
-		 JOIN volumes v ON c.volume_id = v.id
-		 WHERE c.id = ?
-		 LIMIT 1`,
-		chapterID,
-	).Scan(&seriesID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
+	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
 	if err != nil {
 		return "", false, err
 	}
-	return seriesID, true, nil
+	if chapter == nil {
+		return "", false, nil
+	}
+	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if err != nil {
+		return "", false, err
+	}
+	if volume == nil {
+		return "", false, nil
+	}
+	return volume.SeriesID, true, nil
 }
 
 func isViewerLeaseForeignKeyError(err error) bool {
