@@ -139,10 +139,6 @@ export function EpubViewer({
   const [pendingProgressRatio, setPendingProgressRatio] = useState<number | null>(null);
   const [chapterPageDisplay, setChapterPageDisplay] = useState(1);
   const [chapterTotalDisplay, setChapterTotalDisplay] = useState(1);
-  const isTouchDebugEnabled = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("debug-touch") === "1";
-  }, []);
 
   const getZoneRatio = useCallback((clientX: number, element: HTMLElement | null): number => {
     const rect = element?.getBoundingClientRect();
@@ -355,17 +351,6 @@ export function EpubViewer({
       // main 영역 기준 zone 판별 (좌 0~30% / 중앙 30~70% / 우 70~100%)
       const xRatio = getZoneRatio(event.clientX, event.currentTarget);
 
-      if (isTouchDebugEnabled) {
-        const rect = event.currentTarget.getBoundingClientRect();
-        console.info("[EpubViewer][touch-debug] main click", {
-          clientX: event.clientX,
-          ratio: Number(xRatio.toFixed(4)),
-          rectLeft: rect.left,
-          rectWidth: rect.width,
-          windowInnerWidth: window.innerWidth,
-        });
-      }
-
       if (xRatio >= 0.3 && xRatio <= 0.7) {
         // 중앙 클릭 → UI 토글
         onViewerClick();
@@ -384,7 +369,7 @@ export function EpubViewer({
         else handleNext();
       }
     },
-    [getZoneRatio, handleNext, handlePrev, isTouchDebugEnabled, onViewerClick, settings.flow, settings.clickDirection],
+    [getZoneRatio, handleNext, handlePrev, onViewerClick, settings.flow, settings.clickDirection],
   );
 
   useEffect(() => {
@@ -476,17 +461,6 @@ export function EpubViewer({
       const ratio = getZoneRatio(clientX, mainEl);
       startPos = null;
 
-      if (isTouchDebugEnabled) {
-        const rect = mainEl.getBoundingClientRect();
-        console.info("[EpubViewer][touch-debug] main touchend", {
-          clientX,
-          ratio: Number(ratio.toFixed(4)),
-          rectLeft: rect.left,
-          rectWidth: rect.width,
-          windowInnerWidth: window.innerWidth,
-        });
-      }
-
       if (ratio >= 0.3 && ratio <= 0.7) {
         onViewerClick();
       } else if (settings.flow === "paginated") {
@@ -510,15 +484,7 @@ export function EpubViewer({
       mainEl.removeEventListener("touchmove", onTouchMove);
       mainEl.removeEventListener("touchend", onTouchEnd);
     };
-  }, [getZoneRatio, isTouchDebugEnabled, settings.flow, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
-
-  useEffect(() => {
-    if (!isTouchDebugEnabled) return;
-    console.info("[EpubViewer][touch-debug] enabled", {
-      isOldIOSSafari: isOldIOSSafari(),
-      userAgent: navigator.userAgent,
-    });
-  }, [isTouchDebugEnabled]);
+  }, [getZoneRatio, settings.flow, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
 
   return (
     <div
