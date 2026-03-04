@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
 import { useScanStore } from "../stores/scanStore";
 import styles from "./ScanProgressBar.module.css";
@@ -22,11 +23,14 @@ export function ScanProgressBar() {
   if (!isScanning || scanningLibraries.length === 0) {
     return null;
   }
+  if (typeof document === "undefined") {
+    return null;
+  }
 
   // 전체 진행률 계산 (여러 라이브러리의 평균)
   const totalProgress = scanningLibraries.reduce((sum, lib) => sum + (lib.progress || 0), 0) / scanningLibraries.length;
 
-  return (
+  return createPortal(
     <div className={styles.scanProgressContainer}>
       <div
         className={styles.scanProgressBar}
@@ -61,6 +65,7 @@ export function ScanProgressBar() {
           </div>
         ))}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
