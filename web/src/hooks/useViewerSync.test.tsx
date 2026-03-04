@@ -186,23 +186,26 @@ describe("useViewerSync", () => {
         data: { code: "VIEWER_TAKEN_OVER" },
       },
     });
-    vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
+    const axiosIsAxiosErrorSpy = vi.spyOn(axios, "isAxiosError").mockReturnValue(true);
+    try {
+      const { result } = renderHook(() =>
+        useViewerSync({
+          seriesId: "series-1",
+          chapterId: "chapter-1",
+          currentPage: 10,
+          isLoading: false,
+        }),
+      );
 
-    const { result } = renderHook(() =>
-      useViewerSync({
-        seriesId: "series-1",
-        chapterId: "chapter-1",
-        currentPage: 10,
-        isLoading: false,
-      }),
-    );
+      window.dispatchEvent(new Event("focus"));
 
-    window.dispatchEvent(new Event("focus"));
-
-    await waitFor(() => {
-      expect(result.current.terminatedInfo.isOpen).toBe(true);
-      expect(result.current.terminatedInfo.reason).toBe("viewer.session.force_logout_message");
-    });
+      await waitFor(() => {
+        expect(result.current.terminatedInfo.isOpen).toBe(true);
+        expect(result.current.terminatedInfo.reason).toBe("viewer.session.force_logout_message");
+      });
+    } finally {
+      axiosIsAxiosErrorSpy.mockRestore();
+    }
   });
 
   it("throttles rapid touchstart resume-check calls", async () => {

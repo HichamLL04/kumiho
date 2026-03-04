@@ -694,11 +694,8 @@ func (h *ProgressHandler) ResumeCheck(c *fiber.Ctx) error {
 
 	if currentLease.SessionID != sessionID {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"code":              "VIEWER_TAKEN_OVER",
-			"owner":             false,
-			"owner_session_id":  currentLease.SessionID,
-			"active_series_id":  currentLease.SeriesID,
-			"active_chapter_id": currentLease.ChapterID,
+			"code":  "VIEWER_TAKEN_OVER",
+			"owner": false,
 		})
 	}
 

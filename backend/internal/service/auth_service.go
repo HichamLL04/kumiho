@@ -247,9 +247,10 @@ func (s *AuthService) generateTokensWithSession(user *model.User, ctx *LoginCont
 			IPAddress:  ctx.IPAddress,
 			ExpiresAt:  time.Now().Add(7 * 24 * time.Hour),
 		}
-		if err := s.sessionRepo.Create(nil, session); err == nil {
-			sessionID = session.ID
+		if err := s.sessionRepo.Create(nil, session); err != nil {
+			return nil, err
 		}
+		sessionID = session.ID
 	}
 
 	// 세션 ID를 포함한 토큰 생성
