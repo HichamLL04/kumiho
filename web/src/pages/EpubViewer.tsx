@@ -326,25 +326,32 @@ export function EpubViewer({
     (event: MouseEvent<HTMLElement>) => {
       const target = event.target as HTMLElement | null;
       if (!target) return;
-      if (target.closest("[data-epub-iframe-host='true']")) return;
 
       const interactive = target.closest("button, input, select, textarea, a[href], [contenteditable='true']");
       if (interactive) return;
 
-      const rect = event.currentTarget.getBoundingClientRect();
-      const width = Math.max(1, rect.width);
-      const xRatio = (event.clientX - rect.left) / width;
+      // 전체 화면 기준 zone 판별 (좌 0~30% / 중앙 30~70% / 우 70~100%)
+      const xRatio = event.clientX / window.innerWidth;
+
+      if (xRatio >= 0.3 && xRatio <= 0.7) {
+        // 중앙 클릭 → UI 토글
+        onViewerClick();
+        return;
+      }
+
       if (settings.flow !== "paginated") return;
 
-      // iframe 바깥(main) 클릭은 UI 토글 없이 페이지 이동만 처리
-      const isNext = settings.clickDirection === "right" ? xRatio >= 0.5 : xRatio < 0.5;
-      if (isNext) {
-        handleNext();
+      // 좌/우 클릭 → 페이지 이동
+      const isRTL = settings.clickDirection === "left";
+      if (xRatio < 0.3) {
+        if (isRTL) handleNext();
+        else handlePrev();
       } else {
-        handlePrev();
+        if (isRTL) handlePrev();
+        else handleNext();
       }
     },
-    [handleNext, handlePrev, settings.flow, settings.clickDirection],
+    [handleNext, handlePrev, onViewerClick, settings.flow, settings.clickDirection],
   );
 
   useEffect(() => {

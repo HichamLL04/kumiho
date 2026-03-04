@@ -515,12 +515,67 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           }
         };
 
-        // iframe 내부 클릭 → UI 토글만 (페이지 이동은 외부 패딩 영역에서 처리)
+        // zone 판별 헬퍼: 전체 화면 기준 좌(0~30%) / 중앙(30~70%) / 우(70~100%)
+        const resolveZone = (clientX: number): "left" | "center" | "right" => {
+          const ratio = clientX / window.innerWidth;
+          if (ratio < 0.3) return "left";
+          if (ratio > 0.7) return "right";
+          return "center";
+        };
+
+        // zone에 따라 UI 토글 또는 페이지 이동 실행
+        const executeZoneAction = (zone: "left" | "center" | "right") => {
+          const currentSettings = settingsRef.current;
+          if (zone === "center") {
+            onViewerClickRef.current?.();
+            return;
+          }
+          // paginated 모드에서만 좌/우 클릭 페이지 이동
+          if (currentSettings.flow !== "paginated") return;
+          const isRTL = currentSettings.clickDirection === "left";
+          if (zone === "left") {
+            if (isRTL) onPageNextRef.current?.();
+            else onPagePrevRef.current?.();
+          } else {
+            if (isRTL) onPagePrevRef.current?.();
+            else onPageNextRef.current?.();
+          }
+        };
+
+        // 마우스 드래그 감지용 (텍스트 선택과 클릭 구분)
+        const mouseDownHandler = (event: MouseEvent) => {
+          pointerDownPosRef.current = { x: event.clientX, y: event.clientY };
+          isDraggingRef.current = false;
+        };
+
+        const mouseMoveHandler = (event: MouseEvent) => {
+          if (!pointerDownPosRef.current) return;
+          const dx = event.clientX - pointerDownPosRef.current.x;
+          const dy = event.clientY - pointerDownPosRef.current.y;
+          if (Math.sqrt(dx * dx + dy * dy) > 5) {
+            isDraggingRef.current = true;
+          }
+        };
+
+        // iframe 내부 클릭 → zone 기반 UI 토글 / 페이지 이동
         const clickHandler = (event: MouseEvent) => {
           if (touchHandledRef.current) {
             touchHandledRef.current = false;
             return;
           }
+
+          // 드래그(텍스트 선택) 후 클릭은 무시
+          if (isDraggingRef.current) {
+            isDraggingRef.current = false;
+            pointerDownPosRef.current = null;
+            return;
+          }
+          pointerDownPosRef.current = null;
+
+          // 텍스트가 선택된 상태면 클릭 무시 (선택 유지)
+          const iframeWindow = doc.defaultView;
+          const selection = iframeWindow?.getSelection();
+          if (selection && !selection.isCollapsed) return;
 
           const target = event.target as HTMLElement | null;
           const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
@@ -539,10 +594,15 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           const interactiveTarget = target?.closest("button, input, select, textarea, [contenteditable='true']");
           if (interactiveTarget) return;
 
-          onViewerClickRef.current?.();
+          // iframe 내부 클릭 좌표를 최상위 window 기준으로 변환
+          const iframe = doc.defaultView?.frameElement as HTMLIFrameElement | null;
+          const iframeRect = iframe?.getBoundingClientRect();
+          const absoluteX = (iframeRect?.left ?? 0) + event.clientX;
+
+          executeZoneAction(resolveZone(absoluteX));
         };
 
-        // iframe 내부 터치 → UI 토글만
+        // iframe 내부 터치 → zone 기반 UI 토글 / 페이지 이동
         const touchStartHandler = (event: TouchEvent) => {
           const touch = event.touches[0];
           if (!touch) return;
@@ -562,19 +622,29 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           }
         };
 
-        const touchEndHandler = () => {
+        const touchEndHandler = (event: TouchEvent) => {
           touchHandledRef.current = true;
           if (isDraggingRef.current) {
             pointerDownPosRef.current = null;
             isDraggingRef.current = false;
             return;
           }
+
+          // 터치 좌표를 최상위 window 기준으로 변환
+          const touch = event.changedTouches[0];
+          const clientX = touch?.clientX ?? pointerDownPosRef.current?.x ?? 0;
+          const iframe = doc.defaultView?.frameElement as HTMLIFrameElement | null;
+          const iframeRect = iframe?.getBoundingClientRect();
+          const absoluteX = (iframeRect?.left ?? 0) + clientX;
+
           pointerDownPosRef.current = null;
-          onViewerClickRef.current?.();
+          executeZoneAction(resolveZone(absoluteX));
         };
 
         doc.addEventListener("wheel", wheelHandler, { passive: false });
         doc.addEventListener("keydown", keydownHandler);
+        doc.addEventListener("mousedown", mouseDownHandler);
+        doc.addEventListener("mousemove", mouseMoveHandler);
         doc.addEventListener("click", clickHandler);
         doc.addEventListener("touchstart", touchStartHandler, { passive: true });
         doc.addEventListener("touchmove", touchMoveHandler, { passive: true });
@@ -583,6 +653,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         contentDisposers.set(doc, () => {
           doc.removeEventListener("wheel", wheelHandler);
           doc.removeEventListener("keydown", keydownHandler);
+          doc.removeEventListener("mousedown", mouseDownHandler);
+          doc.removeEventListener("mousemove", mouseMoveHandler);
           doc.removeEventListener("click", clickHandler);
           doc.removeEventListener("touchstart", touchStartHandler);
           doc.removeEventListener("touchmove", touchMoveHandler);
