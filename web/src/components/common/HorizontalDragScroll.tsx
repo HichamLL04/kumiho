@@ -82,7 +82,7 @@ export function HorizontalDragScroll({ className = "", children }: HorizontalDra
     // 초기 마스크 설정
     updateMaskEdges(el);
 
-    // 요소 크기 변동 시 (예: 화면 리사이즈나 자식 요소 동적 추가/삭제로 인해 스크롤 폭이 달라질 때) 대응
+    // 컨테이너 박스 크기 변동(리사이즈 등) 시 마스크 갱신
     if (typeof ResizeObserver === "function") {
       const resizeObserver = new ResizeObserver(() => {
         scheduleMaskUpdate(el);
@@ -97,7 +97,14 @@ export function HorizontalDragScroll({ className = "", children }: HorizontalDra
         resizeObserverRef.current = null;
       }
     };
-  }, [children, scheduleMaskUpdate, updateMaskEdges]);
+  }, [scheduleMaskUpdate, updateMaskEdges]);
+
+  // 자식 콘텐츠 변경으로 scrollWidth가 달라질 수 있으므로 별도 갱신
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    scheduleMaskUpdate(el);
+  }, [children, scheduleMaskUpdate]);
 
   const applyScrollOnNextFrame = () => {
     if (rafRef.current !== null) return;
