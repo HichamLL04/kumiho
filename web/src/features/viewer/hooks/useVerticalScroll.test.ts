@@ -105,5 +105,6 @@ describe("useVerticalScroll initial guard", () => {
     expect(isInitialScrollingRef.current).toBe(false);
     expect(getElementByIdSpy).toHaveBeenCalledWith("page-9");
     expect(mocks.setCurrentPageMock).not.toHaveBeenCalledWith(1);
+    getElementByIdSpy.mockRestore();
   });
 });

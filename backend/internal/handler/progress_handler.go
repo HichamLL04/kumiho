@@ -647,10 +647,6 @@ func (h *ProgressHandler) StartViewing(c *fiber.Ctx) error {
 	tookOver := currentLease != nil &&
 		currentLease.SessionID != sessionID &&
 		!h.viewerSessionRepo.IsExpired(currentLease, viewerSessionLeaseTTL, time.Now())
-	if tookOver {
-		h.sseHub.ForceLogoutOtherSessions(userID, sessionID)
-		log.Printf("[StartViewing] takeover force logout: user=%s, new_session=%s, prev_session=%s", userID, sessionID, currentLease.SessionID)
-	}
 
 	if err := h.viewerSessionRepo.Upsert(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
 		if isViewerLeaseForeignKeyError(err) {
@@ -661,6 +657,11 @@ func (h *ProgressHandler) StartViewing(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to acquire viewer session",
 		})
+	}
+
+	if tookOver {
+		h.sseHub.ForceLogoutOtherSessions(userID, sessionID)
+		log.Printf("[StartViewing] takeover force logout: user=%s, new_session=%s, prev_session=%s", userID, sessionID, currentLease.SessionID)
 	}
 
 	return c.JSON(fiber.Map{
