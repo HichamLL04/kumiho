@@ -625,8 +625,33 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         const touchEndHandler = (event: TouchEvent) => {
           touchHandledRef.current = true;
           if (isDraggingRef.current) {
-            pointerDownPosRef.current = null;
             isDraggingRef.current = false;
+            const startPos = pointerDownPosRef.current;
+            pointerDownPosRef.current = null;
+
+            // 스와이프 감지: 수평 이동이 임계값(50px) 이상이고 수직보다 클 때
+            if (startPos) {
+              const touch = event.changedTouches[0];
+              if (touch) {
+                const dx = touch.clientX - startPos.x;
+                const dy = touch.clientY - startPos.y;
+                const SWIPE_THRESHOLD = 50;
+                if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+                  const currentSettings = settingsRef.current;
+                  if (currentSettings.flow !== "paginated") return;
+                  const isRTL = currentSettings.clickDirection === "left";
+                  // 왼쪽으로 스와이프(dx < 0) = LTR에서 다음 페이지
+                  const isSwipeLeft = dx < 0;
+                  if (isSwipeLeft) {
+                    if (isRTL) onPagePrevRef.current?.();
+                    else onPageNextRef.current?.();
+                  } else {
+                    if (isRTL) onPageNextRef.current?.();
+                    else onPagePrevRef.current?.();
+                  }
+                }
+              }
+            }
             return;
           }
 
