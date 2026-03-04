@@ -28,8 +28,8 @@ export function HorizontalDragScroll({ className = "", children }: HorizontalDra
   }, []);
 
   const updateMaskEdges = (el: HTMLDivElement) => {
-    // 0~20px 스크롤에 걸쳐 투명도가 1 -> 0으로 변함
-    const FADE_RANGE = 20;
+    // 0~80px 스크롤에 걸쳐 투명도가 1 -> 0으로 변함 (더 부드러운 애니메이션)
+    const FADE_RANGE = 80;
 
     // isAtLeft: scrollLeft가 0에 가까울수록 1(불투명, 페이드 없음), 커지면 0(투명, 페이드 있음)
     const leftEdgeOpacity = Math.max(0, 1 - el.scrollLeft / FADE_RANGE);
