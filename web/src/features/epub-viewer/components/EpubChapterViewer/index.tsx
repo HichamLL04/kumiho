@@ -186,7 +186,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
     const isDraggingRef = useRef(false);
     const touchHandledRef = useRef(false);
-    const touchDebugEnabledRef = useRef(false);
     const lastAppliedSpreadRef = useRef<"auto" | "none" | null>(null);
     const contentDisposersRef = useRef<Map<Document, () => void>>(new Map());
     const tocRefreshSeqRef = useRef(0);
@@ -218,16 +217,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     useEffect(() => {
       settingsRef.current = settings;
     }, [settings]);
-    useEffect(() => {
-      if (typeof window === "undefined") return;
-      touchDebugEnabledRef.current = new URLSearchParams(window.location.search).get("debug-touch") === "1";
-      if (touchDebugEnabledRef.current) {
-        console.info("[EpubChapterViewer][touch-debug] enabled", {
-          userAgent: navigator.userAgent,
-        });
-      }
-    }, []);
-
     const applySettings = useCallback((rendition: Rendition, s: EpubViewerSettings, layout: EpubRenderLayout) => {
       const theme = THEME_STYLES[s.theme] || THEME_STYLES.light;
       const isOriginal = s.fontFamily === "original";
@@ -538,16 +527,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
               ? (clientX - containerRect.left) / containerRect.width
               : clientX / Math.max(window.innerWidth, 1);
           const clampedRatio = Math.max(0, Math.min(1, ratio));
-
-          if (touchDebugEnabledRef.current) {
-            console.info("[EpubChapterViewer][touch-debug] resolveZone", {
-              clientX,
-              ratio: Number(clampedRatio.toFixed(4)),
-              containerLeft: containerRect?.left ?? null,
-              containerWidth: containerRect?.width ?? null,
-              windowInnerWidth: window.innerWidth,
-            });
-          }
           if (clampedRatio < 0.3) return "left";
           if (clampedRatio > 0.7) return "right";
           return "center";

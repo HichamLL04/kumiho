@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Check, AlertCircle, Info } from "lucide-react";
 import styles from "./Toast.module.css";
 
@@ -10,13 +10,19 @@ export interface ToastProps {
 }
 
 export function Toast({ type, message, onClose, duration = 2000 }: ToastProps) {
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      onClose();
+      onCloseRef.current();
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [duration, onClose]);
+  }, [duration, type, message]);
 
   return (
     <div
