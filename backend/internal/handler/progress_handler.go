@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -609,7 +610,7 @@ func (h *ProgressHandler) StartViewing(c *fiber.Ctx) error {
 	sessionID, _ := c.Locals("sessionID").(string)
 
 	if sessionID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "session ID is required",
 		})
 	}
@@ -675,7 +676,7 @@ func (h *ProgressHandler) ResumeCheck(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	sessionID, _ := c.Locals("sessionID").(string)
 	if sessionID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "session ID is required",
 		})
 	}
@@ -772,36 +773,69 @@ func (h *ProgressHandler) validateViewerLeaseTarget(userID, seriesID, chapterID 
 	}
 
 	if seriesID != "" {
-		series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
+		validSeries, err := h.isValidViewerSeries(userID, seriesID)
 		if err != nil {
 			return err
 		}
-		if series == nil {
+		if !validSeries {
 			return fiber.NewError(fiber.StatusBadRequest, "invalid series_id")
 		}
 	}
 
 	if chapterID != "" {
-		chapter, err := h.chapterRepo.FindByID(nil, chapterID)
+		chapterSeriesID, validChapter, err := h.findViewerChapterSeriesID(chapterID)
 		if err != nil {
 			return err
 		}
-		if chapter == nil {
+		if !validChapter {
 			return fiber.NewError(fiber.StatusBadRequest, "invalid chapter_id")
 		}
 
-		if seriesID != "" {
-			volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
-			if err != nil {
-				return err
-			}
-			if volume == nil || volume.SeriesID != seriesID {
-				return fiber.NewError(fiber.StatusBadRequest, "chapter_id does not belong to series_id")
-			}
+		if seriesID != "" && chapterSeriesID != seriesID {
+			return fiber.NewError(fiber.StatusBadRequest, "chapter_id does not belong to series_id")
 		}
 	}
 
 	return nil
+}
+
+func (h *ProgressHandler) isValidViewerSeries(userID, seriesID string) (bool, error) {
+	var exists int
+	err := database.DB.QueryRow(
+		`SELECT 1
+		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
+		 JOIN user_libraries ul ON l.id = ul.library_id
+		 WHERE s.id = ? AND ul.user_id = ?
+		 LIMIT 1`,
+		seriesID, userID,
+	).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (h *ProgressHandler) findViewerChapterSeriesID(chapterID string) (string, bool, error) {
+	var seriesID string
+	err := database.DB.QueryRow(
+		`SELECT v.series_id
+		 FROM chapters c
+		 JOIN volumes v ON c.volume_id = v.id
+		 WHERE c.id = ?
+		 LIMIT 1`,
+		chapterID,
+	).Scan(&seriesID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return seriesID, true, nil
 }
 
 func isViewerLeaseForeignKeyError(err error) bool {
