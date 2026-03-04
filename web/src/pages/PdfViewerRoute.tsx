@@ -14,6 +14,7 @@ import { useViewerNavigation } from "../features/viewer/hooks/useViewerNavigatio
 import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapterLoader";
 import type { ViewerAnimationHandles } from "../features/viewer/types";
 import { PdfViewer } from "./PdfViewer";
+import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 
 interface PdfViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
@@ -43,6 +44,7 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
   } = useViewerStore();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  usePreventBrowserZoom(true);
 
   // 인접 챕터 탐색
   const { nextChapterId, prevChapterId, isLastChapterOfVolume, isAdjacentResolved } = useAdjacentChapters({
