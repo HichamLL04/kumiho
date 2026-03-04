@@ -214,3 +214,27 @@ describe("ViewerContent wheel navigation", () => {
     expect(mockAnimateNext).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("ViewerContent vertical rendering window", () => {
+  it("renders real images only near current page in vertical mode", () => {
+    render(
+      <ViewerContent
+        {...baseProps}
+        currentPage={10}
+        readingMode="vertical"
+        displayPages={Array.from({ length: 20 }, (_, i) => i + 1)}
+        maxAllowedPage={13}
+        imageLoading={{}}
+      />,
+    );
+
+    // currentPage=10 -> minAllowedPage=7, maxAllowedPage=13
+    // page 6 should remain placeholder (no SmartImageViewer render)
+    expect(screen.queryByTestId("smart-/api/v1/chapters/chapter-1/pages/6/image")).not.toBeInTheDocument();
+    // page 7 and 13 should be rendered
+    expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/7/image")).toBeInTheDocument();
+    expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/13/image")).toBeInTheDocument();
+    // page 14 should remain placeholder
+    expect(screen.queryByTestId("smart-/api/v1/chapters/chapter-1/pages/14/image")).not.toBeInTheDocument();
+  });
+});

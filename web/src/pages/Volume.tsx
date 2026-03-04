@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslation, Trans } from "react-i18next";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { Play, CheckCircle, Folder, Check, RotateCcw, FileText } from "lucide-react";
 import { Header } from "../components/headers/Header";
 import { SubHeader } from "../components/headers/SubHeader";
@@ -19,6 +19,8 @@ export function VolumePage() {
   const { t } = useTranslation();
   const { volumeId } = useParams<{ volumeId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const viewerFrom = `${location.pathname}${location.search}`;
   const [volume, setVolume] = useState<Volume | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [series, setSeries] = useState<Series | null>(null);
@@ -168,12 +170,12 @@ export function VolumePage() {
   // 이어보기 또는 첫 챕터 읽기
   const handlePlay = () => {
     if (lastProgress && lastProgress.chapter_id) {
-      navigate(`/viewer/${lastProgress.chapter_id}`);
+      navigate(`/viewer/${lastProgress.chapter_id}`, { state: { from: viewerFrom } });
       return;
     }
 
     if (chapters.length > 0) {
-      navigate(`/viewer/${chapters[0].id}`);
+      navigate(`/viewer/${chapters[0].id}`, { state: { from: viewerFrom } });
     } else {
       showAlert(t("series.alert.no_readable_chapter"), "warning");
     }
@@ -270,7 +272,7 @@ export function VolumePage() {
                   <div
                     key={chapter.id}
                     className={`${styles.chapterItem} ${lastProgress?.chapter_id === chapter.id ? styles.current : ""}`}
-                    onClick={() => navigate(`/viewer/${chapter.id}`)}
+                    onClick={() => navigate(`/viewer/${chapter.id}`, { state: { from: viewerFrom } })}
                   >
                     <div className={styles.chapterThumbnailWrapper}>
                       {chapter.thumbnail_url && !imageErrors[chapter.id] ? (
