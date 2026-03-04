@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo, type MouseEvent } from "react";
+import { isOldIOSSafari } from "../utils/browserDetect";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -126,6 +127,8 @@ export function EpubViewer({
 }: EpubViewerProps) {
   const { t } = useTranslation();
   const viewerRef = useRef<EpubChapterViewerHandles>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const lastTouchTimeRef = useRef(0);
   const bgColor = THEME_BG[settings.theme] || "#ffffff";
   const [currentChapterHref, setCurrentChapterHref] = useState("");
   const [effectiveLayout, setEffectiveLayout] = useState<EpubRenderLayout>("book");
@@ -324,6 +327,9 @@ export function EpubViewer({
 
   const handleMainClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
+      // 터치 직후 발생하는 Synthetic Click 무시 (500ms 이내)
+      if (Date.now() - lastTouchTimeRef.current < 500) return;
+
       const target = event.target as HTMLElement | null;
       if (!target) return;
 
@@ -379,6 +385,94 @@ export function EpubViewer({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [settings.keyboardDirection, settings.flow, handleNext, handlePrev]);
+
+  // === 구형 iOS Safari: <main>에 터치 이벤트 핸들러 등록 ===
+  // iframe pointer-events:none으로 터치가 관통하므로 부모에서 처리한다.
+  useEffect(() => {
+    if (!isOldIOSSafari()) return;
+    const mainEl = mainRef.current;
+    if (!mainEl) return;
+
+    let startPos: { x: number; y: number } | null = null;
+    let dragging = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      // UI 요소(헤더/푸터/설정/TOC) 위의 터치는 무시
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("header, footer, [data-epub-settings], [data-epub-toc]")) return;
+      startPos = { x: touch.clientX, y: touch.clientY };
+      dragging = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!startPos) return;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const dx = touch.clientX - startPos.x;
+      const dy = touch.clientY - startPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 8) dragging = true;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!startPos) return;
+
+      // 터치 완료 기록 (Synthetic click 무시용)
+      lastTouchTimeRef.current = Date.now();
+
+      if (dragging) {
+        // 스와이프 감지
+        const touch = e.changedTouches[0];
+        if (touch && settings.flow === "paginated") {
+          const dx = touch.clientX - startPos.x;
+          const dy = touch.clientY - startPos.y;
+          const SWIPE_THRESHOLD = 50;
+          if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+            const isRTL = settings.clickDirection === "left";
+            if (dx < 0) {
+              if (isRTL) handlePrev();
+              else handleNext();
+            } else {
+              if (isRTL) handleNext();
+              else handlePrev();
+            }
+          }
+        }
+        startPos = null;
+        dragging = false;
+        return;
+      }
+
+      // 탭: zone 기반 판별
+      const clientX = e.changedTouches[0]?.clientX ?? startPos.x;
+      const ratio = clientX / window.innerWidth;
+      startPos = null;
+
+      if (ratio >= 0.3 && ratio <= 0.7) {
+        onViewerClick();
+      } else if (settings.flow === "paginated") {
+        const isRTL = settings.clickDirection === "left";
+        if (ratio < 0.3) {
+          if (isRTL) handleNext();
+          else handlePrev();
+        } else {
+          if (isRTL) handlePrev();
+          else handleNext();
+        }
+      }
+    };
+
+    mainEl.addEventListener("touchstart", onTouchStart, { passive: true });
+    mainEl.addEventListener("touchmove", onTouchMove, { passive: true });
+    mainEl.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      mainEl.removeEventListener("touchstart", onTouchStart);
+      mainEl.removeEventListener("touchmove", onTouchMove);
+      mainEl.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [settings.flow, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
 
   return (
     <div
@@ -499,6 +593,7 @@ export function EpubViewer({
 
       {/* EPUB 뷰어 영역 */}
       <main
+        ref={mainRef}
         className={styles.main}
         onClick={handleMainClick}
       >
