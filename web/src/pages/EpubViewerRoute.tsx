@@ -10,6 +10,7 @@ import type { EpubTOCItem } from "../features/epub-viewer/components/EpubChapter
 import { AlertModal } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { useAdjacentChapters } from "../features/viewer";
+import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 
 interface EpubViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
@@ -22,6 +23,7 @@ const toPositionRatio = (position: number, total: number): number => {
 
 export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const { t } = useTranslation();
+  usePreventBrowserZoom(true);
   const { chapter, seriesId, volumeId } = loaderData;
   const chapterId = chapter?.id || "";
   const [, setIsInitializing] = useState(true);
