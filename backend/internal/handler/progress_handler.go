@@ -794,6 +794,14 @@ func (h *ProgressHandler) validateViewerLeaseTarget(userID, seriesID, chapterID 
 		if seriesID != "" && chapterSeriesID != seriesID {
 			return fiber.NewError(fiber.StatusBadRequest, "chapter_id does not belong to series_id")
 		}
+
+		validSeriesForChapter, err := h.isValidViewerSeries(userID, chapterSeriesID)
+		if err != nil {
+			return err
+		}
+		if !validSeriesForChapter {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid chapter_id")
+		}
 	}
 
 	return nil
