@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type WheelEvent, type UIEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode, type WheelEvent, type UIEvent } from "react";
 
 interface HorizontalDragScrollProps {
   className?: string;
@@ -14,6 +14,9 @@ export function HorizontalDragScroll({ className = "", children }: HorizontalDra
   const draggedRef = useRef(false);
   const suppressClickUntilRef = useRef(0);
   const rafRef = useRef<number | null>(null);
+  const maskRafRef = useRef<number | null>(null);
+  const pendingMaskElementRef = useRef<HTMLDivElement | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const DRAG_THRESHOLD = 8;
   const CLICK_SUPPRESS_MS = 160;
@@ -24,10 +27,18 @@ export function HorizontalDragScroll({ className = "", children }: HorizontalDra
         window.cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
+      if (maskRafRef.current !== null) {
+        window.cancelAnimationFrame(maskRafRef.current);
+        maskRafRef.current = null;
+      }
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
+      }
     };
   }, []);
 
-  const updateMaskEdges = (el: HTMLDivElement) => {
+  const updateMaskEdges = useCallback((el: HTMLDivElement) => {
     // 0~80px 스크롤에 걸쳐 투명도가 1 -> 0으로 변함 (더 부드러운 애니메이션)
     const FADE_RANGE = 80;
 
@@ -48,7 +59,21 @@ export function HorizontalDragScroll({ className = "", children }: HorizontalDra
 
     el.style.setProperty("--mask-left-edge", leftEdgeOpacity.toString());
     el.style.setProperty("--mask-right-edge", rightEdgeOpacity.toString());
-  };
+  }, []);
+
+  const scheduleMaskUpdate = useCallback((el: HTMLDivElement) => {
+    pendingMaskElementRef.current = el;
+    if (maskRafRef.current !== null) return;
+
+    maskRafRef.current = window.requestAnimationFrame(() => {
+      const target = pendingMaskElementRef.current;
+      if (target) {
+        updateMaskEdges(target);
+      }
+      pendingMaskElementRef.current = null;
+      maskRafRef.current = null;
+    });
+  }, [updateMaskEdges]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -58,15 +83,21 @@ export function HorizontalDragScroll({ className = "", children }: HorizontalDra
     updateMaskEdges(el);
 
     // 요소 크기 변동 시 (예: 화면 리사이즈나 자식 요소 동적 추가/삭제로 인해 스크롤 폭이 달라질 때) 대응
-    const resizeObserver = new ResizeObserver(() => {
-      updateMaskEdges(el);
-    });
-    resizeObserver.observe(el);
+    if (typeof ResizeObserver === "function") {
+      const resizeObserver = new ResizeObserver(() => {
+        scheduleMaskUpdate(el);
+      });
+      resizeObserver.observe(el);
+      resizeObserverRef.current = resizeObserver;
+    }
 
     return () => {
-      resizeObserver.disconnect();
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
+      }
     };
-  }, [children]);
+  }, [children, scheduleMaskUpdate, updateMaskEdges]);
 
   const applyScrollOnNextFrame = () => {
     if (rafRef.current !== null) return;
@@ -145,7 +176,7 @@ export function HorizontalDragScroll({ className = "", children }: HorizontalDra
   };
 
   const handleScroll = (e: UIEvent<HTMLDivElement>) => {
-    updateMaskEdges(e.currentTarget);
+    scheduleMaskUpdate(e.currentTarget);
   };
 
   return (
