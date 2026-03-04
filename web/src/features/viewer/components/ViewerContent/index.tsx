@@ -11,6 +11,7 @@ import { type ReadingMode, type ReadingDirection, type PageTransitionType } from
 import type { ViewerAnimationHandles } from "../../types";
 
 interface ViewerContentProps {
+  currentPage?: number;
   readingMode: ReadingMode;
   readingDirection: ReadingDirection;
   swipeDirection?: ReadingDirection;
@@ -34,6 +35,7 @@ interface ViewerContentProps {
 export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentProps>(
   (
     {
+      currentPage = 1,
       readingMode,
       readingDirection,
       swipeDirection,
@@ -87,6 +89,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
 
     const containerRef = useRef<HTMLDivElement>(null);
     const lastWheelNavAtRef = useRef(0);
+    const [verticalPageHeightCache] = useState<Map<number, number>>(() => new Map<number, number>());
     /* Page Gap (Visual separation between pages) */
     const PAGE_GAP = 20;
 
@@ -96,7 +99,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       readingDirection,
       swipeDirection,
       isZoomed,
-      threshold: 80,
+      threshold: 40,
       containerRef,
       gap: PAGE_GAP,
       duration: 300,
@@ -117,6 +120,10 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       animateNextRef.current = animateNext;
       animatePrevRef.current = animatePrev;
     }, [animateNext, animatePrev]);
+
+    useEffect(() => {
+      verticalPageHeightCache.clear();
+    }, [chapterId, verticalPageHeightCache]);
 
     // Expose animation methods to parent via Ref
     useImperativeHandle(ref, () => ({
@@ -206,6 +213,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
     const VERTICAL_MAX_WIDTH = "760px";
 
     if (readingMode === "vertical") {
+      const minRenderPage = Math.max(1, currentPage - 3);
+
       return (
         <div
           style={{
@@ -225,10 +234,12 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         >
           {displayPages.map((pageNum) => (
             <VerticalPage
-              key={pageNum}
+              key={`${chapterId}-${pageNum}`}
               pageNum={pageNum}
               imageUrl={getPageImageUrl(chapterId, pageNum)}
+              pageHeightCache={verticalPageHeightCache}
               maxAllowedPage={maxAllowedPage}
+              minAllowedPage={minRenderPage}
               handleImageLoad={handleImageLoad}
               handleContentClick={handleContentClick}
               styles={styles}

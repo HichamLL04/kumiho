@@ -1,6 +1,6 @@
 // 세로 모드 당김 인디케이터 컴포넌트
 
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styles from "./PullIndicator.module.css";
 
@@ -24,7 +24,9 @@ export function PullIndicator({
   saveProgress,
 }: PullIndicatorProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
+  const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
 
   // 챕터 ID가 없으면 아예 렌더링하지 않음
   if (!chapterId) return null;
@@ -39,9 +41,13 @@ export function PullIndicator({
 
     await saveProgress();
     if (type === "prev") {
-      navigate(`/viewer/${chapterId}?page=last`);
+      navigate(`/viewer/${chapterId}?page=last`, {
+        state: viewerFrom ? { from: viewerFrom } : undefined,
+      });
     } else {
-      navigate(`/viewer/${chapterId}`);
+      navigate(`/viewer/${chapterId}`, {
+        state: viewerFrom ? { from: viewerFrom } : undefined,
+      });
     }
   };
 

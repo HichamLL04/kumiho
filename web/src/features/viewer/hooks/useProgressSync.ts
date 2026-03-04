@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { seriesAPI, volumeAPI } from "../../../api/client";
 import type { Chapter } from "../types";
 
@@ -23,6 +23,8 @@ export function useProgressSync({ seriesId, chapter, currentPage, isLoading }: U
   const [serverProgress, setServerProgress] = useState<ServerProgress | null>(null);
   const isCheckedRef = useRef(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
 
   const checkSync = useCallback(async () => {
     if (!seriesId || !chapter || isLoading || isCheckedRef.current) return;
@@ -67,9 +69,11 @@ export function useProgressSync({ seriesId, chapter, currentPage, isLoading }: U
 
     setShowSyncModal(false);
     // 해당 챕터와 페이지로 이동
-    navigate(`/viewer/${serverProgress.chapter_id}?page=${serverProgress.current_page}`);
+    navigate(`/viewer/${serverProgress.chapter_id}?page=${serverProgress.current_page}`, {
+      state: viewerFrom ? { from: viewerFrom } : undefined,
+    });
     // 페이지 이동 시 콤포넌트가 재마운트되거나 훅이 다시 실행되므로 isCheckedRef는 그대로 둬도 됨
-  }, [serverProgress, navigate]);
+  }, [serverProgress, navigate, viewerFrom]);
 
   const handleCloseModal = useCallback(() => {
     setShowSyncModal(false);

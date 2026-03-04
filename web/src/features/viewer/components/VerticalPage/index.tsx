@@ -1,10 +1,12 @@
-import type { MouseEvent, TouchEvent, RefObject } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type TouchEvent, type RefObject } from "react";
 import type { ReactZoomPanPinchContentRef } from "react-zoom-pan-pinch";
 import { SmartImageViewer } from "../../../../components/SmartImageViewer";
 
 interface VerticalPageProps {
   pageNum: number;
   imageUrl: string;
+  pageHeightCache: Map<number, number>;
+  minAllowedPage: number;
   maxAllowedPage: number;
   handleImageLoad: (pageNum: number) => void;
   handleContentClick: (
@@ -18,18 +20,45 @@ interface VerticalPageProps {
 export const VerticalPage = ({
   pageNum,
   imageUrl,
+  pageHeightCache,
+  minAllowedPage,
   maxAllowedPage,
   handleImageLoad,
   handleContentClick,
   styles,
   fitMode,
 }: VerticalPageProps) => {
-  // No local zoom state needed for vertical mode now
-  const shouldRenderImage = pageNum <= maxAllowedPage;
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [cachedHeight, setCachedHeight] = useState<number>(() => pageHeightCache.get(pageNum) ?? 0);
+  const shouldRenderImage = pageNum >= minAllowedPage && pageNum <= maxAllowedPage;
+
+  useEffect(() => {
+    if (!shouldRenderImage) return;
+
+    const el = wrapperRef.current;
+    if (!el || !("ResizeObserver" in window)) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const nextHeight = entries[0]?.contentRect.height ?? 0;
+      if (nextHeight > 0) {
+        setCachedHeight((prev) => {
+          if (Math.abs(prev - nextHeight) <= 1) return prev;
+          pageHeightCache.set(pageNum, nextHeight);
+          return nextHeight;
+        });
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [pageHeightCache, pageNum, shouldRenderImage]);
+
+  const placeholderHeight = cachedHeight > 0 ? cachedHeight : 300;
 
   return (
     <div
       id={`page-${pageNum}`}
+      ref={wrapperRef}
       className={styles.pageImageWrapper}
       onClick={(e) => handleContentClick(e, { current: null })} // Pass null ref
       style={{
@@ -55,7 +84,13 @@ export const VerticalPage = ({
       ) : (
         <div
           className={styles.pageLoadingPlaceholder}
-          style={{ minHeight: "300px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{
+            minHeight: `${placeholderHeight}px`,
+            height: `${placeholderHeight}px`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           <div className={styles.spinner} />
         </div>

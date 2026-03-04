@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   BookOpen,
   Play,
@@ -51,6 +51,8 @@ export function SeriesCard({
 }: SeriesCardProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const viewerFrom = `${location.pathname}${location.search}`;
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuAlign, setMenuAlign] = useState<"right" | "left">("right");
   const [menuMeasured, setMenuMeasured] = useState(false);
@@ -148,7 +150,7 @@ export function SeriesCard({
             }
           }
 
-          navigate(`/viewer/${targetChapter?.id || sortedChapters[0].id}`);
+          navigate(`/viewer/${targetChapter?.id || sortedChapters[0].id}`, { state: { from: viewerFrom } });
         } else {
           navigate(`/volumes/${item.id}`);
         }
@@ -159,7 +161,7 @@ export function SeriesCard({
       const targetProgress = progressRes.data?.progress;
 
       if (targetProgress && targetProgress.chapter_id) {
-        navigate(`/viewer/${targetProgress.chapter_id}`);
+        navigate(`/viewer/${targetProgress.chapter_id}`, { state: { from: viewerFrom } });
         return;
       }
 
@@ -179,7 +181,7 @@ export function SeriesCard({
 
       if (chapters.length > 0) {
         const sortedChapters = [...chapters].sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
-        navigate(`/viewer/${sortedChapters[0].id}`);
+        navigate(`/viewer/${sortedChapters[0].id}`, { state: { from: viewerFrom } });
       } else {
         navigate(`/series/${item.id}`);
       }
@@ -203,7 +205,7 @@ export function SeriesCard({
     }
 
     if (chapterId && type === "series") {
-      navigate(`/viewer/${chapterId}`);
+      navigate(`/viewer/${chapterId}`, { state: { from: viewerFrom } });
     } else {
       await playSmart();
     }

@@ -54,6 +54,7 @@ func main() {
 	userSettingRepo := repository.NewUserSettingRepository()
 	userSeriesSettingRepo := repository.NewUserSeriesSettingRepository()
 	sessionRepo := repository.NewSessionRepository()
+	viewerSessionRepo := repository.NewViewerSessionRepository()
 
 	// SSE 허브 초기화 및 실행
 	hub := sse.NewHub()
@@ -87,12 +88,12 @@ func main() {
 	userHandler := handler.NewUserHandler(authService)
 	libraryHandler := handler.NewLibraryHandler(ctx, libraryRepo, authService, fileScanner)
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
-	progressHandler := handler.NewProgressHandler(progressRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
+	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가
-	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo)
+	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo, viewerSessionRepo)
 	sseHandler := handler.NewSSEHandler(hub)
 
 	// 미들웨어 초기화
@@ -252,6 +253,7 @@ func main() {
 	// 뷰어
 	viewer := protected.Group("/viewer")
 	viewer.Post("/start", progressHandler.StartViewing)
+	viewer.Post("/resume-check", progressHandler.ResumeCheck)
 
 	// 설정
 	settingsApi := protected.Group("/settings")

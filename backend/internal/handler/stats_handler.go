@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
@@ -12,14 +13,20 @@ import (
 )
 
 type StatsHandler struct {
-	progressRepo   *repository.ReadingProgressRepository
-	completionRepo *repository.VolumeCompletionRepository
+	progressRepo      *repository.ReadingProgressRepository
+	completionRepo    *repository.VolumeCompletionRepository
+	viewerSessionRepo *repository.ViewerSessionRepository
 }
 
-func NewStatsHandler(progressRepo *repository.ReadingProgressRepository, completionRepo *repository.VolumeCompletionRepository) *StatsHandler {
+func NewStatsHandler(
+	progressRepo *repository.ReadingProgressRepository,
+	completionRepo *repository.VolumeCompletionRepository,
+	viewerSessionRepo *repository.ViewerSessionRepository,
+) *StatsHandler {
 	return &StatsHandler{
-		progressRepo:   progressRepo,
-		completionRepo: completionRepo,
+		progressRepo:      progressRepo,
+		completionRepo:    completionRepo,
+		viewerSessionRepo: viewerSessionRepo,
 	}
 }
 
@@ -29,9 +36,9 @@ type PersonalStatsResponse struct {
 	TotalVolumes         int                         `json:"total_volumes"`   // Completed volumes
 	TotalChapters        int                         `json:"total_chapters"`
 	TotalCompletedSeries int                         `json:"total_completed_series"`
-	DailyActivity      []repository.DailyActivity  `json:"daily_activity"`
-	HourlyActivity     []repository.HourlyActivity `json:"hourly_activity"`
-	TopSeries          []model.Series              `json:"top_series"`
+	DailyActivity        []repository.DailyActivity  `json:"daily_activity"`
+	HourlyActivity       []repository.HourlyActivity `json:"hourly_activity"`
+	TopSeries            []model.Series              `json:"top_series"`
 }
 
 // GetPersonalStats returns reading statistics for the current user
@@ -197,6 +204,14 @@ func (h *StatsHandler) UpdateReadingTime(c *fiber.Ctx) error {
 		// 진행도가 아예 없는 경우(아직 페이지를 안 넘겨서 upsert전)
 		// 204 No Content를 반환하여 데이터가 기록되지 않았음을 명시적으로 알림
 		return c.SendStatus(fiber.StatusNoContent)
+	}
+
+	sessionID, _ := c.Locals("sessionID").(string)
+	if sessionID != "" {
+		if _, err := h.viewerSessionRepo.TouchIfOwner(nil, userID, sessionID, req.SeriesID, req.ChapterID); err != nil {
+			// lease touch 실패는 읽기 시간 기록의 실패로 취급하지 않음
+			log.Printf("[StatsHandler] viewer lease touch failed: user=%s, session=%s, err=%v", userID, sessionID, err)
+		}
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{

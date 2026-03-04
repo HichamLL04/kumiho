@@ -2,7 +2,7 @@
 // 훅과 컴포넌트로 로직과 UI를 분리하여 유지보수성 향상
 
 import { useEffect, useCallback, useState, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
 import { ViewerSettings as ViewerSettingsModal } from "../components/viewer/ViewerSettings";
@@ -61,6 +61,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   } = useViewerStore();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
   usePreventBrowserZoom(true);
 
   // ===== Custom Hooks =====
@@ -200,8 +202,12 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
 
   // 세션 종료 핸들러
   const handleTerminatedConfirm = useCallback(() => {
+    if (viewerFrom) {
+      navigate(viewerFrom);
+      return;
+    }
     navigate("/");
-  }, [navigate]);
+  }, [navigate, viewerFrom]);
 
   // 읽기 시간 측정 (활성화)
   useReadingTime(seriesId || undefined, !isLoading && !error, chapterId);
@@ -413,6 +419,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
           >
             <ViewerContent
               ref={animationRef}
+              currentPage={currentPage}
               readingMode={settings.readingMode}
               readingDirection={settings.readingDirection}
               swipeDirection={settings.swipeDirection}
