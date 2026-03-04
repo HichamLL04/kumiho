@@ -177,8 +177,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <>
-      <header className={styles.appHeader}>
+    <header className={styles.appHeader}>
         <div className={styles.headerLeft}>
           {onMenuClick && (
             <button
@@ -404,8 +403,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             )}
           </div>
         </div>
-      </header>
       <ScanProgressBar />
-    </>
+    </header>
   );
 }

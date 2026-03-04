@@ -74,11 +74,9 @@ export function UserSessionsModal({
                   <div className={styles.sessionDeets}>
                     <div className={styles.deviceName}>{session.device_name || session.os || "Unknown Device"}</div>
                     <div className={styles.sessionMeta}>
-                      <span>
-                        {session.browser} ({session.os})
-                      </span>
+                      <span className={styles.browserInfo}>{`${session.browser} (${session.os})`}</span>
                       <span className={styles.dot}>•</span>
-                      <span>{session.ip_address}</span>
+                      <span className={styles.ipAddress}>{session.ip_address?.trim() || "-"}</span>
                     </div>
                     <div className={styles.lastActive}>
                       <Clock size={12} />
