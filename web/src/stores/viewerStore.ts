@@ -43,6 +43,8 @@ interface ViewerState {
   isSettingsOpen: boolean;
   isFullscreen: boolean;
   isIncognito: boolean;
+  isChapterSwitching: boolean;
+  shouldRestoreFullscreenAfterSwitch: boolean;
 
   // 설정
   settings: ViewerSettings;
@@ -67,6 +69,8 @@ interface ViewerState {
   initPage: (page: number, total: number) => void;
   initializeSettings: (settings: Partial<ViewerSettings>) => void;
   setIncognito: (isIncognito: boolean) => void;
+  startChapterSwitching: (shouldRestoreFullscreen: boolean) => void;
+  finishChapterSwitching: () => void;
   reset: () => void;
 
   // 설정 변경
@@ -124,6 +128,8 @@ export const useViewerStore = create<ViewerState>()(
       isSettingsOpen: false,
       isFullscreen: false,
       isIncognito: false,
+      isChapterSwitching: false,
+      shouldRestoreFullscreenAfterSwitch: false,
       settings: defaultSettings,
       seriesSettings: {},
       currentSeriesId: null,
@@ -188,6 +194,16 @@ export const useViewerStore = create<ViewerState>()(
       },
 
       setFullscreen: (isFullscreen) => set({ isFullscreen }),
+      startChapterSwitching: (shouldRestoreFullscreen) =>
+        set({
+          isChapterSwitching: true,
+          shouldRestoreFullscreenAfterSwitch: shouldRestoreFullscreen,
+        }),
+      finishChapterSwitching: () =>
+        set({
+          isChapterSwitching: false,
+          shouldRestoreFullscreenAfterSwitch: false,
+        }),
 
       // 설정 변경 액션 (현재 상태 + 시리즈별 설정 동시 업데이트)
       setReadingMode: (mode) =>
@@ -402,6 +418,8 @@ export const useViewerStore = create<ViewerState>()(
           isSettingsOpen: false,
           isFullscreen: false,
           isIncognito: false,
+          isChapterSwitching: false,
+          shouldRestoreFullscreenAfterSwitch: false,
           settings: defaultSettings,
           seriesSettings: {},
           currentSeriesId: null,

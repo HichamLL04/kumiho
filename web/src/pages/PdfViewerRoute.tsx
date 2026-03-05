@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
+import { finishChapterSwitching, getFullscreenSwitchState } from "../stores/fullscreenSwitchStore";
 import { useTranslation } from "react-i18next";
 import { AlertModal } from "../components/modals/AlertModal";
 
@@ -213,7 +214,8 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
   // 뷰어 종료 시 전체화면 해제
   useEffect(() => {
     return () => {
-      if (isDocumentFullscreen()) {
+      const { isChapterSwitching: switching } = getFullscreenSwitchState();
+      if (isDocumentFullscreen() && !switching) {
         exitFullscreen().catch(() => {});
       }
       if (uiTimerRef.current) {
@@ -221,6 +223,24 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!chapterId) return;
+
+    const timer = window.setTimeout(() => {
+      const state = getFullscreenSwitchState();
+      if (!state.isChapterSwitching) return;
+
+      const maybeRestore =
+        state.shouldRestoreFullscreenAfterSwitch && !isDocumentFullscreen() ? enterFullscreen().catch(() => {}) : null;
+
+      Promise.resolve(maybeRestore).finally(() => {
+        finishChapterSwitching();
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [chapterId]);
 
   // UI 표시 시작 시각 기록
   useEffect(() => {

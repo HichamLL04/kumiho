@@ -5,6 +5,7 @@ import { useEffect, useCallback, useState, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
+import { finishChapterSwitching, getFullscreenSwitchState } from "../stores/fullscreenSwitchStore";
 import { ViewerSettings as ViewerSettingsModal } from "../components/viewer/ViewerSettings";
 
 // Feature imports
@@ -235,7 +236,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   // 뷰어 종료 시 전체화면 해제
   useEffect(() => {
     return () => {
-      if (isDocumentFullscreen()) {
+      const { isChapterSwitching: switching } = getFullscreenSwitchState();
+      if (isDocumentFullscreen() && !switching) {
         exitFullscreen().catch(() => {});
       }
       if (uiTimerRef.current) {
@@ -243,6 +245,24 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!chapterId) return;
+
+    const timer = window.setTimeout(() => {
+      const state = getFullscreenSwitchState();
+      if (!state.isChapterSwitching) return;
+
+      const maybeRestore =
+        state.shouldRestoreFullscreenAfterSwitch && !isDocumentFullscreen() ? enterFullscreen().catch(() => {}) : null;
+
+      Promise.resolve(maybeRestore).finally(() => {
+        finishChapterSwitching();
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [chapterId]);
 
   // UI 표시 시작 시각 기록
   useEffect(() => {

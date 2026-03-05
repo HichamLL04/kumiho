@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
+import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
+import { startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
 import type { ReadingMode } from "../../../stores/viewerStore";
 
 interface UseVerticalScrollParams {
@@ -255,6 +257,7 @@ export function useVerticalScroll({
           if (newOffset >= pullThreshold) {
             isNavigatingRef.current = true;
             saveProgress().then(() => {
+              startChapterSwitching(isDocumentFullscreen());
               navigate(`/viewer/${prevChapterId}`, {
                 replace: true,
                 state: {
@@ -278,6 +281,7 @@ export function useVerticalScroll({
             handleVolumeCompletion()
               .then(() => saveProgress())
               .then(() => {
+                startChapterSwitching(isDocumentFullscreen());
                 navigate(`/viewer/${nextChapterId}`, {
                   replace: true,
                   state: viewerFrom ? { from: viewerFrom } : undefined,
@@ -358,6 +362,7 @@ export function useVerticalScroll({
       if (currentOffset >= pullThreshold && prevChapterId) {
         isNavigatingRef.current = true;
         saveProgress().then(() => {
+          startChapterSwitching(isDocumentFullscreen());
           navigate(`/viewer/${prevChapterId}`, {
             replace: true,
             state: {
@@ -372,6 +377,7 @@ export function useVerticalScroll({
         handleVolumeCompletion()
           .then(() => saveProgress())
           .then(() => {
+            startChapterSwitching(isDocumentFullscreen());
             navigate(`/viewer/${nextChapterId}`, {
               replace: true,
               state: viewerFrom ? { from: viewerFrom } : undefined,
