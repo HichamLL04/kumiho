@@ -8,16 +8,9 @@ const { mocks } = vi.hoisted(() => {
   const startChapterSwitchingMock = vi.fn();
   const saveProgressMock = vi.fn(async () => {});
 
-  const useViewerStoreMock = Object.assign(
-    vi.fn(() => ({
-      goToPage: goToPageMock,
-    })),
-    {
-      getState: vi.fn(() => ({
-        startChapterSwitching: startChapterSwitchingMock,
-      })),
-    },
-  );
+  const useViewerStoreMock = vi.fn(() => ({
+    goToPage: goToPageMock,
+  }));
 
   return {
     mocks: {
