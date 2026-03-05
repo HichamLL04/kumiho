@@ -154,8 +154,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   const isInteractingRef = useRef(false);
   const [showPageJump, setShowPageJump] = useState(false);
   const [showSeriesEndModal, setShowSeriesEndModal] = useState(false);
-  useExitFullscreenOnViewerUnmount();
-  useRestoreFullscreenAfterChapterSwitch(chapterId);
   const handleReachedSeriesEnd = useCallback(() => {
     if (isAdjacentResolved) {
       setShowSeriesEndModal(true);
@@ -235,6 +233,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       events.forEach((event) => document.removeEventListener(event, handleFullscreenChange));
     };
   }, [isFullscreen, setFullscreen]);
+  useRestoreFullscreenAfterChapterSwitch(chapterId);
+  useExitFullscreenOnViewerUnmount();
 
   // 뷰어 종료 시 타이머 정리
   useEffect(() => {

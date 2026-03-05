@@ -72,8 +72,6 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const [toc, setToc] = useState<EpubTOCItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [epubUrl, setEpubUrl] = useState<string | null>(null);
-  useExitFullscreenOnViewerUnmount();
-  useRestoreFullscreenAfterChapterSwitch(routeChapterId);
   const [initialCFI, setInitialCFI] = useState<string | null>(null);
   const [initialProgressRatio, setInitialProgressRatio] = useState<number | null>(null);
   const isInitializingRef = useRef(true);
@@ -349,6 +347,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       events.forEach((e) => document.removeEventListener(e, handleFSChange));
     };
   }, [isFullscreen, setFullscreen]);
+  useRestoreFullscreenAfterChapterSwitch(routeChapterId);
+  useExitFullscreenOnViewerUnmount();
 
   // 뷰어 종료 시 타이머 정리
   useEffect(() => {

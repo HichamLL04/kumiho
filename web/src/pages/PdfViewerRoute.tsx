@@ -110,8 +110,6 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
   const [showTOC, setShowTOC] = useState(false);
   const [tocItems, setTocItems] = useState<PDFOutlineItem[]>([]);
   const [zoomScale, setZoomScale] = useState(1);
-  useExitFullscreenOnViewerUnmount();
-  useRestoreFullscreenAfterChapterSwitch(routeChapterId);
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
   const isInteractingRef = useRef(false);
@@ -206,6 +204,8 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
       events.forEach((event) => document.removeEventListener(event, handleFullscreenChange));
     };
   }, [isFullscreen, setFullscreen]);
+  useRestoreFullscreenAfterChapterSwitch(routeChapterId);
+  useExitFullscreenOnViewerUnmount();
 
   // PDF 세로 모드에서는 useVerticalScroll 훅을 사용하지 않으므로
   // 초기 스크롤 가드가 해제되지 않으면 진행도 저장이 영구 차단될 수 있다.

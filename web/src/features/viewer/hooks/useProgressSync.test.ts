@@ -5,6 +5,7 @@ import { useProgressSync } from "./useProgressSync";
 const { mocks } = vi.hoisted(() => {
   const navigateMock = vi.fn();
   const startChapterSwitchingMock = vi.fn();
+  const finishChapterSwitchingMock = vi.fn();
   const volumeGetMock = vi.fn();
   const compareProgressMock = vi.fn();
 
@@ -12,6 +13,7 @@ const { mocks } = vi.hoisted(() => {
     mocks: {
       navigateMock,
       startChapterSwitchingMock,
+      finishChapterSwitchingMock,
       volumeGetMock,
       compareProgressMock,
     },
@@ -25,6 +27,7 @@ vi.mock("react-router-dom", () => ({
 
 vi.mock("../../../stores/fullscreenSwitchStore", () => ({
   startChapterSwitching: (...args: unknown[]) => mocks.startChapterSwitchingMock(...args),
+  finishChapterSwitching: (...args: unknown[]) => mocks.finishChapterSwitchingMock(...args),
 }));
 
 vi.mock("../../../utils/fullscreen", () => ({
@@ -86,7 +89,56 @@ describe("useProgressSync fullscreen switching", () => {
     });
 
     expect(mocks.startChapterSwitchingMock).toHaveBeenCalledWith(true);
+    expect(mocks.finishChapterSwitchingMock).not.toHaveBeenCalled();
     expect(mocks.navigateMock).toHaveBeenCalledWith("/viewer/chapter-sync?page=7", {
+      replace: true,
+      state: { from: "/series/1" },
+    });
+  });
+
+  it("does not keep chapter-switch flag when sync target chapter is same", async () => {
+    mocks.volumeGetMock.mockResolvedValue({
+      data: { volume_number: 1 },
+    });
+    mocks.compareProgressMock.mockResolvedValue({
+      data: {
+        server_ahead: true,
+        server_progress: {
+          volume_number: 1,
+          chapter_number: 1,
+          current_page: 8,
+          chapter_id: "chapter-1",
+          volume_id: "volume-1",
+        },
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useProgressSync({
+        seriesId: "series-1",
+        chapter: {
+          id: "chapter-1",
+          volume_id: "volume-1",
+          title: "chapter",
+          chapter_number: 1,
+          page_count: 10,
+        },
+        currentPage: 3,
+        isLoading: false,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.showSyncModal).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleConfirmSync();
+    });
+
+    expect(mocks.startChapterSwitchingMock).not.toHaveBeenCalled();
+    expect(mocks.finishChapterSwitchingMock).toHaveBeenCalledTimes(1);
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/viewer/chapter-1?page=8", {
       replace: true,
       state: { from: "/series/1" },
     });
