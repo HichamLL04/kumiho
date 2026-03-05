@@ -1,13 +1,20 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
-import { finishChapterSwitching, getFullscreenSwitchState } from "../stores/fullscreenSwitchStore";
 import { useTranslation } from "react-i18next";
 import { AlertModal } from "../components/modals/AlertModal";
 
 // Feature imports
-import { useBGM, useAdjacentChapters, useProgress, UI_HIDE_DELAY, useProgressSync } from "../features/viewer";
+import {
+  useBGM,
+  useAdjacentChapters,
+  useProgress,
+  UI_HIDE_DELAY,
+  useProgressSync,
+  useExitFullscreenOnViewerUnmount,
+  useRestoreFullscreenAfterChapterSwitch,
+} from "../features/viewer";
 import type { PDFOutlineItem } from "../features/viewer/components/PdfChapterViewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
@@ -22,6 +29,7 @@ interface PdfViewerRouteProps {
 }
 
 export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
+  const { chapterId: routeChapterId } = useParams<{ chapterId: string }>();
   const { chapter, seriesId, volumeId, isInitialScrollingRef } = loaderData;
   const chapterId = chapter?.id || "";
 
@@ -102,6 +110,8 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
   const [showTOC, setShowTOC] = useState(false);
   const [tocItems, setTocItems] = useState<PDFOutlineItem[]>([]);
   const [zoomScale, setZoomScale] = useState(1);
+  useExitFullscreenOnViewerUnmount();
+  useRestoreFullscreenAfterChapterSwitch(routeChapterId);
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
   const isInteractingRef = useRef(false);
@@ -211,36 +221,14 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     return () => window.clearTimeout(timer);
   }, [settings.readingMode, totalPages, currentPage, isInitialScrollingRef]);
 
-  // 뷰어 종료 시 전체화면 해제
+  // 뷰어 종료 시 타이머 정리
   useEffect(() => {
     return () => {
-      const { isChapterSwitching: switching } = getFullscreenSwitchState();
-      if (isDocumentFullscreen() && !switching) {
-        exitFullscreen().catch(() => {});
-      }
       if (uiTimerRef.current) {
         window.clearTimeout(uiTimerRef.current);
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (!chapterId) return;
-
-    const timer = window.setTimeout(() => {
-      const state = getFullscreenSwitchState();
-      if (!state.isChapterSwitching) return;
-
-      const maybeRestore =
-        state.shouldRestoreFullscreenAfterSwitch && !isDocumentFullscreen() ? enterFullscreen().catch(() => {}) : null;
-
-      Promise.resolve(maybeRestore).finally(() => {
-        finishChapterSwitching();
-      });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [chapterId]);
 
   // UI 표시 시작 시각 기록
   useEffect(() => {

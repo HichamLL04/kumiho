@@ -34,8 +34,6 @@ interface EpubViewerState {
   isTOCOpen: boolean;
   isFullscreen: boolean;
   isIncognito: boolean;
-  isChapterSwitching: boolean;
-  shouldRestoreFullscreenAfterSwitch: boolean;
   globalProgress: number; // 전체 도서 기준 진행률 (0~100)
   isAtFirstPage: boolean;
   isAtLastPage: boolean;
@@ -60,8 +58,6 @@ interface EpubViewerState {
   toggleFullscreen: () => void;
   setFullscreen: (value: boolean) => void;
   setIncognito: (value: boolean) => void;
-  startChapterSwitching: (shouldRestoreFullscreen: boolean) => void;
-  finishChapterSwitching: () => void;
   reset: () => void;
 
   // 설정 변경
@@ -101,8 +97,6 @@ export const useEpubViewerStore = create<EpubViewerState>()(
       isTOCOpen: false,
       isFullscreen: false,
       isIncognito: false,
-      isChapterSwitching: false,
-      shouldRestoreFullscreenAfterSwitch: false,
       globalProgress: 0,
       isAtFirstPage: false,
       isAtLastPage: false,
@@ -144,16 +138,6 @@ export const useEpubViewerStore = create<EpubViewerState>()(
 
       setFullscreen: (value) => set({ isFullscreen: value }),
       setIncognito: (value) => set({ isIncognito: value }),
-      startChapterSwitching: (shouldRestoreFullscreen) =>
-        set({
-          isChapterSwitching: true,
-          shouldRestoreFullscreenAfterSwitch: shouldRestoreFullscreen,
-        }),
-      finishChapterSwitching: () =>
-        set({
-          isChapterSwitching: false,
-          shouldRestoreFullscreenAfterSwitch: false,
-        }),
 
       reset: () =>
         set({
@@ -165,8 +149,6 @@ export const useEpubViewerStore = create<EpubViewerState>()(
           isTOCOpen: false,
           isFullscreen: false,
           isIncognito: false,
-          isChapterSwitching: false,
-          shouldRestoreFullscreenAfterSwitch: false,
           globalProgress: 0,
           isAtFirstPage: false,
           isAtLastPage: false,

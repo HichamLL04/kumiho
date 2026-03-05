@@ -5,7 +5,6 @@ import { useEffect, useCallback, useState, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
-import { finishChapterSwitching, getFullscreenSwitchState } from "../stores/fullscreenSwitchStore";
 import { ViewerSettings as ViewerSettingsModal } from "../components/viewer/ViewerSettings";
 
 // Feature imports
@@ -26,6 +25,8 @@ import {
   useNextChapterPreloader,
   useProgressSync,
   SyncConfirmModal,
+  useRestoreFullscreenAfterChapterSwitch,
+  useExitFullscreenOnViewerUnmount,
 } from "../features/viewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
@@ -153,6 +154,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   const isInteractingRef = useRef(false);
   const [showPageJump, setShowPageJump] = useState(false);
   const [showSeriesEndModal, setShowSeriesEndModal] = useState(false);
+  useExitFullscreenOnViewerUnmount();
+  useRestoreFullscreenAfterChapterSwitch(chapterId);
   const handleReachedSeriesEnd = useCallback(() => {
     if (isAdjacentResolved) {
       setShowSeriesEndModal(true);
@@ -233,36 +236,14 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     };
   }, [isFullscreen, setFullscreen]);
 
-  // 뷰어 종료 시 전체화면 해제
+  // 뷰어 종료 시 타이머 정리
   useEffect(() => {
     return () => {
-      const { isChapterSwitching: switching } = getFullscreenSwitchState();
-      if (isDocumentFullscreen() && !switching) {
-        exitFullscreen().catch(() => {});
-      }
       if (uiTimerRef.current) {
         window.clearTimeout(uiTimerRef.current);
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (!chapterId) return;
-
-    const timer = window.setTimeout(() => {
-      const state = getFullscreenSwitchState();
-      if (!state.isChapterSwitching) return;
-
-      const maybeRestore =
-        state.shouldRestoreFullscreenAfterSwitch && !isDocumentFullscreen() ? enterFullscreen().catch(() => {}) : null;
-
-      Promise.resolve(maybeRestore).finally(() => {
-        finishChapterSwitching();
-      });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [chapterId]);
 
   // UI 표시 시작 시각 기록
   useEffect(() => {

@@ -10,3 +10,4 @@ export { useVerticalScroll } from "./useVerticalScroll";
 export { useChapterLoader } from "./useChapterLoader";
 export { useNextChapterPreloader } from "./useNextChapterPreloader";
 export { useViewerZoom } from "./useViewerZoom";
+export { useExitFullscreenOnViewerUnmount, useRestoreFullscreenAfterChapterSwitch } from "./useFullscreenChapterSwitch";

@@ -1,16 +1,16 @@
 import { useEffect, useCallback, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEpubViewerStore, type EpubFontFamily, type EpubRenderMode } from "../stores/epubViewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
-import { finishChapterSwitching, getFullscreenSwitchState, startChapterSwitching } from "../stores/fullscreenSwitchStore";
+import { startChapterSwitching } from "../stores/fullscreenSwitchStore";
 import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapterLoader";
 import { EpubViewer } from "./EpubViewer";
 import { api, epubProgressAPI, libraryAPI, seriesAPI, settingAPI } from "../api/client";
 import type { EpubTOCItem } from "../features/epub-viewer/components/EpubChapterViewer";
 import { AlertModal } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
-import { useAdjacentChapters } from "../features/viewer";
+import { useAdjacentChapters, useExitFullscreenOnViewerUnmount, useRestoreFullscreenAfterChapterSwitch } from "../features/viewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 import { useViewerSync } from "../hooks/useViewerSync";
 
@@ -24,6 +24,7 @@ const toPositionRatio = (position: number, total: number): number => {
 };
 
 export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
+  const { chapterId: routeChapterId } = useParams<{ chapterId: string }>();
   const { t } = useTranslation();
   usePreventBrowserZoom(true);
   const { chapter, seriesId, volumeId } = loaderData;
@@ -71,6 +72,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const [toc, setToc] = useState<EpubTOCItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [epubUrl, setEpubUrl] = useState<string | null>(null);
+  useExitFullscreenOnViewerUnmount();
+  useRestoreFullscreenAfterChapterSwitch(routeChapterId);
   const [initialCFI, setInitialCFI] = useState<string | null>(null);
   const [initialProgressRatio, setInitialProgressRatio] = useState<number | null>(null);
   const isInitializingRef = useRef(true);
@@ -347,36 +350,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     };
   }, [isFullscreen, setFullscreen]);
 
-  // 뷰어 종료 시 전체화면 해제
+  // 뷰어 종료 시 타이머 정리
   useEffect(() => {
     return () => {
-      const { isChapterSwitching: switching } = getFullscreenSwitchState();
-      if (isDocumentFullscreen() && !switching) {
-        exitFullscreen().catch(() => {});
-      }
-
       if (initFallbackTimerRef.current) window.clearTimeout(initFallbackTimerRef.current);
       if (uiTimerRef.current) window.clearTimeout(uiTimerRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (!chapterId) return;
-
-    const timer = window.setTimeout(() => {
-      const state = getFullscreenSwitchState();
-      if (!state.isChapterSwitching) return;
-
-      const maybeRestore =
-        state.shouldRestoreFullscreenAfterSwitch && !isDocumentFullscreen() ? enterFullscreen().catch(() => {}) : null;
-
-      Promise.resolve(maybeRestore).finally(() => {
-        finishChapterSwitching();
-      });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [chapterId]);
 
   // UI가 표시될 때 시작 시간 기록
   useEffect(() => {

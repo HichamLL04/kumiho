@@ -22,5 +22,4 @@ export const finishChapterSwitching = () => {
   };
 };
 
-export const getFullscreenSwitchState = (): FullscreenSwitchState => state;
-
+export const getFullscreenSwitchState = (): Readonly<FullscreenSwitchState> => ({ ...state });
