@@ -25,6 +25,8 @@ import {
   useNextChapterPreloader,
   useProgressSync,
   SyncConfirmModal,
+  useRestoreFullscreenAfterChapterSwitch,
+  useExitFullscreenOnViewerUnmount,
 } from "../features/viewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
@@ -231,13 +233,12 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       events.forEach((event) => document.removeEventListener(event, handleFullscreenChange));
     };
   }, [isFullscreen, setFullscreen]);
+  useRestoreFullscreenAfterChapterSwitch(chapterId);
+  useExitFullscreenOnViewerUnmount();
 
-  // 뷰어 종료 시 전체화면 해제
+  // 뷰어 종료 시 타이머 정리
   useEffect(() => {
     return () => {
-      if (isDocumentFullscreen()) {
-        exitFullscreen().catch(() => {});
-      }
       if (uiTimerRef.current) {
         window.clearTimeout(uiTimerRef.current);
       }

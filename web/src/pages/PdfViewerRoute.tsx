@@ -1,12 +1,20 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
 import { useTranslation } from "react-i18next";
 import { AlertModal } from "../components/modals/AlertModal";
 
 // Feature imports
-import { useBGM, useAdjacentChapters, useProgress, UI_HIDE_DELAY, useProgressSync } from "../features/viewer";
+import {
+  useBGM,
+  useAdjacentChapters,
+  useProgress,
+  UI_HIDE_DELAY,
+  useProgressSync,
+  useExitFullscreenOnViewerUnmount,
+  useRestoreFullscreenAfterChapterSwitch,
+} from "../features/viewer";
 import type { PDFOutlineItem } from "../features/viewer/components/PdfChapterViewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
@@ -21,6 +29,7 @@ interface PdfViewerRouteProps {
 }
 
 export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
+  const { chapterId: routeChapterId } = useParams<{ chapterId: string }>();
   const { chapter, seriesId, volumeId, isInitialScrollingRef } = loaderData;
   const chapterId = chapter?.id || "";
 
@@ -195,6 +204,8 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
       events.forEach((event) => document.removeEventListener(event, handleFullscreenChange));
     };
   }, [isFullscreen, setFullscreen]);
+  useRestoreFullscreenAfterChapterSwitch(routeChapterId);
+  useExitFullscreenOnViewerUnmount();
 
   // PDF 세로 모드에서는 useVerticalScroll 훅을 사용하지 않으므로
   // 초기 스크롤 가드가 해제되지 않으면 진행도 저장이 영구 차단될 수 있다.
@@ -210,12 +221,9 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     return () => window.clearTimeout(timer);
   }, [settings.readingMode, totalPages, currentPage, isInitialScrollingRef]);
 
-  // 뷰어 종료 시 전체화면 해제
+  // 뷰어 종료 시 타이머 정리
   useEffect(() => {
     return () => {
-      if (isDocumentFullscreen()) {
-        exitFullscreen().catch(() => {});
-      }
       if (uiTimerRef.current) {
         window.clearTimeout(uiTimerRef.current);
       }

@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { seriesAPI, volumeAPI } from "../../../api/client";
+import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
+import { finishChapterSwitching, startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
 import type { Chapter } from "../types";
 
 interface ServerProgress {
@@ -69,11 +71,18 @@ export function useProgressSync({ seriesId, chapter, currentPage, isLoading }: U
 
     setShowSyncModal(false);
     // 해당 챕터와 페이지로 이동
+    const isChapterChanged = chapter ? serverProgress.chapter_id !== chapter.id : true;
+    if (isChapterChanged) {
+      startChapterSwitching(isDocumentFullscreen());
+    } else {
+      finishChapterSwitching();
+    }
     navigate(`/viewer/${serverProgress.chapter_id}?page=${serverProgress.current_page}`, {
+      replace: true,
       state: viewerFrom ? { from: viewerFrom } : undefined,
     });
     // 페이지 이동 시 콤포넌트가 재마운트되거나 훅이 다시 실행되므로 isCheckedRef는 그대로 둬도 됨
-  }, [serverProgress, navigate, viewerFrom]);
+  }, [serverProgress, navigate, viewerFrom, chapter]);
 
   const handleCloseModal = useCallback(() => {
     setShowSyncModal(false);

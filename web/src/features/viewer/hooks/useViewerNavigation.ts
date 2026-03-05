@@ -3,6 +3,8 @@
 import { useEffect, useCallback, useState, useRef, type RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
+import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
+import { startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
 import type { PageMeta } from "../types";
 import type { ReadingDirection, ReadingMode } from "../../../stores/viewerStore";
 
@@ -111,6 +113,7 @@ export function useViewerNavigation({
       if (showNextHint && nextChapterId) {
         // 이미 힌트가 떠있으면 이동 전 현재 진행도 즉시 저장
         await saveProgress();
+        startChapterSwitching(isDocumentFullscreen());
         navigate(`/viewer/${nextChapterId}`, {
           replace: true,
           state: viewerFrom ? { from: viewerFrom } : undefined,
@@ -170,6 +173,7 @@ export function useViewerNavigation({
       // 첫 페이지
       if (showPrevHint && prevChapterId) {
         await saveProgress();
+        startChapterSwitching(isDocumentFullscreen());
         navigate(`/viewer/${prevChapterId}`, {
           replace: true,
           state: {
