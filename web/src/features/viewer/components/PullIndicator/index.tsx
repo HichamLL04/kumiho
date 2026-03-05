@@ -2,6 +2,8 @@
 
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { isFullscreen as isDocumentFullscreen } from "../../../../utils/fullscreen";
+import { startChapterSwitching } from "../../../../stores/fullscreenSwitchStore";
 import styles from "./PullIndicator.module.css";
 
 interface PullIndicatorProps {
@@ -40,6 +42,7 @@ export function PullIndicator({
     if (!isVisible && Math.abs(pullOffset) < showThreshold) return;
 
     await saveProgress();
+    startChapterSwitching(isDocumentFullscreen());
     if (type === "prev") {
       navigate(`/viewer/${chapterId}?page=last`, {
         state: viewerFrom ? { from: viewerFrom } : undefined,
