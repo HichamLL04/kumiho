@@ -1,3 +1,4 @@
+import { create } from "zustand";
 import { exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
 
 interface FullscreenSwitchState {
@@ -5,46 +6,64 @@ interface FullscreenSwitchState {
   shouldRestoreFullscreenAfterSwitch: boolean;
 }
 
-const CHAPTER_SWITCH_TTL_MS = 15_000;
+interface FullscreenSwitchStore extends FullscreenSwitchState {
+  startChapterSwitching: (shouldRestoreFullscreen: boolean) => void;
+  finishChapterSwitching: () => void;
+}
 
-let state: FullscreenSwitchState = {
-  isChapterSwitching: false,
-  shouldRestoreFullscreenAfterSwitch: false,
-};
+const CHAPTER_SWITCH_TTL_MS = 15_000;
 
 let chapterSwitchTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-export const startChapterSwitching = (shouldRestoreFullscreen: boolean) => {
-  if (chapterSwitchTimeoutId !== null) {
-    clearTimeout(chapterSwitchTimeoutId);
-    chapterSwitchTimeoutId = null;
-  }
-
-  state = {
-    isChapterSwitching: true,
-    shouldRestoreFullscreenAfterSwitch: shouldRestoreFullscreen,
-  };
-
-  chapterSwitchTimeoutId = setTimeout(() => {
-    if (state.isChapterSwitching) {
-      finishChapterSwitching();
-      if (isDocumentFullscreen()) {
-        exitFullscreen().catch(() => {});
-      }
+export const useFullscreenSwitchStore = create<FullscreenSwitchStore>((set, get) => ({
+  isChapterSwitching: false,
+  shouldRestoreFullscreenAfterSwitch: false,
+  startChapterSwitching: (shouldRestoreFullscreen: boolean) => {
+    if (chapterSwitchTimeoutId !== null) {
+      clearTimeout(chapterSwitchTimeoutId);
+      chapterSwitchTimeoutId = null;
     }
-  }, CHAPTER_SWITCH_TTL_MS);
+
+    set({
+      isChapterSwitching: true,
+      shouldRestoreFullscreenAfterSwitch: shouldRestoreFullscreen,
+    });
+
+    chapterSwitchTimeoutId = setTimeout(() => {
+      const { isChapterSwitching } = get();
+      if (isChapterSwitching) {
+        get().finishChapterSwitching();
+        if (isDocumentFullscreen()) {
+          exitFullscreen().catch(() => {});
+        }
+      }
+    }, CHAPTER_SWITCH_TTL_MS);
+  },
+  finishChapterSwitching: () => {
+    if (chapterSwitchTimeoutId !== null) {
+      clearTimeout(chapterSwitchTimeoutId);
+      chapterSwitchTimeoutId = null;
+    }
+
+    set({
+      isChapterSwitching: false,
+      shouldRestoreFullscreenAfterSwitch: false,
+    });
+  },
+}));
+
+export const startChapterSwitching = (shouldRestoreFullscreen: boolean) => {
+  useFullscreenSwitchStore.getState().startChapterSwitching(shouldRestoreFullscreen);
 };
 
 export const finishChapterSwitching = () => {
-  if (chapterSwitchTimeoutId !== null) {
-    clearTimeout(chapterSwitchTimeoutId);
-    chapterSwitchTimeoutId = null;
-  }
-
-  state = {
-    isChapterSwitching: false,
-    shouldRestoreFullscreenAfterSwitch: false,
-  };
+  useFullscreenSwitchStore.getState().finishChapterSwitching();
 };
 
-export const getFullscreenSwitchState = (): Readonly<FullscreenSwitchState> => ({ ...state });
+export const getFullscreenSwitchState = (): Readonly<FullscreenSwitchState> => {
+  const { isChapterSwitching, shouldRestoreFullscreenAfterSwitch } = useFullscreenSwitchStore.getState();
+  return {
+    isChapterSwitching,
+    shouldRestoreFullscreenAfterSwitch,
+  };
+};
