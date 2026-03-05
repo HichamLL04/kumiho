@@ -1,3 +1,5 @@
+import { exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
+
 interface FullscreenSwitchState {
   isChapterSwitching: boolean;
   shouldRestoreFullscreenAfterSwitch: boolean;
@@ -26,6 +28,9 @@ export const startChapterSwitching = (shouldRestoreFullscreen: boolean) => {
   chapterSwitchTimeoutId = setTimeout(() => {
     if (state.isChapterSwitching) {
       finishChapterSwitching();
+      if (isDocumentFullscreen()) {
+        exitFullscreen().catch(() => {});
+      }
     }
   }, CHAPTER_SWITCH_TTL_MS);
 };
