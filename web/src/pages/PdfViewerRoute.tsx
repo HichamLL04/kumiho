@@ -125,10 +125,13 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     currentPage,
     totalPages,
     readingMode: settings.readingMode,
+    readingDirection: settings.readingDirection,
     clickDirection: settings.clickDirection,
     keyboardDirection: settings.keyboardDirection,
     pageOffset: settings.pageOffset,
     pageMetaMap: new Map(), // PDF does not use page metas for now
+    subPage: null,
+    setSubPage: () => {},
     nextChapterId,
     prevChapterId,
     saveProgress,

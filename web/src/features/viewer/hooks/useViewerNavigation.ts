@@ -7,7 +7,7 @@ import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen"
 import { startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
 import type { PageMeta } from "../types";
 import type { ReadingDirection, ReadingMode, SubPage } from "../../../stores/viewerStore";
-import { getNextNavState, getPrevNavState, getInitialSubPage } from "../../../utils/pageCalculator";
+import { getNextNavState, getPrevNavState } from "../../../utils/pageCalculator";
 
 import type { ViewerAnimationHandles } from "../types";
 

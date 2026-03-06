@@ -1,7 +1,7 @@
 // 뷰어 페이지 - 리팩토링된 버전
 // 훅과 컴포넌트로 로직과 UI를 분리하여 유지보수성 향상
 
-import { useEffect, useCallback, useMemo, useState, useRef } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
@@ -36,7 +36,7 @@ import { useTranslation } from "react-i18next";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 
-import { getDisplayPages, getPrevTargetPage, getNextTargetPage, getInitialSubPage } from "../utils/pageCalculator";
+import { getDisplayPages, getPrevTargetPage, getNextTargetPage, getInitialSubPage, getNextNavState, getPrevNavState } from "../utils/pageCalculator";
 import styles from "./Viewer.module.css";
 
 import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapterLoader";
@@ -336,7 +336,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
 
   // 이전 뷰의 '기준 페이지'를 구하고 그 페이지의 디스플레이 셋을 구함
   const prevTargetPage = getPrevTargetPage(currentPage, settings.readingMode, pageMetaMap);
-  const prevDisplayPages =
+  let prevDisplayPages =
     prevTargetPage !== -1
       ? getDisplayPages({
           currentPage: prevTargetPage,
@@ -348,8 +348,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       : [];
 
   const nextTargetPage = getNextTargetPage(currentPage, totalPages, settings.readingMode, pageMetaMap);
-  // nextTargetPage가 totalPages를 넘어가면 -1이 아니라, 범위를 벗어난 값이 나옴. getDisplayPages 내부에서 처리하거나 체크 필요.
-  const nextDisplayPages =
+  let nextDisplayPages =
     nextTargetPage !== -1
       ? getDisplayPages({
           currentPage: nextTargetPage,
@@ -359,6 +358,31 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
           pageMetaMap,
         })
       : [];
+
+  // single 모드 스프레드 분할: 애니메이션 미리보기용 subPage 및 displayPages 계산
+  let nextPreviewSubPage: typeof subPage = subPage;
+  let prevPreviewSubPage: typeof subPage = subPage;
+
+  if (settings.readingMode === "single") {
+    const nextNav = getNextNavState(currentPage, totalPages, subPage, pageMetaMap, settings.readingDirection);
+    if (nextNav) {
+      nextDisplayPages = [nextNav.page];
+      nextPreviewSubPage = nextNav.subPage;
+    } else {
+      // 챕터 끝 — 미리보기 없음
+      nextDisplayPages = [];
+      nextPreviewSubPage = null;
+    }
+
+    const prevNav = getPrevNavState(currentPage, subPage, pageMetaMap, settings.readingDirection);
+    if (prevNav) {
+      prevDisplayPages = [prevNav.page];
+      prevPreviewSubPage = prevNav.subPage;
+    } else {
+      prevDisplayPages = [];
+      prevPreviewSubPage = null;
+    }
+  }
 
   return (
     <div
@@ -472,6 +496,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
               onPageChange={setCurrentPage}
               transitionType={settings.pageTransition}
               subPage={subPage}
+              nextPreviewSubPage={nextPreviewSubPage}
+              prevPreviewSubPage={prevPreviewSubPage}
               pageMetaMap={pageMetaMap}
             />
           </div>

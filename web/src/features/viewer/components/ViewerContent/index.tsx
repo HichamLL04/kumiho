@@ -32,6 +32,8 @@ interface ViewerContentProps {
   onPageChange?: (page: number) => void;
   transitionType: PageTransitionType;
   subPage?: SubPage;
+  nextPreviewSubPage?: SubPage;
+  prevPreviewSubPage?: SubPage;
   pageMetaMap?: Map<number, PageMeta>;
 }
 
@@ -57,6 +59,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       onPrev,
       transitionType,
       subPage,
+      nextPreviewSubPage,
+      prevPreviewSubPage,
       pageMetaMap,
     },
     ref,
@@ -163,8 +167,11 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       [handleAnimatedNext, handleAnimatedPrev, isZoomed, readingMode, wheelDirection],
     );
 
-    const renderPages = (pages: number[]) => {
+    const renderPages = (pages: number[], renderSubPage?: SubPage) => {
       if (!pages || pages.length === 0) return null;
+
+      // 명시적으로 전달된 subPage가 있으면 사용, 없으면 현재 subPage 사용
+      const effectiveSubPage = renderSubPage !== undefined ? renderSubPage : subPage;
 
       return (
         <div
@@ -186,9 +193,9 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
             const shouldRenderImage = pageNum <= maxAllowedPage;
 
             // 스프레드 분할: single 모드 + wide 이미지 + subPage 활성화
-            const isSplit = readingMode === "single" && subPage && pageMetaMap?.get(pageNum)?.isWide;
+            const isSplit = readingMode === "single" && effectiveSubPage && pageMetaMap?.get(pageNum)?.isWide;
             const splitClass = isSplit
-              ? subPage === "left"
+              ? effectiveSubPage === "left"
                 ? styles.splitLeft
                 : styles.splitRight
               : "";
@@ -279,8 +286,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         onTouchEnd={swipeHandlers.onTouchEnd}
         onWheel={handleWheelNavigation}
         style={{ background: "transparent" }}
-        prevChildren={renderPages(prevDisplayPages)}
-        nextChildren={renderPages(nextDisplayPages)}
+        prevChildren={renderPages(prevDisplayPages, prevPreviewSubPage)}
+        nextChildren={renderPages(nextDisplayPages, nextPreviewSubPage)}
       >
         {/* Current Pages (With Zoom) */}
         <div style={{ width: "100%", height: "100%", flexShrink: 0 }}>
