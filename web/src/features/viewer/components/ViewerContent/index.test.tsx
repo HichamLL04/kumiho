@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import type { ReactNode } from "react";
 import { ViewerContent } from "./index";
+import type { PageMeta } from "../../types";
 
 vi.mock("../../../../pages/Viewer.module.css", () => ({
   default: new Proxy(
@@ -81,6 +82,19 @@ const baseProps = {
   onPrev: vi.fn(),
   transitionType: "slide" as const,
 };
+
+const createPageMetaMap = (isWide: boolean): Map<number, PageMeta> =>
+  new Map([
+    [
+      1,
+      {
+        pageNumber: 1,
+        width: isWide ? 2600 : 1200,
+        height: 1600,
+        isWide,
+      },
+    ],
+  ]);
 
 afterEach(() => {
   mockIsZoomed = false;
@@ -236,5 +250,58 @@ describe("ViewerContent vertical rendering window", () => {
     expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/13/image")).toBeInTheDocument();
     // page 14 should remain placeholder
     expect(screen.queryByTestId("smart-/api/v1/chapters/chapter-1/pages/14/image")).not.toBeInTheDocument();
+  });
+});
+
+describe("ViewerContent split rendering", () => {
+  it("applies splitLeft class for wide page with left subPage", () => {
+    const { container } = render(
+      <ViewerContent
+        {...baseProps}
+        readingMode="single"
+        displayPages={[1]}
+        subPage="left"
+        pageMetaMap={createPageMetaMap(true)}
+        imageLoading={{ 1: false }}
+      />,
+    );
+
+    const wrapper = container.querySelector("#page-1");
+    expect(wrapper).toHaveClass("splitLeft");
+    expect(wrapper).not.toHaveClass("splitRight");
+  });
+
+  it("applies splitRight class for wide page with right subPage", () => {
+    const { container } = render(
+      <ViewerContent
+        {...baseProps}
+        readingMode="single"
+        displayPages={[1]}
+        subPage="right"
+        pageMetaMap={createPageMetaMap(true)}
+        imageLoading={{ 1: false }}
+      />,
+    );
+
+    const wrapper = container.querySelector("#page-1");
+    expect(wrapper).toHaveClass("splitRight");
+    expect(wrapper).not.toHaveClass("splitLeft");
+  });
+
+  it("does not apply split classes for non-wide page", () => {
+    const { container } = render(
+      <ViewerContent
+        {...baseProps}
+        readingMode="single"
+        displayPages={[1]}
+        subPage="left"
+        pageMetaMap={createPageMetaMap(false)}
+        imageLoading={{ 1: false }}
+      />,
+    );
+
+    const wrapper = container.querySelector("#page-1");
+    expect(wrapper).not.toHaveClass("splitLeft");
+    expect(wrapper).not.toHaveClass("splitRight");
   });
 });

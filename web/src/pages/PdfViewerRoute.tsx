@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef } from "react";
+import { useEffect, useCallback, useState, useRef, useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
@@ -20,9 +20,10 @@ import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
 import { useViewerNavigation } from "../features/viewer/hooks/useViewerNavigation";
 import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapterLoader";
-import type { ViewerAnimationHandles } from "../features/viewer/types";
+import type { ViewerAnimationHandles, PageMeta } from "../features/viewer/types";
 import { PdfViewer } from "./PdfViewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
+import type { SubPage } from "../stores/viewerStore";
 
 interface PdfViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
@@ -119,16 +120,22 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
       setShowSeriesEndModal(true);
     }
   }, [isAdjacentResolved]);
+  const emptyPageMetaMap = useMemo<Map<number, PageMeta>>(() => new Map(), []);
+  const noopSetSubPage = useCallback((subPage: SubPage) => {
+    void subPage;
+  }, []);
 
   // 네비게이션 제어
   const { handleNext, handlePrev, handleBack } = useViewerNavigation({
     currentPage,
     totalPages,
     readingMode: settings.readingMode,
-    clickDirection: settings.clickDirection,
+    readingDirection: settings.readingDirection,
     keyboardDirection: settings.keyboardDirection,
     pageOffset: settings.pageOffset,
-    pageMetaMap: new Map(), // PDF does not use page metas for now
+    pageMetaMap: emptyPageMetaMap, // PDF does not use page metas for now
+    subPage: null,
+    setSubPage: noopSetSubPage,
     nextChapterId,
     prevChapterId,
     saveProgress,
