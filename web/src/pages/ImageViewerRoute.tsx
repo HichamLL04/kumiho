@@ -1,7 +1,7 @@
 // 뷰어 페이지 - 리팩토링된 버전
 // 훅과 컴포넌트로 로직과 UI를 분리하여 유지보수성 향상
 
-import { useEffect, useCallback, useState, useRef } from "react";
+import { useEffect, useLayoutEffect, useCallback, useState, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
@@ -75,7 +75,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   const { chapter, isLoading, error, seriesId, volumeId, pageMetaMap, isInitialScrollingRef } = loaderData;
 
   // subPage 초기화/재계산: 챕터/페이지/모드/방향/메타 변경 시 일관 처리
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (settings.readingMode === "single") {
       setSubPage(getInitialSubPage(currentPage, pageMetaMap, settings.readingDirection));
     } else {
@@ -188,7 +188,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     totalPages,
     readingMode: settings.readingMode,
     readingDirection: settings.readingDirection,
-    clickDirection: settings.clickDirection,
     keyboardDirection: settings.keyboardDirection,
     pageOffset: settings.pageOffset,
     pageMetaMap,

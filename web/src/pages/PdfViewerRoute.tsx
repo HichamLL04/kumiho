@@ -23,6 +23,7 @@ import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapter
 import type { ViewerAnimationHandles, PageMeta } from "../features/viewer/types";
 import { PdfViewer } from "./PdfViewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
+import type { SubPage } from "../stores/viewerStore";
 
 interface PdfViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
@@ -120,7 +121,9 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     }
   }, [isAdjacentResolved]);
   const emptyPageMetaMap = useMemo<Map<number, PageMeta>>(() => new Map(), []);
-  const noopSetSubPage = useCallback(() => {}, []);
+  const noopSetSubPage = useCallback((subPage: SubPage) => {
+    void subPage;
+  }, []);
 
   // 네비게이션 제어
   const { handleNext, handlePrev, handleBack } = useViewerNavigation({
@@ -128,7 +131,6 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     totalPages,
     readingMode: settings.readingMode,
     readingDirection: settings.readingDirection,
-    clickDirection: settings.clickDirection,
     keyboardDirection: settings.keyboardDirection,
     pageOffset: settings.pageOffset,
     pageMetaMap: emptyPageMetaMap, // PDF does not use page metas for now

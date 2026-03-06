@@ -16,7 +16,6 @@ interface UseViewerNavigationParams {
   totalPages: number;
   readingMode: ReadingMode;
   readingDirection: ReadingDirection;
-  clickDirection: ReadingDirection;
   keyboardDirection: ReadingDirection;
   pageOffset: number;
   pageMetaMap: Map<number, PageMeta>;
