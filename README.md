@@ -2,6 +2,7 @@
 
 <div align="center">
 
+[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/KYaWSCUNQt)
 ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/aha-hyeong/kumiho?style=flat-square&label=version)
 ![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/ahahyeong/kumiho?style=flat-square)
 ![GitHub](https://img.shields.io/github/license/aha-hyeong/kumiho?style=flat-square)
