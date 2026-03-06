@@ -1,4 +1,4 @@
-import type { ReadingMode } from "../stores/viewerStore";
+import type { ReadingMode, ReadingDirection, SubPage } from "../stores/viewerStore";
 import type { PageMeta } from "../features/viewer/types";
 
 interface PageCalculationParams {
@@ -142,4 +142,82 @@ export const getNextTargetPage = (
   // 하지만 여기서는 "Target Page"를 구하는 것이므로 유효한 페이지여야 함.
   const target = currentPage + 2;
   return target > totalPages ? totalPages : target;
+};
+
+// ===== 스프레드 분할 네비게이션 =====
+
+interface NavState {
+  page: number;
+  subPage: SubPage;
+}
+
+// 읽기 방향에 따른 첫 번째 / 마지막 subPage
+const getFirstSubPage = (direction: ReadingDirection): "left" | "right" =>
+  direction === "rtl" ? "right" : "left";
+
+const getLastSubPage = (direction: ReadingDirection): "left" | "right" =>
+  direction === "rtl" ? "left" : "right";
+
+// wide 페이지에 처음 도달할 때의 subPage 결정
+export const getInitialSubPage = (
+  page: number,
+  pageMetaMap: Map<number, PageMeta>,
+  readingDirection: ReadingDirection,
+): SubPage => {
+  const meta = pageMetaMap.get(page);
+  if (!meta?.isWide) return null;
+  return getFirstSubPage(readingDirection);
+};
+
+// 다음 이동 시 { page, subPage } 계산 (single 모드 전용)
+export const getNextNavState = (
+  currentPage: number,
+  totalPages: number,
+  subPage: SubPage,
+  pageMetaMap: Map<number, PageMeta>,
+  readingDirection: ReadingDirection,
+): NavState | null => {
+  const currentMeta = pageMetaMap.get(currentPage);
+
+  // 현재 wide 이미지 + subPage가 첫 번째 반쪽이면 → 반대쪽으로
+  if (currentMeta?.isWide && subPage === getFirstSubPage(readingDirection)) {
+    return { page: currentPage, subPage: getLastSubPage(readingDirection) };
+  }
+
+  // 마지막 페이지의 마지막 subPage면 → 이동 불가 (챕터 끝)
+  if (currentPage >= totalPages) return null;
+
+  // 다음 페이지로 이동
+  const nextPage = currentPage + 1;
+  const nextMeta = pageMetaMap.get(nextPage);
+  return {
+    page: nextPage,
+    subPage: nextMeta?.isWide ? getFirstSubPage(readingDirection) : null,
+  };
+};
+
+// 이전 이동 시 { page, subPage } 계산 (single 모드 전용)
+export const getPrevNavState = (
+  currentPage: number,
+  subPage: SubPage,
+  pageMetaMap: Map<number, PageMeta>,
+  readingDirection: ReadingDirection,
+): NavState | null => {
+  const currentMeta = pageMetaMap.get(currentPage);
+
+  // 현재 wide 이미지 + subPage가 마지막 반쪽이면 → 첫 번째로
+  if (currentMeta?.isWide && subPage === getLastSubPage(readingDirection)) {
+    return { page: currentPage, subPage: getFirstSubPage(readingDirection) };
+  }
+
+  // 첫 페이지의 첫 subPage면 → 이동 불가 (챕터 시작)
+  if (currentPage <= 1) return null;
+
+  // 이전 페이지로 이동
+  const prevPage = currentPage - 1;
+  const prevMeta = pageMetaMap.get(prevPage);
+  return {
+    page: prevPage,
+    subPage: prevMeta?.isWide ? getLastSubPage(readingDirection) : null,
+  };
 };

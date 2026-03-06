@@ -15,6 +15,9 @@ export type FitMode = "screen" | "width" | "height" | "original";
 // 페이지 전환 애니메이션 타입
 export type PageTransitionType = "slide" | "fade" | "none";
 
+// 스프레드 분할 서브페이지
+export type SubPage = "left" | "right" | null;
+
 // 뷰어 설정
 export interface ViewerSettings {
   readingMode: ReadingMode;
@@ -43,6 +46,7 @@ interface ViewerState {
   isSettingsOpen: boolean;
   isFullscreen: boolean;
   isIncognito: boolean;
+  subPage: SubPage;
 
   // 설정
   settings: ViewerSettings;
@@ -66,6 +70,7 @@ interface ViewerState {
   setFullscreen: (isFullscreen: boolean) => void;
   initPage: (page: number, total: number) => void;
   initializeSettings: (settings: Partial<ViewerSettings>) => void;
+  setSubPage: (subPage: SubPage) => void;
   setIncognito: (isIncognito: boolean) => void;
   reset: () => void;
 
@@ -124,6 +129,7 @@ export const useViewerStore = create<ViewerState>()(
       isSettingsOpen: false,
       isFullscreen: false,
       isIncognito: false,
+      subPage: null,
       settings: defaultSettings,
       seriesSettings: {},
       currentSeriesId: null,
@@ -392,6 +398,7 @@ export const useViewerStore = create<ViewerState>()(
           settings: { ...state.settings, ...newSettings },
         })),
 
+      setSubPage: (subPage) => set({ subPage }),
       setIncognito: (isIncognito) => set({ isIncognito }),
 
       reset: () =>
@@ -402,6 +409,7 @@ export const useViewerStore = create<ViewerState>()(
           isSettingsOpen: false,
           isFullscreen: false,
           isIncognito: false,
+          subPage: null,
           settings: defaultSettings,
           seriesSettings: {},
           currentSeriesId: null,

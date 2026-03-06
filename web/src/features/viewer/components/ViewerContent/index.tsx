@@ -7,7 +7,8 @@ import { useViewerZoom } from "../../hooks/useViewerZoom";
 import { useSwipe } from "../../hooks/useSwipe";
 import { getPageImageUrl } from "../../utils/imageUrl";
 import styles from "../../../../pages/Viewer.module.css";
-import { type ReadingMode, type ReadingDirection, type PageTransitionType } from "../../../../stores/viewerStore";
+import { type ReadingMode, type ReadingDirection, type PageTransitionType, type SubPage } from "../../../../stores/viewerStore";
+import type { PageMeta } from "../../types";
 import type { ViewerAnimationHandles } from "../../types";
 
 interface ViewerContentProps {
@@ -30,6 +31,8 @@ interface ViewerContentProps {
   onPrev: () => void;
   onPageChange?: (page: number) => void;
   transitionType: PageTransitionType;
+  subPage?: SubPage;
+  pageMetaMap?: Map<number, PageMeta>;
 }
 
 export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentProps>(
@@ -53,6 +56,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       onNext,
       onPrev,
       transitionType,
+      subPage,
+      pageMetaMap,
     },
     ref,
   ) => {
@@ -180,11 +185,19 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
             const isSingleWideInDouble = isDoubleMode && pages.length === 1;
             const shouldRenderImage = pageNum <= maxAllowedPage;
 
+            // 스프레드 분할: single 모드 + wide 이미지 + subPage 활성화
+            const isSplit = readingMode === "single" && subPage && pageMetaMap?.get(pageNum)?.isWide;
+            const splitClass = isSplit
+              ? subPage === "left"
+                ? styles.splitLeft
+                : styles.splitRight
+              : "";
+
             return (
               <div
                 key={pageNum}
                 id={`page-${pageNum}`}
-                className={`${styles.pageImageWrapper} ${isSingleWideInDouble ? styles.singleWide : ""}`}
+                className={`${styles.pageImageWrapper} ${isSingleWideInDouble ? styles.singleWide : ""} ${splitClass}`}
               >
                 {shouldRenderImage ? (
                   <SmartImageViewer
