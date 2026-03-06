@@ -74,21 +74,14 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   // 챕터 로딩 데이터
   const { chapter, isLoading, error, seriesId, volumeId, pageMetaMap, isInitialScrollingRef } = loaderData;
 
-  // 챕터 변경 시 subPage 초기화
-  useEffect(() => {
-    setSubPage(null);
-  }, [chapterId, setSubPage]);
-
-  // readingMode 변경 시 subPage 설정/초기화
+  // subPage 초기화/재계산: 챕터/페이지/모드/방향/메타 변경 시 일관 처리
   useEffect(() => {
     if (settings.readingMode === "single") {
       setSubPage(getInitialSubPage(currentPage, pageMetaMap, settings.readingDirection));
     } else {
       setSubPage(null);
     }
-    // readingMode 변경 시에만 실행 (currentPage 변경은 네비게이션 로직에서 처리)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.readingMode]);
+  }, [chapterId, currentPage, settings.readingMode, settings.readingDirection, pageMetaMap, setSubPage]);
 
   // goToPage 래퍼: 페이지 점프 시 wide 이미지면 subPage도 설정
   const goToPageWithSubPage = useCallback(

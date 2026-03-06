@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useViewerNavigation } from "./useViewerNavigation";
+import type { PageMeta } from "../types";
 
 const { mocks } = vi.hoisted(() => {
   const navigateMock = vi.fn();
@@ -84,5 +85,163 @@ describe("useViewerNavigation fullscreen switching", () => {
       replace: true,
       state: { from: "/series/1" },
     });
+  });
+});
+
+describe("useViewerNavigation split-page flow", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const createWidePageMetaMap = (page: number): Map<number, PageMeta> =>
+    new Map([
+      [
+        page,
+        {
+          pageNumber: page,
+          width: 2600,
+          height: 1600,
+          isWide: true,
+        },
+      ],
+    ]);
+  type NavHookProps = { currentPage: number; subPage: "left" | "right" | null };
+
+  it("navigates wide page halves in LTR order", async () => {
+    const setSubPage = vi.fn();
+    const pageMetaMap = createWidePageMetaMap(5);
+    const initialProps: NavHookProps = { currentPage: 5, subPage: "left" };
+
+    const { result, rerender } = renderHook(
+      ({ currentPage, subPage }: NavHookProps) =>
+        useViewerNavigation({
+          currentPage,
+          totalPages: 10,
+          readingMode: "single",
+          readingDirection: "ltr",
+          clickDirection: "ltr",
+          keyboardDirection: "ltr",
+          pageOffset: 0,
+          pageMetaMap,
+          subPage,
+          setSubPage,
+          nextChapterId: "next-chapter",
+          prevChapterId: null,
+          saveProgress: mocks.saveProgressMock,
+          isSettingsOpen: false,
+          closeSettings: vi.fn(),
+          handleToggleFullscreen: vi.fn(),
+          currentChapterId: "chapter-1",
+        }),
+      { initialProps },
+    );
+
+    await act(async () => {
+      await result.current.handleNext();
+    });
+
+    expect(mocks.goToPageMock).not.toHaveBeenCalled();
+    expect(setSubPage).toHaveBeenCalledWith("right");
+
+    rerender({ currentPage: 5, subPage: "right" });
+
+    await act(async () => {
+      await result.current.handleNext();
+    });
+
+    expect(mocks.goToPageMock).toHaveBeenCalledWith(6);
+    expect(setSubPage).toHaveBeenCalledWith(null);
+  });
+
+  it("navigates wide page halves in RTL order", async () => {
+    const setSubPage = vi.fn();
+    const pageMetaMap = createWidePageMetaMap(5);
+    const initialProps: NavHookProps = { currentPage: 5, subPage: "right" };
+
+    const { result, rerender } = renderHook(
+      ({ currentPage, subPage }: NavHookProps) =>
+        useViewerNavigation({
+          currentPage,
+          totalPages: 10,
+          readingMode: "single",
+          readingDirection: "rtl",
+          clickDirection: "rtl",
+          keyboardDirection: "rtl",
+          pageOffset: 0,
+          pageMetaMap,
+          subPage,
+          setSubPage,
+          nextChapterId: "next-chapter",
+          prevChapterId: null,
+          saveProgress: mocks.saveProgressMock,
+          isSettingsOpen: false,
+          closeSettings: vi.fn(),
+          handleToggleFullscreen: vi.fn(),
+          currentChapterId: "chapter-1",
+        }),
+      { initialProps },
+    );
+
+    await act(async () => {
+      await result.current.handleNext();
+    });
+
+    expect(mocks.goToPageMock).not.toHaveBeenCalled();
+    expect(setSubPage).toHaveBeenCalledWith("left");
+
+    rerender({ currentPage: 5, subPage: "left" });
+
+    await act(async () => {
+      await result.current.handleNext();
+    });
+
+    expect(mocks.goToPageMock).toHaveBeenCalledWith(6);
+    expect(setSubPage).toHaveBeenCalledWith(null);
+  });
+
+  it("navigates previous from wide page half before moving page", async () => {
+    const setSubPage = vi.fn();
+    const pageMetaMap = createWidePageMetaMap(5);
+    const initialProps: NavHookProps = { currentPage: 5, subPage: "right" };
+
+    const { result, rerender } = renderHook(
+      ({ currentPage, subPage }: NavHookProps) =>
+        useViewerNavigation({
+          currentPage,
+          totalPages: 10,
+          readingMode: "single",
+          readingDirection: "ltr",
+          clickDirection: "ltr",
+          keyboardDirection: "ltr",
+          pageOffset: 0,
+          pageMetaMap,
+          subPage,
+          setSubPage,
+          nextChapterId: "next-chapter",
+          prevChapterId: "prev-chapter",
+          saveProgress: mocks.saveProgressMock,
+          isSettingsOpen: false,
+          closeSettings: vi.fn(),
+          handleToggleFullscreen: vi.fn(),
+          currentChapterId: "chapter-1",
+        }),
+      { initialProps },
+    );
+
+    await act(async () => {
+      await result.current.handlePrev();
+    });
+
+    expect(mocks.goToPageMock).not.toHaveBeenCalled();
+    expect(setSubPage).toHaveBeenCalledWith("left");
+
+    rerender({ currentPage: 5, subPage: "left" });
+
+    await act(async () => {
+      await result.current.handlePrev();
+    });
+
+    expect(mocks.goToPageMock).toHaveBeenCalledWith(4);
+    expect(setSubPage).toHaveBeenCalledWith(null);
   });
 });
