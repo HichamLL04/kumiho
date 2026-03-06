@@ -398,7 +398,10 @@ export const useViewerStore = create<ViewerState>()(
           settings: { ...state.settings, ...newSettings },
         })),
 
-      setSubPage: (subPage) => set({ subPage }),
+      setSubPage: (subPage) => {
+        if (get().subPage === subPage) return;
+        set({ subPage });
+      },
       setIncognito: (isIncognito) => set({ isIncognito }),
 
       reset: () =>
