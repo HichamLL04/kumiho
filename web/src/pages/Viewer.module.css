@@ -100,6 +100,22 @@
   max-height: none;
 }
 
+/* 스프레드 분할 (single 모드에서 wide 이미지 반쪽 표시) */
+.splitLeft,
+.splitRight {
+  overflow: hidden;
+}
+
+.splitLeft img {
+  clip-path: inset(0 50% 0 0) !important;
+  transform: translateX(25%);
+}
+
+.splitRight img {
+  clip-path: inset(0 0 0 50%) !important;
+  transform: translateX(-25%);
+}
+
 /* 두 페이지 모드 이미지 */
 .modeDouble .pageImageWrapper {
   max-width: 50%;

@@ -6,7 +6,8 @@ import { useViewerStore } from "../../../stores/viewerStore";
 import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
 import { startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
 import type { PageMeta } from "../types";
-import type { ReadingDirection, ReadingMode } from "../../../stores/viewerStore";
+import type { ReadingDirection, ReadingMode, SubPage } from "../../../stores/viewerStore";
+import { getNextNavState, getPrevNavState } from "../../../utils/pageCalculator";
 
 import type { ViewerAnimationHandles } from "../types";
 
@@ -14,10 +15,12 @@ interface UseViewerNavigationParams {
   currentPage: number;
   totalPages: number;
   readingMode: ReadingMode;
-  clickDirection: ReadingDirection;
+  readingDirection: ReadingDirection;
   keyboardDirection: ReadingDirection;
   pageOffset: number;
   pageMetaMap: Map<number, PageMeta>;
+  subPage: SubPage;
+  setSubPage: (subPage: SubPage) => void;
   nextChapterId: string | null;
   prevChapterId: string | null;
   saveProgress: () => Promise<void>;
@@ -48,9 +51,12 @@ export function useViewerNavigation({
   currentPage,
   totalPages,
   readingMode,
+  readingDirection,
   keyboardDirection,
   pageOffset,
   pageMetaMap,
+  subPage,
+  setSubPage,
   nextChapterId,
   prevChapterId,
   saveProgress,
@@ -92,6 +98,20 @@ export function useViewerNavigation({
   const handleNext = useCallback(async () => {
     // PDF가 아직 로딩 중이면 네비게이션 무시 (totalPages=0일 때 "책 끝남" 오판 방지)
     if (totalPages <= 0) return;
+
+    // single 모드 스프레드 분할 처리
+    if (readingMode === "single") {
+      const navState = getNextNavState(currentPage, totalPages, subPage, pageMetaMap, readingDirection);
+      if (navState) {
+        if (navState.page !== currentPage) {
+          goToPage(navState.page);
+        }
+        setSubPage(navState.subPage);
+        return;
+      }
+      // navState가 null이면 마지막 페이지의 마지막 subPage → 챕터 끝 처리로 fall through
+    }
+
     if (currentPage < totalPages) {
       // 2장 보기 모드일 때 오프셋 설정에 따라 이동 간격(step) 계산
       let step = 1;
@@ -142,8 +162,11 @@ export function useViewerNavigation({
     navigate,
     saveProgress,
     readingMode,
+    readingDirection,
     pageOffset,
     pageMetaMap,
+    subPage,
+    setSubPage,
     currentChapterId,
     onReachedSeriesEnd,
     viewerFrom,
@@ -153,6 +176,20 @@ export function useViewerNavigation({
   const handlePrev = useCallback(async () => {
     // PDF가 아직 로딩 중이면 네비게이션 무시
     if (totalPages <= 0) return;
+
+    // single 모드 스프레드 분할 처리
+    if (readingMode === "single") {
+      const navState = getPrevNavState(currentPage, subPage, pageMetaMap, readingDirection);
+      if (navState) {
+        if (navState.page !== currentPage) {
+          goToPage(navState.page);
+        }
+        setSubPage(navState.subPage);
+        return;
+      }
+      // navState가 null이면 첫 페이지의 첫 subPage → 이전 챕터 처리로 fall through
+    }
+
     if (currentPage > 1) {
       // 2장 보기 모드일 때 오프셋 설정에 따라 이동 간격(step) 계산
       let step = 1;
@@ -201,8 +238,11 @@ export function useViewerNavigation({
     navigate,
     saveProgress,
     readingMode,
+    readingDirection,
     pageOffset,
     pageMetaMap,
+    subPage,
+    setSubPage,
     currentChapterId,
     viewerFrom,
   ]);
