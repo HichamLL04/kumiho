@@ -1172,6 +1172,9 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 			renderMode = "image"
 		}
 		chapter.RenderMode = &renderMode
+	} else if strings.HasSuffix(chapterPath, ".txt") {
+		renderMode := "text"
+		chapter.RenderMode = &renderMode
 	}
 
 	return c.JSON(chapter)

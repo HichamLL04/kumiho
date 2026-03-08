@@ -4,6 +4,7 @@ import { useChapterLoader } from "../features/viewer";
 import { ImageViewerRoute } from "./ImageViewerRoute";
 import { PdfViewerRoute } from "./PdfViewerRoute";
 import { EpubViewerRoute } from "./EpubViewerRoute";
+import { TextViewerRoute } from "./TextViewerRoute";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 
 export function ViewerPage() {
@@ -45,6 +46,7 @@ export function ViewerPage() {
   const chapterPath = loaderData.chapter?.path?.toLowerCase() ?? "";
   const isPdf = chapterPath.endsWith(".pdf");
   const isEpub = chapterPath.endsWith(".epub");
+  const isText = chapterPath.endsWith(".txt");
   const shouldUseImageRouteForPdf = isPdf && loaderData.chapter?.render_mode === "image";
 
   if (isEpub) {
@@ -53,6 +55,10 @@ export function ViewerPage() {
 
   if (isPdf && !shouldUseImageRouteForPdf) {
     return <PdfViewerRoute loaderData={loaderData} />;
+  }
+
+  if (isText) {
+    return <TextViewerRoute loaderData={loaderData} />;
   }
 
   return <ImageViewerRoute loaderData={loaderData} />;

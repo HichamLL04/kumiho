@@ -14,6 +14,7 @@ export type FitMode = "screen" | "width" | "height" | "original";
 
 // 페이지 전환 애니메이션 타입
 export type PageTransitionType = "slide" | "fade" | "none";
+export type ViewerFontFamily = "original" | "serif" | "sans-serif";
 
 // 스프레드 분할 서브페이지
 export type SubPage = "left" | "right" | null;
@@ -35,6 +36,9 @@ export interface ViewerSettings {
   swipeDirection: ReadingDirection; // 스와이프 방향 (모바일/터치용)
   pageTransition: PageTransitionType; // 페이지 전환 애니메이션
   showPdfZoomControls: boolean; // PDF 상단 확대 버튼 표시 여부
+  fontSize: number; // 글자 크기 % (50~150)
+  fontFamily: ViewerFontFamily; // 글꼴
+  lineHeight: number; // 줄 간격 (1.2~2.0)
 }
 
 // 뷰어 상태
@@ -91,6 +95,9 @@ interface ViewerState {
   setShowThreshold: (threshold: number) => void;
   setPageTransition: (transition: PageTransitionType) => void;
   setShowPdfZoomControls: (show: boolean) => void;
+  setFontSize: (size: number) => void;
+  setFontFamily: (family: ViewerFontFamily) => void;
+  setLineHeight: (lineHeight: number) => void;
 
   // 다음 챕터 데이터 캐시
   nextChapterData: {
@@ -117,6 +124,9 @@ const defaultSettings: ViewerSettings = {
   swipeDirection: "ltr",
   pageTransition: "slide",
   showPdfZoomControls: true,
+  fontSize: 100,
+  fontFamily: "original",
+  lineHeight: 1.6,
 };
 
 export const useViewerStore = create<ViewerState>()(
@@ -386,6 +396,59 @@ export const useViewerStore = create<ViewerState>()(
         set((state) => ({
           settings: { ...state.settings, showPdfZoomControls: show },
         })),
+
+      setFontSize: (size) =>
+        set((state) => {
+          const clampedSize = Math.max(50, Math.min(size, 150));
+          const newSettings = { ...state.settings, fontSize: clampedSize };
+          const updates: Partial<ViewerState> = { settings: newSettings };
+
+          if (state.currentSeriesId) {
+            updates.seriesSettings = {
+              ...state.seriesSettings,
+              [state.currentSeriesId]: {
+                ...(state.seriesSettings[state.currentSeriesId] || {}),
+                fontSize: clampedSize,
+              },
+            };
+          }
+          return updates;
+        }),
+
+      setFontFamily: (family) =>
+        set((state) => {
+          const newSettings = { ...state.settings, fontFamily: family };
+          const updates: Partial<ViewerState> = { settings: newSettings };
+
+          if (state.currentSeriesId) {
+            updates.seriesSettings = {
+              ...state.seriesSettings,
+              [state.currentSeriesId]: {
+                ...(state.seriesSettings[state.currentSeriesId] || {}),
+                fontFamily: family,
+              },
+            };
+          }
+          return updates;
+        }),
+
+      setLineHeight: (lineHeight) =>
+        set((state) => {
+          const clampedLineHeight = Math.max(1.2, Math.min(lineHeight, 2.0));
+          const newSettings = { ...state.settings, lineHeight: clampedLineHeight };
+          const updates: Partial<ViewerState> = { settings: newSettings };
+
+          if (state.currentSeriesId) {
+            updates.seriesSettings = {
+              ...state.seriesSettings,
+              [state.currentSeriesId]: {
+                ...(state.seriesSettings[state.currentSeriesId] || {}),
+                lineHeight: clampedLineHeight,
+              },
+            };
+          }
+          return updates;
+        }),
 
       initPage: (page, total) =>
         set({

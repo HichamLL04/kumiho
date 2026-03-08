@@ -49,7 +49,7 @@ export interface Chapter {
   title: string;
   chapter_number: number;
   path: string;
-  render_mode?: "pdf" | "image";
+  render_mode?: "pdf" | "image" | "text";
   page_count: number;
   total_bytes?: number;
   total_positions?: number;

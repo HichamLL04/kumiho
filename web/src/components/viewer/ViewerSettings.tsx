@@ -10,9 +10,29 @@ import { isMobile } from "../../utils/device";
 interface ViewerSettingsProps {
   onClose: () => void;
   showPdfControlsOption?: boolean;
+  showTextTypographyOption?: boolean;
 }
 
-export function ViewerSettings({ onClose, showPdfControlsOption = false }: ViewerSettingsProps) {
+type ViewerTheme = "light" | "dark" | "sepia";
+
+const VIEWER_THEME_TO_BACKGROUND: Record<ViewerTheme, string> = {
+  light: "#ffffff",
+  dark: "#1a1a1a",
+  sepia: "#f4ecd8",
+};
+
+const resolveThemeFromBackground = (backgroundColor: string): ViewerTheme => {
+  const normalized = backgroundColor.trim().toLowerCase();
+  if (normalized === "#ffffff") return "light";
+  if (normalized === "#f4ecd8") return "sepia";
+  return "dark";
+};
+
+export function ViewerSettings({
+  onClose,
+  showPdfControlsOption = false,
+  showTextTypographyOption = false,
+}: ViewerSettingsProps) {
   const { t } = useTranslation();
   const isMobileDevice = isMobile();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -30,7 +50,11 @@ export function ViewerSettings({ onClose, showPdfControlsOption = false }: Viewe
     setBackgroundColor,
     setPageTransition,
     setShowPdfZoomControls,
+    setFontSize,
+    setFontFamily,
+    setLineHeight,
   } = useViewerStore();
+  const selectedTheme = resolveThemeFromBackground(settings.backgroundColor);
 
   const updateScrollbarState = useCallback(() => {
     const contentEl = contentRef.current;
@@ -110,7 +134,7 @@ export function ViewerSettings({ onClose, showPdfControlsOption = false }: Viewe
 
   useEffect(() => {
     updateScrollbarState();
-  }, [updateScrollbarState, settings, showPdfControlsOption, isMobileDevice]);
+  }, [updateScrollbarState, settings, showPdfControlsOption, showTextTypographyOption, isMobileDevice]);
 
   return (
     <div
@@ -164,6 +188,75 @@ export function ViewerSettings({ onClose, showPdfControlsOption = false }: Viewe
             </button>
           </div>
           </div>
+
+          {showTextTypographyOption && (
+            <>
+              <div className={styles.settingsSection}>
+                <label
+                  className={styles.settingsLabel}
+                  htmlFor="viewer-font-family-select"
+                >
+                  {t("viewer.settings.font_family.label")}
+                </label>
+                <select
+                  id="viewer-font-family-select"
+                  className={styles.select}
+                  value={settings.fontFamily}
+                  onChange={(e) => updateSetting("font_family", e.target.value as "original" | "serif" | "sans-serif", setFontFamily)}
+                >
+                  <option value="original">{t("viewer.settings.font_family.original")}</option>
+                  <option value="serif">{t("viewer.settings.font_family.serif")}</option>
+                  <option value="sans-serif">{t("viewer.settings.font_family.sans_serif")}</option>
+                </select>
+              </div>
+
+              <div className={styles.settingsSection}>
+                <label
+                  className={styles.settingsLabel}
+                  htmlFor="viewer-font-size-slider"
+                >
+                  {t("viewer.settings.font_size.label")} ({settings.fontSize}%)
+                </label>
+                <input
+                  id="viewer-font-size-slider"
+                  type="range"
+                  min={50}
+                  max={150}
+                  step={5}
+                  value={settings.fontSize}
+                  onChange={(e) => updateSetting("font_size", Number(e.target.value), setFontSize)}
+                  className={styles.slider}
+                />
+                <div className={styles.sliderLabels}>
+                  <span>50%</span>
+                  <span>150%</span>
+                </div>
+              </div>
+
+              <div className={styles.settingsSection}>
+                <label
+                  className={styles.settingsLabel}
+                  htmlFor="viewer-line-height-slider"
+                >
+                  {t("viewer.settings.line_height.label")} ({settings.lineHeight.toFixed(1)})
+                </label>
+                <input
+                  id="viewer-line-height-slider"
+                  type="range"
+                  min={1.2}
+                  max={2.0}
+                  step={0.1}
+                  value={settings.lineHeight}
+                  onChange={(e) => updateSetting("line_height", Number(e.target.value), setLineHeight)}
+                  className={styles.slider}
+                />
+                <div className={styles.sliderLabels}>
+                  <span>1.2</span>
+                  <span>2.0</span>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className={styles.settingsSection}>
           <div className={styles.settingsLabel}>{t("viewer.settings.reading_direction.label")}</div>
@@ -298,36 +391,20 @@ export function ViewerSettings({ onClose, showPdfControlsOption = false }: Viewe
           </div>
 
           <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>{t("viewer.settings.background_color.label")}</div>
-          <div className={styles.colorOptions}>
-            <button
-              className={`${styles.colorBtn} ${settings.backgroundColor === "#000000" ? styles.selected : ""}`}
-              style={{ background: "#000000" }}
-              onClick={() => updateSetting("background_color", "#000000", setBackgroundColor)}
-              aria-label={t("viewer.settings.background_color.black")}
-              title={t("viewer.settings.background_color.black")}
-            />
-            <button
-              className={`${styles.colorBtn} ${settings.backgroundColor === "#1a1a1a" ? styles.selected : ""}`}
-              style={{ background: "#1a1a1a" }}
-              onClick={() => updateSetting("background_color", "#1a1a1a", setBackgroundColor)}
-              aria-label={t("viewer.settings.background_color.dark_gray")}
-              title={t("viewer.settings.background_color.dark_gray")}
-            />
-            <button
-              className={`${styles.colorBtn} ${settings.backgroundColor === "#333333" ? styles.selected : ""}`}
-              style={{ background: "#333333" }}
-              onClick={() => updateSetting("background_color", "#333333", setBackgroundColor)}
-              aria-label={t("viewer.settings.background_color.gray")}
-              title={t("viewer.settings.background_color.gray")}
-            />
-            <button
-              className={`${styles.colorBtn} ${settings.backgroundColor === "#ffffff" ? styles.selected : ""}`}
-              style={{ background: "#ffffff", border: "1px solid #ccc" }}
-              onClick={() => updateSetting("background_color", "#ffffff", setBackgroundColor)}
-              aria-label={t("viewer.settings.background_color.white")}
-              title={t("viewer.settings.background_color.white")}
-            />
+          <div className={styles.settingsLabel}>{t("viewer.settings.theme.label")}</div>
+          <div className={styles.themeGroup}>
+            {(["light", "dark", "sepia"] as ViewerTheme[]).map((theme) => (
+              <button
+                key={theme}
+                type="button"
+                className={`${styles.themeBtn} ${styles[`theme_${theme}`]} ${selectedTheme === theme ? styles.activeTheme : ""}`}
+                onClick={() => updateSetting("background_color", VIEWER_THEME_TO_BACKGROUND[theme], setBackgroundColor)}
+                aria-label={t(`viewer.settings.theme.${theme}`)}
+                title={t(`viewer.settings.theme.${theme}`)}
+              >
+                {t(`viewer.settings.theme.${theme}`)}
+              </button>
+            ))}
           </div>
           </div>
 
