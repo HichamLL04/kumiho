@@ -40,6 +40,7 @@ export interface Volume {
   is_completed?: boolean;
   read_page_count?: number;
   total_page_count?: number;
+  progress_percent?: number;
   created_at: string;
 }
 

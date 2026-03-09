@@ -11,6 +11,7 @@ import (
 
 	"io/fs"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1605,7 +1606,7 @@ func (s *Scanner) analyzeArchiveAsChapter(archivePath, title string, chapterNum 
 			ChapterNumber:  chapterNum,
 			Path:           archivePath,
 			Pages:          []scannedPage{},
-			PageCount:      1,
+			PageCount:      int(math.Max(1, math.Ceil(float64(utf8.RuneCount(raw))/1000.0))),
 			TotalBytes:     int64(len(raw)),
 			TotalPositions: utf8.RuneCount(raw),
 		}, nil

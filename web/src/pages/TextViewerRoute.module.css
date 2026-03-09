@@ -1,5 +1,18 @@
 .textViewerRoot {
-  position: relative;
+  min-height: 0;
+}
+
+/* viewerContent is default flex-direction: row with align-items: center.
+   Overriding it to column stretch so the text scroll container can properly
+   inherit the 100% viewport height and scroll its overflow. */
+.textViewerContent {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .fixedUiLayer {
@@ -14,13 +27,38 @@
 }
 
 .textScrollContainer {
+  flex: 1;
   width: 100%;
-  height: 100%;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
   padding: 72px 24px 96px;
+}
+
+.pagedScrollContainer {
+  overflow-y: hidden;
+}
+
+.singlePagedScrollContainer {
+  padding-top: 56px;
+  padding-bottom: 72px;
+}
+
+.textViewportMask {
+  width: 100%;
+}
+
+.pagedViewportMask {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.singlePagedViewportMask {
+  width: min(100%, 1180px);
+  margin: 0 auto;
 }
 
 .textBody {
@@ -35,9 +73,75 @@
   font-family: "Pretendard", "Noto Sans KR", sans-serif;
 }
 
+.textBody p {
+  margin: 0 0 1.1em;
+  padding: 2px 0;
+  white-space: pre-wrap;
+  transition: background-color 0.3s ease;
+}
+
+.textBody p:last-child {
+  margin-bottom: 0;
+}
+
+.readingHighlight {
+  animation: reading-highlight-fade 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  border-left: 4px solid #3b82f6;
+  padding-left: 12px !important;
+  margin-left: -16px !important;
+  border-radius: 0 4px 4px 0;
+}
+
+@keyframes reading-highlight-fade {
+  0% {
+    background-color: rgba(59, 130, 246, 0.25);
+  }
+  20% {
+    background-color: rgba(59, 130, 246, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Modifiers for paged modes */
+.textBody.pagedMode {
+  max-width: none;
+  width: var(--viewport-width, 100%);
+  margin: 0;
+  /* Force a strict height so text overflows into the next column */
+  height: calc(100vh - 72px - 96px); /* subtract header/footer approx */
+  padding: 0;
+  will-change: transform;
+  transition: transform 0.2s ease-out;
+  column-fill: auto;
+  box-sizing: border-box;
+}
+
+/* Single Page Column Settings */
+.textBody.pagedMode.singleMode {
+  column-count: 1;
+  column-width: auto;
+  column-gap: 0;
+}
+
+/* Double Page Column Settings */
+.textBody.pagedMode.doubleMode {
+  column-count: 2;
+  column-width: auto;
+  column-gap: 40px;
+  column-rule: 1px solid rgba(150, 150, 150, 0.2);
+  padding: 0 20px;
+}
+
 @media (max-width: 768px) {
   .textScrollContainer {
     padding: 68px 16px 104px;
+  }
+
+  .singlePagedScrollContainer {
+    padding-top: 52px;
+    padding-bottom: 84px;
   }
 
   .textBody {

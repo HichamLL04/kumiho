@@ -288,6 +288,7 @@ export function HomePage() {
               id: progress.series_id,
               title: progress.series_title,
               library_id: "", // 필수지만 카드에서 사용 안 함
+              path: progress.chapter_path || progress.volume_path || progress.path,
               created_at: "", // 필수지만 카드에서 사용 안 함
               updated_at: progress.updated_at,
               thumbnail_url: progress.thumbnail_url,

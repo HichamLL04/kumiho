@@ -209,6 +209,16 @@ export const useViewerStore = create<ViewerState>()(
       setReadingMode: (mode) =>
         set((state) => {
           const newSettings = { ...state.settings, readingMode: mode };
+          const seriesSettingsUpdate: Partial<ViewerSettings> = { readingMode: mode };
+
+          // 1페이지/세로 모드에서 2페이지 모드로 전환 시,
+          // 보던 페이지가 항상 좌측(시작점)에 오도록 pageOffset을 동적으로 조정합니다.
+          if (mode === "double" && state.settings.readingMode !== "double") {
+            const newPageOffset = state.currentPage % 2 === 0 ? 1 : 0;
+            newSettings.pageOffset = newPageOffset;
+            seriesSettingsUpdate.pageOffset = newPageOffset;
+          }
+
           const updates: Partial<ViewerState> = { settings: newSettings };
 
           if (state.currentSeriesId) {
@@ -216,7 +226,7 @@ export const useViewerStore = create<ViewerState>()(
               ...state.seriesSettings,
               [state.currentSeriesId]: {
                 ...(state.seriesSettings[state.currentSeriesId] || {}),
-                readingMode: mode,
+                ...seriesSettingsUpdate,
               },
             };
           }

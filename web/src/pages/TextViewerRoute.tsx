@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { chapterAPI, seriesAPI } from "../api/client";
-import { useViewerStore } from "../stores/viewerStore";
+import { useViewerStore, type ReadingMode } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
 import { ViewerSettings as ViewerSettingsModal } from "../components/viewer/ViewerSettings";
 import {
@@ -23,6 +23,16 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { AlertModal } from "../components/modals/AlertModal";
 import { API_BASE_URL } from "../features/viewer/utils/imageUrl";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
+import { getTranslationForVirtualPage, measureVirtualPaging } from "./textViewerPaging";
+import {
+  createViewportAnchor,
+  findParagraphForAbsoluteOffset,
+  normalizeTextContent,
+  parseTextParagraphs,
+  resolveSavedAnchorToAbsoluteOffset,
+  type SavedTextAnchor,
+  type ViewportAnchor,
+} from "./textViewerAnchors";
 import viewerStyles from "./Viewer.module.css";
 import styles from "./TextViewerRoute.module.css";
 
@@ -30,33 +40,45 @@ interface TextViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
 }
 
-interface SavedTextAnchor {
-  kind?: string;
-  offset?: number;
-  before?: string;
-  after?: string;
-  hash?: string;
+interface TextProgressSnapshot {
+  chapter_id: string;
+  volume_id: string;
+  current_page: number;
+  total_pages: number;
+  current_position: number;
+  total_positions: number;
+  progress_percent: number;
+  current_cfi: string;
+}
+
+interface PendingModeTransition {
+  fromMode: ReadingMode;
+  fromPage: number;
 }
 
 const SAVE_INTERVAL = 3000;
-const CONTEXT_WINDOW = 24;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-const hashContext = (value: string): string => {
-  let hash = 5381;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 33) ^ value.charCodeAt(i);
+const resolveApiUrl = (path: string): string => {
+  if (/^https?:\/\//i.test(path)) return path;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return new URL(path, window.location.origin).toString();
   }
-  return Math.abs(hash >>> 0).toString(16);
+  return path;
 };
 
-const getAnchorContext = (text: string, offset: number) => {
-  const safe = clamp(offset, 0, text.length);
-  return {
-    before: text.slice(Math.max(0, safe - CONTEXT_WINDOW), safe),
-    after: text.slice(safe, Math.min(text.length, safe + CONTEXT_WINDOW)),
-  };
+const resolveTextColorFromBackground = (backgroundColor: string): string => {
+  const normalized = backgroundColor.trim().toLowerCase();
+  if (normalized === "#ffffff") return "#1a1a1a";
+  if (normalized === "#f4ecd8") return "#3b2f2f";
+  return "#f7f7f7";
+};
+
+const resolveTextFontFamily = (fontFamily: "original" | "serif" | "sans-serif"): string => {
+  if (fontFamily === "serif") return '"Noto Serif KR", "Times New Roman", serif';
+  if (fontFamily === "sans-serif") return '"Pretendard", "Noto Sans KR", sans-serif';
+  return '"Pretendard", "Noto Sans KR", sans-serif';
 };
 
 const parseAnchor = (raw?: string): SavedTextAnchor | null => {
@@ -70,20 +92,193 @@ const parseAnchor = (raw?: string): SavedTextAnchor | null => {
   return null;
 };
 
-const resolveTextColorFromBackground = (backgroundColor: string): string => {
-  const normalized = backgroundColor.trim().toLowerCase();
-  if (normalized === "#ffffff") return "#1a1a1a";
-  if (normalized === "#f4ecd8") return "#3b2f2f";
-  return "#f7f7f7";
+const getNumericStyle = (value: string): number => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const resolveTextFontFamily = (fontFamily: "original" | "serif" | "sans-serif"): string => {
-  if (fontFamily === "serif") return "\"Noto Serif KR\", \"Times New Roman\", serif";
-  if (fontFamily === "sans-serif") return "\"Pretendard\", \"Noto Sans KR\", sans-serif";
-  return "\"Pretendard\", \"Noto Sans KR\", sans-serif";
+const getAnchorInsetForMode = (mode: ReadingMode): number => {
+  if (mode === "double") return 28;
+  if (mode === "single") return 8;
+  return 8;
 };
 
-export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
+const getAbsoluteOffsetFromAnchor = (anchor: SavedTextAnchor | null): number | null => {
+  if (!anchor) return null;
+  if (anchor.kind === "txt_anchor_v2" && "absoluteOffset" in anchor) return anchor.absoluteOffset;
+  if ("offset" in anchor && typeof anchor.offset === "number") return anchor.offset;
+  return null;
+};
+
+const getViewportRectForAnchor = (container: HTMLDivElement, mode: ReadingMode, pagedViewport: HTMLDivElement | null) => {
+  if (mode === "vertical") {
+    const rect = container.getBoundingClientRect();
+    const style = window.getComputedStyle(container);
+    const paddingLeft = getNumericStyle(style.paddingLeft);
+    const paddingTop = getNumericStyle(style.paddingTop);
+    return {
+      left: rect.left + paddingLeft,
+      top: rect.top + paddingTop,
+      width: Math.max(1, container.clientWidth - paddingLeft - getNumericStyle(style.paddingRight)),
+      height: Math.max(1, container.clientHeight - paddingTop - getNumericStyle(style.paddingBottom)),
+    };
+  }
+
+  const viewport = pagedViewport ?? container;
+  const rect = viewport.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: Math.max(1, rect.width || viewport.clientWidth || container.clientWidth),
+    height: Math.max(1, rect.height || viewport.clientHeight || container.clientHeight),
+  };
+};
+
+const getClosestParagraphElement = (node: Node | null): HTMLElement | null => {
+  if (!node) return null;
+  if (node instanceof HTMLElement) {
+    return node.closest("p[data-paragraph-id]");
+  }
+  return node.parentElement?.closest("p[data-paragraph-id]") ?? null;
+};
+
+const findFirstVisibleParagraph = (container: HTMLElement, mode: ReadingMode): HTMLElement | null => {
+  const paragraphs = Array.from(container.querySelectorAll<HTMLElement>("p[data-paragraph-id]"));
+  if (paragraphs.length === 0) return null;
+
+  const containerRect = container.getBoundingClientRect();
+
+  for (const paragraph of paragraphs) {
+    const rect = paragraph.getBoundingClientRect();
+    if (mode === "vertical") {
+      if (rect.bottom > containerRect.top + 8) {
+        return paragraph;
+      }
+    } else if (rect.right > containerRect.left + 4 && rect.bottom > containerRect.top + 4) {
+      return paragraph;
+    }
+  }
+
+  return paragraphs[0] ?? null;
+};
+
+const getCaretPoint = (x: number, y: number): { node: Node; offset: number } | null => {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (px: number, py: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (px: number, py: number) => Range | null;
+  };
+
+  if (typeof doc.caretPositionFromPoint === "function") {
+    const position = doc.caretPositionFromPoint(x, y);
+    if (position?.offsetNode) {
+      return { node: position.offsetNode, offset: position.offset };
+    }
+  }
+
+  if (typeof doc.caretRangeFromPoint === "function") {
+    const range = doc.caretRangeFromPoint(x, y);
+    if (range?.startContainer) {
+      return { node: range.startContainer, offset: range.startOffset };
+    }
+  }
+
+  return null;
+};
+
+const getTextOffsetWithinParagraph = (paragraph: HTMLElement, node: Node, offset: number): number => {
+  const range = document.createRange();
+  range.selectNodeContents(paragraph);
+  try {
+    range.setEnd(node, offset);
+  } catch {
+    return 0;
+  }
+  return range.toString().length;
+};
+
+const createRangeForParagraphOffset = (paragraph: HTMLElement, offsetInParagraph: number): Range | null => {
+  const textWalker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+
+  let currentNode = textWalker.nextNode();
+  while (currentNode) {
+    if (currentNode instanceof Text) {
+      textNodes.push(currentNode);
+    }
+    currentNode = textWalker.nextNode();
+  }
+
+  if (textNodes.length === 0) return null;
+
+  let remaining = offsetInParagraph;
+  for (const textNode of textNodes) {
+    const textLength = textNode.textContent?.length ?? 0;
+    if (textLength === 0) continue;
+
+    if (remaining < textLength) {
+      const range = document.createRange();
+      range.setStart(textNode, remaining);
+      range.setEnd(textNode, Math.min(textLength, remaining + 1));
+      return range;
+    }
+
+    remaining -= textLength;
+  }
+
+  const lastNode = textNodes[textNodes.length - 1];
+  const lastLength = lastNode.textContent?.length ?? 0;
+  if (lastLength === 0) return null;
+
+  const range = document.createRange();
+  range.setStart(lastNode, Math.max(0, lastLength - 1));
+  range.setEnd(lastNode, lastLength);
+  return range;
+};
+
+const getRangeRect = (range: Range): DOMRect | null => {
+  const safeRange = range as Range & {
+    getClientRects?: () => DOMRectList;
+    getBoundingClientRect?: () => DOMRect;
+  };
+  const rects = typeof safeRange.getClientRects === "function" ? Array.from(safeRange.getClientRects()) : [];
+  const visibleRect = rects.find((rect) => rect.width > 0 || rect.height > 0);
+  if (visibleRect) return visibleRect;
+
+  const boundingRect =
+    typeof safeRange.getBoundingClientRect === "function" ? safeRange.getBoundingClientRect() : null;
+  if (!boundingRect) return null;
+  if (boundingRect.width > 0 || boundingRect.height > 0) {
+    return boundingRect;
+  }
+
+  return null;
+};
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ color: "red", padding: "20px", background: "black", height: "100vh" }}>
+          <h1>Something went wrong.</h1>
+          <pre>{this.state.error?.toString()}</pre>
+          <pre>{this.state.error?.stack}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   const { chapterId: routeChapterId } = useParams<{ chapterId: string }>();
   const { t } = useTranslation();
   usePreventBrowserZoom(true);
@@ -117,14 +312,45 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
   const [text, setText] = useState("");
   const [isLoadingText, setIsLoadingText] = useState(true);
   const [showPageJump, setShowPageJump] = useState(false);
-  const [restoreOffset, setRestoreOffset] = useState<number | null>(null);
+  const [restoreAnchor, setRestoreAnchor] = useState<SavedTextAnchor | null>(null);
+  const [currentOffsetX, setCurrentOffsetX] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
+  const [highlightParagraphId, setHighlightParagraphId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pagedViewportRef = useRef<HTMLDivElement>(null);
+  const textBodyRef = useRef<HTMLElement>(null);
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
   const isInteractingRef = useRef(false);
   const lastSaveRef = useRef<number>(0);
   const saveTimerRef = useRef<number | null>(null);
+  const currentOffsetXRef = useRef(0);
+  const totalPagesRef = useRef(totalPages);
+  const currentPageRef = useRef(currentPage);
+  const pendingTransitionAnchorRef = useRef<ViewportAnchor | null>(null);
+  const pendingModeTransitionRef = useRef<PendingModeTransition | null>(null);
+  const lastRestoredPagedPageRef = useRef<number | null>(null);
+  const pendingHighlightParagraphRef = useRef<string | null>(null);
+  const highlightTimeoutRef = useRef<number | null>(null);
+
+  totalPagesRef.current = totalPages;
+  currentPageRef.current = currentPage;
+
+  const parsedParagraphs = useMemo(() => parseTextParagraphs(text), [text]);
+  const paragraphMap = useMemo(() => new Map(parsedParagraphs.map((item) => [item.id, item])), [parsedParagraphs]);
+
+  const renderedParagraphs = useMemo(() => {
+    return parsedParagraphs.map((paragraph) => (
+      <p
+        key={paragraph.id}
+        data-paragraph-id={paragraph.id}
+        className={highlightParagraphId === paragraph.id ? styles.readingHighlight : ""}
+      >
+        {paragraph.text}
+      </p>
+    ));
+  }, [highlightParagraphId, parsedParagraphs]);
 
   const { nextChapterId, prevChapterId, isAdjacentResolved } = useAdjacentChapters({
     volumeId,
@@ -134,69 +360,257 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
 
   useReadingTime(seriesId || undefined, !chapterLoading && !isLoadingText && !error, chapterId);
 
-  const handleBack = useCallback(() => {
-    if (viewerFrom) {
-      navigate(viewerFrom);
-      return;
-    }
-    navigate("/");
-  }, [navigate, viewerFrom]);
-
-  const handleToggleFullscreen = useCallback(() => {
-    try {
-      if (!isDocumentFullscreen()) {
-        enterFullscreen().catch(() => {});
-      } else {
-        exitFullscreen().catch(() => {});
-      }
-    } catch (err) {
-      console.error("Fullscreen toggle failed:", err);
-    }
+  const setOffset = useCallback((newOffsetX: number) => {
+    currentOffsetXRef.current = Math.max(0, newOffsetX);
+    setCurrentOffsetX(Math.max(0, newOffsetX));
   }, []);
 
-  const updateVirtualPage = useCallback(() => {
+  const getContentScrollWidth = useCallback(() => {
+    if (settings.readingMode === "vertical") return undefined;
+    return textBodyRef.current?.scrollWidth;
+  }, [settings.readingMode]);
+
+  const getPagedViewportWidth = useCallback(() => {
+    if (settings.readingMode === "vertical") return undefined;
+    const viewport = pagedViewportRef.current;
+    if (viewport && viewport.clientWidth > 0) {
+      return Math.max(1, viewport.clientWidth);
+    }
     const container = scrollRef.current;
-    if (!container) return;
+    if (!container) return undefined;
+    const style = window.getComputedStyle(container);
+    const horizontalPadding = getNumericStyle(style.paddingLeft) + getNumericStyle(style.paddingRight);
+    return Math.max(1, container.clientWidth - horizontalPadding);
+  }, [settings.readingMode]);
 
-    const viewport = Math.max(1, container.clientHeight);
-    const full = Math.max(viewport, container.scrollHeight);
-    const virtualTotal = Math.max(1, Math.ceil(full / viewport));
-    const virtualPage = clamp(Math.floor(container.scrollTop / viewport) + 1, 1, virtualTotal);
+  const resolveAnchorTarget = useCallback(
+    (anchor: SavedTextAnchor | null) => {
+      const absoluteOffset = resolveSavedAnchorToAbsoluteOffset(text, parsedParagraphs, anchor);
+      if (absoluteOffset === null) return null;
 
-    setTotalPages(virtualTotal);
-    setCurrentPage(virtualPage);
-  }, [setCurrentPage, setTotalPages]);
+      const paragraph = findParagraphForAbsoluteOffset(parsedParagraphs, absoluteOffset);
+      if (!paragraph) return null;
 
-  const saveProgress = useCallback(async () => {
-    if (isIncognito || !chapter || !chapterId || !seriesId || !scrollRef.current || !text) return;
+      return {
+        absoluteOffset,
+        paragraphId: paragraph.id,
+        offsetInParagraph: clamp(absoluteOffset - paragraph.startOffset, 0, paragraph.text.length),
+      };
+    },
+    [parsedParagraphs, text],
+  );
 
-    const container = scrollRef.current;
-    const ratio = container.scrollTop / Math.max(1, container.scrollHeight - container.clientHeight);
-    const offset = clamp(Math.round(ratio * Math.max(0, text.length - 1)), 0, Math.max(0, text.length - 1));
-    const ctx = getAnchorContext(text, offset);
+  const resolveAnchorRange = useCallback(
+    (anchor: SavedTextAnchor | null) => {
+      const target = resolveAnchorTarget(anchor);
+      if (!target) return null;
 
-    const safeTotalPages = Math.max(1, totalPages);
-    const safeCurrentPage = clamp(currentPage, 1, safeTotalPages);
+      const article = textBodyRef.current;
+      if (!article) return null;
 
-    const anchor: SavedTextAnchor = {
-      kind: "txt_anchor",
-      offset,
-      before: ctx.before,
-      after: ctx.after,
-      hash: hashContext(`${ctx.before}|${ctx.after}`),
-    };
+      const paragraph = article.querySelector<HTMLElement>(`p[data-paragraph-id="${CSS.escape(target.paragraphId)}"]`);
+      if (!paragraph) return null;
 
-    await seriesAPI.updateProgress(seriesId, {
+      const range = createRangeForParagraphOffset(paragraph, target.offsetInParagraph);
+      if (!range) return null;
+
+      const rect = getRangeRect(range);
+      if (!rect) return null;
+
+      return {
+        ...target,
+        paragraph,
+        range,
+        rect,
+      };
+    },
+    [resolveAnchorTarget],
+  );
+
+  const buildViewportAnchorSnapshot = useCallback(
+    (modeOverride?: ReadingMode): ViewportAnchor | null => {
+      if (!text || parsedParagraphs.length === 0) return null;
+
+      const container = scrollRef.current;
+      if (!container) return null;
+
+      const mode = modeOverride ?? settings.readingMode;
+      const viewportRect = getViewportRectForAnchor(container, mode, pagedViewportRef.current);
+      const inset = getAnchorInsetForMode(mode);
+      const pointX = viewportRect.left + inset;
+      const pointY = viewportRect.top + inset;
+
+      const caret = getCaretPoint(pointX, pointY);
+      const paragraphElement = caret
+        ? getClosestParagraphElement(caret.node) ?? findFirstVisibleParagraph(container, mode)
+        : findFirstVisibleParagraph(container, mode);
+
+      if (!paragraphElement) {
+        const fallbackAnchor = createViewportAnchor(text, parsedParagraphs, parsedParagraphs[0].id, 0);
+        if (!fallbackAnchor) return null;
+        return {
+          ...fallbackAnchor,
+          relativeX: inset,
+          relativeY: inset,
+        };
+      }
+
+      const paragraphId = paragraphElement.getAttribute("data-paragraph-id");
+      if (!paragraphId) return null;
+
+      const paragraphMeta = paragraphMap.get(paragraphId);
+      if (!paragraphMeta) return null;
+
+      const offsetInParagraph =
+        caret && getClosestParagraphElement(caret.node) === paragraphElement
+          ? clamp(getTextOffsetWithinParagraph(paragraphElement, caret.node, caret.offset), 0, paragraphMeta.text.length)
+          : 0;
+
+      const anchor = createViewportAnchor(text, parsedParagraphs, paragraphId, offsetInParagraph);
+      if (!anchor) return null;
+
+      const range = createRangeForParagraphOffset(paragraphElement, offsetInParagraph);
+      const rect = (range && getRangeRect(range)) || paragraphElement.getBoundingClientRect();
+      const relativeX = clamp(rect.left - viewportRect.left, 0, Math.max(0, viewportRect.width - 1));
+      const relativeY = clamp(rect.top - viewportRect.top, 0, Math.max(0, viewportRect.height - 1));
+
+      return {
+        ...anchor,
+        relativeX,
+        relativeY,
+      };
+    },
+    [paragraphMap, parsedParagraphs, settings.readingMode, text],
+  );
+
+  const applyParagraphHighlight = useCallback((paragraphId: string | null) => {
+    if (!paragraphId) return;
+
+    setHighlightParagraphId(paragraphId);
+    if (highlightTimeoutRef.current !== null) {
+      window.clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightParagraphId(null);
+      highlightTimeoutRef.current = null;
+    }, 2000);
+  }, []);
+
+  const updateVirtualPage = useCallback(
+    (overrideOffsetX?: number) => {
+      const container = scrollRef.current;
+      if (!container) return;
+
+      const metrics = measureVirtualPaging(
+        container,
+        settings.readingMode,
+        overrideOffsetX ?? currentOffsetXRef.current,
+        getContentScrollWidth(),
+        getPagedViewportWidth(),
+      );
+
+      let nextCurrentPage = metrics.currentPage;
+
+      if (overrideOffsetX === undefined) {
+        const anchor = buildViewportAnchorSnapshot();
+        const resolvedAnchor = resolveAnchorRange(anchor);
+
+        if (resolvedAnchor) {
+          if (settings.readingMode === "vertical") {
+            nextCurrentPage = clamp(Math.floor(container.scrollTop / metrics.viewportHeight) + 1, 1, metrics.totalPages);
+          } else {
+            const articleRect = textBodyRef.current?.getBoundingClientRect();
+            if (articleRect) {
+              const screenIndex = clamp(
+                Math.floor((resolvedAnchor.rect.left - articleRect.left) / metrics.viewportWidth),
+                0,
+                Math.max(0, Math.ceil(metrics.totalPages / (settings.readingMode === "double" ? 2 : 1)) - 1),
+              );
+              nextCurrentPage = settings.readingMode === "double" ? screenIndex * 2 + 1 : screenIndex + 1;
+            }
+          }
+        }
+      }
+
+      if (totalPagesRef.current !== metrics.totalPages) {
+        setTotalPages(metrics.totalPages);
+      }
+      if (currentPageRef.current !== nextCurrentPage) {
+        setCurrentPage(nextCurrentPage);
+      }
+    },
+    [
+      buildViewportAnchorSnapshot,
+      getContentScrollWidth,
+      getPagedViewportWidth,
+      resolveAnchorRange,
+      setCurrentPage,
+      setTotalPages,
+      settings.readingMode,
+    ],
+  );
+
+  const getCurrentVisualPage = useCallback(
+    (mode: ReadingMode): number => {
+      const container = scrollRef.current;
+      if (!container) {
+        return clamp(currentPageRef.current, 1, Math.max(1, totalPagesRef.current));
+      }
+
+      const metrics = measureVirtualPaging(
+        container,
+        mode,
+        currentOffsetXRef.current,
+        mode === "vertical" ? undefined : getContentScrollWidth(),
+        mode === "vertical" ? undefined : getPagedViewportWidth(),
+      );
+
+      return clamp(metrics.currentPage, 1, Math.max(1, metrics.totalPages));
+    },
+    [getContentScrollWidth, getPagedViewportWidth],
+  );
+
+  const buildProgressSnapshot = useCallback((): TextProgressSnapshot | null => {
+    if (isIncognito || !chapter || !chapterId || !seriesId || !text) return null;
+
+    const anchor = buildViewportAnchorSnapshot();
+    if (!anchor) return null;
+
+    const safeTotalPages = Math.max(1, totalPagesRef.current);
+    const safeCurrentPage = clamp(currentPageRef.current, 1, safeTotalPages);
+
+    return {
       chapter_id: chapterId,
       volume_id: chapter.volume_id,
       current_page: safeCurrentPage,
       total_pages: safeTotalPages,
-      current_position: offset,
+      current_position: anchor.absoluteOffset,
       total_positions: text.length,
       progress_percent: (safeCurrentPage / safeTotalPages) * 100,
       current_cfi: JSON.stringify(anchor),
-    });
-  }, [chapter, chapterId, currentPage, isIncognito, seriesId, text, totalPages]);
+    };
+  }, [buildViewportAnchorSnapshot, chapter, chapterId, isIncognito, seriesId, text]);
+
+  const saveProgress = useCallback(async () => {
+    const payload = buildProgressSnapshot();
+    if (!payload || !seriesId) return;
+    await seriesAPI.updateProgress(seriesId, payload);
+  }, [buildProgressSnapshot, seriesId]);
+
+  const flushProgressKeepalive = useCallback(() => {
+    if (import.meta.env.MODE === "test") return;
+
+    const payload = buildProgressSnapshot();
+    if (!payload) return;
+
+    fetch(resolveApiUrl(`${API_BASE_URL}/series/${seriesId}/progress`), {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      keepalive: true,
+    }).catch((err) => console.error("[TextViewer] keepalive save failed:", err));
+  }, [buildProgressSnapshot, seriesId]);
 
   const scheduleSave = useCallback(() => {
     if (saveTimerRef.current) {
@@ -217,6 +631,26 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
       lastSaveRef.current = Date.now();
     }, SAVE_INTERVAL - elapsed);
   }, [saveProgress]);
+
+  const handleBack = useCallback(() => {
+    if (viewerFrom) {
+      navigate(viewerFrom);
+      return;
+    }
+    navigate("/");
+  }, [navigate, viewerFrom]);
+
+  const handleToggleFullscreen = useCallback(() => {
+    try {
+      if (!isDocumentFullscreen()) {
+        enterFullscreen().catch(() => {});
+      } else {
+        exitFullscreen().catch(() => {});
+      }
+    } catch (err) {
+      console.error("Fullscreen toggle failed:", err);
+    }
+  }, []);
 
   const resetUITimer = useCallback(() => {
     if (uiTimerRef.current) window.clearTimeout(uiTimerRef.current);
@@ -243,31 +677,66 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
     resetUITimer();
   }, [hideUI, isUIVisible, resetUITimer]);
 
-  const handleContentTap = useCallback(() => {
-    if (isSettingsOpen) return;
-    if (isUIVisible) {
-      hideUI();
-      return;
-    }
-    showUI();
-    resetUITimer();
-  }, [hideUI, isSettingsOpen, isUIVisible, resetUITimer, showUI]);
-
   const goToPage = useCallback(
     (page: number) => {
       const container = scrollRef.current;
       if (!container) return;
-      const safePage = clamp(page, 1, Math.max(1, totalPages));
-      container.scrollTop = (safePage - 1) * container.clientHeight;
-      updateVirtualPage();
+
+      const { scrollTop, translateX } = getTranslationForVirtualPage(
+        container,
+        page,
+        settings.readingMode,
+        getContentScrollWidth(),
+        getPagedViewportWidth(),
+      );
+
+      if (settings.readingMode === "vertical") {
+        container.scrollTop = scrollTop;
+      } else {
+        setOffset(translateX);
+      }
+
+      updateVirtualPage(translateX);
       scheduleSave();
     },
-    [scheduleSave, totalPages, updateVirtualPage],
+    [getContentScrollWidth, getPagedViewportWidth, scheduleSave, setOffset, settings.readingMode, updateVirtualPage],
   );
 
   const handleNext = useCallback(() => {
-    if (currentPage < totalPages) {
-      goToPage(currentPage + 1);
+    const container = scrollRef.current;
+    if (!container) return;
+
+    if (settings.readingMode === "vertical") {
+      const metrics = measureVirtualPaging(container, settings.readingMode);
+      if (!metrics.isAtVisualEnd) {
+        container.scrollTop = Math.min(container.scrollTop + metrics.viewportHeight, metrics.maxScrollTop);
+        updateVirtualPage();
+        scheduleSave();
+        return;
+      }
+
+      if (nextChapterId && isAdjacentResolved) {
+        navigate(`/viewer/${nextChapterId}`, {
+          state: viewerFrom ? { from: viewerFrom } : undefined,
+        });
+      }
+      return;
+    }
+
+    const offsetX = currentOffsetXRef.current;
+    const metrics = measureVirtualPaging(
+      container,
+      settings.readingMode,
+      offsetX,
+      getContentScrollWidth(),
+      getPagedViewportWidth(),
+    );
+
+    if (!metrics.isAtVisualEnd) {
+      const nextX = offsetX + metrics.viewportWidth;
+      setOffset(nextX);
+      updateVirtualPage(nextX);
+      scheduleSave();
       return;
     }
 
@@ -276,11 +745,54 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
         state: viewerFrom ? { from: viewerFrom } : undefined,
       });
     }
-  }, [currentPage, goToPage, isAdjacentResolved, navigate, nextChapterId, totalPages, viewerFrom]);
+  }, [
+    getContentScrollWidth,
+    getPagedViewportWidth,
+    isAdjacentResolved,
+    navigate,
+    nextChapterId,
+    scheduleSave,
+    setOffset,
+    settings.readingMode,
+    updateVirtualPage,
+    viewerFrom,
+  ]);
 
   const handlePrev = useCallback(() => {
-    if (currentPage > 1) {
-      goToPage(currentPage - 1);
+    const container = scrollRef.current;
+    if (!container) return;
+
+    if (settings.readingMode === "vertical") {
+      const metrics = measureVirtualPaging(container, settings.readingMode);
+      if (!metrics.isAtVisualStart) {
+        container.scrollTop = Math.max(container.scrollTop - metrics.viewportHeight, 0);
+        updateVirtualPage();
+        scheduleSave();
+        return;
+      }
+
+      if (prevChapterId && isAdjacentResolved) {
+        navigate(`/viewer/${prevChapterId}`, {
+          state: viewerFrom ? { from: viewerFrom } : undefined,
+        });
+      }
+      return;
+    }
+
+    const offsetX = currentOffsetXRef.current;
+    const metrics = measureVirtualPaging(
+      container,
+      settings.readingMode,
+      offsetX,
+      getContentScrollWidth(),
+      getPagedViewportWidth(),
+    );
+
+    if (!metrics.isAtVisualStart) {
+      const prevX = Math.max(offsetX - metrics.viewportWidth, 0);
+      setOffset(prevX);
+      updateVirtualPage(prevX);
+      scheduleSave();
       return;
     }
 
@@ -289,7 +801,101 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
         state: viewerFrom ? { from: viewerFrom } : undefined,
       });
     }
-  }, [currentPage, goToPage, isAdjacentResolved, navigate, prevChapterId, viewerFrom]);
+  }, [
+    getContentScrollWidth,
+    getPagedViewportWidth,
+    isAdjacentResolved,
+    navigate,
+    prevChapterId,
+    scheduleSave,
+    setOffset,
+    settings.readingMode,
+    updateVirtualPage,
+    viewerFrom,
+  ]);
+
+  const handleReadingModeChange = useCallback(
+    (newMode: ReadingMode) => {
+      if (newMode === settings.readingMode) return;
+
+      const anchor = buildViewportAnchorSnapshot(settings.readingMode);
+      pendingTransitionAnchorRef.current = anchor;
+      pendingModeTransitionRef.current = {
+        fromMode: settings.readingMode,
+        fromPage:
+          settings.readingMode === "single" && lastRestoredPagedPageRef.current !== null
+            ? lastRestoredPagedPageRef.current
+            : getCurrentVisualPage(settings.readingMode),
+      };
+      lastRestoredPagedPageRef.current = null;
+      pendingHighlightParagraphRef.current = anchor?.paragraphId ?? null;
+      setReadingMode(newMode);
+    },
+    [buildViewportAnchorSnapshot, getCurrentVisualPage, setReadingMode, settings.readingMode],
+  );
+
+  const handleContentTap = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (isSettingsOpen) return;
+      if (settings.readingMode === "vertical") {
+        if (isUIVisible) {
+          hideUI();
+          return;
+        }
+        showUI();
+        resetUITimer();
+        return;
+      }
+
+      const container = scrollRef.current;
+      if (!container) return;
+
+      const selection = window.getSelection();
+      if (selection && selection.toString().length > 0) return;
+
+      const width = container.clientWidth;
+      const x = event.clientX - container.getBoundingClientRect().left;
+      const leftBoundary = width * 0.3;
+      const rightBoundary = width * 0.7;
+      const nextIsRight = settings.clickDirection === "ltr";
+
+      if (x <= leftBoundary) {
+        if (nextIsRight) {
+          handlePrev();
+        } else {
+          handleNext();
+        }
+        return;
+      }
+
+      if (x >= rightBoundary) {
+        if (nextIsRight) {
+          handleNext();
+        } else {
+          handlePrev();
+        }
+        return;
+      }
+
+      if (isUIVisible) {
+        hideUI();
+        return;
+      }
+      showUI();
+      resetUITimer();
+    },
+    [
+      handleNext,
+      handlePrev,
+      hideUI,
+      isSettingsOpen,
+      isUIVisible,
+      resetUITimer,
+      settings.clickDirection,
+      settings.readingMode,
+      showUI,
+    ],
+  );
 
   const { showSyncModal, serverProgress, handleConfirmSync, handleCloseModal } = useProgressSync({
     seriesId,
@@ -324,37 +930,25 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
         const [textRes, progressRes] = await Promise.all([chapterAPI.getText(chapterId), chapterAPI.getProgress(chapterId)]);
         if (cancelled) return;
 
-        const content = textRes.data.content || "";
-        setText(content);
+        const normalizedText = normalizeTextContent(textRes.data.content || "");
+        setText(normalizedText);
 
         const progress = progressRes.data?.progress;
-        if (progress) {
-          const anchor = parseAnchor(progress.current_cfi);
-          if (anchor?.kind === "txt_anchor" && typeof anchor.offset === "number") {
-            let offset = clamp(anchor.offset, 0, Math.max(0, content.length - 1));
-            if (anchor.before || anchor.after) {
-              const seed = `${anchor.before || ""}${anchor.after || ""}`;
-              if (seed) {
-                const idx = content.indexOf(seed);
-                if (idx >= 0) {
-                  offset = idx + (anchor.before?.length || 0);
-                }
-              }
-            }
-            setRestoreOffset(clamp(offset, 0, Math.max(0, content.length - 1)));
-          } else if (typeof progress.current_position === "number" && progress.current_position >= 0) {
-            setRestoreOffset(clamp(progress.current_position, 0, Math.max(0, content.length - 1)));
-          } else {
-            setRestoreOffset(null);
-          }
+        if (progress?.current_cfi) {
+          setRestoreAnchor(parseAnchor(progress.current_cfi));
+        } else if (typeof progress?.current_position === "number" && progress.current_position >= 0) {
+          setRestoreAnchor({
+            kind: "txt_anchor",
+            offset: progress.current_position,
+          });
         } else {
-          setRestoreOffset(null);
+          setRestoreAnchor(null);
         }
       } catch (err) {
         console.error("[TextViewer] failed to load text data:", err);
         if (!cancelled) {
           setText("");
-          setRestoreOffset(null);
+          setRestoreAnchor(null);
         }
       } finally {
         if (!cancelled) {
@@ -370,20 +964,147 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
   }, [chapterId]);
 
   useEffect(() => {
-    if (!text || restoreOffset === null) return;
+    if (scrollRef.current) {
+      setViewportWidth(getPagedViewportWidth() ?? scrollRef.current.clientWidth);
+    }
+  }, [getPagedViewportWidth]);
+
+  useEffect(() => {
+    const pendingAnchor = pendingTransitionAnchorRef.current;
+    if (!pendingAnchor) return;
+
+    pendingTransitionAnchorRef.current = null;
+    setRestoreAnchor(pendingAnchor);
+  }, [settings.readingMode]);
+
+  useEffect(() => {
+    if (!restoreAnchor) return;
+
     const container = scrollRef.current;
     if (!container) return;
 
-    const id = window.requestAnimationFrame(() => {
-      const ratio = restoreOffset / Math.max(1, text.length - 1);
-      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-      container.scrollTop = ratio * maxScroll;
-      updateVirtualPage();
-      setRestoreOffset(null);
+    let frameOne = 0;
+    let frameTwo = 0;
+    const transitionMeta = pendingModeTransitionRef.current;
+
+    frameOne = window.requestAnimationFrame(() => {
+      if (transitionMeta && transitionMeta.fromMode !== "vertical" && settings.readingMode !== "vertical") {
+        setOffset(0);
+        frameTwo = window.requestAnimationFrame(() => {
+          const viewportWidth = getPagedViewportWidth() ?? 1;
+          let targetPage = transitionMeta.fromPage;
+
+          if (transitionMeta.fromMode === "single" && settings.readingMode === "double") {
+            targetPage = Math.max(1, 2 * Math.floor((transitionMeta.fromPage - 1) / 2) + 1);
+          } else if (transitionMeta.fromMode === "double" && settings.readingMode === "single") {
+            targetPage = Math.max(1, transitionMeta.fromPage);
+          }
+
+          const screenIndex =
+            settings.readingMode === "double" ? Math.floor((targetPage - 1) / 2) : Math.max(0, targetPage - 1);
+          const targetX = Math.max(0, screenIndex * viewportWidth);
+
+          setOffset(targetX);
+          updateVirtualPage(targetX);
+          applyParagraphHighlight(pendingHighlightParagraphRef.current);
+          pendingModeTransitionRef.current = null;
+          pendingHighlightParagraphRef.current = null;
+          setRestoreAnchor(null);
+        });
+        return;
+      }
+
+      if (settings.readingMode === "vertical") {
+        setOffset(0);
+        container.scrollTop = 0;
+
+        frameTwo = window.requestAnimationFrame(() => {
+          const resolved = resolveAnchorRange(restoreAnchor);
+          if (resolved) {
+            const viewportRect = getViewportRectForAnchor(container, "vertical", pagedViewportRef.current);
+            const relativeY =
+              restoreAnchor.kind === "txt_anchor_v2" && "relativeY" in restoreAnchor ? (restoreAnchor.relativeY ?? 0) : 0;
+            const desiredTop = viewportRect.top + relativeY;
+            const deltaY = resolved.rect.top - desiredTop;
+            const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+            container.scrollTop = clamp(container.scrollTop + deltaY, 0, maxScroll);
+            applyParagraphHighlight(pendingHighlightParagraphRef.current ?? resolved.paragraphId);
+          }
+
+          pendingHighlightParagraphRef.current = null;
+          pendingModeTransitionRef.current = null;
+          window.requestAnimationFrame(() => updateVirtualPage());
+          setRestoreAnchor(null);
+        });
+        return;
+      }
+
+      setOffset(0);
+      frameTwo = window.requestAnimationFrame(() => {
+        const resolved = resolveAnchorRange(restoreAnchor);
+        const nextViewportWidth = getPagedViewportWidth() ?? 1;
+        const metrics = measureVirtualPaging(
+          container,
+          settings.readingMode,
+          0,
+          getContentScrollWidth(),
+          nextViewportWidth,
+        );
+        const absoluteOffset = getAbsoluteOffsetFromAnchor(restoreAnchor);
+        const estimatedPageFromOffset =
+          absoluteOffset !== null && text.length > 1 && metrics.totalPages > 1
+            ? clamp(Math.round(clamp(absoluteOffset / Math.max(1, text.length - 1), 0, 1) * (metrics.totalPages - 1)) + 1, 1, metrics.totalPages)
+            : 1;
+
+        if (resolved) {
+          if (textBodyRef.current) {
+            const maxOffset = Math.max(0, textBodyRef.current.scrollWidth - nextViewportWidth);
+            const articleRect = textBodyRef.current.getBoundingClientRect();
+            const screenIndex = Math.max(0, Math.floor((resolved.rect.left - articleRect.left) / nextViewportWidth));
+            let restoredPage = settings.readingMode === "double" ? screenIndex * 2 + 1 : screenIndex + 1;
+            if (transitionMeta?.fromMode === "vertical" && restoredPage === 1) {
+              restoredPage = estimatedPageFromOffset;
+            }
+            let targetX =
+              settings.readingMode === "double"
+                ? Math.floor((restoredPage - 1) / 2) * nextViewportWidth
+                : Math.max(0, restoredPage - 1) * nextViewportWidth;
+            targetX = clamp(targetX, 0, maxOffset);
+            if (transitionMeta?.fromMode === "vertical") {
+              lastRestoredPagedPageRef.current = restoredPage;
+            }
+            setOffset(targetX);
+            setCurrentPage(restoredPage);
+            updateVirtualPage(targetX);
+          }
+          applyParagraphHighlight(pendingHighlightParagraphRef.current ?? resolved.paragraphId);
+        } else if (transitionMeta?.fromMode === "vertical" && estimatedPageFromOffset > 1) {
+          lastRestoredPagedPageRef.current = estimatedPageFromOffset;
+          setCurrentPage(estimatedPageFromOffset);
+        }
+
+        pendingHighlightParagraphRef.current = null;
+        pendingModeTransitionRef.current = null;
+        setRestoreAnchor(null);
+      });
     });
 
-    return () => window.cancelAnimationFrame(id);
-  }, [restoreOffset, text, updateVirtualPage]);
+    return () => {
+      window.cancelAnimationFrame(frameOne);
+      window.cancelAnimationFrame(frameTwo);
+    };
+  }, [
+    applyParagraphHighlight,
+    getContentScrollWidth,
+    getPagedViewportWidth,
+    resolveAnchorRange,
+    restoreAnchor,
+    setCurrentPage,
+    setOffset,
+    settings.readingMode,
+    text.length,
+    updateVirtualPage,
+  ]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -394,13 +1115,81 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
       scheduleSave();
     };
 
-    updateVirtualPage();
-    container.addEventListener("scroll", onScroll, { passive: true });
+    container.addEventListener("scroll", onScroll, { passive: settings.readingMode === "vertical" });
+
+    const onWheel = (event: WheelEvent) => {
+      if (settings.readingMode === "vertical") return;
+      event.preventDefault();
+      if (event.deltaY === 0) return;
+      const moveNextByWheel = settings.wheelDirection === "down" ? event.deltaY > 0 : event.deltaY < 0;
+      if (moveNextByWheel) {
+        handleNext();
+      } else {
+        handlePrev();
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (settings.readingMode === "vertical") return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const moveNextByKeyboard =
+        settings.keyboardDirection === "ltr" ? event.key === "ArrowRight" : event.key === "ArrowLeft";
+      if (moveNextByKeyboard) {
+        handleNext();
+      } else {
+        handlePrev();
+      }
+    };
+
+    container.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("keydown", onKeyDown);
 
     return () => {
       container.removeEventListener("scroll", onScroll);
+      container.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKeyDown);
     };
-  }, [scheduleSave, updateVirtualPage]);
+  }, [
+    handleNext,
+    handlePrev,
+    scheduleSave,
+    settings.keyboardDirection,
+    settings.readingMode,
+    settings.wheelDirection,
+    updateVirtualPage,
+  ]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || !text) return;
+
+    let rafId: number | null = window.requestAnimationFrame(() => updateVirtualPage());
+
+    const onResize = () => {
+      if (container.clientWidth > 0) {
+        setViewportWidth(getPagedViewportWidth() ?? container.clientWidth);
+      }
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      rafId = window.requestAnimationFrame(() => updateVirtualPage());
+    };
+
+    window.addEventListener("resize", onResize);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(onResize);
+      observer.observe(container);
+      const textBody = textBodyRef.current;
+      if (textBody) observer.observe(textBody);
+    }
+
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", onResize);
+      observer?.disconnect();
+    };
+  }, [getPagedViewportWidth, text, updateVirtualPage]);
 
   useEffect(() => {
     if (isUIVisible) {
@@ -416,55 +1205,28 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
         window.clearTimeout(uiTimerRef.current);
       }
     };
-  }, [isUIVisible, resetUITimer, currentPage]);
+  }, [currentPage, isUIVisible, resetUITimer]);
 
   useEffect(() => {
     return () => {
+      flushProgressKeepalive();
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       if (uiTimerRef.current) window.clearTimeout(uiTimerRef.current);
+      if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
     };
-  }, []);
+  }, [flushProgressKeepalive]);
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (isIncognito || !seriesId || !chapterId || !chapter || !scrollRef.current || !text) return;
-
-      const container = scrollRef.current;
-      const ratio = container.scrollTop / Math.max(1, container.scrollHeight - container.clientHeight);
-      const offset = clamp(Math.round(ratio * Math.max(0, text.length - 1)), 0, Math.max(0, text.length - 1));
-      const ctx = getAnchorContext(text, offset);
-      const safeTotalPages = Math.max(1, totalPages);
-      const safeCurrentPage = clamp(currentPage, 1, safeTotalPages);
-
-      const payload = JSON.stringify({
-        chapter_id: chapterId,
-        volume_id: chapter.volume_id,
-        current_page: safeCurrentPage,
-        total_pages: safeTotalPages,
-        current_position: offset,
-        total_positions: text.length,
-        progress_percent: (safeCurrentPage / safeTotalPages) * 100,
-        current_cfi: JSON.stringify({
-          kind: "txt_anchor",
-          offset,
-          before: ctx.before,
-          after: ctx.after,
-          hash: hashContext(`${ctx.before}|${ctx.after}`),
-        }),
-      });
-
-      fetch(`${API_BASE_URL}/series/${seriesId}/progress`, {
-        method: "PATCH",
-        body: payload,
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        keepalive: true,
-      }).catch((err) => console.error("[TextViewer] keepalive save failed:", err));
-    };
+    const handleBeforeUnload = () => flushProgressKeepalive();
+    const handlePageHide = () => flushProgressKeepalive();
 
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [chapter, chapterId, currentPage, isIncognito, seriesId, text, totalPages]);
+    window.addEventListener("pagehide", handlePageHide);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [flushProgressKeepalive]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -542,13 +1304,12 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
           isUIVisible={isUIVisible}
           readingMode={settings.readingMode}
           pageOffset={settings.pageOffset}
-          seriesId={seriesId}
-          nextChapterId={nextChapterId}
+          nextChapterId={nextChapterId || null}
           onPrev={handlePrev}
           onNext={handleNext}
           onGoToPage={goToPage}
           onPageJumpClick={() => setShowPageJump(true)}
-          onReadingModeChange={setReadingMode}
+          onReadingModeChange={handleReadingModeChange}
           onTogglePageOffset={togglePageOffset}
           onInteractionStart={handleInteractionStart}
           onInteractionEnd={handleInteractionEnd}
@@ -556,29 +1317,44 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
       </div>
 
       <div
-        className={viewerStyles.viewerContent}
+        className={`${viewerStyles.viewerContent} ${styles.textViewerContent}`}
         onClick={handleContentTap}
       >
         <div
           ref={scrollRef}
-          className={styles.textScrollContainer}
+          className={`${styles.textScrollContainer} ${settings.readingMode !== "vertical" ? styles.pagedScrollContainer : ""} ${settings.readingMode === "single" ? styles.singlePagedScrollContainer : ""}`}
         >
-          <article
-            className={styles.textBody}
-            style={{
-              fontSize: `${(settings.fontSize / 100) * 20}px`,
-              lineHeight: settings.lineHeight,
-              fontFamily: resolveTextFontFamily(settings.fontFamily),
-            }}
+          <div
+            ref={settings.readingMode !== "vertical" ? pagedViewportRef : undefined}
+            className={`${settings.readingMode !== "vertical" ? styles.pagedViewportMask : styles.textViewportMask} ${settings.readingMode === "single" ? styles.singlePagedViewportMask : ""}`}
           >
-            {text}
-          </article>
+            <article
+              ref={textBodyRef}
+              className={`${styles.textBody} ${settings.readingMode !== "vertical" ? styles.pagedMode : ""} ${settings.readingMode === "single" ? styles.singleMode : settings.readingMode === "double" ? styles.doubleMode : ""}`}
+              style={
+                {
+                  fontSize: `${(settings.fontSize / 100) * 20}px`,
+                  lineHeight: settings.lineHeight,
+                  fontFamily: resolveTextFontFamily(settings.fontFamily),
+                  ...(settings.readingMode !== "vertical"
+                    ? {
+                        transform: `translateX(-${currentOffsetX}px)`,
+                        "--viewport-width": `${viewportWidth}px`,
+                      }
+                    : {}),
+                } as React.CSSProperties
+              }
+            >
+              {renderedParagraphs}
+            </article>
+          </div>
         </div>
       </div>
 
       {isSettingsOpen && (
         <ViewerSettingsModal
           onClose={closeSettings}
+          onReadingModeChange={handleReadingModeChange}
           showTextTypographyOption
         />
       )}
@@ -606,3 +1382,13 @@ export function TextViewerRoute({ loaderData }: TextViewerRouteProps) {
     </div>
   );
 }
+
+export function TextViewerRoute(props: TextViewerRouteProps) {
+  return (
+    <ErrorBoundary>
+      <TextViewerRouteInner {...props} />
+    </ErrorBoundary>
+  );
+}
+
+export default TextViewerRoute;

@@ -66,6 +66,25 @@
   transition: transform 0.3s ease;
 }
 
+.seriesPlaceholderImageWrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at center, rgba(96, 197, 232, 0.12), transparent 58%),
+    linear-gradient(180deg, rgba(8, 24, 48, 0.98), rgba(10, 32, 60, 0.92));
+}
+
+.seriesPlaceholderImage {
+  width: 58%;
+  height: auto;
+  max-height: 58%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.35));
+}
+
 .seriesCard:hover .seriesThumbnail {
   transform: scale(1.05);
 }

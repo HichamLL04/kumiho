@@ -53,6 +53,10 @@ export function SeriesPage() {
 
   const user = useAuthStore((state) => state.user);
   const canDownload = user?.role === "MASTER" || user?.can_download;
+  const preferPercentLabel = volumes.length > 0 && volumes.every((volume) => {
+    const lowerPath = String(volume.path || "").toLowerCase();
+    return lowerPath.endsWith(".txt") || lowerPath.endsWith(".epub");
+  });
 
   const showAlert = (message: string, type: AlertType = "info") => {
     setAlertModal({ isOpen: true, type, message });
@@ -205,6 +209,7 @@ export function SeriesPage() {
               series={series}
               progress={progress}
               summary={summary}
+              preferPercentLabel={preferPercentLabel}
               onUpdate={handleUpdate}
               onRefresh={loadData}
               onAlert={showAlert}

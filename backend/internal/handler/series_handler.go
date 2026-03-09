@@ -1014,6 +1014,13 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 			volumes[i].ReadPageCount = readPages
 		}
 
+		progressPercent, err := h.volumeRepo.GetProgressPercent(nil, userID, volumes[i].ID)
+		if err != nil {
+			log.Printf("failed to get progress percent for user %s, volume %s: %v", userID, volumes[i].ID, err)
+		} else {
+			volumes[i].ProgressPercent = progressPercent
+		}
+
 		completedByFlag := completedVolumeIDs[volumes[i].ID]
 		// 완독 플래그가 있으나 집계값이 비어있는 경우(과거 데이터 등)에는 100%로 보정.
 		// 이후 최종 완독 여부는 보정된 readPages를 포함해 재검증한다.
@@ -1081,6 +1088,13 @@ func (h *SeriesHandler) GetVolume(c *fiber.Ctx) error {
 		} else {
 			readPages = rp
 			volume.ReadPageCount = readPages
+		}
+
+		progressPercent, progressErr := h.volumeRepo.GetProgressPercent(nil, userID, volume.ID)
+		if progressErr != nil {
+			log.Printf("failed to get progress percent for user %s, volume %s: %v", userID, volume.ID, progressErr)
+		} else {
+			volume.ProgressPercent = progressPercent
 		}
 	}
 

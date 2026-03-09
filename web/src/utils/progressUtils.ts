@@ -14,9 +14,10 @@ export function calculateProgressDisplay(params: {
   volume?: Volume;
   progress?: ReadingProgress;
   summary?: SeriesProgressSummary;
+  preferPercentLabel?: boolean;
   t: (key: string, options?: Record<string, unknown>) => string;
 }): ProgressDisplayData {
-  const { type, series, volume, progress, summary, t } = params;
+  const { type, series, volume, progress, summary, preferPercentLabel = false, t } = params;
   const isVolumeType = type === "volume";
 
   // 1. 퍼센트 계산 로직
@@ -25,6 +26,9 @@ export function calculateProgressDisplay(params: {
     if (volume) {
       if (volume.is_completed) {
         percent = 100;
+      } else if (typeof volume.progress_percent === "number") {
+        // TXT/EPUB 등 가변 페이지 매체는 고정 총량과 별도로 실제 읽기 진행 퍼센트를 우선 사용
+        percent = Math.min(100, Math.max(0, volume.progress_percent));
       } else if (volume.total_page_count && volume.total_page_count > 0) {
         // 일반 도서 (이미지/PDF): 전체 페이지 수 기반 계산
         percent = Math.min(100, ((volume.read_page_count || 0) / volume.total_page_count) * 100);
@@ -34,7 +38,9 @@ export function calculateProgressDisplay(params: {
       }
     }
   } else {
-    if (series.total_page_count && series.total_page_count > 0) {
+    if (summary?.total_pages && summary.total_pages > 0) {
+      percent = Math.min(100, Math.max(0, ((summary.read_pages || 0) / summary.total_pages) * 100));
+    } else if (series.total_page_count && series.total_page_count > 0) {
       // 일반 시리즈: 전체 페이지 수 기반 합산 계산
       percent = Math.min(100, Math.max(0, ((series.read_page_count || 0) / series.total_page_count) * 100));
     } else if (summary?.total_volumes && summary.current_volume_number >= 0) {
@@ -52,6 +58,10 @@ export function calculateProgressDisplay(params: {
     if (volume) {
       if (volume.is_completed) {
         label = t("series.info.completed");
+      } else if (preferPercentLabel && percent > 0) {
+        label = `${Math.floor(percent)}%`;
+      } else if (preferPercentLabel && percent <= 0) {
+        label = t("series.info.not_read");
       } else if (volume.total_page_count && volume.total_page_count > 0) {
         label = `${volume.read_page_count || 0} / ${volume.total_page_count} P`;
       } else if (progress) {
@@ -59,16 +69,16 @@ export function calculateProgressDisplay(params: {
       }
     }
   } else {
-    if (series.total_page_count && series.total_page_count > 0) {
-      const p = Math.floor(percent);
-      label = `${p}% (${series.read_page_count || 0} / ${series.total_page_count} P)`;
-    } else if (summary?.total_pages && summary.total_pages > 0) {
+    if (summary?.total_pages && summary.total_pages > 0) {
       const p = Math.floor(((summary.read_pages || 0) / summary.total_pages) * 100);
-      label = `${p}% (${summary.read_pages || 0} / ${summary.total_pages} P)`;
+      label = preferPercentLabel ? `${p}%` : `${p}% (${summary.read_pages || 0} / ${summary.total_pages} P)`;
+    } else if (series.total_page_count && series.total_page_count > 0) {
+      const p = Math.floor(percent);
+      label = preferPercentLabel ? `${p}%` : `${p}% (${series.read_page_count || 0} / ${series.total_page_count} P)`;
     } else if (summary?.total_volumes) {
       label = `${summary.current_volume_number} / ${summary.total_volumes} ${t("series.unit.volume", { count: 1 }).replace(/\d+/, "").trim()}`;
     } else if (progress) {
-      label = `${progress.current_page} / ${progress.total_pages} P`;
+      label = preferPercentLabel ? `${Math.floor(percent)}%` : `${progress.current_page} / ${progress.total_pages} P`;
     }
   }
 

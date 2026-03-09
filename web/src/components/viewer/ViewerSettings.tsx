@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useViewerStore } from "../../stores/viewerStore";
+import { useViewerStore, type ReadingMode } from "../../stores/viewerStore";
 import { seriesAPI, settingAPI } from "../../api/client";
 import { toast } from "react-hot-toast";
 import styles from "./ViewerSettings.module.css";
@@ -11,6 +11,7 @@ interface ViewerSettingsProps {
   onClose: () => void;
   showPdfControlsOption?: boolean;
   showTextTypographyOption?: boolean;
+  onReadingModeChange?: (mode: ReadingMode) => void;
 }
 
 type ViewerTheme = "light" | "dark" | "sepia";
@@ -32,6 +33,7 @@ export function ViewerSettings({
   onClose,
   showPdfControlsOption = false,
   showTextTypographyOption = false,
+  onReadingModeChange,
 }: ViewerSettingsProps) {
   const { t } = useTranslation();
   const isMobileDevice = isMobile();
@@ -103,6 +105,14 @@ export function ViewerSettings({
     }
   };
 
+  const handleReadingModeClick = (mode: ReadingMode) => {
+    if (onReadingModeChange) {
+      onReadingModeChange(mode);
+    } else {
+      updateSetting("reading_mode", mode, setReadingMode);
+    }
+  };
+
   useEffect(() => {
     const contentEl = contentRef.current;
     if (!contentEl) return;
@@ -166,27 +176,27 @@ export function ViewerSettings({
           className={`${styles.settingsContent} ${!hasScrollbar ? styles.noScrollbar : ""}`}
         >
           <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>{t("viewer.settings.reading_mode.label")}</div>
-          <div className={styles.settingsOptions}>
-            <button
-              className={`${styles.optionBtn} ${settings.readingMode === "single" ? styles.selected : ""}`}
-              onClick={() => updateSetting("reading_mode", "single", setReadingMode)}
-            >
-              {t("viewer.settings.reading_mode.single")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.readingMode === "double" ? styles.selected : ""}`}
-              onClick={() => updateSetting("reading_mode", "double", setReadingMode)}
-            >
-              {t("viewer.settings.reading_mode.double")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.readingMode === "vertical" ? styles.selected : ""}`}
-              onClick={() => updateSetting("reading_mode", "vertical", setReadingMode)}
-            >
-              {t("viewer.settings.reading_mode.vertical")}
-            </button>
-          </div>
+            <div className={styles.settingsLabel}>{t("viewer.settings.reading_mode.label")}</div>
+            <div className={styles.settingsOptions}>
+              <button
+                className={`${styles.optionBtn} ${settings.readingMode === "single" ? styles.selected : ""}`}
+                onClick={() => handleReadingModeClick("single")}
+              >
+                {t("viewer.settings.reading_mode.single")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.readingMode === "double" ? styles.selected : ""}`}
+                onClick={() => handleReadingModeClick("double")}
+              >
+                {t("viewer.settings.reading_mode.double")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.readingMode === "vertical" ? styles.selected : ""}`}
+                onClick={() => handleReadingModeClick("vertical")}
+              >
+                {t("viewer.settings.reading_mode.vertical")}
+              </button>
+            </div>
           </div>
 
           {showTextTypographyOption && (
@@ -202,7 +212,9 @@ export function ViewerSettings({
                   id="viewer-font-family-select"
                   className={styles.select}
                   value={settings.fontFamily}
-                  onChange={(e) => updateSetting("font_family", e.target.value as "original" | "serif" | "sans-serif", setFontFamily)}
+                  onChange={(e) =>
+                    updateSetting("font_family", e.target.value as "original" | "serif" | "sans-serif", setFontFamily)
+                  }
                 >
                   <option value="original">{t("viewer.settings.font_family.original")}</option>
                   <option value="serif">{t("viewer.settings.font_family.serif")}</option>
@@ -259,177 +271,183 @@ export function ViewerSettings({
           )}
 
           <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>{t("viewer.settings.reading_direction.label")}</div>
-          <div className={styles.settingsOptions}>
-            <button
-              className={`${styles.optionBtn} ${settings.readingDirection === "ltr" ? styles.selected : ""}`}
-              onClick={() => updateSetting("reading_direction", "ltr", setReadingDirection)}
-            >
-              {t("viewer.settings.reading_direction.ltr")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.readingDirection === "rtl" ? styles.selected : ""}`}
-              onClick={() => updateSetting("reading_direction", "rtl", setReadingDirection)}
-            >
-              {t("viewer.settings.reading_direction.rtl")}
-            </button>
-          </div>
-          </div>
-
-          <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>{t("viewer.settings.click_direction.label")}</div>
-          <div className={styles.settingsOptions}>
-            <button
-              className={`${styles.optionBtn} ${settings.clickDirection === "ltr" ? styles.selected : ""}`}
-              onClick={() => updateSetting("click_direction", "ltr", setClickDirection)}
-            >
-              {t("viewer.settings.click_direction.right")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.clickDirection === "rtl" ? styles.selected : ""}`}
-              onClick={() => updateSetting("click_direction", "rtl", setClickDirection)}
-            >
-              {t("viewer.settings.click_direction.left")}
-            </button>
-          </div>
-          </div>
-
-          <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>{t("viewer.settings.wheel_direction.label")}</div>
-          <div className={styles.settingsOptions}>
-            <button
-              className={`${styles.optionBtn} ${settings.wheelDirection === "down" ? styles.selected : ""}`}
-              onClick={() => updateSetting("wheel_direction", "down", setWheelDirection)}
-            >
-              {t("viewer.settings.wheel_direction.down")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.wheelDirection === "up" ? styles.selected : ""}`}
-              onClick={() => updateSetting("wheel_direction", "up", setWheelDirection)}
-            >
-              {t("viewer.settings.wheel_direction.up")}
-            </button>
-          </div>
-          </div>
-
-          <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>
-            {isMobileDevice
-              ? t("viewer.settings.nav_direction.label_mobile")
-              : t("viewer.settings.nav_direction.label_desktop")}
-          </div>
-          <div className={styles.settingsOptions}>
-            <button
-              className={`${styles.optionBtn} ${
-                (isMobileDevice ? settings.swipeDirection : settings.keyboardDirection) === "ltr" ? styles.selected : ""
-              }`}
-              onClick={() =>
-                isMobileDevice
-                  ? updateSetting("swipe_direction", "ltr", setSwipeDirection)
-                  : updateSetting("keyboard_direction", "ltr", setKeyboardDirection)
-              }
-            >
-              {isMobileDevice ? (
-                <>
-                  <span style={{ fontSize: "1.2em", marginRight: "4px" }}>⬅️</span>{" "}
-                  {t("viewer.settings.nav_direction.ltr_mobile")}
-                </>
-              ) : (
-                t("viewer.settings.nav_direction.ltr_desktop")
-              )}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${
-                (isMobileDevice ? settings.swipeDirection : settings.keyboardDirection) === "rtl" ? styles.selected : ""
-              }`}
-              onClick={() =>
-                isMobileDevice
-                  ? updateSetting("swipe_direction", "rtl", setSwipeDirection)
-                  : updateSetting("keyboard_direction", "rtl", setKeyboardDirection)
-              }
-            >
-              {isMobileDevice ? (
-                <>
-                  <span style={{ fontSize: "1.2em", marginRight: "4px" }}>➡️</span>{" "}
-                  {t("viewer.settings.nav_direction.rtl_mobile")}
-                </>
-              ) : (
-                t("viewer.settings.nav_direction.rtl_desktop")
-              )}
-            </button>
-          </div>
-          </div>
-
-          <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>{t("viewer.settings.fit_mode.label")}</div>
-          <div className={styles.settingsOptions}>
-            <button
-              className={`${styles.optionBtn} ${settings.fitMode === "screen" ? styles.selected : ""}`}
-              onClick={() => updateSetting("fit_mode", "screen", setFitMode)}
-            >
-              {t("viewer.settings.fit_mode.screen")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.fitMode === "width" ? styles.selected : ""}`}
-              onClick={() => updateSetting("fit_mode", "width", setFitMode)}
-            >
-              {t("viewer.settings.fit_mode.width")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.fitMode === "height" ? styles.selected : ""}`}
-              onClick={() => updateSetting("fit_mode", "height", setFitMode)}
-            >
-              {t("viewer.settings.fit_mode.height")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.fitMode === "original" ? styles.selected : ""}`}
-              onClick={() => updateSetting("fit_mode", "original", setFitMode)}
-            >
-              {t("viewer.settings.fit_mode.original")}
-            </button>
-          </div>
-          </div>
-
-          <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>{t("viewer.settings.theme.label")}</div>
-          <div className={styles.themeGroup}>
-            {(["light", "dark", "sepia"] as ViewerTheme[]).map((theme) => (
+            <div className={styles.settingsLabel}>{t("viewer.settings.reading_direction.label")}</div>
+            <div className={styles.settingsOptions}>
               <button
-                key={theme}
-                type="button"
-                className={`${styles.themeBtn} ${styles[`theme_${theme}`]} ${selectedTheme === theme ? styles.activeTheme : ""}`}
-                onClick={() => updateSetting("background_color", VIEWER_THEME_TO_BACKGROUND[theme], setBackgroundColor)}
-                aria-label={t(`viewer.settings.theme.${theme}`)}
-                title={t(`viewer.settings.theme.${theme}`)}
+                className={`${styles.optionBtn} ${settings.readingDirection === "ltr" ? styles.selected : ""}`}
+                onClick={() => updateSetting("reading_direction", "ltr", setReadingDirection)}
               >
-                {t(`viewer.settings.theme.${theme}`)}
+                {t("viewer.settings.reading_direction.ltr")}
               </button>
-            ))}
-          </div>
+              <button
+                className={`${styles.optionBtn} ${settings.readingDirection === "rtl" ? styles.selected : ""}`}
+                onClick={() => updateSetting("reading_direction", "rtl", setReadingDirection)}
+              >
+                {t("viewer.settings.reading_direction.rtl")}
+              </button>
+            </div>
           </div>
 
           <div className={styles.settingsSection}>
-          <div className={styles.settingsLabel}>{t("viewer.settings.page_transition.label")}</div>
-          <div className={styles.settingsOptions}>
-            <button
-              className={`${styles.optionBtn} ${settings.pageTransition === "slide" ? styles.selected : ""}`}
-              onClick={() => updateSetting("page_transition", "slide", setPageTransition)}
-            >
-              {t("viewer.settings.page_transition.slide")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.pageTransition === "fade" ? styles.selected : ""}`}
-              onClick={() => updateSetting("page_transition", "fade", setPageTransition)}
-            >
-              {t("viewer.settings.page_transition.fade")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${settings.pageTransition === "none" ? styles.selected : ""}`}
-              onClick={() => updateSetting("page_transition", "none", setPageTransition)}
-            >
-              {t("viewer.settings.page_transition.none")}
-            </button>
+            <div className={styles.settingsLabel}>{t("viewer.settings.click_direction.label")}</div>
+            <div className={styles.settingsOptions}>
+              <button
+                className={`${styles.optionBtn} ${settings.clickDirection === "ltr" ? styles.selected : ""}`}
+                onClick={() => updateSetting("click_direction", "ltr", setClickDirection)}
+              >
+                {t("viewer.settings.click_direction.right")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.clickDirection === "rtl" ? styles.selected : ""}`}
+                onClick={() => updateSetting("click_direction", "rtl", setClickDirection)}
+              >
+                {t("viewer.settings.click_direction.left")}
+              </button>
+            </div>
           </div>
+
+          <div className={styles.settingsSection}>
+            <div className={styles.settingsLabel}>{t("viewer.settings.wheel_direction.label")}</div>
+            <div className={styles.settingsOptions}>
+              <button
+                className={`${styles.optionBtn} ${settings.wheelDirection === "down" ? styles.selected : ""}`}
+                onClick={() => updateSetting("wheel_direction", "down", setWheelDirection)}
+              >
+                {t("viewer.settings.wheel_direction.down")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.wheelDirection === "up" ? styles.selected : ""}`}
+                onClick={() => updateSetting("wheel_direction", "up", setWheelDirection)}
+              >
+                {t("viewer.settings.wheel_direction.up")}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.settingsSection}>
+            <div className={styles.settingsLabel}>
+              {isMobileDevice
+                ? t("viewer.settings.nav_direction.label_mobile")
+                : t("viewer.settings.nav_direction.label_desktop")}
+            </div>
+            <div className={styles.settingsOptions}>
+              <button
+                className={`${styles.optionBtn} ${
+                  (isMobileDevice ? settings.swipeDirection : settings.keyboardDirection) === "ltr"
+                    ? styles.selected
+                    : ""
+                }`}
+                onClick={() =>
+                  isMobileDevice
+                    ? updateSetting("swipe_direction", "ltr", setSwipeDirection)
+                    : updateSetting("keyboard_direction", "ltr", setKeyboardDirection)
+                }
+              >
+                {isMobileDevice ? (
+                  <>
+                    <span style={{ fontSize: "1.2em", marginRight: "4px" }}>⬅️</span>{" "}
+                    {t("viewer.settings.nav_direction.ltr_mobile")}
+                  </>
+                ) : (
+                  t("viewer.settings.nav_direction.ltr_desktop")
+                )}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${
+                  (isMobileDevice ? settings.swipeDirection : settings.keyboardDirection) === "rtl"
+                    ? styles.selected
+                    : ""
+                }`}
+                onClick={() =>
+                  isMobileDevice
+                    ? updateSetting("swipe_direction", "rtl", setSwipeDirection)
+                    : updateSetting("keyboard_direction", "rtl", setKeyboardDirection)
+                }
+              >
+                {isMobileDevice ? (
+                  <>
+                    <span style={{ fontSize: "1.2em", marginRight: "4px" }}>➡️</span>{" "}
+                    {t("viewer.settings.nav_direction.rtl_mobile")}
+                  </>
+                ) : (
+                  t("viewer.settings.nav_direction.rtl_desktop")
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.settingsSection}>
+            <div className={styles.settingsLabel}>{t("viewer.settings.fit_mode.label")}</div>
+            <div className={styles.settingsOptions}>
+              <button
+                className={`${styles.optionBtn} ${settings.fitMode === "screen" ? styles.selected : ""}`}
+                onClick={() => updateSetting("fit_mode", "screen", setFitMode)}
+              >
+                {t("viewer.settings.fit_mode.screen")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.fitMode === "width" ? styles.selected : ""}`}
+                onClick={() => updateSetting("fit_mode", "width", setFitMode)}
+              >
+                {t("viewer.settings.fit_mode.width")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.fitMode === "height" ? styles.selected : ""}`}
+                onClick={() => updateSetting("fit_mode", "height", setFitMode)}
+              >
+                {t("viewer.settings.fit_mode.height")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.fitMode === "original" ? styles.selected : ""}`}
+                onClick={() => updateSetting("fit_mode", "original", setFitMode)}
+              >
+                {t("viewer.settings.fit_mode.original")}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.settingsSection}>
+            <div className={styles.settingsLabel}>{t("viewer.settings.theme.label")}</div>
+            <div className={styles.themeGroup}>
+              {(["light", "dark", "sepia"] as ViewerTheme[]).map((theme) => (
+                <button
+                  key={theme}
+                  type="button"
+                  className={`${styles.themeBtn} ${styles[`theme_${theme}`]} ${selectedTheme === theme ? styles.activeTheme : ""}`}
+                  onClick={() =>
+                    updateSetting("background_color", VIEWER_THEME_TO_BACKGROUND[theme], setBackgroundColor)
+                  }
+                  aria-label={t(`viewer.settings.theme.${theme}`)}
+                  title={t(`viewer.settings.theme.${theme}`)}
+                >
+                  {t(`viewer.settings.theme.${theme}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.settingsSection}>
+            <div className={styles.settingsLabel}>{t("viewer.settings.page_transition.label")}</div>
+            <div className={styles.settingsOptions}>
+              <button
+                className={`${styles.optionBtn} ${settings.pageTransition === "slide" ? styles.selected : ""}`}
+                onClick={() => updateSetting("page_transition", "slide", setPageTransition)}
+              >
+                {t("viewer.settings.page_transition.slide")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.pageTransition === "fade" ? styles.selected : ""}`}
+                onClick={() => updateSetting("page_transition", "fade", setPageTransition)}
+              >
+                {t("viewer.settings.page_transition.fade")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${settings.pageTransition === "none" ? styles.selected : ""}`}
+                onClick={() => updateSetting("page_transition", "none", setPageTransition)}
+              >
+                {t("viewer.settings.page_transition.none")}
+              </button>
+            </div>
           </div>
 
           {showPdfControlsOption && (

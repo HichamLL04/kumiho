@@ -46,6 +46,8 @@ export function VolumePage() {
 
   const user = useAuthStore((state) => state.user);
   const canDownload = user?.role === "MASTER" || user?.can_download;
+  const lowerVolumePath = String(volume?.path || "").toLowerCase();
+  const preferPercentLabel = lowerVolumePath.endsWith(".txt") || lowerVolumePath.endsWith(".epub");
 
   const showAlert = (message: string, type: AlertType = "info") => {
     setAlertModal({ isOpen: true, type, message });
@@ -243,6 +245,7 @@ export function VolumePage() {
             volume={volume}
             type="volume"
             progress={lastProgress || undefined}
+            preferPercentLabel={preferPercentLabel}
             onPlay={handlePlay}
             onAlert={showAlert}
             onRefresh={loadData}
