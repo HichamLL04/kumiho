@@ -530,7 +530,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
             isUIVisible={isUIVisible}
             readingMode={settings.readingMode}
             pageOffset={settings.pageOffset}
-            seriesId={seriesId}
             nextChapterId={nextChapterId}
             onPrev={handlePrev}
             onNext={handleNext}

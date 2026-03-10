@@ -286,65 +286,64 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
   return (
     <>
       <PdfViewer
-      chapterTitle={chapter?.title || ""}
-      chapterId={chapterId}
-      seriesId={seriesId || undefined}
-      currentPage={currentPage}
-      totalPages={totalPages}
-      isUIVisible={isUIVisible}
-      isSettingsOpen={isSettingsOpen}
-      isFullscreen={isFullscreen}
-      isIncognito={isIncognito}
-      settings={{
-        backgroundColor: settings.backgroundColor,
-        fitMode: settings.fitMode,
-        readingMode: settings.readingMode,
-        readingDirection: settings.readingDirection,
-        wheelDirection: settings.wheelDirection,
-        pageOffset: settings.pageOffset,
-        pageTransition: settings.pageTransition,
-        preloadCount: settings.preloadCount,
-      }}
-      bgmInfo={bgmInfo}
-      isBgmPlaying={isBgmPlaying}
-      showPageJump={showPageJump}
-      showSyncModal={showSyncModal}
-      showTOC={showTOC}
-      tocItems={tocItems}
-      serverProgress={serverProgress}
-      terminatedInfo={terminatedInfo}
-      nextChapterId={nextChapterId}
-      audioRef={audioRef}
-      animationRef={animationRef as React.RefObject<ViewerAnimationHandles>}
-      showZoomControls={settings.showPdfZoomControls}
-      zoomPercent={Math.round(zoomScale * 100)}
-      onBack={handleBack}
-      onToggleFullscreen={handleToggleFullscreen}
-      onToggleSettings={toggleSettings}
-      onToggleBgm={() => setIsBgmPlaying(!isBgmPlaying)}
-      onToggleTOC={() => setShowTOC(!showTOC)}
-      onZoomIn={handleZoomIn}
-      onZoomOut={handleZoomOut}
-      onZoomReset={handleZoomReset}
-      onZoomChange={setZoomScale}
-      onDocumentLoad={handleDocumentLoad}
-      onOutlineLoad={handleOutlineLoad}
-      onNext={handleNext}
-      onPrev={handlePrev}
-      onPageChange={setCurrentPage}
-      onGoToPage={goToPage}
-      onPageJumpClick={() => setShowPageJump(true)}
-      onReadingModeChange={setReadingMode}
-      onTogglePageOffset={togglePageOffset}
-      onCloseSettings={closeSettings}
-      onClosePageJump={() => setShowPageJump(false)}
-      onPageJump={goToPage}
-      onConfirmSync={handleConfirmSync}
-      onCloseSync={handleCloseModal}
-      onConfirmTerminated={handleTerminatedConfirm}
-      sessionForceLogoutTitle={t("viewer.session.force_logout_title")}
-      onInteractionStart={handleInteractionStart}
-      onInteractionEnd={handleInteractionEnd}
+        chapterTitle={chapter?.title || ""}
+        chapterId={chapterId}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        isUIVisible={isUIVisible}
+        isSettingsOpen={isSettingsOpen}
+        isFullscreen={isFullscreen}
+        isIncognito={isIncognito}
+        settings={{
+          backgroundColor: settings.backgroundColor,
+          fitMode: settings.fitMode,
+          readingMode: settings.readingMode,
+          readingDirection: settings.readingDirection,
+          wheelDirection: settings.wheelDirection,
+          pageOffset: settings.pageOffset,
+          pageTransition: settings.pageTransition,
+          preloadCount: settings.preloadCount,
+        }}
+        bgmInfo={bgmInfo}
+        isBgmPlaying={isBgmPlaying}
+        showPageJump={showPageJump}
+        showSyncModal={showSyncModal}
+        showTOC={showTOC}
+        tocItems={tocItems}
+        serverProgress={serverProgress}
+        terminatedInfo={terminatedInfo}
+        nextChapterId={nextChapterId}
+        audioRef={audioRef}
+        animationRef={animationRef as React.RefObject<ViewerAnimationHandles>}
+        showZoomControls={settings.showPdfZoomControls}
+        zoomPercent={Math.round(zoomScale * 100)}
+        onBack={handleBack}
+        onToggleFullscreen={handleToggleFullscreen}
+        onToggleSettings={toggleSettings}
+        onToggleBgm={() => setIsBgmPlaying(!isBgmPlaying)}
+        onToggleTOC={() => setShowTOC(!showTOC)}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onZoomReset={handleZoomReset}
+        onZoomChange={setZoomScale}
+        onDocumentLoad={handleDocumentLoad}
+        onOutlineLoad={handleOutlineLoad}
+        onNext={handleNext}
+        onPrev={handlePrev}
+        onPageChange={setCurrentPage}
+        onGoToPage={goToPage}
+        onPageJumpClick={() => setShowPageJump(true)}
+        onReadingModeChange={setReadingMode}
+        onTogglePageOffset={togglePageOffset}
+        onCloseSettings={closeSettings}
+        onClosePageJump={() => setShowPageJump(false)}
+        onPageJump={goToPage}
+        onConfirmSync={handleConfirmSync}
+        onCloseSync={handleCloseModal}
+        onConfirmTerminated={handleTerminatedConfirm}
+        sessionForceLogoutTitle={t("viewer.session.force_logout_title")}
+        onInteractionStart={handleInteractionStart}
+        onInteractionEnd={handleInteractionEnd}
       />
       <AlertModal
         isOpen={showSeriesEndModal}

@@ -19,7 +19,6 @@ interface ViewerFooterProps {
   isUIVisible: boolean;
   readingMode: ReadingMode;
   pageOffset: number;
-  seriesId?: string | null;
   nextChapterId: string | null;
   onPrev: () => void;
   onNext: () => void;
