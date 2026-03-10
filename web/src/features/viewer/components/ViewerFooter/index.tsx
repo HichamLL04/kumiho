@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { seriesAPI } from "../../../../api/client";
 import styles from "./ViewerFooter.module.css";
 import type { ReadingMode } from "../../../../stores/viewerStore";
 
@@ -20,7 +19,6 @@ interface ViewerFooterProps {
   isUIVisible: boolean;
   readingMode: ReadingMode;
   pageOffset: number;
-  seriesId: string | null;
   nextChapterId: string | null;
   onPrev: () => void;
   onNext: () => void;
@@ -40,7 +38,6 @@ export function ViewerFooter({
   isUIVisible,
   readingMode,
   pageOffset,
-  seriesId,
   nextChapterId,
   onPrev,
   onNext,
@@ -153,18 +150,9 @@ export function ViewerFooter({
     setIsDragging(false);
   }, []);
 
-  const handleModeToggle = async () => {
+  const handleModeToggle = () => {
     const newMode = readingMode === "single" ? "double" : "single";
     onReadingModeChange(newMode);
-
-    // 설정 저장
-    if (seriesId) {
-      try {
-        await seriesAPI.updateViewerSettings(seriesId, { reading_mode: newMode });
-      } catch (e) {
-        console.error("설정 저장 실패:", e);
-      }
-    }
   };
 
   return (

@@ -13,12 +13,6 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../../api/client", () => ({
-  seriesAPI: {
-    updateViewerSettings: vi.fn(),
-  },
-}));
-
 function renderFooter(override: Partial<React.ComponentProps<typeof ViewerFooter>> = {}) {
   const props: React.ComponentProps<typeof ViewerFooter> = {
     currentPage: 10,
@@ -26,7 +20,6 @@ function renderFooter(override: Partial<React.ComponentProps<typeof ViewerFooter
     isUIVisible: true,
     readingMode: "single",
     pageOffset: 0,
-    seriesId: null,
     nextChapterId: null,
     onPrev: vi.fn(),
     onNext: vi.fn(),

@@ -232,8 +232,8 @@ func (r *VolumeRepository) GetTotalPages(db database.Queryer, volumeID string) (
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN total_positions > 0 THEN total_positions
 				WHEN page_count > 0 THEN page_count 
+				WHEN page_count <= 0 AND total_positions > 0 THEN total_positions
 				ELSE 0 
 			END), 0)
 		 FROM chapters
@@ -264,8 +264,8 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 	err = db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN c.total_positions > 0 THEN c.total_positions
 				WHEN c.page_count > 0 THEN c.page_count 
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
 			END), 0)
 		 FROM chapter_completions cc
@@ -283,11 +283,11 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 	err = db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN c.total_positions > 0 THEN rp.current_page
 				WHEN c.page_count > 0 THEN rp.current_page
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
 				ELSE CAST(rp.progress_percent AS INTEGER)
 			END
-		 ), 0)
+			 ), 0)
 		 FROM reading_progress rp
 		 JOIN chapters c ON rp.chapter_id = c.id
 		 WHERE rp.user_id = ? AND rp.volume_id = ?
@@ -301,6 +301,61 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 	}
 
 	return completedPages + progressPages, nil
+}
+
+// GetProgressPercent 사용자의 볼륨 실제 진행 퍼센트 조회
+// - 총량은 고정 집계값(total_positions 우선, 없으면 page_count)을 사용
+// - 진행량은 뷰어 진행(current_page/total_pages, fallback: progress_percent) 비율을 반영
+func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volumeID string) (float64, error) {
+	db = database.GetQueryer(db)
+
+	var percent float64
+	err := db.QueryRow(
+		`WITH chapter_units AS (
+			SELECT
+				c.id AS chapter_id,
+				CASE
+					WHEN c.total_positions > 0 THEN c.total_positions
+					WHEN c.page_count > 0 THEN c.page_count
+					ELSE 0
+				END AS unit_total
+			FROM chapters c
+			WHERE c.volume_id = ?
+		),
+		total_units AS (
+			SELECT COALESCE(SUM(cu.unit_total), 0) AS value
+			FROM chapter_units cu
+		),
+		completed_units AS (
+			SELECT COALESCE(SUM(cu.unit_total), 0) AS value
+			FROM chapter_units cu
+			JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id
+			WHERE cc.user_id = ?
+		),
+		inprogress_units AS (
+			SELECT COALESCE(SUM(
+				cu.unit_total * (
+					CASE
+						WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
+						ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
+					END
+				)
+			), 0.0) AS value
+			FROM chapter_units cu
+			JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id
+			LEFT JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id AND cc.user_id = rp.user_id
+			WHERE rp.user_id = ?
+			  AND rp.volume_id = ?
+			  AND cc.chapter_id IS NULL
+		)
+		SELECT CASE
+			WHEN total_units.value <= 0 THEN 0.0
+			ELSE MIN(100.0, MAX(0.0, ((completed_units.value + inprogress_units.value) * 100.0) / total_units.value))
+		END
+		FROM total_units, completed_units, inprogress_units`,
+		volumeID, userID, userID, volumeID,
+	).Scan(&percent)
+	return percent, err
 }
 
 // GetFirstVolume 시리즈의 첫 번째 볼륨 조회

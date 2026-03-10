@@ -66,6 +66,9 @@ export function SeriesCard({
   const setIncognito = useViewerStore((state) => state.setIncognito);
 
   let calculatedProgress = progress;
+  if (calculatedProgress === undefined && "progress_percent" in item && typeof item.progress_percent === "number") {
+    calculatedProgress = item.progress_percent;
+  }
   if (calculatedProgress === undefined && item.read_page_count !== undefined && item.total_page_count !== undefined) {
     if (item.total_page_count > 0) {
       calculatedProgress = (item.read_page_count / item.total_page_count) * 100;
@@ -291,6 +294,8 @@ export function SeriesCard({
   const hasAudio = "has_audio" in item && item.has_audio;
   const showOverlayProgress =
     progressStyle === "overlay" && displayProgress !== null && (displayProgress > 0 || forceShowProgress);
+  const lowerItemPath = String(item.path || "").toLowerCase();
+  const isTextFile = extensionBadge === "TXT" || lowerItemPath.endsWith(".txt");
 
   let displaySubtitle = customSubtitle;
   if (!displaySubtitle && type === "volume" && "volume_number" in item) {
@@ -320,6 +325,16 @@ export function SeriesCard({
               onError={() => setImageError(true)}
               draggable={false}
             />
+          ) : isTextFile ? (
+            <div className={styles.seriesPlaceholderImageWrapper}>
+              <img
+                src="/reading-kumiho.png"
+                alt=""
+                className={styles.seriesPlaceholderImage}
+                loading="lazy"
+                draggable={false}
+              />
+            </div>
           ) : item.path?.toLowerCase().endsWith(".pdf") ? (
             <FileText
               className={styles.seriesIcon}

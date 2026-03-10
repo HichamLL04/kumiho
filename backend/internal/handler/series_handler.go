@@ -1014,6 +1014,15 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 			volumes[i].ReadPageCount = readPages
 		}
 
+		// TODO: N+1 쿼리 개선 필요 - GetProgressPercent가 볼륨마다 개별 호출됨.
+		// 볼륨 수가 많을 경우 배치 조회 방식으로 성능 개선 고려.
+		progressPercent, err := h.volumeRepo.GetProgressPercent(nil, userID, volumes[i].ID)
+		if err != nil {
+			log.Printf("failed to get progress percent for user %s, volume %s: %v", userID, volumes[i].ID, err)
+		} else {
+			volumes[i].ProgressPercent = progressPercent
+		}
+
 		completedByFlag := completedVolumeIDs[volumes[i].ID]
 		// 완독 플래그가 있으나 집계값이 비어있는 경우(과거 데이터 등)에는 100%로 보정.
 		// 이후 최종 완독 여부는 보정된 readPages를 포함해 재검증한다.
@@ -1081,6 +1090,13 @@ func (h *SeriesHandler) GetVolume(c *fiber.Ctx) error {
 		} else {
 			readPages = rp
 			volume.ReadPageCount = readPages
+		}
+
+		progressPercent, progressErr := h.volumeRepo.GetProgressPercent(nil, userID, volume.ID)
+		if progressErr != nil {
+			log.Printf("failed to get progress percent for user %s, volume %s: %v", userID, volume.ID, progressErr)
+		} else {
+			volume.ProgressPercent = progressPercent
 		}
 	}
 
@@ -1171,6 +1187,9 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 		if service.ShouldUsePdfImageFallback(c.Get("User-Agent")) {
 			renderMode = "image"
 		}
+		chapter.RenderMode = &renderMode
+	} else if strings.HasSuffix(chapterPath, ".txt") {
+		renderMode := "text"
 		chapter.RenderMode = &renderMode
 	}
 

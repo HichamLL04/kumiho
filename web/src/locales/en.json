@@ -644,6 +644,18 @@
         "double": "Double Page",
         "vertical": "Vertical Scroll"
       },
+      "font_size": {
+        "label": "Font Size"
+      },
+      "font_family": {
+        "label": "Font",
+        "original": "Original",
+        "serif": "Serif",
+        "sans_serif": "Sans-serif"
+      },
+      "line_height": {
+        "label": "Line Spacing"
+      },
       "reading_direction": {
         "label": "Direction",
         "ltr": "L → R",
@@ -674,12 +686,11 @@
         "height": "Height",
         "original": "Original"
       },
-      "background_color": {
-        "label": "Background Color",
-        "black": "Black",
-        "dark_gray": "Dark Gray",
-        "gray": "Gray",
-        "white": "White"
+      "theme": {
+        "label": "Theme",
+        "light": "Light",
+        "dark": "Dark",
+        "sepia": "Sepia"
       },
       "page_transition": {
         "label": "Page Transition Animation",

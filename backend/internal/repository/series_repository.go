@@ -440,15 +440,16 @@ func (r *SeriesRepository) GetFirstPageID(db database.Queryer, seriesID string) 
 }
 
 // GetTotalPages 시리즈의 전체 페이지 수 조회
-// page_count > 0인 챕터: 실제 page_count, EPUB 등(page_count <= 0) 이면서 total_positions > 0: total_positions 반영
+// page_count > 0인 챕터: 실제 page_count
+// page_count <= 0 이면서 total_positions > 0인 챕터(예: EPUB): total_positions 반영
 func (r *SeriesRepository) GetTotalPages(db database.Queryer, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
 	var totalPages int
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN c.total_positions > 0 THEN c.total_positions
 				WHEN c.page_count > 0 THEN c.page_count 
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
 			END), 0)
 		 FROM chapters c
@@ -468,13 +469,13 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 
 	// 1. 완독된 챕터들의 페이지 수 합계
 	// page_count > 0인 챕터: 실제 page_count 사용
-	// page_count <= 0인 챕터(EPUB 등): 0 (가상 total) 사용
+	// page_count <= 0인 챕터(EPUB 등): total_positions 사용
 	var completedPages int
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN c.total_positions > 0 THEN c.total_positions
 				WHEN c.page_count > 0 THEN c.page_count 
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
 			END), 0)
 		 FROM chapter_completions cc
@@ -494,8 +495,8 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 	err = db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN c.total_positions > 0 THEN rp.current_page
 				WHEN c.page_count > 0 THEN rp.current_page
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
 				ELSE CAST(rp.progress_percent AS INTEGER)
 			END
 		), 0)
@@ -512,6 +513,78 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 	}
 
 	return completedPages + progressPages, nil
+}
+
+// GetTotalProgressUnits 시리즈 진행률 표시용 총량(용량 기반 단위) 조회
+// - total_positions > 0: total_positions 사용 (EPUB/TXT 등)
+// - 그 외 page_count > 0: page_count 사용 (이미지/PDF 등)
+func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID string) (int, error) {
+	db = database.GetQueryer(db)
+	var total int
+	err := db.QueryRow(
+		`SELECT COALESCE(SUM(
+			CASE
+				WHEN c.total_positions > 0 THEN c.total_positions
+				WHEN c.page_count > 0 THEN c.page_count
+				ELSE 0
+			END
+		), 0)
+		FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		WHERE v.series_id = ?`,
+		seriesID,
+	).Scan(&total)
+	return total, err
+}
+
+// GetReadProgressUnits 시리즈 진행률 표시용 완료량 조회
+// - 완독 챕터: 해당 챕터 총량을 100% 반영
+// - 미완독 챕터: 뷰어 진행(current_page/total_pages, fallback: progress_percent) 비율만큼 반영
+func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, seriesID string) (int, error) {
+	db = database.GetQueryer(db)
+	var read int
+	err := db.QueryRow(
+		`WITH chapter_units AS (
+			SELECT
+				c.id AS chapter_id,
+				CASE
+					WHEN c.total_positions > 0 THEN c.total_positions
+					WHEN c.page_count > 0 THEN c.page_count
+					ELSE 0
+				END AS unit_total
+			FROM chapters c
+			JOIN volumes v ON c.volume_id = v.id
+			WHERE v.series_id = ?
+		),
+		completed_units AS (
+			SELECT COALESCE(SUM(cu.unit_total), 0) AS value
+			FROM chapter_units cu
+			JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id
+			WHERE cc.user_id = ?
+		),
+		inprogress_units AS (
+			SELECT COALESCE(SUM(
+				CAST(ROUND(
+					cu.unit_total * (
+						CASE
+							WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
+							ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
+						END
+					)
+				) AS INTEGER)
+			), 0) AS value
+			FROM chapter_units cu
+			JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id
+			LEFT JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id AND cc.user_id = rp.user_id
+			WHERE rp.user_id = ?
+			  AND rp.series_id = ?
+			  AND cc.chapter_id IS NULL
+		)
+		SELECT completed_units.value + inprogress_units.value
+		FROM completed_units, inprogress_units`,
+		seriesID, userID, userID, seriesID,
+	).Scan(&read)
+	return read, err
 }
 
 // Search 검색어로 시리즈 조회
