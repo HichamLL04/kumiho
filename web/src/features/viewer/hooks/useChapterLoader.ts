@@ -312,10 +312,10 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
                 // 5. 계층별 병합
                 const resolvedSettings: Partial<ViewerSettings> = {};
 
-                resolvedSettings.readingMode = (seriesOverride.readingMode ||
-                  library.default_view_mode ||
-                  globalData.viewer_reading_mode ||
-                  "single") as ReadingMode;
+      resolvedSettings.readingMode = (seriesOverride.readingMode ||
+        library.default_view_mode ||
+        globalData.viewer_reading_mode ||
+        "vertical") as ReadingMode;
 
                 resolvedSettings.readingDirection = (seriesOverride.readingDirection ||
                   library.default_read_direction ||

@@ -6,6 +6,7 @@ import { useViewerStore } from "../stores/viewerStore";
 
 const chapterGetTextMock = vi.fn();
 const chapterGetProgressMock = vi.fn();
+const seriesUpdateViewerSettingsMock = vi.fn();
 
 vi.mock("../api/client", () => ({
   chapterAPI: {
@@ -14,6 +15,7 @@ vi.mock("../api/client", () => ({
   },
   seriesAPI: {
     updateProgress: vi.fn().mockResolvedValue(undefined),
+    updateViewerSettings: (...args: unknown[]) => seriesUpdateViewerSettingsMock(...args),
   },
 }));
 
@@ -78,6 +80,8 @@ describe("TextViewerRoute", () => {
   beforeEach(() => {
     chapterGetTextMock.mockReset();
     chapterGetProgressMock.mockReset();
+    seriesUpdateViewerSettingsMock.mockReset();
+    seriesUpdateViewerSettingsMock.mockResolvedValue(undefined);
     const doc = document as Document & {
       caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
       caretRangeFromPoint?: (x: number, y: number) => Range | null;

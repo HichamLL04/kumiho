@@ -109,7 +109,7 @@ interface ViewerState {
 }
 
 const defaultSettings: ViewerSettings = {
-  readingMode: "single",
+  readingMode: "vertical",
   readingDirection: "ltr",
   clickDirection: "ltr",
   keyboardDirection: "ltr",

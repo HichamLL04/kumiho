@@ -333,6 +333,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   const lastRestoredPagedPageRef = useRef<number | null>(null);
   const pendingHighlightParagraphRef = useRef<string | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
+  const isRestoringRef = useRef(false);
 
   totalPagesRef.current = totalPages;
   currentPageRef.current = currentPage;
@@ -510,6 +511,13 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       );
 
       let nextCurrentPage = metrics.currentPage;
+
+      if (overrideOffsetX === undefined && isRestoringRef.current) {
+        if (totalPagesRef.current !== metrics.totalPages) {
+          setTotalPages(metrics.totalPages);
+        }
+        return;
+      }
 
       if (overrideOffsetX === undefined) {
         const anchor = buildViewportAnchorSnapshot();
@@ -829,9 +837,16 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       };
       lastRestoredPagedPageRef.current = null;
       pendingHighlightParagraphRef.current = anchor?.paragraphId ?? null;
+      if (seriesId) {
+        void seriesAPI
+          .updateViewerSettings(seriesId, { reading_mode: newMode })
+          .catch((error) => {
+            console.warn("[TextViewer] failed to persist reading mode", error);
+          });
+      }
       setReadingMode(newMode);
     },
-    [buildViewportAnchorSnapshot, getCurrentVisualPage, setReadingMode, settings.readingMode],
+    [buildViewportAnchorSnapshot, getCurrentVisualPage, seriesId, setReadingMode, settings.readingMode],
   );
 
   const handleContentTap = useCallback(
@@ -985,7 +1000,9 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
     let frameOne = 0;
     let frameTwo = 0;
+    let frameThree = 0;
     const transitionMeta = pendingModeTransitionRef.current;
+    isRestoringRef.current = true;
 
     frameOne = window.requestAnimationFrame(() => {
       if (transitionMeta && transitionMeta.fromMode !== "vertical" && settings.readingMode !== "vertical") {
@@ -1005,11 +1022,14 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           const targetX = Math.max(0, screenIndex * viewportWidth);
 
           setOffset(targetX);
-          updateVirtualPage(targetX);
-          applyParagraphHighlight(pendingHighlightParagraphRef.current);
-          pendingModeTransitionRef.current = null;
-          pendingHighlightParagraphRef.current = null;
-          setRestoreAnchor(null);
+          frameThree = window.requestAnimationFrame(() => {
+            updateVirtualPage(targetX);
+            applyParagraphHighlight(pendingHighlightParagraphRef.current);
+            pendingModeTransitionRef.current = null;
+            pendingHighlightParagraphRef.current = null;
+            isRestoringRef.current = false;
+            setRestoreAnchor(null);
+          });
         });
         return;
       }
@@ -1033,6 +1053,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
           pendingHighlightParagraphRef.current = null;
           pendingModeTransitionRef.current = null;
+          isRestoringRef.current = false;
           window.requestAnimationFrame(() => updateVirtualPage());
           setRestoreAnchor(null);
         });
@@ -1075,12 +1096,18 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             }
             setOffset(targetX);
             setCurrentPage(restoredPage);
-            updateVirtualPage(targetX);
+            frameThree = window.requestAnimationFrame(() => {
+              updateVirtualPage(targetX);
+              isRestoringRef.current = false;
+            });
           }
           applyParagraphHighlight(pendingHighlightParagraphRef.current ?? resolved.paragraphId);
         } else if (transitionMeta?.fromMode === "vertical" && estimatedPageFromOffset > 1) {
           lastRestoredPagedPageRef.current = estimatedPageFromOffset;
           setCurrentPage(estimatedPageFromOffset);
+          isRestoringRef.current = false;
+        } else {
+          isRestoringRef.current = false;
         }
 
         pendingHighlightParagraphRef.current = null;
@@ -1092,6 +1119,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     return () => {
       window.cancelAnimationFrame(frameOne);
       window.cancelAnimationFrame(frameTwo);
+      window.cancelAnimationFrame(frameThree);
     };
   }, [
     applyParagraphHighlight,
