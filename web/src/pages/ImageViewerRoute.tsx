@@ -4,6 +4,7 @@
 import { useEffect, useLayoutEffect, useCallback, useState, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useViewerStore } from "../stores/viewerStore";
+import { seriesAPI } from "../api/client";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
 import { ViewerSettings as ViewerSettingsModal } from "../components/viewer/ViewerSettings";
 
@@ -36,7 +37,14 @@ import { useTranslation } from "react-i18next";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 
-import { getDisplayPages, getPrevTargetPage, getNextTargetPage, getInitialSubPage, getNextNavState, getPrevNavState } from "../utils/pageCalculator";
+import {
+  getDisplayPages,
+  getPrevTargetPage,
+  getNextTargetPage,
+  getInitialSubPage,
+  getNextNavState,
+  getPrevNavState,
+} from "../utils/pageCalculator";
 import styles from "./Viewer.module.css";
 
 import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapterLoader";
@@ -95,8 +103,14 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   );
 
   // 인접 챕터 탐색
-  const { nextChapterId, prevChapterId, nextChapterTitle, prevChapterTitle, isLastChapterOfVolume, isAdjacentResolved } =
-    useAdjacentChapters({ volumeId, chapterId, seriesId });
+  const {
+    nextChapterId,
+    prevChapterId,
+    nextChapterTitle,
+    prevChapterTitle,
+    isLastChapterOfVolume,
+    isAdjacentResolved,
+  } = useAdjacentChapters({ volumeId, chapterId, seriesId });
 
   // 이미지 프리로딩
   const { imageLoading, handleImageLoad, maxAllowedPage } = useImagePreloader({
@@ -152,6 +166,21 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     chapterId,
     isInitialScrollingRef,
   });
+
+  // 읽기 모드 변경 핸들러: store 업데이트 + 서버 설정 저장
+  const handleReadingModeChange = useCallback(
+    async (mode: "single" | "double" | "vertical") => {
+      setReadingMode(mode);
+      if (seriesId) {
+        try {
+          await seriesAPI.updateViewerSettings(seriesId, { reading_mode: mode });
+        } catch (e) {
+          console.error("설정 저장 실패:", e);
+        }
+      }
+    },
+    [seriesId, setReadingMode],
+  );
 
   // 전체화면 토글 핸들러
   const handleToggleFullscreen = useCallback(() => {
@@ -507,7 +536,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
             onNext={handleNext}
             onGoToPage={goToPageWithSubPage}
             onPageJumpClick={() => setShowPageJump(true)}
-            onReadingModeChange={setReadingMode}
+            onReadingModeChange={handleReadingModeChange}
             onTogglePageOffset={togglePageOffset}
             onInteractionStart={handleInteractionStart}
             onInteractionEnd={handleInteractionEnd}

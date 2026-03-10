@@ -1014,6 +1014,8 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 			volumes[i].ReadPageCount = readPages
 		}
 
+		// TODO: N+1 쿼리 개선 필요 - GetProgressPercent가 볼륨마다 개별 호출됨.
+		// 볼륨 수가 많을 경우 배치 조회 방식으로 성능 개선 고려.
 		progressPercent, err := h.volumeRepo.GetProgressPercent(nil, userID, volumes[i].ID)
 		if err != nil {
 			log.Printf("failed to get progress percent for user %s, volume %s: %v", userID, volumes[i].ID, err)

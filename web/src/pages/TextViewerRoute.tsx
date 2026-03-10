@@ -78,7 +78,8 @@ const resolveTextColorFromBackground = (backgroundColor: string): string => {
 const resolveTextFontFamily = (fontFamily: "original" | "serif" | "sans-serif"): string => {
   if (fontFamily === "serif") return '"Noto Serif KR", "Times New Roman", serif';
   if (fontFamily === "sans-serif") return '"Pretendard", "Noto Sans KR", sans-serif';
-  return '"Pretendard", "Noto Sans KR", sans-serif';
+  // "original": 브라우저/시스템 기본 폰트를 그대로 사용
+  return "inherit";
 };
 
 const parseAnchor = (raw?: string): SavedTextAnchor | null => {
@@ -110,7 +111,11 @@ const getAbsoluteOffsetFromAnchor = (anchor: SavedTextAnchor | null): number | n
   return null;
 };
 
-const getViewportRectForAnchor = (container: HTMLDivElement, mode: ReadingMode, pagedViewport: HTMLDivElement | null) => {
+const getViewportRectForAnchor = (
+  container: HTMLDivElement,
+  mode: ReadingMode,
+  pagedViewport: HTMLDivElement | null,
+) => {
   if (mode === "vertical") {
     const rect = container.getBoundingClientRect();
     const style = window.getComputedStyle(container);
@@ -244,8 +249,7 @@ const getRangeRect = (range: Range): DOMRect | null => {
   const visibleRect = rects.find((rect) => rect.width > 0 || rect.height > 0);
   if (visibleRect) return visibleRect;
 
-  const boundingRect =
-    typeof safeRange.getBoundingClientRect === "function" ? safeRange.getBoundingClientRect() : null;
+  const boundingRect = typeof safeRange.getBoundingClientRect === "function" ? safeRange.getBoundingClientRect() : null;
   if (!boundingRect) return null;
   if (boundingRect.width > 0 || boundingRect.height > 0) {
     return boundingRect;
@@ -443,7 +447,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
       const caret = getCaretPoint(pointX, pointY);
       const paragraphElement = caret
-        ? getClosestParagraphElement(caret.node) ?? findFirstVisibleParagraph(container, mode)
+        ? (getClosestParagraphElement(caret.node) ?? findFirstVisibleParagraph(container, mode))
         : findFirstVisibleParagraph(container, mode);
 
       if (!paragraphElement) {
@@ -464,7 +468,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
       const offsetInParagraph =
         caret && getClosestParagraphElement(caret.node) === paragraphElement
-          ? clamp(getTextOffsetWithinParagraph(paragraphElement, caret.node, caret.offset), 0, paragraphMeta.text.length)
+          ? clamp(
+              getTextOffsetWithinParagraph(paragraphElement, caret.node, caret.offset),
+              0,
+              paragraphMeta.text.length,
+            )
           : 0;
 
       const anchor = createViewportAnchor(text, parsedParagraphs, paragraphId, offsetInParagraph);
@@ -525,7 +533,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
         if (resolvedAnchor) {
           if (settings.readingMode === "vertical") {
-            nextCurrentPage = clamp(Math.floor(container.scrollTop / metrics.viewportHeight) + 1, 1, metrics.totalPages);
+            nextCurrentPage = clamp(
+              Math.floor(container.scrollTop / metrics.viewportHeight) + 1,
+              1,
+              metrics.totalPages,
+            );
           } else {
             const articleRect = textBodyRef.current?.getBoundingClientRect();
             if (articleRect) {
@@ -838,11 +850,9 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       lastRestoredPagedPageRef.current = null;
       pendingHighlightParagraphRef.current = anchor?.paragraphId ?? null;
       if (seriesId) {
-        void seriesAPI
-          .updateViewerSettings(seriesId, { reading_mode: newMode })
-          .catch((error) => {
-            console.warn("[TextViewer] failed to persist reading mode", error);
-          });
+        void seriesAPI.updateViewerSettings(seriesId, { reading_mode: newMode }).catch((error) => {
+          console.warn("[TextViewer] failed to persist reading mode", error);
+        });
       }
       setReadingMode(newMode);
     },
@@ -942,7 +952,10 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
     const loadText = async () => {
       try {
-        const [textRes, progressRes] = await Promise.all([chapterAPI.getText(chapterId), chapterAPI.getProgress(chapterId)]);
+        const [textRes, progressRes] = await Promise.all([
+          chapterAPI.getText(chapterId),
+          chapterAPI.getProgress(chapterId),
+        ]);
         if (cancelled) return;
 
         const normalizedText = normalizeTextContent(textRes.data.content || "");
@@ -1043,7 +1056,9 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           if (resolved) {
             const viewportRect = getViewportRectForAnchor(container, "vertical", pagedViewportRef.current);
             const relativeY =
-              restoreAnchor.kind === "txt_anchor_v2" && "relativeY" in restoreAnchor ? (restoreAnchor.relativeY ?? 0) : 0;
+              restoreAnchor.kind === "txt_anchor_v2" && "relativeY" in restoreAnchor
+                ? (restoreAnchor.relativeY ?? 0)
+                : 0;
             const desiredTop = viewportRect.top + relativeY;
             const deltaY = resolved.rect.top - desiredTop;
             const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
@@ -1074,7 +1089,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         const absoluteOffset = getAbsoluteOffsetFromAnchor(restoreAnchor);
         const estimatedPageFromOffset =
           absoluteOffset !== null && text.length > 1 && metrics.totalPages > 1
-            ? clamp(Math.round(clamp(absoluteOffset / Math.max(1, text.length - 1), 0, 1) * (metrics.totalPages - 1)) + 1, 1, metrics.totalPages)
+            ? clamp(
+                Math.round(clamp(absoluteOffset / Math.max(1, text.length - 1), 0, 1) * (metrics.totalPages - 1)) + 1,
+                1,
+                metrics.totalPages,
+              )
             : 1;
 
         if (resolved) {
