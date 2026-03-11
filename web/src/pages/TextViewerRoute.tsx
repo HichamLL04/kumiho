@@ -1278,7 +1278,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       const isAtTop = container.scrollTop <= 0;
       const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
 
-      if (isAtTop && e.deltaY < 0 && prevChapterId) {
+      if (isAtTop && e.deltaY < 0 && prevChapterId && isAdjacentResolved) {
         e.preventDefault();
         const delta = -e.deltaY * sensitivity;
         const newOffset = Math.max(0, (pullOffsetRef.current ?? 0) + delta);
@@ -1305,7 +1305,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               });
             });
         }
-      } else if (isAtBottom && e.deltaY > 0 && nextChapterId) {
+      } else if (isAtBottom && e.deltaY > 0 && nextChapterId && isAdjacentResolved) {
         e.preventDefault();
         const delta = -e.deltaY * sensitivity;
         const newOffset = Math.min(0, (pullOffsetRef.current ?? 0) + delta);
@@ -1354,14 +1354,14 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       const isAtTop = container.scrollTop <= 0;
       const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
 
-      if ((isAtTop && diff > 0 && prevChapterId) || pullOffsetRef.current > 0) {
+      if ((isAtTop && diff > 0 && prevChapterId && isAdjacentResolved) || pullOffsetRef.current > 0) {
         const maxPull = 180;
         const resistance = sensitivity * (1 - Math.abs(pullOffsetRef.current) / (maxPull * 2));
         const newOffset = Math.max(0, Math.min(pullOffsetRef.current + diff * resistance, maxPull));
         pullOffsetRef.current = newOffset;
         setPullOffset(newOffset);
         if (container.scrollTop <= 0 && newOffset > 0) e.preventDefault();
-      } else if ((isAtBottom && diff < 0 && nextChapterId) || pullOffsetRef.current < 0) {
+      } else if ((isAtBottom && diff < 0 && nextChapterId && isAdjacentResolved) || pullOffsetRef.current < 0) {
         const maxPull = 180;
         const resistance = sensitivity * (1 - Math.abs(pullOffsetRef.current) / (maxPull * 2));
         const newOffset = Math.min(0, Math.max(pullOffsetRef.current + diff * resistance, -maxPull));
@@ -1379,7 +1379,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
       const currentOffset = pullOffsetRef.current;
 
-      if (currentOffset >= pullThreshold && prevChapterId) {
+      if (currentOffset >= pullThreshold && prevChapterId && isAdjacentResolved) {
         isNavigatingRef.current = true;
         saveProgress()
           .catch((err) => console.warn("Failed to save progress", err))
@@ -1391,7 +1391,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
             });
           });
-      } else if (currentOffset <= -pullThreshold && nextChapterId) {
+      } else if (currentOffset <= -pullThreshold && nextChapterId && isAdjacentResolved) {
         isNavigatingRef.current = true;
         saveProgress()
           .catch((err) => console.warn("Failed to save progress", err))
@@ -1461,6 +1461,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [
+    isAdjacentResolved,
     navigate,
     nextChapterId,
     prevChapterId,
@@ -1711,13 +1712,13 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
       <ChapterNavHint
         type="next"
-        title={nextChapterTitle || ""}
-        show={showNextHint && !!nextChapterTitle}
+        title={nextChapterTitle || t("viewer.guide.no_title")}
+        show={showNextHint && !!nextChapterId}
       />
       <ChapterNavHint
         type="prev"
-        title={prevChapterTitle || ""}
-        show={showPrevHint && !!prevChapterTitle}
+        title={prevChapterTitle || t("viewer.guide.no_title")}
+        show={showPrevHint && !!prevChapterId}
       />
 
       <SyncConfirmModal
