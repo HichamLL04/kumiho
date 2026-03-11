@@ -467,7 +467,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
                 type="prev"
                 pullOffset={pullOffset}
                 pullThreshold={settings.pullThreshold}
-                showThreshold={settings.showThreshold}
+
                 chapterId={prevChapterId}
                 chapterTitle={prevChapterTitle}
                 saveProgress={saveProgress}
@@ -476,7 +476,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
                 type="next"
                 pullOffset={pullOffset}
                 pullThreshold={settings.pullThreshold}
-                showThreshold={settings.showThreshold}
+
                 chapterId={nextChapterId}
                 chapterTitle={nextChapterTitle}
                 saveProgress={saveProgress}

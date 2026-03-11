@@ -1639,7 +1639,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               type="prev"
               pullOffset={pullOffset}
               pullThreshold={settings.pullThreshold}
-              showThreshold={settings.showThreshold}
+
               chapterId={prevChapterId}
               chapterTitle={prevChapterTitle}
               saveProgress={saveProgress}
@@ -1648,7 +1648,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               type="next"
               pullOffset={pullOffset}
               pullThreshold={settings.pullThreshold}
-              showThreshold={settings.showThreshold}
+
               chapterId={nextChapterId}
               chapterTitle={nextChapterTitle}
               saveProgress={saveProgress}

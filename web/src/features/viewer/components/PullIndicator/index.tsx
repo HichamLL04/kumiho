@@ -10,7 +10,6 @@ interface PullIndicatorProps {
   type: "prev" | "next";
   pullOffset: number;
   pullThreshold: number;
-  showThreshold: number;
   chapterId: string | null;
   chapterTitle: string | null;
   saveProgress: () => Promise<void>;
@@ -20,7 +19,6 @@ export function PullIndicator({
   type,
   pullOffset,
   pullThreshold,
-  showThreshold,
   chapterId,
   chapterTitle,
   saveProgress,
