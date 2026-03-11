@@ -68,6 +68,8 @@ type Series struct {
 	// 진행도 정보 (계산 필드)
 	TotalPageCount int `json:"total_page_count" db:"-"`
 	ReadPageCount  int `json:"read_page_count" db:"-"`
+	VolumeCount    int `json:"volume_count" db:"-"`
+	ChapterCount   int `json:"chapter_count" db:"-"`
 }
 
 // SeriesMetadata 시리즈 부가 메타데이터
@@ -103,6 +105,8 @@ type Volume struct {
 	ReadPageCount   int       `json:"read_page_count" db:"-"`
 	ProgressPercent float64   `json:"progress_percent" db:"-"`
 	ChapterCount    int       `json:"chapter_count"`
+	SubVolumeCount  int       `json:"sub_volume_count" db:"-"`
+	ParentID        *string   `json:"parent_id" db:"parent_id"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }

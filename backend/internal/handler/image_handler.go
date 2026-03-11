@@ -709,56 +709,47 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 				}
 			}
 		} else {
-			// 볼륨의 첫 번째 챕터 → 첫 번째 페이지
-			chapters, err := h.chapterRepo.FindByVolumeID(nil, resourceID)
-			if err != nil || len(chapters) == 0 {
+			// 볼륨의 첫 번째 챕터 → 첫 번째 페이지 (재귀적 탐색 지원)
+			targetChapter, targetPage, targetArchive, found := h.findFirstAvailableChapterRecursively(resourceID)
+			if !found {
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "no chapters found",
+					"error": "no chapters found in volume hierarchy",
 				})
 			}
 
 			// EPUB 챕터는 pages 테이블 레코드가 비어 있을 수 있으므로 커버 추출 fallback 처리
-			if strings.ToLower(filepath.Ext(chapters[0].Path)) == ".epub" {
+			if strings.ToLower(filepath.Ext(targetChapter.Path)) == ".epub" {
 				thumbnailsDir := filepath.Join(h.config.DataDir, "thumbnails", "volumes")
 				if mkErr := os.MkdirAll(thumbnailsDir, 0755); mkErr == nil {
-					hashBytes := md5.Sum([]byte(chapters[0].Path))
+					hashBytes := md5.Sum([]byte(targetChapter.Path))
 					hashString := hex.EncodeToString(hashBytes[:])
 					existingThumbPath := findExistingThumbnailByHash(thumbnailsDir, hashString)
 					if existingThumbPath != "" {
-						volume.ThumbnailPath = &existingThumbPath
-						if uErr := h.volumeRepo.Update(nil, volume); uErr != nil {
-							log.Printf("[IMAGE_HANDLER] Failed to update existing EPUB volume thumbnail path in DB: %v", uErr)
-						}
+						// 이 볼륨에 직접 썸네일을 업데이트할 수 있는지 판단 필요 (원본 volume 객체가 필요함)
+						// 상속받은 썸네일이므로 원본 볼륨 DB 업데이트는 생략하거나 신중히 결정
 						customThumbnailPath = existingThumbPath
-						break
-					}
-
-					if coverData, coverMT, coverErr := util.ExtractEpubCover(chapters[0].Path); coverErr == nil {
-						ext := thumbnailExtFromMediaType(coverMT)
-						newThumbPath := filepath.Join(thumbnailsDir, hashString+ext)
-
-						if writeErr := ensureThumbnailFileAtomic(newThumbPath, coverData); writeErr == nil {
-							volume.ThumbnailPath = &newThumbPath
-							if uErr := h.volumeRepo.Update(nil, volume); uErr != nil {
-								log.Printf("[IMAGE_HANDLER] Failed to update EPUB volume thumbnail path in DB: %v", uErr)
+					} else {
+						if coverData, coverMT, coverErr := util.ExtractEpubCover(targetChapter.Path); coverErr == nil {
+							ext := thumbnailExtFromMediaType(coverMT)
+							newThumbPath := filepath.Join(thumbnailsDir, hashString+ext)
+							if writeErr := ensureThumbnailFileAtomic(newThumbPath, coverData); writeErr == nil {
+								customThumbnailPath = newThumbPath
 							}
-							customThumbnailPath = newThumbPath
-							break
 						}
 					}
 				}
+				if customThumbnailPath != "" {
+					break
+				}
 			}
 
-			pages, err := h.pageRepo.FindByChapterID(nil, chapters[0].ID)
-			if err != nil || len(pages) == 0 {
+			if targetPage == nil {
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "no pages found",
+					"error": "no pages found in volume hierarchy",
 				})
 			}
-			firstPagePath = pages[0].Path
-			if isArchiveFile(chapters[0].Path) {
-				archivePath = chapters[0].Path
-			}
+			firstPagePath = targetPage.Path
+			archivePath = targetArchive
 		}
 
 	case "chapters":
@@ -1383,4 +1374,42 @@ func (h *ImageHandler) ServeChapterPDF(c *fiber.Ctx) error {
 	c.Set("Content-Type", "application/pdf")
 	c.Set("Accept-Ranges", "bytes")
 	return c.SendFile(realFullPath)
+}
+
+// findFirstAvailableChapterRecursively 볼륨 계층 구조 내에서 첫 번째로 사용 가능한 챕터를 재귀적으로 찾음
+func (h *ImageHandler) findFirstAvailableChapterRecursively(volumeID string) (*model.Chapter, *model.Page, string, bool) {
+	// 1. 해당 볼륨에 직접 속한 챕터 확인
+	chapters, err := h.chapterRepo.FindByVolumeID(nil, volumeID)
+	if err == nil && len(chapters) > 0 {
+		for _, ch := range chapters {
+			// EPUB의 경우 페이지 레코드 없이도 썸네일 추출 로직(커버 fallback)이 있으므로 일단 반환
+			if strings.ToLower(filepath.Ext(ch.Path)) == ".epub" {
+				return &ch, nil, "", true
+			}
+
+			// 일반 이미지/아카이브인 경우 첫 번째 페이지가 있는지 확인
+			var pages []model.Page
+			pages, err = h.pageRepo.FindByChapterID(nil, ch.ID)
+			if err == nil && len(pages) > 0 {
+				archivePath := ""
+				if isArchiveFile(ch.Path) {
+					archivePath = ch.Path
+				}
+				return &ch, &pages[0], archivePath, true
+			}
+		}
+	}
+
+	// 2. 하위 볼륨이 있다면 재귀적으로 탐색
+	subVolumes, err := h.volumeRepo.FindByParentID(nil, volumeID)
+	if err == nil && len(subVolumes) > 0 {
+		for _, subVol := range subVolumes {
+			ch, pg, arch, found := h.findFirstAvailableChapterRecursively(subVol.ID)
+			if found {
+				return ch, pg, arch, true
+			}
+		}
+	}
+
+	return nil, nil, "", false
 }

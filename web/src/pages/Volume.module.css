@@ -29,15 +29,32 @@
   color: var(--text-secondary);
 }
 
-.chapterCount {
+.chapterCount,
+.volumeCount {
   font-size: 1rem;
   color: var(--text-primary);
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border-color);
+  margin-top: 1rem;
 }
 
-.chapterCount strong {
+.chapterCount strong,
+.volumeCount strong {
   color: #667eea;
+}
+
+.volumeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+@media (max-width: 768px) {
+  .volumeGrid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 1rem;
+  }
 }
 
 .chapterList {

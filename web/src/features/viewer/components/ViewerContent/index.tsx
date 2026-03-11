@@ -7,7 +7,12 @@ import { useViewerZoom } from "../../hooks/useViewerZoom";
 import { useSwipe } from "../../hooks/useSwipe";
 import { getPageImageUrl } from "../../utils/imageUrl";
 import styles from "../../../../pages/Viewer.module.css";
-import { type ReadingMode, type ReadingDirection, type PageTransitionType, type SubPage } from "../../../../stores/viewerStore";
+import {
+  type ReadingMode,
+  type ReadingDirection,
+  type PageTransitionType,
+  type SubPage,
+} from "../../../../stores/viewerStore";
 import type { PageMeta } from "../../types";
 import type { ViewerAnimationHandles } from "../../types";
 
@@ -35,6 +40,7 @@ interface ViewerContentProps {
   nextPreviewSubPage?: SubPage;
   prevPreviewSubPage?: SubPage;
   pageMetaMap?: Map<number, PageMeta>;
+  isInitialScrolling?: boolean; // Boolean으로 회복
 }
 
 export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentProps>(
@@ -62,6 +68,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       nextPreviewSubPage,
       prevPreviewSubPage,
       pageMetaMap,
+      isInitialScrolling = false,
     },
     ref,
   ) => {
@@ -194,11 +201,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
 
             // 스프레드 분할: single 모드 + wide 이미지 + subPage 활성화
             const isSplit = readingMode === "single" && effectiveSubPage && pageMetaMap?.get(pageNum)?.isWide;
-            const splitClass = isSplit
-              ? effectiveSubPage === "left"
-                ? styles.splitLeft
-                : styles.splitRight
-              : "";
+            const splitClass = isSplit ? (effectiveSubPage === "left" ? styles.splitLeft : styles.splitRight) : "";
 
             return (
               <div
@@ -260,6 +263,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
               pageHeightCache={verticalPageHeightCache}
               maxAllowedPage={maxAllowedPage}
               minAllowedPage={minRenderPage}
+              isInitialScrolling={isInitialScrolling} // Boolean 전달
               handleImageLoad={handleImageLoad}
               handleContentClick={handleContentClick}
               styles={styles}

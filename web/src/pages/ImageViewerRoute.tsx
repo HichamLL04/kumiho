@@ -80,7 +80,35 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   // ===== Custom Hooks =====
 
   // 챕터 로딩 데이터
-  const { chapter, isLoading, error, seriesId, volumeId, pageMetaMap, isInitialScrollingRef } = loaderData;
+  // Feature imports
+  const {
+    chapter,
+    isLoading,
+    error,
+    seriesId,
+    volumeId,
+    pageMetaMap,
+    isInitialScrollingRef, // 이 Ref 자체를 넘겨받음
+  } = loaderData;
+
+  // 초기 진입 상태 관리 (Ref 접근 린트 에러 방지 및 리액티브 피드백)
+  const [isInitialEntry, setIsInitialEntry] = useState(true);
+  const [lastChapterIdForReset, setLastChapterIdForReset] = useState(chapterId);
+
+  // 챕터 변경 시 초기 상태로 리셋 (Effect 밖에서 처리하여 Lint 에러 방지)
+  if (chapterId !== lastChapterIdForReset) {
+    setLastChapterIdForReset(chapterId);
+    setIsInitialEntry(true);
+  }
+
+  useEffect(() => {
+    if (!isLoading) {
+      const timer = setTimeout(() => {
+        setIsInitialEntry(false);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
 
   // subPage 초기화/재계산: 챕터/페이지/모드/방향/메타 변경 시 일관 처리
   useLayoutEffect(() => {
@@ -467,7 +495,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
                 type="prev"
                 pullOffset={pullOffset}
                 pullThreshold={settings.pullThreshold}
-
                 chapterId={prevChapterId}
                 chapterTitle={prevChapterTitle}
                 saveProgress={saveProgress}
@@ -476,7 +503,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
                 type="next"
                 pullOffset={pullOffset}
                 pullThreshold={settings.pullThreshold}
-
                 chapterId={nextChapterId}
                 chapterTitle={nextChapterTitle}
                 saveProgress={saveProgress}
@@ -520,6 +546,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
               nextPreviewSubPage={nextPreviewSubPage}
               prevPreviewSubPage={prevPreviewSubPage}
               pageMetaMap={pageMetaMap}
+              isInitialScrolling={isInitialEntry}
             />
           </div>
 

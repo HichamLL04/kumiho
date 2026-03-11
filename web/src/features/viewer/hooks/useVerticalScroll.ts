@@ -83,13 +83,35 @@ export function useVerticalScroll({
         requestAnimationFrame(() => {
           if (disposed) return;
           content.scrollTop = content.scrollHeight;
-          // 마지막 페이지 스크롤 후에는 isInternalScrollRef를 true로 유지하여
-          // IntersectionObserver가 중간 페이지를 감지해도 스크롤이 다시 이동하지 않도록 함
+          // 마지막 페이지 스크롤 후에도 레이아웃 변동이 있을 수 있으므로
+          // 다른 페이지와 마찬가지로 releaseGuard를 통해 검증 과정을 거친다.
           isInternalScrollRef.current = true;
-          initialReleaseTimeoutId = window.setTimeout(() => {
+
+          let attempts = 0;
+          const releaseGuard = () => {
             if (disposed) return;
+            const currentContent = viewerContentRef.current;
+            if (!currentContent) {
+              isInitialScrollingRef.current = false;
+              return;
+            }
+
+            // 마지막 페이지 근처에 도달했는지 확인 (scrollHeight 변화 대응)
+            const isNearBottom =
+              currentContent.scrollTop + currentContent.clientHeight >= currentContent.scrollHeight - 50;
+            if (!isNearBottom && attempts < 5) {
+              // 시도 횟수 상향
+              attempts += 1;
+              currentContent.scrollTop = currentContent.scrollHeight;
+              retryReleaseTimeoutId = window.setTimeout(releaseGuard, 150);
+              return;
+            }
+
+            // [Important] 이미지가 로드되어 렌더링될 때까지 가드를 조금 더 유지 (무한 로딩 방지)
             isInitialScrollingRef.current = false;
-          }, 150);
+          };
+
+          initialReleaseTimeoutId = window.setTimeout(releaseGuard, 200);
         });
       } else {
         // 일반 페이지: 해당 페이지 요소로 스크롤
@@ -98,8 +120,7 @@ export function useVerticalScroll({
           requestAnimationFrame(() => {
             if (disposed) return;
             pageEl.scrollIntoView({ block: "start" });
-            // 이미지 레이아웃 변동으로 초기 위치가 흔들릴 수 있어
-            // 목표 페이지로 실제 스크롤되었는지 확인한 뒤 가드를 해제한다.
+
             let attempts = 0;
             const releaseGuard = () => {
               if (disposed) return;
@@ -109,17 +130,30 @@ export function useVerticalScroll({
                 return;
               }
 
-              if (currentPage > 1 && currentContent.scrollTop <= 4 && attempts < 3) {
+              // 테스트 환경 등에서 함수가 없을 경우 대비
+              if (
+                typeof pageEl.getBoundingClientRect !== "function" ||
+                typeof currentContent.getBoundingClientRect !== "function"
+              ) {
+                isInitialScrollingRef.current = false;
+                return;
+              }
+
+              const rect = pageEl.getBoundingClientRect();
+              const containerRect = currentContent.getBoundingClientRect();
+              const isCentered = Math.abs(rect.top - containerRect.top) < 20;
+
+              if (currentPage > 1 && !isCentered && attempts < 5) {
                 attempts += 1;
                 pageEl.scrollIntoView({ block: "start" });
-                retryReleaseTimeoutId = window.setTimeout(releaseGuard, 120);
+                retryReleaseTimeoutId = window.setTimeout(releaseGuard, 150);
                 return;
               }
 
               isInitialScrollingRef.current = false;
             };
 
-            initialReleaseTimeoutId = window.setTimeout(releaseGuard, 150);
+            initialReleaseTimeoutId = window.setTimeout(releaseGuard, 200);
           });
         } else {
           isInitialScrollingRef.current = false;
@@ -205,7 +239,7 @@ export function useVerticalScroll({
       },
       {
         root: content, // 스크롤 컨테이너를 기준으로 감지
-        rootMargin: "-50% 0px -50% 0px",
+        rootMargin: "-10% 0px -10% 0px", // 감지 범위를 넓혀 다음 페이지를 더 빨리 인식하도록 수정
         threshold: 0,
       },
     );

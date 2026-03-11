@@ -139,8 +139,7 @@ export const libraryAPI = {
     default_epub_wheel_direction?: string;
     default_epub_keyboard_direction?: string;
     default_epub_click_direction?: string;
-  }) =>
-    api.post("/libraries", data),
+  }) => api.post("/libraries", data),
   update: (
     id: string,
     data: {
@@ -234,6 +233,41 @@ export const volumeAPI = {
   getCompletion: (volumeId: string) => api.get(`/volumes/${volumeId}/completion`),
   deleteCompletion: (volumeId: string) => api.delete(`/volumes/${volumeId}/completion`),
   getBGM: (volumeId: string) => api.get<{ exists: boolean; url?: string }>(`/volumes/${volumeId}/bgm`),
+  // 재귀적으로 첫 번째 챕터 찾기
+  findFirstChapterRecursively: async (volumeId: string): Promise<Chapter | null> => {
+    try {
+      // 1. 현재 볼륨의 직계 챕터 확인
+      const chapRes = await volumeAPI.getChapters(volumeId);
+      const chapters = Array.isArray(chapRes.data) ? chapRes.data : chapRes.data.chapters || [];
+
+      if (chapters.length > 0) {
+        return [...chapters].sort((a, b) => a.chapter_number - b.chapter_number)[0];
+      }
+
+      // 2. 챕터가 없으면 하위 볼륨 확인
+      const volRes = await volumeAPI.get(volumeId);
+      const volume = volRes.data;
+
+      if (!volume.series_id) return null;
+
+      const subVolsRes = await api.get(`/series/${volume.series_id}/volumes?parent_id=${volumeId}`);
+      const subVolumes = Array.isArray(subVolsRes.data?.volumes) ? subVolsRes.data.volumes : [];
+
+      if (subVolumes.length > 0) {
+        // 첫 번째 하위 볼륨부터 재귀 탐색
+        const sortedSubVols = [...subVolumes].sort((a, b) => a.volume_number - b.volume_number);
+        for (const subVol of sortedSubVols) {
+          const firstChap = await volumeAPI.findFirstChapterRecursively(subVol.id);
+          if (firstChap) return firstChap;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Failed to find first chapter recursively:", error);
+      return null;
+    }
+  },
 };
 
 // Chapter API

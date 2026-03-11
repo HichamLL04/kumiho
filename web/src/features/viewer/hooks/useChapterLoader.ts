@@ -177,10 +177,12 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           timeoutId = setTimeout(() => {
             if (cancelled) return;
             setIsLoading(false);
+            // 세로 모드일 때는 useVerticalScroll에서 스크롤 보정 후 직접 가드를 해제하도록 위임한다.
+            // 다른 모드(single, double)는 스크롤 개념이 없으므로 여기서 즉시 해제.
             if (readingModeRef.current !== "vertical") {
               isInitialScrollingRef.current = false;
             }
-          }, 150);
+          }, 300); // 150ms -> 300ms로 상향 (렌더링 안정성 확보)
 
           // 부가 정보 로드 (비동기, 백그라운드 처리)
           (async () => {
@@ -440,7 +442,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           if (readingModeRef.current !== "vertical") {
             isInitialScrollingRef.current = false;
           }
-        }, 150);
+        }, 300); // 150ms -> 300ms로 상향
       } catch (err) {
         if (cancelled) return;
         console.error("챕터 로드 실패:", err);

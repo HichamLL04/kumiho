@@ -138,22 +138,24 @@ export function SeriesCard({
     setIsUpdating(true);
     try {
       if (type === "volume") {
-        const chaptersRes = await volumeAPI.getChapters(item.id);
-        const chapters = Array.isArray(chaptersRes.data) ? chaptersRes.data : chaptersRes.data.chapters || [];
+        // 1. 재귀적 진행도 먼저 확인 (하위 볼륨 포함)
+        const progressRes = await volumeAPI.getProgress(item.id);
+        const progressList = Array.isArray(progressRes.data) ? progressRes.data : progressRes.data?.progress_list || [];
 
-        if (chapters.length > 0) {
-          const sortedChapters = [...chapters].sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
+        if (progressList.length > 0) {
+          // 백엔드에서 이미 업데이트 시간(DESC) 및 챕터 번호(DESC) 순으로 정렬되어 옴
+          const lastProgress = progressList[0];
 
-          let targetChapter: Chapter | null = null;
-          for (let i = sortedChapters.length - 1; i >= 0; i--) {
-            const ch = sortedChapters[i] as Chapter & { reading_progress?: { current_page?: number } };
-            if (ch.reading_progress && (ch.reading_progress.current_page || 0) > 0) {
-              targetChapter = sortedChapters[i];
-              break;
-            }
+          if (lastProgress && lastProgress.chapter_id) {
+            navigate(`/viewer/${lastProgress.chapter_id}`, { state: { from: viewerFrom } });
+            return;
           }
+        }
 
-          navigate(`/viewer/${targetChapter?.id || sortedChapters[0].id}`, { state: { from: viewerFrom } });
+        // 2. 진행도가 없으면 첫 번째 챕터 탐색
+        const firstChapter = await volumeAPI.findFirstChapterRecursively(item.id);
+        if (firstChapter) {
+          navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
         } else {
           navigate(`/volumes/${item.id}`);
         }
@@ -298,16 +300,30 @@ export function SeriesCard({
   const isTextFile = extensionBadge === "TXT" || lowerItemPath.endsWith(".txt");
 
   let displaySubtitle = customSubtitle;
-  if (!displaySubtitle && type === "volume" && "volume_number" in item) {
-    const v = item as Volume;
-    if (v.unit === "chapter") {
+  if (!displaySubtitle) {
+    if (type === "series") {
+      const s = item as Series;
+      if (s.chapter_count && s.chapter_count > 0) {
+        displaySubtitle = t("series.unit.chapter_count", { count: s.chapter_count });
+      } else if (s.volume_count && s.volume_count > 0) {
+        displaySubtitle = t("series.unit.volume", { count: s.volume_count });
+      }
+    } else if (type === "volume" && "volume_number" in item) {
+      const v = item as Volume;
+      // 챕터가 있으면 챕터 개수를 표시
       if (v.chapter_count && v.chapter_count > 0) {
         displaySubtitle = t("series.unit.chapter_count", { count: v.chapter_count });
-      } else {
-        displaySubtitle = t("series.unit.chapter", { count: v.volume_number });
       }
-    } else {
-      displaySubtitle = t("series.unit.volume", { count: v.volume_number });
+      // 챕터가 없고 하위 볼륨이 있으면 하위 볼륨 개수를 표시
+      else if (v.sub_volume_count && v.sub_volume_count > 0) {
+        displaySubtitle = t("series.unit.volume", { count: v.sub_volume_count });
+      }
+      // 둘 다 없으면 자신의 번호 표시
+      else {
+        displaySubtitle = t(v.unit === "chapter" ? "series.unit.chapter" : "series.unit.volume", {
+          count: v.volume_number,
+        });
+      }
     }
   }
 

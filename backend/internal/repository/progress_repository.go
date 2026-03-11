@@ -329,17 +329,23 @@ func (r *ReadingProgressRepository) Delete(db database.Queryer, id string) error
 	return err
 }
 
-// FindByUserAndVolume 사용자와 볼륨의 모든 챕터 진행도 조회
+// FindByUserAndVolume 사용자와 볼륨의 모든 챕터 진행도 조회 (하위 볼륨 포함)
 func (r *ReadingProgressRepository) FindByUserAndVolume(db database.Queryer, userID, volumeID string) ([]model.ReadingProgress, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, 
+		`WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, 
 		 rp.total_pages, rp.current_position, rp.total_positions, rp.progress_percent, rp.device_id, rp.device_name, rp.current_cfi, rp.updated_at
 		 FROM reading_progress rp
-		 LEFT JOIN chapters c ON rp.chapter_id = c.id
-		 WHERE rp.user_id = ? AND (rp.volume_id = ? OR c.volume_id = ?)
-		 ORDER BY c.chapter_number ASC`,
-		userID, volumeID, volumeID,
+		 JOIN chapters c ON rp.chapter_id = c.id
+		 WHERE rp.user_id = ? AND c.volume_id IN (SELECT id FROM descendant_volumes)
+		 ORDER BY rp.updated_at DESC, c.chapter_number DESC`,
+		volumeID, userID,
 	)
 	if err != nil {
 		return nil, err
