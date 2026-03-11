@@ -41,7 +41,7 @@ export function PullIndicator({
     // visible 상태일 때만 클릭 허용 (pointer-events로 제어하지만 안전장치)
     if (!isVisible && Math.abs(pullOffset) < showThreshold) return;
 
-    await saveProgress();
+    await saveProgress().catch((err) => console.warn("Failed to save progress", err));
     startChapterSwitching(isDocumentFullscreen());
     if (type === "prev") {
       navigate(`/viewer/${chapterId}?page=last`, {

@@ -849,7 +849,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         console.warn("Failed to save progress before navigation", err);
       }
       startChapterSwitching(isDocumentFullscreen());
-      navigate(`/viewer/${prevChapterId}`, {
+      navigate(`/viewer/${prevChapterId}?page=last`, {
         replace: true,
         state: viewerFrom ? { from: viewerFrom } : undefined,
       });
@@ -1251,6 +1251,17 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     updateVirtualPage,
   ]);
 
+  // 세로 모드가 아닐 때 pullOffset 관련 상태 초기화
+  useEffect(() => {
+    if (settings.readingMode !== "vertical") {
+      setPullOffset(0);
+      pullOffsetRef.current = 0;
+      isNavigatingRef.current = false;
+      startYRef.current = null;
+      lastYRef.current = null;
+    }
+  }, [settings.readingMode]);
+
   // 세로 모드 오버스크롤 감지 (당기기 네비게이션)
   useEffect(() => {
     if (settings.readingMode !== "vertical") return;
@@ -1288,7 +1299,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             .finally(() => {
               isNavigatingRef.current = false;
               startChapterSwitching(isDocumentFullscreen());
-              navigate(`/viewer/${prevChapterId}`, {
+              navigate(`/viewer/${prevChapterId}?page=last`, {
                 replace: true,
                 state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
               });
@@ -1375,7 +1386,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           .finally(() => {
             isNavigatingRef.current = false;
             startChapterSwitching(isDocumentFullscreen());
-            navigate(`/viewer/${prevChapterId}`, {
+            navigate(`/viewer/${prevChapterId}?page=last`, {
               replace: true,
               state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
             });
