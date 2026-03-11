@@ -774,7 +774,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
     if (showNextHint && nextChapterId && isAdjacentResolved) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
-      await saveProgress();
+      try {
+        await saveProgress();
+      } catch (err) {
+        console.warn("Failed to save progress before navigation", err);
+      }
       navigate(`/viewer/${nextChapterId}`, {
         replace: true,
         state: viewerFrom ? { from: viewerFrom } : undefined,
@@ -836,7 +840,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
     if (showPrevHint && prevChapterId && isAdjacentResolved) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
-      await saveProgress();
+      try {
+        await saveProgress();
+      } catch (err) {
+        console.warn("Failed to save progress before navigation", err);
+      }
       navigate(`/viewer/${prevChapterId}`, {
         replace: true,
         state: viewerFrom ? { from: viewerFrom } : undefined,
@@ -1261,12 +1269,15 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           pullOffsetRef.current = newOffset;
           if (newOffset >= pullThreshold) {
             isNavigatingRef.current = true;
-            saveProgress().then(() => {
-              navigate(`/viewer/${prevChapterId}`, {
-                replace: true,
-                state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+            saveProgress()
+              .catch((err) => console.warn("Failed to save progress", err))
+              .finally(() => {
+                isNavigatingRef.current = false;
+                navigate(`/viewer/${prevChapterId}`, {
+                  replace: true,
+                  state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+                });
               });
-            });
             return 0;
           }
           return newOffset;
@@ -1278,12 +1289,15 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           pullOffsetRef.current = newOffset;
           if (Math.abs(newOffset) >= pullThreshold) {
             isNavigatingRef.current = true;
-            saveProgress().then(() => {
-              navigate(`/viewer/${nextChapterId}`, {
-                replace: true,
-                state: viewerFrom ? { from: viewerFrom } : undefined,
+            saveProgress()
+              .catch((err) => console.warn("Failed to save progress", err))
+              .finally(() => {
+                isNavigatingRef.current = false;
+                navigate(`/viewer/${nextChapterId}`, {
+                  replace: true,
+                  state: viewerFrom ? { from: viewerFrom } : undefined,
+                });
               });
-            });
             return 0;
           }
           return newOffset;
@@ -1351,20 +1365,26 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
       if (currentOffset >= pullThreshold && prevChapterId) {
         isNavigatingRef.current = true;
-        saveProgress().then(() => {
-          navigate(`/viewer/${prevChapterId}`, {
-            replace: true,
-            state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+        saveProgress()
+          .catch((err) => console.warn("Failed to save progress", err))
+          .finally(() => {
+            isNavigatingRef.current = false;
+            navigate(`/viewer/${prevChapterId}`, {
+              replace: true,
+              state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+            });
           });
-        });
       } else if (currentOffset <= -pullThreshold && nextChapterId) {
         isNavigatingRef.current = true;
-        saveProgress().then(() => {
-          navigate(`/viewer/${nextChapterId}`, {
-            replace: true,
-            state: viewerFrom ? { from: viewerFrom } : undefined,
+        saveProgress()
+          .catch((err) => console.warn("Failed to save progress", err))
+          .finally(() => {
+            isNavigatingRef.current = false;
+            navigate(`/viewer/${nextChapterId}`, {
+              replace: true,
+              state: viewerFrom ? { from: viewerFrom } : undefined,
+            });
           });
-        });
       }
 
       setPullOffset(0);
@@ -1399,18 +1419,27 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       }
     };
 
-    container.addEventListener("wheel", handleWheel, { passive: false });
+    const onWheel = (e: WheelEvent) => {
+      handleWheel(e);
+      startDecay();
+    };
+
+    container.addEventListener("wheel", onWheel, { passive: false });
     container.addEventListener("touchstart", handleTouchStart, { passive: true });
     container.addEventListener("touchmove", handleTouchMove, { passive: false });
     container.addEventListener("touchend", handleTouchEnd, { passive: true });
     container.addEventListener("touchend", startDecay, { passive: true });
+    container.addEventListener("touchcancel", handleTouchEnd, { passive: true });
+    container.addEventListener("touchcancel", startDecay, { passive: true });
 
     return () => {
-      container.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("wheel", onWheel);
       container.removeEventListener("touchstart", handleTouchStart);
       container.removeEventListener("touchmove", handleTouchMove);
       container.removeEventListener("touchend", handleTouchEnd);
       container.removeEventListener("touchend", startDecay);
+      container.removeEventListener("touchcancel", handleTouchEnd);
+      container.removeEventListener("touchcancel", startDecay);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [
@@ -1662,8 +1691,16 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         onJump={goToPage}
       />
 
-      <ChapterNavHint type="next" title={nextChapterTitle || ""} show={showNextHint && !!nextChapterTitle} />
-      <ChapterNavHint type="prev" title={prevChapterTitle || ""} show={showPrevHint && !!prevChapterTitle} />
+      <ChapterNavHint
+        type="next"
+        title={nextChapterTitle || ""}
+        show={showNextHint && !!nextChapterTitle}
+      />
+      <ChapterNavHint
+        type="prev"
+        title={prevChapterTitle || ""}
+        show={showPrevHint && !!prevChapterTitle}
+      />
 
       <SyncConfirmModal
         show={showSyncModal}
