@@ -851,7 +851,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${prevChapterId}?page=last`, {
         replace: true,
-        state: viewerFrom ? { from: viewerFrom } : undefined,
+        state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
       });
     } else if (prevChapterId) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
