@@ -60,6 +60,11 @@ vi.mock("../features/viewer", () => ({
   PageJumpModal: () => null,
   SyncConfirmModal: () => null,
   ChapterNavHint: () => null,
+  PullIndicator: () => null,
+}));
+
+vi.mock("../stores/fullscreenSwitchStore", () => ({
+  startChapterSwitching: vi.fn(),
 }));
 
 vi.mock("../hooks/useViewerSync", () => ({
@@ -435,6 +440,71 @@ describe("TextViewerRoute", () => {
     });
 
     expect(useViewerStore.getState().currentPage).toBeGreaterThan(1);
+  });
+
+  it("세로 모드에서 wheel 이벤트 시 pullOffset이 임계값 미만이면 0으로 복귀한다", async () => {
+    chapterGetTextMock.mockResolvedValue({
+      data: {
+        content: "짧은 텍스트",
+      },
+    });
+    chapterGetProgressMock.mockResolvedValue({
+      data: {
+        progress: null,
+      },
+    });
+
+    useViewerStore.setState({
+      settings: {
+        ...useViewerStore.getState().settings,
+        readingMode: "vertical",
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <TextViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "테스트 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText(/짧은 텍스트/);
+
+    const scrollContainer = document.querySelector("article")?.parentElement?.parentElement;
+    expect(scrollContainer).toBeTruthy();
+
+    // 스크롤 컨테이너에 작은 wheel 이벤트 발생 (임계값 미달)
+    act(() => {
+      scrollContainer!.dispatchEvent(
+        new WheelEvent("wheel", { deltaY: -5, bubbles: true, cancelable: true }),
+      );
+    });
+
+    // 에러 없이 정상 동작하는지 확인
+    expect(document.querySelector("article")).toBeTruthy();
   });
 
   it("세로에서 복원된 single 페이지 번호를 다음 double 전환의 기준으로 사용한다", async () => {

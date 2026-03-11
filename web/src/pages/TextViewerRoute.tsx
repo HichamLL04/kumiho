@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { chapterAPI, seriesAPI } from "../api/client";
 import { useViewerStore, type ReadingMode } from "../stores/viewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
+import { startChapterSwitching } from "../stores/fullscreenSwitchStore";
 import { ViewerSettings as ViewerSettingsModal } from "../components/viewer/ViewerSettings";
 import {
   UI_HIDE_DELAY,
@@ -779,12 +780,14 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       } catch (err) {
         console.warn("Failed to save progress before navigation", err);
       }
+      startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${nextChapterId}`, {
         replace: true,
         state: viewerFrom ? { from: viewerFrom } : undefined,
       });
     } else if (nextChapterId) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+      setPrevHintTriggeredChapterId(null);
       setNextHintTriggeredChapterId(chapterId || null);
       hintTimeoutRef.current = setTimeout(() => {
         setNextHintTriggeredChapterId(null);
@@ -845,12 +848,14 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       } catch (err) {
         console.warn("Failed to save progress before navigation", err);
       }
+      startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${prevChapterId}`, {
         replace: true,
         state: viewerFrom ? { from: viewerFrom } : undefined,
       });
     } else if (prevChapterId) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+      setNextHintTriggeredChapterId(null);
       setPrevHintTriggeredChapterId(chapterId || null);
       hintTimeoutRef.current = setTimeout(() => {
         setPrevHintTriggeredChapterId(null);
@@ -1254,7 +1259,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     if (!container) return;
 
     const pullThreshold = settings.pullThreshold;
-    const sensitivity = settings.pullSensitivity;
+    const sensitivity = Math.min(1, Math.max(0.1, settings.pullSensitivity ?? 1));
 
     const handleWheel = (e: WheelEvent) => {
       if (isNavigatingRef.current) return;
@@ -1273,6 +1278,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               .catch((err) => console.warn("Failed to save progress", err))
               .finally(() => {
                 isNavigatingRef.current = false;
+                startChapterSwitching(isDocumentFullscreen());
                 navigate(`/viewer/${prevChapterId}`, {
                   replace: true,
                   state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
@@ -1293,6 +1299,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               .catch((err) => console.warn("Failed to save progress", err))
               .finally(() => {
                 isNavigatingRef.current = false;
+                startChapterSwitching(isDocumentFullscreen());
                 navigate(`/viewer/${nextChapterId}`, {
                   replace: true,
                   state: viewerFrom ? { from: viewerFrom } : undefined,
@@ -1369,6 +1376,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           .catch((err) => console.warn("Failed to save progress", err))
           .finally(() => {
             isNavigatingRef.current = false;
+            startChapterSwitching(isDocumentFullscreen());
             navigate(`/viewer/${prevChapterId}`, {
               replace: true,
               state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
@@ -1380,6 +1388,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           .catch((err) => console.warn("Failed to save progress", err))
           .finally(() => {
             isNavigatingRef.current = false;
+            startChapterSwitching(isDocumentFullscreen());
             navigate(`/viewer/${nextChapterId}`, {
               replace: true,
               state: viewerFrom ? { from: viewerFrom } : undefined,
