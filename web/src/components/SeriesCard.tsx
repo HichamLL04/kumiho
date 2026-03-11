@@ -299,10 +299,15 @@ export function SeriesCard({
 
   let displaySubtitle = customSubtitle;
   if (!displaySubtitle && type === "volume" && "volume_number" in item) {
-    if ((item as Volume).unit === "chapter") {
-      displaySubtitle = t("series.unit.chapter", { count: item.volume_number });
+    const v = item as Volume;
+    if (v.unit === "chapter") {
+      if (v.chapter_count && v.chapter_count > 0) {
+        displaySubtitle = t("series.unit.chapter_count", { count: v.chapter_count });
+      } else {
+        displaySubtitle = t("series.unit.chapter", { count: v.volume_number });
+      }
     } else {
-      displaySubtitle = t("series.unit.volume", { count: item.volume_number });
+      displaySubtitle = t("series.unit.volume", { count: v.volume_number });
     }
   }
 

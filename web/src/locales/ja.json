@@ -486,6 +486,7 @@
     "unit": {
       "volume": "{{count}}巻",
       "chapter": "{{count}}話",
+      "chapter_count": "{{count}}話",
       "page": "{{count}}ページ"
     },
     "status": {

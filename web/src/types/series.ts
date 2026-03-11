@@ -41,6 +41,7 @@ export interface Volume {
   read_page_count?: number;
   total_page_count?: number;
   progress_percent?: number;
+  chapter_count?: number;
   created_at: string;
 }
 

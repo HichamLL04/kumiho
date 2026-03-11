@@ -489,6 +489,7 @@
     "unit": {
       "volume": "{{count}}권",
       "chapter": "{{count}}화",
+      "chapter_count": "{{count}}개 챕터",
       "page": "{{count}}페이지"
     },
     "status": {

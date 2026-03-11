@@ -146,6 +146,7 @@ func Migrate() error {
 		thumbnail_path TEXT,
 		has_audio BOOLEAN DEFAULT 0,
 		unit TEXT DEFAULT 'volume',
+		chapter_count INTEGER DEFAULT 0,
 		description TEXT DEFAULT '',
 		authors TEXT DEFAULT '',
 		publication_year TEXT DEFAULT '',
@@ -378,6 +379,9 @@ func Migrate() error {
 	// 23. 라이브러리 EPUB 기본값 컬럼 추가
 	migrateLibraryEpubDefaults()
 
+	// 24. 볼륨 챕터 수 컬럼 추가
+	migrateVolumesChapterCount()
+
 	return nil
 }
 
@@ -450,6 +454,18 @@ func migrateChapterCompletions() {
 	}
 
 	fmt.Println("Migrated database: added chapter_completions table.")
+}
+
+// migrateVolumesChapterCount volumes 테이블에 chapter_count 컬럼 추가
+func migrateVolumesChapterCount() {
+	if !columnExists("volumes", "chapter_count") {
+		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN chapter_count INTEGER DEFAULT 0`)
+		if err != nil {
+			fmt.Printf("Migration error (volumes.chapter_count): %v\n", err)
+		} else {
+			fmt.Println("Migrated volumes table: added chapter_count column.")
+		}
+	}
 }
 
 // migrateVolumesMetadata volumes 테이블에 메타 데이터(description, authors, publication_year) 컬럼 추가

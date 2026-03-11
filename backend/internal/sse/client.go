@@ -15,7 +15,7 @@ type Client struct {
 	Role       string
 	Source     string
 	Message    chan []byte // 버퍼가 있는 채널로 SSE 스트림에 데이터를 보냄
-	closeOnce  sync.Once  // 채널을 안전하게 1회만 닫기 위한 보호
+	closeOnce  sync.Once   // 채널을 안전하게 1회만 닫기 위한 보호
 }
 
 // NewClient creates a new SSE client

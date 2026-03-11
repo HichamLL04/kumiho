@@ -16,7 +16,7 @@ func NewChapterCompletionRepository() *ChapterCompletionRepository {
 // MarkComplete 챕터 완독 처리
 func (r *ChapterCompletionRepository) MarkComplete(db database.Queryer, userID, chapterID string) error {
 	db = database.GetQueryer(db)
-	
+
 	// 이미 완독된 경우 완료 시간 갱신 (ON CONFLICT DO UPDATE)
 	_, err := db.Exec(
 		`INSERT INTO chapter_completions (id, user_id, chapter_id, completed_at)
@@ -35,7 +35,7 @@ func (r *ChapterCompletionRepository) IsCompleted(db database.Queryer, userID, c
 		`SELECT COUNT(*) FROM chapter_completions WHERE user_id = ? AND chapter_id = ?`,
 		userID, chapterID,
 	).Scan(&count)
-	
+
 	if err != nil {
 		return false, err
 	}
@@ -45,7 +45,7 @@ func (r *ChapterCompletionRepository) IsCompleted(db database.Queryer, userID, c
 // FindCompletedChapterIDs 볼륨 내 완독된 챕터 ID 목록 조회
 func (r *ChapterCompletionRepository) FindCompletedChapterIDs(db database.Queryer, userID, volumeID string) (map[string]bool, error) {
 	db = database.GetQueryer(db)
-	
+
 	rows, err := db.Query(
 		`SELECT cc.chapter_id 
 		 FROM chapter_completions cc
@@ -57,7 +57,7 @@ func (r *ChapterCompletionRepository) FindCompletedChapterIDs(db database.Querye
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	
+
 	result := make(map[string]bool)
 	for rows.Next() {
 		var chapterID string
@@ -73,7 +73,7 @@ func (r *ChapterCompletionRepository) FindCompletedChapterIDs(db database.Querye
 // 성능 주의: 필요할 때만 사용
 func (r *ChapterCompletionRepository) FindAllCompletedByUser(db database.Queryer, userID string) (map[string]bool, error) {
 	db = database.GetQueryer(db)
-	
+
 	rows, err := db.Query(
 		`SELECT chapter_id FROM chapter_completions WHERE user_id = ?`,
 		userID,
@@ -82,7 +82,7 @@ func (r *ChapterCompletionRepository) FindAllCompletedByUser(db database.Queryer
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	
+
 	result := make(map[string]bool)
 	for rows.Next() {
 		var chapterID string
@@ -101,7 +101,7 @@ func (r *ChapterCompletionRepository) FindAllCompletedByUser(db database.Queryer
 // DeleteByVolume 완독 정보 삭제 (볼륨 삭제 또는 초기화 시)
 func (r *ChapterCompletionRepository) DeleteByVolume(db database.Queryer, userID, volumeID string) error {
 	db = database.GetQueryer(db)
-	
+
 	_, err := db.Exec(
 		`DELETE FROM chapter_completions 
 		 WHERE user_id = ? AND chapter_id IN (SELECT id FROM chapters WHERE volume_id = ?)`,

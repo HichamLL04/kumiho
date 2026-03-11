@@ -59,7 +59,7 @@ var (
 	reYear         = regexp.MustCompile(`\b(19|20)\d{2}\b`)
 
 	// 볼륨 파싱 정규식 (Global Compile)
-	reVolKorean  = regexp.MustCompile(`(\d+)\s*(권|회|화)`)
+	reVolKorean  = regexp.MustCompile(`(\d+)\s*(권|회|화|부)`)
 	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume)\s*(\d+)`)
 	reVolChapter = regexp.MustCompile(`(?i)(?:c|ch\.?|chapter)\s*(\d+)`)
 	reVolSuffix  = regexp.MustCompile(`(?:^|[\s\-_\[\(])(\d+)(?:$|[\s\-_\]\)])`)
@@ -243,6 +243,7 @@ type scannedVolume struct {
 	ModTime      time.Time
 	HasAudio     bool
 	Unit         string // "volume" or "chapter"
+	ChapterCount int
 	Chapters     []scannedChapter
 }
 
@@ -1205,10 +1206,17 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 
 		parsedNum := 0
 		parsedUnit := "volume"
-		// 0번 볼륨도 유효한 번호로 인정
-		if num, unit, ok := parseVolumeNumber(displayName); ok {
-			parsedNum = num
-			parsedUnit = unit
+		entry := entryMap[name]
+
+		// 폴더인 경우 파싱 생략 (사용자 요청: 폴더명 그대로 사용)
+		if entry != nil && entry.IsDir() {
+			parsedUnit = "chapter"
+		} else {
+			// 0번 볼륨도 유효한 번호로 인정
+			if num, unit, ok := parseVolumeNumber(displayName); ok {
+				parsedNum = num
+				parsedUnit = unit
+			}
 		}
 
 		// 할당할 번호 결정 (Strategy: Monotonic)
@@ -1325,7 +1333,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 					}
 				}
 
-				if volNum == 0 {
+				if volNum == 0 && !entry.IsDir() {
 					displayName = "프롤로그"
 				}
 
@@ -1416,6 +1424,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 			}
 
 			if existingVol != nil {
+				// 기존 볼륨이 있고, 업데이트가 필요한 경우 (예: 볼륨 번호 변경, 챕터 수 변경 등)
+				// 기존 볼륨을 삭제하고 새로 생성하는 방식으로 처리 (챕터/페이지도 함께 삭제됨)
 				if delErr := s.volumeRepo.Delete(tx, existingVol.ID); delErr != nil {
 					_ = tx.Rollback()
 					mu.Lock()
@@ -1484,6 +1494,7 @@ func (s *Scanner) analyzeVolume(volumePath, title string, volumeNum int, unit st
 		Path:         volumePath,
 		ModTime:      modTime,
 		Unit:         unit,
+		ChapterCount: 0, // 초기화
 	}
 
 	entries, err := os.ReadDir(volumePath)
@@ -1503,6 +1514,11 @@ func (s *Scanner) analyzeVolume(volumePath, title string, volumeNum int, unit st
 		} else if isImage(entry.Name()) {
 			imageFiles = append(imageFiles, entry.Name())
 		}
+	}
+
+	result.ChapterCount = len(chapterEntries)
+	if result.ChapterCount == 0 && len(imageFiles) > 0 {
+		result.ChapterCount = 1 // 이미지만 있는 경우 단일 챕터로 취급
 	}
 
 	if len(chapterEntries) > 0 {
@@ -1576,6 +1592,7 @@ func (s *Scanner) analyzeArchiveAsVolume(archivePath, title string, volumeNum in
 		Path:         archivePath,
 		ModTime:      modTime,
 		Unit:         unit,
+		ChapterCount: 1, // 아카이브는 단일 챕터로 간주
 	}
 
 	// 아카이브를 챕터로 분석하여 추가 (Chapter 1)
@@ -1775,6 +1792,7 @@ func (s *Scanner) saveVolume(tx database.Queryer, seriesID string, volData *scan
 		UpdatedAt:    volData.ModTime,
 		HasAudio:     volData.HasAudio,
 		Unit:         volData.Unit,
+		ChapterCount: volData.ChapterCount, // Add ChapterCount
 	}
 
 	if foundThumbnailPath != "" {
