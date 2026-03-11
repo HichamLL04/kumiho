@@ -17,6 +17,10 @@ describe("extension utils", () => {
       expect(parseSupportedExtension("/books/test.cBz")).toBe("CBZ");
     });
 
+    it("txt 확장자를 지원한다", () => {
+      expect(parseSupportedExtension("/books/test.txt")).toBe("TXT");
+    });
+
     it("미지원 확장자는 null을 반환한다", () => {
       expect(parseSupportedExtension("/books/test.mobi")).toBeNull();
     });
@@ -31,8 +35,12 @@ describe("extension utils", () => {
       expect(normalizeExtensionBadge("mix")).toBe("MIX");
     });
 
+    it("txt를 확장자 배지로 정규화한다", () => {
+      expect(normalizeExtensionBadge("txt")).toBe("TXT");
+    });
+
     it("미지원 값은 null을 반환한다", () => {
-      expect(normalizeExtensionBadge("txt")).toBeNull();
+      expect(normalizeExtensionBadge("mobi")).toBeNull();
     });
   });
 

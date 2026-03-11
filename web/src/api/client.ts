@@ -241,6 +241,8 @@ export const chapterAPI = {
   get: (id: string) => api.get(`/chapters/${id}`),
   getPages: (chapterId: string) => api.get(`/chapters/${chapterId}/pages`),
   getProgress: (chapterId: string) => api.get(`/chapters/${chapterId}/progress`),
+  getText: (chapterId: string) =>
+    api.get<{ content: string; total_bytes: number; total_positions: number }>(`/chapters/${chapterId}/text`),
   analyze: (chapterId: string) =>
     api.post<{ analyzed_count: number; total_pages: number; success: boolean }>(`/chapters/${chapterId}/analyze`),
   markComplete: (chapterId: string) => api.post(`/chapters/${chapterId}/complete`),

@@ -101,6 +101,7 @@ type Volume struct {
 	PublicationYear string    `json:"publication_year" db:"publication_year"`
 	TotalPageCount  int       `json:"total_page_count" db:"-"`
 	ReadPageCount   int       `json:"read_page_count" db:"-"`
+	ProgressPercent float64   `json:"progress_percent" db:"-"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }

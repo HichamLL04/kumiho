@@ -27,6 +27,10 @@ vi.mock("./EpubViewerRoute", () => ({
   EpubViewerRoute: () => <div data-testid="epub-viewer-route">epub route</div>,
 }));
 
+vi.mock("./TextViewerRoute", () => ({
+  TextViewerRoute: () => <div data-testid="text-viewer-route">text route</div>,
+}));
+
 describe("ViewerPage routing by chapter type", () => {
   beforeEach(() => {
     useChapterLoaderMock.mockReset();
@@ -91,6 +95,24 @@ describe("ViewerPage routing by chapter type", () => {
     renderPage();
 
     expect(screen.getByTestId("pdf-viewer-route")).toBeInTheDocument();
+    expect(screen.queryByTestId("image-viewer-route")).not.toBeInTheDocument();
+  });
+
+  it("routes TXT chapter to TextViewerRoute", () => {
+    useChapterLoaderMock.mockReturnValue({
+      error: null,
+      isLoading: false,
+      chapter: {
+        id: "chapter-1",
+        path: "/books/sample.txt",
+        render_mode: "text",
+      },
+    });
+
+    renderPage();
+
+    expect(screen.getByTestId("text-viewer-route")).toBeInTheDocument();
+    expect(screen.queryByTestId("pdf-viewer-route")).not.toBeInTheDocument();
     expect(screen.queryByTestId("image-viewer-route")).not.toBeInTheDocument();
   });
 });

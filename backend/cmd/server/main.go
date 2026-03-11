@@ -101,7 +101,7 @@ func main() {
 
 	// Fiber 앱 생성
 	app := fiber.New(fiber.Config{
-		AppName:   "Kumiho API v0.10.15",
+		AppName:   "Kumiho API v0.11.0",
 		BodyLimit: 50 * 1024 * 1024, // 50MB
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -228,6 +228,7 @@ func main() {
 	chapters.Get("/:chapterId/pages/:pageNumber/image", imageHandler.PageImageByNumber)
 	chapters.Get("/:chapterId/pdf", imageHandler.ServeChapterPDF)
 	chapters.Get("/:chapterId/epub", imageHandler.ServeChapterEpub)
+	chapters.Get("/:chapterId/text", imageHandler.ServeChapterText)
 	chapters.Post("/:chapterId/analyze", imageHandler.AnalyzeChapterPages)
 	chapters.Get("/:chapterId/progress", progressHandler.GetChapterProgress)
 	chapters.Get("/:chapterId/epub-progress", progressHandler.GetEpubProgress)

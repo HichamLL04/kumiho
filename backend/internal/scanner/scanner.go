@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 
 	"io/fs"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/facette/natsort"
 	"github.com/fsnotify/fsnotify"
@@ -42,7 +45,7 @@ var imageExtensions = map[string]bool{
 
 // 지원하는 아카이브 확장자
 var archiveExtensions = map[string]bool{
-	".zip": true, ".cbz": true, ".pdf": true, ".epub": true,
+	".zip": true, ".cbz": true, ".pdf": true, ".epub": true, ".txt": true,
 }
 
 // 지원하는 오디오 확장자
@@ -1587,6 +1590,28 @@ func (s *Scanner) analyzeArchiveAsVolume(archivePath, title string, volumeNum in
 
 // analyzeArchiveAsChapter scans an archive as a chapter
 func (s *Scanner) analyzeArchiveAsChapter(archivePath, title string, chapterNum int) (*scannedChapter, error) {
+	if strings.ToLower(filepath.Ext(archivePath)) == ".txt" {
+		raw, err := os.ReadFile(archivePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read txt file: %w", err)
+		}
+
+		raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+		if !utf8.Valid(raw) {
+			return nil, fmt.Errorf("unsupported text encoding: utf-8 only")
+		}
+
+		return &scannedChapter{
+			Title:          title,
+			ChapterNumber:  chapterNum,
+			Path:           archivePath,
+			Pages:          []scannedPage{},
+			PageCount:      int(math.Max(1, math.Ceil(float64(utf8.RuneCount(raw))/1000.0))),
+			TotalBytes:     int64(len(raw)),
+			TotalPositions: utf8.RuneCount(raw),
+		}, nil
+	}
+
 	if strings.ToLower(filepath.Ext(archivePath)) == ".pdf" {
 		pageCount, err := util.GetPdfPageCount(archivePath)
 		if err != nil {

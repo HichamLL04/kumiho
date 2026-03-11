@@ -671,12 +671,23 @@
         "height": "高さ",
         "original": "原寸"
       },
-      "background_color": {
-        "label": "背景色",
-        "black": "黒",
-        "dark_gray": "濃い灰色",
-        "gray": "灰色",
-        "white": "白色"
+      "font_size": {
+        "label": "文字サイズ"
+      },
+      "font_family": {
+        "label": "フォント",
+        "original": "オリジナル",
+        "serif": "セリフ",
+        "sans_serif": "ゴシック"
+      },
+      "line_height": {
+        "label": "行間"
+      },
+      "theme": {
+        "label": "テーマ",
+        "light": "ライト",
+        "dark": "ダーク",
+        "sepia": "セピア"
       },
       "page_transition": {
         "label": "ページ切り替えアニメーション",

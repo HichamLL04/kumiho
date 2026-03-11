@@ -18,6 +18,7 @@ interface SeriesInfoCardProps {
   type?: "series" | "volume";
   progress?: ReadingProgress;
   summary?: SeriesProgressSummary;
+  preferPercentLabel?: boolean;
   onUpdate?: (updated: Series | Volume) => void;
   onPlay: () => void;
   onRefresh?: () => void;
@@ -31,6 +32,7 @@ export function SeriesInfoCard({
   type = "series",
   progress,
   summary,
+  preferPercentLabel = false,
   onUpdate,
   onPlay,
   onRefresh,
@@ -61,6 +63,9 @@ export function SeriesInfoCard({
   });
 
   const isVolumeType = type === "volume";
+  const displayPath = (isVolumeType ? volume?.path : series.path) || "";
+  const lowerDisplayPath = displayPath.toLowerCase();
+  const isTextFile = lowerDisplayPath.endsWith(".txt");
 
   // 시리즈 완독 처리 실행
   const executeMarkComplete = async () => {
@@ -145,8 +150,8 @@ export function SeriesInfoCard({
 
   // 진행 상태 데이터 계산 (퍼센트 및 라벨)
   const { percent: progressPercent, label: progressLabel } = useMemo(
-    () => calculateProgressDisplay({ type, series, volume, progress, summary, t }),
-    [type, series, volume, progress, summary, t],
+    () => calculateProgressDisplay({ type, series, volume, progress, summary, preferPercentLabel, t }),
+    [type, series, volume, progress, summary, preferPercentLabel, t],
   );
 
   // 마지막 읽은 시간
@@ -224,9 +229,18 @@ export function SeriesInfoCard({
             className={styles.seriesThumbnail}
             onError={() => setImageError(true)}
           />
+        ) : isTextFile ? (
+          <div className={styles.seriesThumbnailPlaceholder}>
+            <img
+              src="/reading-kumiho.png"
+              alt=""
+              className={styles.seriesPlaceholderImage}
+              draggable={false}
+            />
+          </div>
         ) : (
           <div className={styles.seriesThumbnailPlaceholder}>
-            {((isVolumeType ? volume?.path : series.path) || "").toLowerCase().endsWith(".pdf") ? (
+            {lowerDisplayPath.endsWith(".pdf") ? (
               <FileText
                 size={64}
                 style={{ opacity: 0.5 }}

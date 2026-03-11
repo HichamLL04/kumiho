@@ -49,6 +49,46 @@ describe("Progress Utilities", () => {
       expect(result.label).toBe("45 / 100 P");
     });
 
+    it("should prefer volume progress_percent for variable-page media", () => {
+      const volume: Volume = {
+        id: "v1",
+        series_id: "s1",
+        title: "Vol 1",
+        volume_number: 1,
+        path: "",
+        created_at: "",
+        total_page_count: 1,
+        read_page_count: 0,
+        progress_percent: 13.3,
+      };
+      const result = calculateProgressDisplay({ type: "volume", series: mockSeries, volume, t: mockT });
+      expect(result.percent).toBe(13.3);
+      expect(result.label).toBe("0 / 1 P");
+    });
+
+    it("should show percent-only label when preferred for variable-page volume", () => {
+      const volume: Volume = {
+        id: "v1",
+        series_id: "s1",
+        title: "Vol 1",
+        volume_number: 1,
+        path: "",
+        created_at: "",
+        total_page_count: 1,
+        read_page_count: 0,
+        progress_percent: 13.3,
+      };
+      const result = calculateProgressDisplay({
+        type: "volume",
+        series: mockSeries,
+        volume,
+        preferPercentLabel: true,
+        t: mockT,
+      });
+      expect(result.percent).toBe(13.3);
+      expect(result.label).toBe("13%");
+    });
+
     it("should fallback to progress object if page counts are missing", () => {
       const volume: Volume = { id: "v1", series_id: "s1", title: "Vol 1", volume_number: 1, path: "", created_at: "" };
       const progress: ReadingProgress = {
@@ -73,6 +113,25 @@ describe("Progress Utilities", () => {
       const result = calculateProgressDisplay({ type: "series", series, t: mockT });
       expect(result.percent).toBe(50);
       expect(result.label).toContain("50%");
+    });
+
+    it("should show percent-only label when preferred for variable-page series", () => {
+      const result = calculateProgressDisplay({
+        type: "series",
+        series: mockSeries,
+        summary: {
+          current_volume_number: 1,
+          total_volumes: 3,
+          current_chapter_number: 2,
+          total_chapters: 10,
+          total_pages: 300,
+          read_pages: 99,
+        },
+        preferPercentLabel: true,
+        t: mockT,
+      });
+      expect(result.percent).toBe(33);
+      expect(result.label).toBe("33%");
     });
 
     it("should return not read label if no progress", () => {

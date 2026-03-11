@@ -315,7 +315,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
                 resolvedSettings.readingMode = (seriesOverride.readingMode ||
                   library.default_view_mode ||
                   globalData.viewer_reading_mode ||
-                  "single") as ReadingMode;
+                  "vertical") as ReadingMode;
 
                 resolvedSettings.readingDirection = (seriesOverride.readingDirection ||
                   library.default_read_direction ||
@@ -331,10 +331,9 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
                   globalData.viewer_keyboard_direction ||
                   "ltr") as ReadingDirection;
 
-                resolvedSettings.wheelDirection =
-                  (seriesOverride.wheelDirection ||
-                    globalData.viewer_wheel_direction ||
-                    "down") as ViewerSettings["wheelDirection"];
+                resolvedSettings.wheelDirection = (seriesOverride.wheelDirection ||
+                  globalData.viewer_wheel_direction ||
+                  "down") as ViewerSettings["wheelDirection"];
 
                 resolvedSettings.swipeDirection = (seriesOverride.swipeDirection ||
                   globalData.swipe_direction ||

@@ -13,7 +13,6 @@ import styles from "./PdfViewer.module.css";
 interface PdfViewerProps {
   chapterTitle: string;
   chapterId: string;
-  seriesId?: string;
   currentPage: number;
   totalPages: number;
   isUIVisible: boolean;
@@ -79,7 +78,6 @@ interface PdfViewerProps {
 export function PdfViewer({
   chapterTitle,
   chapterId,
-  seriesId,
   currentPage,
   totalPages,
   isUIVisible,
@@ -241,7 +239,6 @@ export function PdfViewer({
         isUIVisible={isUIVisible}
         readingMode={settings.readingMode}
         pageOffset={settings.pageOffset}
-        seriesId={seriesId ?? null}
         nextChapterId={nextChapterId}
         onPrev={onPrev}
         onNext={onNext}

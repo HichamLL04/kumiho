@@ -134,8 +134,21 @@ func (h *ProgressHandler) GetProgress(c *fiber.Ctx) error {
 	}
 
 	if series != nil {
-		progressSummary["total_pages"] = series.TotalPageCount
-		progressSummary["read_pages"] = series.ReadPageCount
+		totalUnits, totalErr := h.seriesRepo.GetTotalProgressUnits(nil, seriesID)
+		if totalErr != nil {
+			log.Printf("Failed to calculate total progress units for series %s: %v", seriesID, totalErr)
+			progressSummary["total_pages"] = series.TotalPageCount
+		} else {
+			progressSummary["total_pages"] = totalUnits
+		}
+
+		readUnits, readErr := h.seriesRepo.GetReadProgressUnits(nil, userID, seriesID)
+		if readErr != nil {
+			log.Printf("Failed to calculate read progress units for series %s: %v", seriesID, readErr)
+			progressSummary["read_pages"] = series.ReadPageCount
+		} else {
+			progressSummary["read_pages"] = readUnits
+		}
 	}
 
 	// 1. 전체 권/화 수 조회
@@ -316,10 +329,25 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 		})
 	}
 
-	// VolumeID가 없으면 ChapterID로 추론 시도
-	if req.VolumeID == nil && req.ChapterID != nil {
-		if chapter, _ := h.chapterRepo.FindByID(nil, *req.ChapterID); chapter != nil {
-			req.VolumeID = &chapter.VolumeID
+	// VolumeID가 없거나, TXT 동적 페이지 수 동기화를 위해 ChapterID로 챕터 조회
+	var chapter *model.Chapter
+	if req.ChapterID != nil {
+		chapter, _ = h.chapterRepo.FindByID(nil, *req.ChapterID)
+		if chapter != nil {
+			if req.VolumeID == nil {
+				req.VolumeID = &chapter.VolumeID
+			}
+
+			// TXT 파일인 경우 클라이언트가 송신한 동적 TotalPages를 chapter_count에 동기화
+			if strings.HasSuffix(strings.ToLower(chapter.Path), ".txt") {
+				if req.TotalPages > 0 && chapter.PageCount != req.TotalPages {
+					if err := h.chapterRepo.UpdatePageCount(nil, chapter.ID, req.TotalPages); err == nil {
+						chapter.PageCount = req.TotalPages
+					} else {
+						log.Printf("[UpdateProgress] Failed to sync txt page count: %v", err)
+					}
+				}
+			}
 		}
 	}
 
