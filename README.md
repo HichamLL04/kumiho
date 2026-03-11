@@ -66,7 +66,7 @@ It was originally developed by a developer for personal convenience, after feeli
 | :----------- | :----------------------------------------------- |
 | **Images**   | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
 | **Archives** | `.zip`, `.cbz`                                   |
-| **E-books**  | `.epub`, `.pdf`                                  |
+| **E-books**  | `.epub`, `.pdf`, `.txt`                          |
 
 > 📁 **Folder Structure**: Automatically recognizes image files in folders or archive files and organizes them into volumes/chapters.
 
@@ -75,7 +75,6 @@ It was originally developed by a developer for personal convenience, after feeli
 | Category     | Planned Extensions            |
 | :----------- | :---------------------------- |
 | **Archives** | `.cbr`, `.rar`, `.cb7`, `.7z` |
-| **E-books**  | `.txt`                        |
 
 - Support `comicInfo.xml`
   - Metadata management interaction
@@ -204,7 +203,7 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 | :------------- | :----------------------------------------------- |
 | **画像**       | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
 | **アーカイブ** | `.zip`, `.cbz`                                   |
-| **電子書籍**   | `.epub`, `.pdf`                                  |
+| **電子書籍**   | `.epub`, `.pdf`, `.txt`                          |
 
 > 📁 **フォルダ構造**: フォルダ内の画像ファイル、またはアーカイブファイルを自動的に認識し、巻/チャプターとして構成します。
 
@@ -213,7 +212,6 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 | 分類           | 予定拡張子                    |
 | :------------- | :---------------------------- |
 | **アーカイブ** | `.cbr`, `.rar`, `.cb7`, `.7z` |
-| **電子書籍**   | `.txt`                        |
 
 - `comicInfo.xml` 対応
   - メタデータ管理の連携
@@ -342,7 +340,7 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 | :----------- | :----------------------------------------------- |
 | **이미지**   | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
 | **아카이브** | `.zip`, `.cbz`                                   |
-| **전자책**   | `.epub`, `.pdf`                                  |
+| **전자책**   | `.epub`, `.pdf`, `.txt`                          |
 
 > 📁 **폴더 구조**: 폴더 내 이미지 파일들, 또는 아카이브 파일을 자동으로 인식하여 볼륨/챕터로 구성합니다.
 
@@ -351,7 +349,6 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 | 분류         | 예정 확장자                   |
 | :----------- | :---------------------------- |
 | **아카이브** | `.cbr`, `.rar`, `.cb7`, `.7z` |
-| **전자책**   | `.txt`                        |
 
 - `comicInfo.xml` 지원
   - 메타데이터 관리 지원
