@@ -15,6 +15,8 @@ import {
   ViewerHeader,
   PageJumpModal,
   SyncConfirmModal,
+  ChapterNavHint,
+  PullIndicator,
 } from "../features/viewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
@@ -357,13 +359,26 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     ));
   }, [highlightParagraphId, parsedParagraphs]);
 
-  const { nextChapterId, prevChapterId, isAdjacentResolved } = useAdjacentChapters({
+  const { nextChapterId, prevChapterId, nextChapterTitle, prevChapterTitle, isAdjacentResolved } = useAdjacentChapters({
     volumeId,
     chapterId,
     seriesId,
   });
 
   useReadingTime(seriesId || undefined, !chapterLoading && !isLoadingText && !error, chapterId);
+
+  const [nextHintTriggeredChapterId, setNextHintTriggeredChapterId] = useState<string | null>(null);
+  const [prevHintTriggeredChapterId, setPrevHintTriggeredChapterId] = useState<string | null>(null);
+  const hintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [pullOffset, setPullOffset] = useState(0);
+  const pullOffsetRef = useRef(0);
+  const isNavigatingRef = useRef(false);
+  const startYRef = useRef<number | null>(null);
+  const lastYRef = useRef<number | null>(null);
+
+  const showNextHint = nextHintTriggeredChapterId === chapterId;
+  const showPrevHint = prevHintTriggeredChapterId === chapterId;
 
   const setOffset = useCallback((newOffsetX: number) => {
     currentOffsetXRef.current = Math.max(0, newOffsetX);
@@ -552,6 +567,10 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         }
       }
 
+      if (metrics.isAtVisualEnd) {
+        nextCurrentPage = metrics.totalPages;
+      }
+
       if (totalPagesRef.current !== metrics.totalPages) {
         setTotalPages(metrics.totalPages);
       }
@@ -722,7 +741,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     [getContentScrollWidth, getPagedViewportWidth, scheduleSave, setOffset, settings.readingMode, updateVirtualPage],
   );
 
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback(async () => {
     const container = scrollRef.current;
     if (!container) return;
 
@@ -734,51 +753,57 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         scheduleSave();
         return;
       }
+    } else {
+      const offsetX = currentOffsetXRef.current;
+      const metrics = measureVirtualPaging(
+        container,
+        settings.readingMode,
+        offsetX,
+        getContentScrollWidth(),
+        getPagedViewportWidth(),
+      );
 
-      if (nextChapterId && isAdjacentResolved) {
-        navigate(`/viewer/${nextChapterId}`, {
-          state: viewerFrom ? { from: viewerFrom } : undefined,
-        });
+      if (!metrics.isAtVisualEnd) {
+        const nextX = offsetX + metrics.viewportWidth;
+        setOffset(nextX);
+        updateVirtualPage(nextX);
+        scheduleSave();
+        return;
       }
-      return;
     }
 
-    const offsetX = currentOffsetXRef.current;
-    const metrics = measureVirtualPaging(
-      container,
-      settings.readingMode,
-      offsetX,
-      getContentScrollWidth(),
-      getPagedViewportWidth(),
-    );
-
-    if (!metrics.isAtVisualEnd) {
-      const nextX = offsetX + metrics.viewportWidth;
-      setOffset(nextX);
-      updateVirtualPage(nextX);
-      scheduleSave();
-      return;
-    }
-
-    if (nextChapterId && isAdjacentResolved) {
+    if (showNextHint && nextChapterId && isAdjacentResolved) {
+      if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+      await saveProgress();
       navigate(`/viewer/${nextChapterId}`, {
+        replace: true,
         state: viewerFrom ? { from: viewerFrom } : undefined,
       });
+    } else if (nextChapterId) {
+      if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+      setNextHintTriggeredChapterId(chapterId || null);
+      hintTimeoutRef.current = setTimeout(() => {
+        setNextHintTriggeredChapterId(null);
+        hintTimeoutRef.current = null;
+      }, 3000);
     }
   }, [
+    chapterId,
     getContentScrollWidth,
     getPagedViewportWidth,
     isAdjacentResolved,
     navigate,
     nextChapterId,
+    saveProgress,
     scheduleSave,
     setOffset,
     settings.readingMode,
+    showNextHint,
     updateVirtualPage,
     viewerFrom,
   ]);
 
-  const handlePrev = useCallback(() => {
+  const handlePrev = useCallback(async () => {
     const container = scrollRef.current;
     if (!container) return;
 
@@ -790,46 +815,52 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         scheduleSave();
         return;
       }
+    } else {
+      const offsetX = currentOffsetXRef.current;
+      const metrics = measureVirtualPaging(
+        container,
+        settings.readingMode,
+        offsetX,
+        getContentScrollWidth(),
+        getPagedViewportWidth(),
+      );
 
-      if (prevChapterId && isAdjacentResolved) {
-        navigate(`/viewer/${prevChapterId}`, {
-          state: viewerFrom ? { from: viewerFrom } : undefined,
-        });
+      if (!metrics.isAtVisualStart) {
+        const prevX = Math.max(offsetX - metrics.viewportWidth, 0);
+        setOffset(prevX);
+        updateVirtualPage(prevX);
+        scheduleSave();
+        return;
       }
-      return;
     }
 
-    const offsetX = currentOffsetXRef.current;
-    const metrics = measureVirtualPaging(
-      container,
-      settings.readingMode,
-      offsetX,
-      getContentScrollWidth(),
-      getPagedViewportWidth(),
-    );
-
-    if (!metrics.isAtVisualStart) {
-      const prevX = Math.max(offsetX - metrics.viewportWidth, 0);
-      setOffset(prevX);
-      updateVirtualPage(prevX);
-      scheduleSave();
-      return;
-    }
-
-    if (prevChapterId && isAdjacentResolved) {
+    if (showPrevHint && prevChapterId && isAdjacentResolved) {
+      if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+      await saveProgress();
       navigate(`/viewer/${prevChapterId}`, {
+        replace: true,
         state: viewerFrom ? { from: viewerFrom } : undefined,
       });
+    } else if (prevChapterId) {
+      if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+      setPrevHintTriggeredChapterId(chapterId || null);
+      hintTimeoutRef.current = setTimeout(() => {
+        setPrevHintTriggeredChapterId(null);
+        hintTimeoutRef.current = null;
+      }, 3000);
     }
   }, [
+    chapterId,
     getContentScrollWidth,
     getPagedViewportWidth,
     isAdjacentResolved,
     navigate,
     prevChapterId,
+    saveProgress,
     scheduleSave,
     setOffset,
     settings.readingMode,
+    showPrevHint,
     updateVirtualPage,
     viewerFrom,
   ]);
@@ -1207,6 +1238,192 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     updateVirtualPage,
   ]);
 
+  // 세로 모드 오버스크롤 감지 (당기기 네비게이션)
+  useEffect(() => {
+    if (settings.readingMode !== "vertical") return;
+
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const pullThreshold = settings.pullThreshold;
+    const sensitivity = settings.pullSensitivity;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (isNavigatingRef.current) return;
+
+      const isAtTop = container.scrollTop <= 0;
+      const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+
+      if (isAtTop && e.deltaY < 0 && prevChapterId) {
+        e.preventDefault();
+        setPullOffset((prev) => {
+          const newOffset = Math.max(0, prev - e.deltaY * sensitivity);
+          pullOffsetRef.current = newOffset;
+          if (newOffset >= pullThreshold) {
+            isNavigatingRef.current = true;
+            saveProgress().then(() => {
+              navigate(`/viewer/${prevChapterId}`, {
+                replace: true,
+                state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+              });
+            });
+            return 0;
+          }
+          return newOffset;
+        });
+      } else if (isAtBottom && e.deltaY > 0 && nextChapterId) {
+        e.preventDefault();
+        setPullOffset((prev) => {
+          const newOffset = Math.min(0, prev - e.deltaY * sensitivity);
+          pullOffsetRef.current = newOffset;
+          if (Math.abs(newOffset) >= pullThreshold) {
+            isNavigatingRef.current = true;
+            saveProgress().then(() => {
+              navigate(`/viewer/${nextChapterId}`, {
+                replace: true,
+                state: viewerFrom ? { from: viewerFrom } : undefined,
+              });
+            });
+            return 0;
+          }
+          return newOffset;
+        });
+      } else {
+        setPullOffset((current) => {
+          if (current !== 0) {
+            pullOffsetRef.current = 0;
+            return 0;
+          }
+          return current;
+        });
+      }
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (isNavigatingRef.current) return;
+      startYRef.current = e.touches[0].clientY;
+      lastYRef.current = e.touches[0].clientY;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (isNavigatingRef.current || startYRef.current === null) return;
+
+      const currentY = e.touches[0].clientY;
+      const diff = currentY - (lastYRef.current ?? currentY);
+      lastYRef.current = currentY;
+
+      const isAtTop = container.scrollTop <= 0;
+      const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+
+      if ((isAtTop && diff > 0 && prevChapterId) || pullOffsetRef.current > 0) {
+        const maxPull = 180;
+        const resistance = sensitivity * (1 - Math.abs(pullOffsetRef.current) / (maxPull * 2));
+        setPullOffset((prev) => {
+          const newOffset = Math.max(0, Math.min(prev + diff * resistance, maxPull));
+          pullOffsetRef.current = newOffset;
+          return newOffset;
+        });
+        if (container.scrollTop <= 0 && pullOffsetRef.current > 0) e.preventDefault();
+      } else if ((isAtBottom && diff < 0 && nextChapterId) || pullOffsetRef.current < 0) {
+        const maxPull = 180;
+        const resistance = sensitivity * (1 - Math.abs(pullOffsetRef.current) / (maxPull * 2));
+        setPullOffset((prev) => {
+          const newOffset = Math.min(0, Math.max(prev + diff * resistance, -maxPull));
+          pullOffsetRef.current = newOffset;
+          return newOffset;
+        });
+        if (isAtBottom && pullOffsetRef.current < 0) e.preventDefault();
+      } else {
+        setPullOffset((current) => {
+          if (current !== 0) {
+            pullOffsetRef.current = 0;
+            return 0;
+          }
+          return current;
+        });
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (isNavigatingRef.current) return;
+
+      const currentOffset = pullOffsetRef.current;
+
+      if (currentOffset >= pullThreshold && prevChapterId) {
+        isNavigatingRef.current = true;
+        saveProgress().then(() => {
+          navigate(`/viewer/${prevChapterId}`, {
+            replace: true,
+            state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+          });
+        });
+      } else if (currentOffset <= -pullThreshold && nextChapterId) {
+        isNavigatingRef.current = true;
+        saveProgress().then(() => {
+          navigate(`/viewer/${nextChapterId}`, {
+            replace: true,
+            state: viewerFrom ? { from: viewerFrom } : undefined,
+          });
+        });
+      }
+
+      setPullOffset(0);
+      pullOffsetRef.current = 0;
+      startYRef.current = null;
+      lastYRef.current = null;
+    };
+
+    // 감쇠 애니메이션
+    let rafId: number | null = null;
+    const runDecay = () => {
+      if (startYRef.current !== null) {
+        rafId = requestAnimationFrame(runDecay);
+        return;
+      }
+      setPullOffset((prev) => {
+        if (Math.abs(prev) < 1) {
+          pullOffsetRef.current = 0;
+          rafId = null;
+          return 0;
+        }
+        const newVal = prev * 0.8;
+        pullOffsetRef.current = newVal;
+        rafId = requestAnimationFrame(runDecay);
+        return newVal;
+      });
+    };
+
+    const startDecay = () => {
+      if (rafId === null && pullOffsetRef.current !== 0) {
+        rafId = requestAnimationFrame(runDecay);
+      }
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener("touchstart", handleTouchStart, { passive: true });
+    container.addEventListener("touchmove", handleTouchMove, { passive: false });
+    container.addEventListener("touchend", handleTouchEnd, { passive: true });
+    container.addEventListener("touchend", startDecay, { passive: true });
+
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchmove", handleTouchMove);
+      container.removeEventListener("touchend", handleTouchEnd);
+      container.removeEventListener("touchend", startDecay);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [
+    navigate,
+    nextChapterId,
+    prevChapterId,
+    saveProgress,
+    settings.pullSensitivity,
+    settings.pullThreshold,
+    settings.readingMode,
+    viewerFrom,
+  ]);
+
   useEffect(() => {
     const container = scrollRef.current;
     if (!container || !text) return;
@@ -1260,6 +1477,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       if (uiTimerRef.current) window.clearTimeout(uiTimerRef.current);
       if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+      if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
     };
   }, [flushProgressKeepalive]);
 
@@ -1367,9 +1585,40 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         className={`${viewerStyles.viewerContent} ${styles.textViewerContent}`}
         onClick={handleContentTap}
       >
+        {settings.readingMode === "vertical" && (
+          <>
+            <PullIndicator
+              type="prev"
+              pullOffset={pullOffset}
+              pullThreshold={settings.pullThreshold}
+              showThreshold={settings.showThreshold}
+              chapterId={prevChapterId}
+              chapterTitle={prevChapterTitle}
+              saveProgress={saveProgress}
+            />
+            <PullIndicator
+              type="next"
+              pullOffset={pullOffset}
+              pullThreshold={settings.pullThreshold}
+              showThreshold={settings.showThreshold}
+              chapterId={nextChapterId}
+              chapterTitle={nextChapterTitle}
+              saveProgress={saveProgress}
+            />
+          </>
+        )}
+
         <div
           ref={scrollRef}
           className={`${styles.textScrollContainer} ${settings.readingMode !== "vertical" ? styles.pagedScrollContainer : ""} ${settings.readingMode === "single" ? styles.singlePagedScrollContainer : ""}`}
+          style={
+            settings.readingMode === "vertical"
+              ? {
+                  transform: `translateY(${pullOffset * 0.3}px)`,
+                  transition: pullOffset === 0 ? "transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)" : "none",
+                }
+              : undefined
+          }
         >
           <div
             ref={settings.readingMode !== "vertical" ? pagedViewportRef : undefined}
@@ -1412,6 +1661,9 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         onClose={() => setShowPageJump(false)}
         onJump={goToPage}
       />
+
+      <ChapterNavHint type="next" title={nextChapterTitle || ""} show={showNextHint && !!nextChapterTitle} />
+      <ChapterNavHint type="prev" title={prevChapterTitle || ""} show={showPrevHint && !!prevChapterTitle} />
 
       <SyncConfirmModal
         show={showSyncModal}

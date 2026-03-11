@@ -30,6 +30,8 @@ vi.mock("../features/viewer", () => ({
   useAdjacentChapters: () => ({
     nextChapterId: null,
     prevChapterId: null,
+    nextChapterTitle: null,
+    prevChapterTitle: null,
     isAdjacentResolved: true,
   }),
   useExitFullscreenOnViewerUnmount: () => {},
@@ -57,6 +59,7 @@ vi.mock("../features/viewer", () => ({
   ),
   PageJumpModal: () => null,
   SyncConfirmModal: () => null,
+  ChapterNavHint: () => null,
 }));
 
 vi.mock("../hooks/useViewerSync", () => ({
