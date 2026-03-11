@@ -1269,54 +1269,61 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
       if (isAtTop && e.deltaY < 0 && prevChapterId) {
         e.preventDefault();
-        setPullOffset((prev) => {
-          const newOffset = Math.max(0, prev - e.deltaY * sensitivity);
+        const delta = -e.deltaY * sensitivity;
+        const newOffset = Math.max(0, (pullOffsetRef.current ?? 0) + delta);
+        const shouldNavigate = !isNavigatingRef.current && newOffset >= pullThreshold;
+
+        if (shouldNavigate) {
+          pullOffsetRef.current = 0;
+          setPullOffset(0);
+        } else {
           pullOffsetRef.current = newOffset;
-          if (newOffset >= pullThreshold) {
-            isNavigatingRef.current = true;
-            saveProgress()
-              .catch((err) => console.warn("Failed to save progress", err))
-              .finally(() => {
-                isNavigatingRef.current = false;
-                startChapterSwitching(isDocumentFullscreen());
-                navigate(`/viewer/${prevChapterId}`, {
-                  replace: true,
-                  state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
-                });
+          setPullOffset(newOffset);
+        }
+
+        if (shouldNavigate) {
+          isNavigatingRef.current = true;
+          saveProgress()
+            .catch((err) => console.warn("Failed to save progress", err))
+            .finally(() => {
+              isNavigatingRef.current = false;
+              startChapterSwitching(isDocumentFullscreen());
+              navigate(`/viewer/${prevChapterId}`, {
+                replace: true,
+                state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
               });
-            return 0;
-          }
-          return newOffset;
-        });
+            });
+        }
       } else if (isAtBottom && e.deltaY > 0 && nextChapterId) {
         e.preventDefault();
-        setPullOffset((prev) => {
-          const newOffset = Math.min(0, prev - e.deltaY * sensitivity);
+        const delta = -e.deltaY * sensitivity;
+        const newOffset = Math.min(0, (pullOffsetRef.current ?? 0) + delta);
+        const shouldNavigate = !isNavigatingRef.current && Math.abs(newOffset) >= pullThreshold;
+
+        if (shouldNavigate) {
+          pullOffsetRef.current = 0;
+          setPullOffset(0);
+        } else {
           pullOffsetRef.current = newOffset;
-          if (Math.abs(newOffset) >= pullThreshold) {
-            isNavigatingRef.current = true;
-            saveProgress()
-              .catch((err) => console.warn("Failed to save progress", err))
-              .finally(() => {
-                isNavigatingRef.current = false;
-                startChapterSwitching(isDocumentFullscreen());
-                navigate(`/viewer/${nextChapterId}`, {
-                  replace: true,
-                  state: viewerFrom ? { from: viewerFrom } : undefined,
-                });
+          setPullOffset(newOffset);
+        }
+
+        if (shouldNavigate) {
+          isNavigatingRef.current = true;
+          saveProgress()
+            .catch((err) => console.warn("Failed to save progress", err))
+            .finally(() => {
+              isNavigatingRef.current = false;
+              startChapterSwitching(isDocumentFullscreen());
+              navigate(`/viewer/${nextChapterId}`, {
+                replace: true,
+                state: viewerFrom ? { from: viewerFrom } : undefined,
               });
-            return 0;
-          }
-          return newOffset;
-        });
-      } else {
-        setPullOffset((current) => {
-          if (current !== 0) {
-            pullOffsetRef.current = 0;
-            return 0;
-          }
-          return current;
-        });
+            });
+        }
+      } else if (pullOffsetRef.current !== 0) {
+        pullOffsetRef.current = 0;
+        setPullOffset(0);
       }
     };
 
@@ -1339,29 +1346,20 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       if ((isAtTop && diff > 0 && prevChapterId) || pullOffsetRef.current > 0) {
         const maxPull = 180;
         const resistance = sensitivity * (1 - Math.abs(pullOffsetRef.current) / (maxPull * 2));
-        setPullOffset((prev) => {
-          const newOffset = Math.max(0, Math.min(prev + diff * resistance, maxPull));
-          pullOffsetRef.current = newOffset;
-          return newOffset;
-        });
-        if (container.scrollTop <= 0 && pullOffsetRef.current > 0) e.preventDefault();
+        const newOffset = Math.max(0, Math.min(pullOffsetRef.current + diff * resistance, maxPull));
+        pullOffsetRef.current = newOffset;
+        setPullOffset(newOffset);
+        if (container.scrollTop <= 0 && newOffset > 0) e.preventDefault();
       } else if ((isAtBottom && diff < 0 && nextChapterId) || pullOffsetRef.current < 0) {
         const maxPull = 180;
         const resistance = sensitivity * (1 - Math.abs(pullOffsetRef.current) / (maxPull * 2));
-        setPullOffset((prev) => {
-          const newOffset = Math.min(0, Math.max(prev + diff * resistance, -maxPull));
-          pullOffsetRef.current = newOffset;
-          return newOffset;
-        });
-        if (isAtBottom && pullOffsetRef.current < 0) e.preventDefault();
-      } else {
-        setPullOffset((current) => {
-          if (current !== 0) {
-            pullOffsetRef.current = 0;
-            return 0;
-          }
-          return current;
-        });
+        const newOffset = Math.min(0, Math.max(pullOffsetRef.current + diff * resistance, -maxPull));
+        pullOffsetRef.current = newOffset;
+        setPullOffset(newOffset);
+        if (isAtBottom && newOffset < 0) e.preventDefault();
+      } else if (pullOffsetRef.current !== 0) {
+        pullOffsetRef.current = 0;
+        setPullOffset(0);
       }
     };
 
@@ -1409,17 +1407,17 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         rafId = requestAnimationFrame(runDecay);
         return;
       }
-      setPullOffset((prev) => {
-        if (Math.abs(prev) < 1) {
-          pullOffsetRef.current = 0;
-          rafId = null;
-          return 0;
-        }
-        const newVal = prev * 0.8;
-        pullOffsetRef.current = newVal;
-        rafId = requestAnimationFrame(runDecay);
-        return newVal;
-      });
+      const current = pullOffsetRef.current;
+      if (Math.abs(current) < 1) {
+        pullOffsetRef.current = 0;
+        setPullOffset(0);
+        rafId = null;
+        return;
+      }
+      const newVal = current * 0.8;
+      pullOffsetRef.current = newVal;
+      setPullOffset(newVal);
+      rafId = requestAnimationFrame(runDecay);
     };
 
     const startDecay = () => {
