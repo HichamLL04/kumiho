@@ -21,6 +21,10 @@ describe("extension utils", () => {
       expect(parseSupportedExtension("/books/test.txt")).toBe("TXT");
     });
 
+    it("img 확장자를 지원한다 (폴더 볼륨)", () => {
+      expect(parseSupportedExtension("/books/test.img")).toBe("IMG");
+    });
+
     it("미지원 확장자는 null을 반환한다", () => {
       expect(parseSupportedExtension("/books/test.mobi")).toBeNull();
     });
@@ -37,6 +41,10 @@ describe("extension utils", () => {
 
     it("txt를 확장자 배지로 정규화한다", () => {
       expect(normalizeExtensionBadge("txt")).toBe("TXT");
+    });
+
+    it("img를 확장자 배지로 정규화한다", () => {
+      expect(normalizeExtensionBadge("img")).toBe("IMG");
     });
 
     it("미지원 값은 null을 반환한다", () => {

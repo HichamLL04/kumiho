@@ -912,7 +912,7 @@ func (s *Scanner) processArchiveAsSeries(
 		// 확장자 필드 보정 (기존 시리즈 중 extension이 비어있는 경우)
 		if series.Extension == "" {
 			series.Extension = strings.ToUpper(strings.TrimPrefix(filepath.Ext(archivePath), "."))
-			if uErr := s.seriesRepo.Update(tx, series); uErr != nil {
+			if uErr := s.seriesRepo.UpdateExtension(tx, series.ID, series.Extension); uErr != nil {
 				return nil, uErr
 			}
 		}
@@ -1527,9 +1527,12 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 		}
 
 		if series.Extension != representativeExt {
-			series.Extension = representativeExt
-			if upErr := s.seriesRepo.Update(nil, series); upErr != nil {
+			// 메타데이터를 건드리지 않도록 extension 전용 업데이트 로직 사용
+			if _, upErr := database.DB.Exec(`UPDATE series SET extension = ?, updated_at = ? WHERE id = ?`, representativeExt, time.Now(), series.ID); upErr != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("failed to update series extension: %v", upErr))
+			} else {
+				// 메모리 상의 시리즈 객체도 함께 갱신
+				series.Extension = representativeExt
 			}
 		}
 	} else {

@@ -721,3 +721,13 @@ func (r *SeriesRepository) Search(db database.Queryer, query string, userID stri
 	}
 	return seriesList, nil
 }
+
+// UpdateExtension 시리즈의 확장자 정보만 업데이트
+func (r *SeriesRepository) UpdateExtension(db database.Queryer, seriesID string, extension string) error {
+	db = database.GetQueryer(db)
+	_, err := db.Exec(
+"UPDATE series SET extension = ?, updated_at = ? WHERE id = ?",
+extension, time.Now(), seriesID,
+	)
+	return err
+}
