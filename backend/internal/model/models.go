@@ -61,6 +61,7 @@ type Series struct {
 	IsBookmarked  bool      `json:"is_bookmarked" db:"is_bookmarked"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	Extension     string    `json:"extension" db:"extension"` // 시리즈 대표 확장자
 
 	// 시리즈 부가 메타데이터 (필요 시 로드)
 	Metadata *SeriesMetadata `json:"metadata,omitempty" db:"-"`
@@ -109,6 +110,7 @@ type Volume struct {
 	ParentID        *string   `json:"parent_id" db:"parent_id"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+	Extension       string    `json:"extension" db:"extension"` // 확장자 ( ZIP, EPUB, PDF 등)
 }
 
 // Chapter 챕터 모델

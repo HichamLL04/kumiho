@@ -288,7 +288,9 @@ export function SeriesCard({
   const showMenu = true;
   const shouldShowExtensionBadge = showExtensionBadge ?? type === "volume";
   const extensionBadge = shouldShowExtensionBadge
-    ? (normalizeExtensionBadge(extensionBadgeText) ?? parseSupportedExtension(item.path))
+    ? (normalizeExtensionBadge(extensionBadgeText) ??
+      normalizeExtensionBadge((item as Series | Volume).extension) ??
+      parseSupportedExtension(item.path))
     : null;
   const showMetaExtensionBadge = shouldShowExtensionBadge && extensionBadgePlacement === "meta" && !!extensionBadge;
   const showThumbnailExtensionBadge =

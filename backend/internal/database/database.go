@@ -117,6 +117,7 @@ func Migrate() error {
 		title TEXT NOT NULL,
 		path TEXT NOT NULL,
 		thumbnail_path TEXT,
+		extension TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -151,6 +152,7 @@ func Migrate() error {
 		description TEXT DEFAULT '',
 		authors TEXT DEFAULT '',
 		publication_year TEXT DEFAULT '',
+		extension TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -386,6 +388,12 @@ func Migrate() error {
 	// 25. 볼륨 부모 ID 컬럼 추가 (계층형 볼륨 지원)
 	migrateVolumesParentID()
 
+	// 26. 볼륨 확장자 컬럼 추가
+	migrateVolumesExtension()
+
+	// 27. 시리즈 확장자 컬럼 추가
+	migrateSeriesExtension()
+
 	return nil
 }
 
@@ -399,6 +407,30 @@ func migrateVolumesParentID() {
 			fmt.Println("Migrated volumes table: added parent_id column.")
 			// 인덱스 추가
 			_, _ = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_volumes_parent ON volumes(parent_id)`)
+		}
+	}
+}
+
+// migrateVolumesExtension volumes 테이블에 extension 컬럼 추가
+func migrateVolumesExtension() {
+	if !columnExists("volumes", "extension") {
+		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN extension TEXT DEFAULT ''`)
+		if err != nil {
+			fmt.Printf("Migration error (volumes.extension): %v\n", err)
+		} else {
+			fmt.Println("Migrated volumes table: added extension column.")
+		}
+	}
+}
+
+// migrateSeriesExtension series 테이블에 extension 컬럼 추가
+func migrateSeriesExtension() {
+	if !columnExists("series", "extension") {
+		_, err := DB.Exec(`ALTER TABLE series ADD COLUMN extension TEXT DEFAULT ''`)
+		if err != nil {
+			fmt.Printf("Migration error (series.extension): %v\n", err)
+		} else {
+			fmt.Println("Migrated series table: added extension column.")
 		}
 	}
 }
