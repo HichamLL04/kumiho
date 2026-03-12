@@ -323,6 +323,9 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	if thumbnail.Valid {
 		s.ThumbnailPath = &thumbnail.String
 	}
+	if ext.Valid {
+		s.Extension = ext.String
+	}
 
 	m.SeriesID = s.ID
 	if desc.Valid {
@@ -671,6 +674,9 @@ func (r *SeriesRepository) Search(db database.Queryer, query string, userID stri
 
 		if thumbnail.Valid {
 			s.ThumbnailPath = &thumbnail.String
+		}
+		if ext.Valid {
+			s.Extension = ext.String
 		}
 
 		m.SeriesID = s.ID
