@@ -23,8 +23,12 @@ func (r *VolumeRepository) Create(db database.Queryer, volume *model.Volume) err
 		volume.ID = uuid.New().String()
 	}
 	now := time.Now()
-	volume.CreatedAt = now
-	volume.UpdatedAt = now
+	if volume.CreatedAt.IsZero() {
+		volume.CreatedAt = now
+	}
+	if volume.UpdatedAt.IsZero() {
+		volume.UpdatedAt = now
+	}
 
 	_, err := db.Exec(
 		`INSERT INTO volumes (id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at)

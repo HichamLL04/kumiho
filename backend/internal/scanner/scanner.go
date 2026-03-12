@@ -1310,7 +1310,6 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 					mu.Lock()
 					result.Errors = append(result.Errors, fmt.Sprintf("failed to stat %s: %v", entryPath, statErr))
 					mu.Unlock()
-					loopErr = statErr // Assign statErr to loopErr for later check
 				} else {
 					modTime := info.ModTime()
 					// 기존 볼륨 정보 확인 (기존 맵은 메인 스레드에서 생성되었으므로 읽기 안전)
@@ -1330,14 +1329,18 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 								isPdf := strings.ToLower(filepath.Ext(entryPath)) == ".pdf"
 								hasThumbnail := existingVol.ThumbnailPath != nil && *existingVol.ThumbnailPath != ""
 
-								if (!isPdf || hasThumbnail) {
+								if !isPdf || hasThumbnail {
 									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)
 									// 단, Extension 필드가 비어있으면 로직 업데이트를 위해 분석 진행
-									if (existingVol.Extension != "") {
+									if existingVol.Extension != "" {
 										continue
 									}
+									// PDF 썸네일 문제는 아니고, Extension 메타데이터 누락으로 인한 강제 업데이트
+									log.Printf("[SCANNER] Force update for %s: Missing extension metadata", j.name)
+								} else {
+									// PDF이며 썸네일이 없는 경우 강제 업데이트
+									log.Printf("[SCANNER] Force update for %s: Missing PDF thumbnail", j.name)
 								}
-								log.Printf("[SCANNER] Force update for %s: Missing PDF thumbnail", j.name)
 							}
 
 							if loopErr == nil { // Changed 'err' to 'loopErr'
@@ -1383,9 +1386,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 				}
 
 				if loopErr != nil { // New check for loopErr
-					mu.Lock()
-					result.Errors = append(result.Errors, fmt.Sprintf("failed to process volume %s: %v", j.name, loopErr))
-					mu.Unlock()
+					// 이미 aErr 단계에서 result.Errors에 추가되었거나 statErr는 보수적으로 분석 진행됨
+					// 추가적인 에러 중복 append 방지 로직 필요 시 적용
 					continue
 				}
 
