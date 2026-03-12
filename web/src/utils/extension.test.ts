@@ -21,7 +21,7 @@ describe("extension utils", () => {
       expect(parseSupportedExtension("/books/test.txt")).toBe("TXT");
     });
 
-    it("img 확장자를 지원한다 (폴더 볼륨)", () => {
+    it("img 확장자를 지원한다 (IMG 확장자 지원)", () => {
       expect(parseSupportedExtension("/books/test.img")).toBe("IMG");
     });
 

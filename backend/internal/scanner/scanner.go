@@ -1528,7 +1528,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 
 		if series.Extension != representativeExt {
 			// 메타데이터를 건드리지 않도록 extension 전용 업데이트 로직 사용
-			if _, upErr := database.DB.Exec(`UPDATE series SET extension = ?, updated_at = ? WHERE id = ?`, representativeExt, time.Now(), series.ID); upErr != nil {
+			// 증분 스캔 무결성을 위해 updated_at은 갱신하지 않음
+			if _, upErr := database.DB.Exec(`UPDATE series SET extension = ? WHERE id = ?`, representativeExt, series.ID); upErr != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("failed to update series extension: %v", upErr))
 			} else {
 				// 메모리 상의 시리즈 객체도 함께 갱신

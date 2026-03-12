@@ -726,8 +726,8 @@ func (r *SeriesRepository) Search(db database.Queryer, query string, userID stri
 func (r *SeriesRepository) UpdateExtension(db database.Queryer, seriesID string, extension string) error {
 	db = database.GetQueryer(db)
 	_, err := db.Exec(
-"UPDATE series SET extension = ?, updated_at = ? WHERE id = ?",
-extension, time.Now(), seriesID,
+		"UPDATE series SET extension = ? WHERE id = ?",
+		extension, seriesID,
 	)
 	return err
 }
