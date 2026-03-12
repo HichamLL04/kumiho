@@ -1320,9 +1320,9 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 						if !modTime.After(existingVol.UpdatedAt) {
 							// 챕터 개수 확인 (0개면 내용물 인식 실패 후 수정되었을 수 있으므로 재스캔)
 							var chapCount int
-							chapCount, loopErr = s.volumeRepo.GetChapterCount(nil, existingVol.ID) // Changed 'err' to 'loopErr'
-							if loopErr != nil { // Changed 'err' to 'loopErr'
-								log.Printf("[SCANNER] Error getting chapter count for %s: %v. Continuing with forced scan.", j.name, loopErr) // Changed 'err' to 'loopErr'
+							chapCount, chapErr := s.volumeRepo.GetChapterCount(nil, existingVol.ID)
+							if chapErr != nil {
+								log.Printf("[SCANNER] Error getting chapter count for %s: %v. Continuing with forced scan.", j.name, chapErr)
 								// 에러 발생 시 안전을 위해 continue하지 않고 분석 진행
 							} else if existingVol.VolumeNumber == volNum && existingVol.Unit == volUnit && chapCount > 0 {
 								// PDF인 경우 썸네일이 있는지 추가로 확인
@@ -1343,7 +1343,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 								}
 							}
 
-							if loopErr == nil { // Changed 'err' to 'loopErr'
+							if chapErr == nil {
 								if chapCount == 0 {
 									log.Printf("[SCANNER] Force update for %s: Volume has 0 chapters", j.name)
 								} else {
@@ -1369,6 +1369,9 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 				}
 
 				if aErr != nil {
+					mu.Lock()
+					result.Errors = append(result.Errors, fmt.Sprintf("failed to analyze volume %s: %v", displayName, aErr))
+					mu.Unlock()
 					loopErr = aErr // Assign aErr to loopErr for later check
 				}
 
@@ -1529,6 +1532,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 				result.Errors = append(result.Errors, fmt.Sprintf("failed to update series extension: %v", upErr))
 			}
 		}
+	} else {
+		result.Errors = append(result.Errors, fmt.Sprintf("failed to get distinct extensions for series %s: %v", series.Title, err))
 	}
 
 	return result, nil

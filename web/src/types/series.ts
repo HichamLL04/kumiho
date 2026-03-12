@@ -1,3 +1,5 @@
+import type { ExtensionBadge } from "../utils/extension";
+
 export interface EbookMetadata {
   series_id: string;
   status: string;
@@ -25,7 +27,7 @@ export interface Series {
   chapter_count?: number;
   created_at: string;
   updated_at: string;
-  extension?: string;
+  extension?: ExtensionBadge | "";
 }
 
 export interface Volume {
@@ -47,7 +49,7 @@ export interface Volume {
   chapter_count?: number;
   sub_volume_count?: number;
   parent_id?: string;
-  extension?: string;
+  extension?: ExtensionBadge | "";
   created_at: string;
 }
 
