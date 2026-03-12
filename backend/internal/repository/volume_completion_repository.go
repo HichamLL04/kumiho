@@ -161,7 +161,7 @@ func (r *VolumeCompletionRepository) CountTotalCompleted(db database.Queryer, us
 func (r *VolumeCompletionRepository) CountCompletedSeries(db database.Queryer, userID string) (int, error) {
 	db = database.GetQueryer(db)
 	var count int
-	
+
 	// 로직:
 	// 1. volumes 테이블에서 시리즈별로 그룹핑할 기준 시리즈 집합을 만든다.
 	// 2. 각 시리즈에 대해, 해당 시리즈 내에 사용자가 아직 완료하지 않은 볼륨이 하나라도 있으면 제외한다.
@@ -185,8 +185,7 @@ func (r *VolumeCompletionRepository) CountCompletedSeries(db database.Queryer, u
 			GROUP BY v.series_id
 		) AS completed_series
 	`
-	
+
 	err := db.QueryRow(query, userID).Scan(&count)
 	return count, err
 }
-

@@ -53,10 +53,12 @@ export function SeriesPage() {
 
   const user = useAuthStore((state) => state.user);
   const canDownload = user?.role === "MASTER" || user?.can_download;
-  const preferPercentLabel = volumes.length > 0 && volumes.every((volume) => {
-    const lowerPath = String(volume.path || "").toLowerCase();
-    return lowerPath.endsWith(".txt") || lowerPath.endsWith(".epub");
-  });
+  const preferPercentLabel =
+    volumes.length > 0 &&
+    volumes.every((volume) => {
+      const lowerPath = String(volume.path || "").toLowerCase();
+      return lowerPath.endsWith(".txt") || lowerPath.endsWith(".epub");
+    });
 
   const showAlert = (message: string, type: AlertType = "info") => {
     setAlertModal({ isOpen: true, type, message });
@@ -113,8 +115,8 @@ export function SeriesPage() {
       const seriesRes = await api.get(`/series/${id}`);
       setSeries(seriesRes.data);
 
-      // 볼륨 목록
-      const volumesRes = await api.get(`/series/${id}/volumes`);
+      // 볼륨 목록 (최상위 볼륨만 우선 조회)
+      const volumesRes = await api.get(`/series/${id}/volumes?parent_id=root`);
       const rawVolumes = Array.isArray(volumesRes.data?.volumes) ? volumesRes.data.volumes : [];
       const normalizedVolumes: Volume[] = rawVolumes.map((raw: Volume & { is_completed?: boolean }) => ({
         ...raw,
@@ -218,23 +220,19 @@ export function SeriesPage() {
                   navigate(`/viewer/${progress.chapter_id}`, { state: { from: viewerFrom } });
                 } else if (volumes.length > 0) {
                   const sortedVolumes = [...volumes].sort((a, b) => a.volume_number - b.volume_number);
-                  const firstVolume = sortedVolumes[0];
 
-                  try {
-                    const res = await volumeAPI.getChapters(firstVolume.id);
-                    const chapters = Array.isArray(res.data) ? res.data : res.data.chapters || [];
+                  // 재귀적으로 첫 번째 챕터 탐색
+                  let firstChapter: Chapter | null = null;
+                  for (const vol of sortedVolumes) {
+                    firstChapter = await volumeAPI.findFirstChapterRecursively(vol.id);
+                    if (firstChapter) break;
+                  }
 
-                    if (chapters.length > 0) {
-                      const sortedChapters = [...chapters].sort(
-                        (a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number,
-                      );
-                      navigate(`/viewer/${sortedChapters[0].id}`, { state: { from: viewerFrom } });
-                    } else {
-                      openVolume(firstVolume);
-                    }
-                  } catch (error) {
-                    console.error("Failed to load chapters for first play:", error);
-                    openVolume(firstVolume);
+                  if (firstChapter) {
+                    navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
+                  } else {
+                    // 챕터를 전혀 찾지 못한 경우 첫 번째 볼륨으로 이동
+                    openVolume(sortedVolumes[0]);
                   }
                 } else {
                   showAlert(t("series.alert.no_readable_volume"), "warning");
@@ -245,8 +243,12 @@ export function SeriesPage() {
 
             <div className={styles.volumeCount}>
               <Trans
-                i18nKey="series.count"
-                count={volumes.length}
+                i18nKey={series.chapter_count && series.chapter_count > 0 ? "series.chapter_count" : "series.count"}
+                count={
+                  series.chapter_count && series.chapter_count > 0
+                    ? series.chapter_count
+                    : series.volume_count || volumes.length
+                }
                 components={{ strong: <strong /> }}
               />
             </div>

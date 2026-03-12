@@ -21,6 +21,8 @@ export interface Series {
   metadata?: EbookMetadata;
   total_page_count?: number;
   read_page_count?: number;
+  volume_count?: number;
+  chapter_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +43,9 @@ export interface Volume {
   read_page_count?: number;
   total_page_count?: number;
   progress_percent?: number;
+  chapter_count?: number;
+  sub_volume_count?: number;
+  parent_id?: string;
   created_at: string;
 }
 

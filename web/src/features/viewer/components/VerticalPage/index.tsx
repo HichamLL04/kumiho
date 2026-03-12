@@ -8,6 +8,7 @@ interface VerticalPageProps {
   pageHeightCache: Map<number, number>;
   minAllowedPage: number;
   maxAllowedPage: number;
+  isInitialScrolling?: boolean; // Boolean으로 회복
   handleImageLoad: (pageNum: number) => void;
   handleContentClick: (
     e: MouseEvent | TouchEvent,
@@ -23,6 +24,7 @@ export const VerticalPage = ({
   pageHeightCache,
   minAllowedPage,
   maxAllowedPage,
+  isInitialScrolling = false,
   handleImageLoad,
   handleContentClick,
   styles,
@@ -30,7 +32,15 @@ export const VerticalPage = ({
 }: VerticalPageProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [cachedHeight, setCachedHeight] = useState<number>(() => pageHeightCache.get(pageNum) ?? 0);
-  const shouldRenderImage = pageNum >= minAllowedPage && pageNum <= maxAllowedPage;
+
+  // 초기 스크롤/점프 시에도 모든 페이지를 한 번에 렌더하지 않도록,
+  // maxAllowedPage를 기준으로 제한된 윈도우만 허용한다.
+  const INITIAL_RENDER_WINDOW = 10;
+  const effectiveMinAllowedPage = isInitialScrolling
+    ? Math.max(1, maxAllowedPage - INITIAL_RENDER_WINDOW)
+    : minAllowedPage;
+
+  const shouldRenderImage = pageNum >= effectiveMinAllowedPage && pageNum <= maxAllowedPage;
 
   useEffect(() => {
     if (!shouldRenderImage) return;

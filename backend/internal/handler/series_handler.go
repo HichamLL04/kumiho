@@ -965,7 +965,29 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 		})
 	}
 
-	volumes, err := h.volumeRepo.FindBySeriesID(nil, seriesID)
+	// parent_id 쿼리 파라미터 처리
+	parentIDParam := c.Query("parent_id")
+	var volumes []model.Volume
+	var err error
+
+	if parentIDParam == "root" {
+		volumes, err = h.volumeRepo.FindRootVolumesBySeriesID(nil, seriesID)
+	} else if parentIDParam != "" {
+		volumes, err = h.volumeRepo.FindByParentID(nil, parentIDParam)
+		if err == nil {
+			// parent_id로 조회하더라도, 반드시 요청된 seriesID 범위로 스코프를 제한
+			filtered := make([]model.Volume, 0, len(volumes))
+			for _, v := range volumes {
+				if v.SeriesID == seriesID {
+					filtered = append(filtered, v)
+				}
+			}
+			volumes = filtered
+		}
+	} else {
+		volumes, err = h.volumeRepo.FindBySeriesID(nil, seriesID)
+	}
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch volumes",
@@ -1021,6 +1043,11 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 			log.Printf("failed to get progress percent for user %s, volume %s: %v", userID, volumes[i].ID, err)
 		} else {
 			volumes[i].ProgressPercent = progressPercent
+		}
+
+		// 하위 볼륨 개수 조회
+		if subVolCount, err := h.volumeRepo.CountByParentID(nil, volumes[i].ID); err == nil {
+			volumes[i].SubVolumeCount = subVolCount
 		}
 
 		completedByFlag := completedVolumeIDs[volumes[i].ID]

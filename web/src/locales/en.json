@@ -489,6 +489,7 @@
     "unit": {
       "volume": "Vol. {{count}}",
       "chapter": "Ch. {{count}}",
+      "chapter_count": "{{count}} chapters",
       "page": "{{count}} P"
     },
     "status": {

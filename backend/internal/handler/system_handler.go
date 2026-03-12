@@ -13,12 +13,12 @@ import (
 
 type SystemHandler struct {
 	settingRepo repository.SettingRepository
-	
+
 	// 버전 캐시
-	versionCache     *VersionInfo
-	cacheMutex       sync.Mutex
-	lastChecked      time.Time
-	
+	versionCache *VersionInfo
+	cacheMutex   sync.Mutex
+	lastChecked  time.Time
+
 	// 수동 체크 제한 (Rate Limit)
 	manualCheckCount map[string]int // date -> count
 	countMutex       sync.Mutex
@@ -44,7 +44,7 @@ func NewSystemHandler(settingRepo repository.SettingRepository) *SystemHandler {
 // GET /api/v1/system/version
 func (h *SystemHandler) GetVersion(c *fiber.Ctx) error {
 	force := c.Query("force") == "true"
-	
+
 	if force {
 		// 수동 체크 제한 확인
 		today := time.Now().Format("2006-01-02")

@@ -67,7 +67,7 @@ export function useImagePreloader({
   );
 
   const imageLoading = useMemo(
-    () => (chapterId ? imageLoadingByChapter[chapterId] ?? {} : {}),
+    () => (chapterId ? (imageLoadingByChapter[chapterId] ?? {}) : {}),
     [imageLoadingByChapter, chapterId],
   );
 
@@ -98,9 +98,9 @@ export function useImagePreloader({
         break;
       }
     }
-    // 순차 로딩된 지점 + 3장, 혹은 현재 보고 있는 페이지 + preloadCount 중 더 큰 범위까지 렌더링 허용
-    // 이를 통해 뒤쪽 페이지로 점프했을 때 해당 페이지가 렌더링되지 않는 문제 해결
-    return Math.max(sequentialLoaded + 3, currentPage + preloadCount);
+    // 순차 로딩된 지점 + 5장, 혹은 현재 보고 있는 페이지 + (preloadCount * 1.5) 중 더 큰 범위까지 렌더링 허용
+    // 렌더링 범위를 더 넉넉하게 잡아(기존 +3 -> +5) 세로 모드 스크롤 시 무한 로딩 현상 방지
+    return Math.max(sequentialLoaded + 5, currentPage + Math.floor(preloadCount * 1.5));
   }, [readingMode, totalPages, imageLoading, currentPage, preloadCount]);
 
   // 이미지 프리로딩 - 현재 페이지 주변 이미지를 미리 로드

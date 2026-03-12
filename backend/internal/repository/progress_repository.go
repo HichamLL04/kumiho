@@ -329,17 +329,23 @@ func (r *ReadingProgressRepository) Delete(db database.Queryer, id string) error
 	return err
 }
 
-// FindByUserAndVolume 사용자와 볼륨의 모든 챕터 진행도 조회
+// FindByUserAndVolume 사용자와 볼륨의 모든 챕터 진행도 조회 (하위 볼륨 포함)
 func (r *ReadingProgressRepository) FindByUserAndVolume(db database.Queryer, userID, volumeID string) ([]model.ReadingProgress, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, 
+		`WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, 
 		 rp.total_pages, rp.current_position, rp.total_positions, rp.progress_percent, rp.device_id, rp.device_name, rp.current_cfi, rp.updated_at
 		 FROM reading_progress rp
-		 LEFT JOIN chapters c ON rp.chapter_id = c.id
-		 WHERE rp.user_id = ? AND (rp.volume_id = ? OR c.volume_id = ?)
-		 ORDER BY c.chapter_number ASC`,
-		userID, volumeID, volumeID,
+		 JOIN chapters c ON rp.chapter_id = c.id
+		 WHERE rp.user_id = ? AND c.volume_id IN (SELECT id FROM descendant_volumes)
+		 ORDER BY rp.updated_at DESC, c.chapter_number DESC`,
+		volumeID, userID,
 	)
 	if err != nil {
 		return nil, err
@@ -388,7 +394,6 @@ func (r *ReadingProgressRepository) DeleteByUserAndSeries(db database.Queryer, u
 	return err
 }
 
-
 // CountTotalSeriesRead 사용자가 읽기 시작한 총 시리즈 수
 func (r *ReadingProgressRepository) CountTotalSeriesRead(db database.Queryer, userID string) (int, error) {
 	db = database.GetQueryer(db)
@@ -412,7 +417,6 @@ func (r *ReadingProgressRepository) CountTotalChaptersRead(db database.Queryer, 
 	`, userID).Scan(&count)
 	return count, err
 }
-
 
 // UpdateReadingTime 읽은 시간 누적 업데이트 (영향을 받은 행 수를 반환)
 func (r *ReadingProgressRepository) UpdateReadingTime(db database.Queryer, userID, seriesID, chapterID string, seconds int) (int64, error) {
@@ -538,8 +542,8 @@ type DailyActivitySeries struct {
 }
 
 type DailyActivity struct {
-	Date   string                 `json:"date"`
-	Count  int                    `json:"count"`
+	Date   string                `json:"date"`
+	Count  int                   `json:"count"`
 	Series []DailyActivitySeries `json:"series,omitempty"`
 }
 
@@ -548,7 +552,7 @@ func (r *ReadingProgressRepository) GetDailyActivity(db database.Queryer, userID
 	db = database.GetQueryer(db)
 
 	// 1. 각 날짜별 총 활동량 조회
-	// daily_activity 테이블을 메인으로 사용하되, 기존 데이터와의 호환성을 위해 
+	// daily_activity 테이블을 메인으로 사용하되, 기존 데이터와의 호환성을 위해
 	// 두 소스를 병합하여 집계합니다.
 	rows, err := db.Query(`
 		SELECT date, SUM(count) as count
@@ -677,7 +681,7 @@ func (r *ReadingProgressRepository) GetHourlyActivity(db database.Queryer, userI
 		GROUP BY hour
 		ORDER BY hour ASC
 	`, userID, userID)
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +710,7 @@ func (r *ReadingProgressRepository) GetTopSeries(db database.Queryer, userID str
 		ORDER BY total_read_time DESC
 		LIMIT ?
 	`, userID, limit)
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -722,9 +726,8 @@ func (r *ReadingProgressRepository) GetTopSeries(db database.Queryer, userID str
 		}
 		// ReadTimeSeconds 필드에 할당 (만약 모델에 있다면 사용, 없으면 ReadPageCount를 임시로 쓰거나 모델 확장 필요)
 		// 현재는 ReadPageCount 필드를 사용하고 있으나, 의미상 읽은 시간을 전달함
-		s.ReadPageCount = totalReadTimeSeconds 
+		s.ReadPageCount = totalReadTimeSeconds
 		seriesList = append(seriesList, s)
 	}
 	return seriesList, nil
 }
-
