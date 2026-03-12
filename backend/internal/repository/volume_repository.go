@@ -550,5 +550,8 @@ func (r *VolumeRepository) GetDistinctExtensions(db database.Queryer, seriesID s
 		}
 		extensions = append(extensions, ext)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return extensions, nil
 }
