@@ -1530,7 +1530,9 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 	}
 
 	// 1. 이미지가 직접 포함된 경우 (Terminal folder) -> 챕터로 취급
-	if len(imageFiles) > 0 {
+	//    단, 하위 폴더/아카이브가 없는 '터미널' 폴더에만 적용하여 
+	//    혼재 케이스(이미지 + 하위 엔트리)에서 챕터 번호 중복을 방지한다.
+	if len(imageFiles) > 0 && len(subEntries) == 0 {
 		pages, err := s.analyzeImages(volumePath, imageFiles)
 		if err != nil {
 			return nil, err
@@ -1555,16 +1557,19 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 		}
 		natsort.Sort(names)
 
-		for i, name := range names {
+		for _, name := range names {
 			entry := entryMap[name]
 			entryPath := filepath.Join(volumePath, name)
 			entryTitle := strings.TrimSuffix(name, filepath.Ext(name))
+
+			// 현재까지 누적된 챕터 수를 기준으로 다음 번호 부여 (중복 방지)
+			nextChapterNum := result.ChapterCount + 1
 
 			if entry.IsDir() {
 				// 폴더가 챕터인지(이미지 포함) 아니면 하위 볼륨인지 확인
 				if s.isTerminalFolder(entryPath, excludePatterns) {
 					// 챕터로 처리
-					chapter, err := s.analyzeChapter(entryPath, name, i+1)
+					chapter, err := s.analyzeChapter(entryPath, name, nextChapterNum)
 					if err == nil {
 						result.Chapters = append(result.Chapters, *chapter)
 						result.ChapterCount++
@@ -1573,7 +1578,8 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 					}
 				} else {
 					// 하위 볼륨으로 처리 (재귀)
-					subVol, err := s.analyzeVolumeRecursive(entryPath, entryTitle, i+1, "volume", excludePatterns)
+					// 볼륨 번호는 해당 부모 볼륨 내에서의 순서이므로 1부터 시작해도 됨 (SubVolumes 리스트 내의 순서)
+					subVol, err := s.analyzeVolumeRecursive(entryPath, entryTitle, len(result.SubVolumes)+1, "volume", excludePatterns)
 					if err == nil {
 						result.SubVolumes = append(result.SubVolumes, subVol)
 					} else {
@@ -1581,10 +1587,7 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 					}
 				}
 			} else if isArchive(name) {
-				// 아카이브는 항상 챕터로 처리하거나, 
-				// 만약 아카이브를 볼륨으로 취급하고 싶다면 analyzeArchiveAsVolume을 쓸 수도 있음.
-				// 여기서는 기존 방식대로 챕터로 처리.
-				chapter, err := s.analyzeArchiveAsChapter(entryPath, entryTitle, i+1)
+				chapter, err := s.analyzeArchiveAsChapter(entryPath, entryTitle, nextChapterNum)
 				if err == nil {
 					result.Chapters = append(result.Chapters, *chapter)
 					result.ChapterCount++
