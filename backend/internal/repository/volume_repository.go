@@ -27,9 +27,9 @@ func (r *VolumeRepository) Create(db database.Queryer, volume *model.Volume) err
 	volume.UpdatedAt = now
 
 	_, err := db.Exec(
-		`INSERT INTO volumes (id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		volume.ID, volume.SeriesID, volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.CreatedAt, volume.UpdatedAt,
+		`INSERT INTO volumes (id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		volume.ID, volume.SeriesID, volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.Extension, volume.CreatedAt, volume.UpdatedAt,
 	)
 	return err
 }
@@ -41,9 +41,9 @@ func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) err
 
 	_, err := db.Exec(
 		`UPDATE volumes 
-		 SET title = ?, volume_number = ?, path = ?, thumbnail_path = ?, has_audio = ?, unit = ?, chapter_count = ?, parent_id = ?, description = ?, authors = ?, publication_year = ?, updated_at = ?
+		 SET title = ?, volume_number = ?, path = ?, thumbnail_path = ?, has_audio = ?, unit = ?, chapter_count = ?, parent_id = ?, description = ?, authors = ?, publication_year = ?, extension = ?, updated_at = ?
 		 WHERE id = ?`,
-		volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.UpdatedAt, volume.ID,
+		volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.Extension, volume.UpdatedAt, volume.ID,
 	)
 	return err
 }
@@ -52,7 +52,7 @@ func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) err
 func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) ([]model.Volume, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, created_at, updated_at 
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
 		 FROM volumes WHERE series_id = ? ORDER BY volume_number`,
 		seriesID,
 	)
@@ -65,9 +65,9 @@ func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) 
 	for rows.Next() {
 		var v model.Volume
 		var thumbnail, unit, parentID sql.NullString
-		var description, authors, pubYear sql.NullString
+		var description, authors, pubYear, extension sql.NullString
 
-		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if unit.Valid {
@@ -88,6 +88,9 @@ func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) 
 		if pubYear.Valid {
 			v.PublicationYear = pubYear.String
 		}
+		if extension.Valid {
+			v.Extension = extension.String
+		}
 		volumes = append(volumes, v)
 	}
 	return volumes, nil
@@ -98,12 +101,12 @@ func (r *VolumeRepository) FindByID(db database.Queryer, id string) (*model.Volu
 	db = database.GetQueryer(db)
 	var v model.Volume
 	var thumbnail, unit, parentID sql.NullString
-	var description, authors, pubYear sql.NullString
+	var description, authors, pubYear, extension sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, created_at, updated_at FROM volumes WHERE id = ?`,
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at FROM volumes WHERE id = ?`,
 		id,
-	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt)
+	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -128,6 +131,9 @@ func (r *VolumeRepository) FindByID(db database.Queryer, id string) (*model.Volu
 	}
 	if pubYear.Valid {
 		v.PublicationYear = pubYear.String
+	}
+	if extension.Valid {
+		v.Extension = extension.String
 	}
 	return &v, nil
 }
@@ -137,12 +143,12 @@ func (r *VolumeRepository) FindByPath(db database.Queryer, path string) (*model.
 	db = database.GetQueryer(db)
 	var v model.Volume
 	var thumbnail, unit, parentID sql.NullString
-	var description, authors, pubYear sql.NullString
+	var description, authors, pubYear, extension sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, created_at, updated_at FROM volumes WHERE path = ?`,
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at FROM volumes WHERE path = ?`,
 		path,
-	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt)
+	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -167,6 +173,9 @@ func (r *VolumeRepository) FindByPath(db database.Queryer, path string) (*model.
 	}
 	if pubYear.Valid {
 		v.PublicationYear = pubYear.String
+	}
+	if extension.Valid {
+		v.Extension = extension.String
 	}
 	return &v, nil
 }
@@ -372,13 +381,13 @@ func (r *VolumeRepository) GetFirstVolume(db database.Queryer, seriesID string) 
 	db = database.GetQueryer(db)
 	var v model.Volume
 	var thumbnail, unit, parentID sql.NullString
-	var description, authors, pubYear sql.NullString
+	var description, authors, pubYear, extension sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, created_at, updated_at 
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
 		 FROM volumes WHERE series_id = ? ORDER BY volume_number LIMIT 1`,
 		seriesID,
-	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt)
+	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -404,6 +413,9 @@ func (r *VolumeRepository) GetFirstVolume(db database.Queryer, seriesID string) 
 	if pubYear.Valid {
 		v.PublicationYear = pubYear.String
 	}
+	if extension.Valid {
+		v.Extension = extension.String
+	}
 	return &v, nil
 }
 
@@ -411,7 +423,7 @@ func (r *VolumeRepository) GetFirstVolume(db database.Queryer, seriesID string) 
 func (r *VolumeRepository) FindByParentID(db database.Queryer, parentID string) ([]model.Volume, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, created_at, updated_at 
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
 		 FROM volumes 
 		 WHERE parent_id = ? 
 		   AND series_id = (SELECT series_id FROM volumes WHERE id = ?)
@@ -428,9 +440,9 @@ func (r *VolumeRepository) FindByParentID(db database.Queryer, parentID string) 
 	for rows.Next() {
 		var v model.Volume
 		var thumbnail, unit, pID sql.NullString
-		var description, authors, pubYear sql.NullString
+		var description, authors, pubYear, extension sql.NullString
 
-		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &pID, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &pID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if unit.Valid {
@@ -450,6 +462,9 @@ func (r *VolumeRepository) FindByParentID(db database.Queryer, parentID string) 
 		}
 		if pubYear.Valid {
 			v.PublicationYear = pubYear.String
+		}
+		if extension.Valid {
+			v.Extension = extension.String
 		}
 		volumes = append(volumes, v)
 	}
@@ -471,7 +486,7 @@ func (r *VolumeRepository) CountByParentID(db database.Queryer, parentID string)
 func (r *VolumeRepository) FindRootVolumesBySeriesID(db database.Queryer, seriesID string) ([]model.Volume, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, created_at, updated_at 
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
 		 FROM volumes WHERE series_id = ? AND parent_id IS NULL ORDER BY volume_number`,
 		seriesID,
 	)
@@ -484,9 +499,9 @@ func (r *VolumeRepository) FindRootVolumesBySeriesID(db database.Queryer, series
 	for rows.Next() {
 		var v model.Volume
 		var thumbnail, unit, pID sql.NullString
-		var description, authors, pubYear sql.NullString
+		var description, authors, pubYear, extension sql.NullString
 
-		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &pID, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &pID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if unit.Valid {
@@ -507,7 +522,29 @@ func (r *VolumeRepository) FindRootVolumesBySeriesID(db database.Queryer, series
 		if pubYear.Valid {
 			v.PublicationYear = pubYear.String
 		}
+		if extension.Valid {
+			v.Extension = extension.String
+		}
 		volumes = append(volumes, v)
 	}
 	return volumes, nil
+}
+// GetDistinctExtensions 시리즈 내 모든 볼륨의 고유한 확장자 목록 조회
+func (r *VolumeRepository) GetDistinctExtensions(db database.Queryer, seriesID string) ([]string, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(`SELECT DISTINCT extension FROM volumes WHERE series_id = ? AND (extension IS NOT NULL AND extension != '')`, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var extensions []string
+	for rows.Next() {
+		var ext string
+		if err := rows.Scan(&ext); err != nil {
+			return nil, err
+		}
+		extensions = append(extensions, ext)
+	}
+	return extensions, nil
 }

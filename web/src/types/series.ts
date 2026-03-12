@@ -25,6 +25,7 @@ export interface Series {
   chapter_count?: number;
   created_at: string;
   updated_at: string;
+  extension?: string;
 }
 
 export interface Volume {
@@ -46,6 +47,7 @@ export interface Volume {
   chapter_count?: number;
   sub_volume_count?: number;
   parent_id?: string;
+  extension?: string;
   created_at: string;
 }
 
