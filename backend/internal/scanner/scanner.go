@@ -1366,9 +1366,6 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 				}
 
 				if aErr != nil {
-					mu.Lock()
-					result.Errors = append(result.Errors, fmt.Sprintf("failed to analyze volume %s: %v", displayName, aErr))
-					mu.Unlock()
 					loopErr = aErr // Assign aErr to loopErr for later check
 				}
 
@@ -1526,7 +1523,9 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 
 		if series.Extension != representativeExt {
 			series.Extension = representativeExt
-			_ = s.seriesRepo.Update(nil, series)
+			if upErr := s.seriesRepo.Update(nil, series); upErr != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to update series extension: %v", upErr))
+			}
 		}
 	}
 
@@ -1901,7 +1900,7 @@ func (s *Scanner) saveVolumeRecursive(tx database.Queryer, seriesID string, pare
 		Authors:         volData.Authors,
 		PublicationYear: volData.PublicationYear,
 		Extension:       volData.Extension,
-		UpdatedAt:       time.Now(), // Changed from volData.ModTime to time.Now() as per instruction's implied change
+		UpdatedAt:       volData.ModTime,
 		HasAudio:        volData.HasAudio,
 		Unit:            volData.Unit,
 		ChapterCount:    volData.ChapterCount,

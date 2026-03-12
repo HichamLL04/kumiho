@@ -251,6 +251,9 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	if thumbnail.Valid {
 		s.ThumbnailPath = &thumbnail.String
 	}
+	if ext.Valid {
+		s.Extension = ext.String
+	}
 
 	m.SeriesID = s.ID
 	if desc.Valid {
