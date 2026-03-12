@@ -95,7 +95,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   const [isInitialEntry, setIsInitialEntry] = useState(true);
   const [lastChapterIdForReset, setLastChapterIdForReset] = useState(chapterId);
 
-  // 챕터 변경 시 초기 상태로 리셋 (Effect 밖에서 처리하여 Lint 에러 방지)
+  // 챕터 변경 시 초기 상태로 리셋
   if (chapterId !== lastChapterIdForReset) {
     setLastChapterIdForReset(chapterId);
     setIsInitialEntry(true);

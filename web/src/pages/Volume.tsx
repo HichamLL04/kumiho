@@ -190,15 +190,19 @@ export function VolumePage() {
       showAlert(t("series.alert.no_readable_chapter"), "warning");
     }
   };
-  const handleDownloadVolume = () => {
-    if (!volume) return;
+  const handleDownloadVolume = (volId?: string, volTitle?: string) => {
+    const targetId = volId || volume?.id;
+    const targetTitle = volTitle || volume?.title;
+
+    if (!targetId) return;
+
     setAlertModal({
       isOpen: true,
       type: "info",
-      message: t("series.alert.download_volume_confirm", { title: volume.title }),
+      message: t("series.alert.download_volume_confirm", { title: targetTitle }),
       onConfirm: () => {
         try {
-          const url = downloadAPI.getVolumeUrl(volume.id);
+          const url = downloadAPI.getVolumeUrl(targetId);
           initiateDownload(url);
           closeAlert();
         } catch (error: unknown) {
@@ -280,7 +284,7 @@ export function VolumePage() {
                     progressStyle="overlay"
                     extensionBadgePlacement="meta"
                     onStatusChange={loadData}
-                    onDownload={canDownload ? () => handleDownloadVolume() : undefined}
+                    onDownload={canDownload ? () => handleDownloadVolume(vol.id, vol.title) : undefined}
                   />
                 ))}
               </div>

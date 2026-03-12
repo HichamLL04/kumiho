@@ -407,12 +407,16 @@ func (r *VolumeRepository) GetFirstVolume(db database.Queryer, seriesID string) 
 	return &v, nil
 }
 
-// FindByParentID 부모 볼륨 ID로 볼륨 목록 조회
+// FindByParentID 부모 볼륨 ID로 볼륨 목록 조회 (시리즈 스코프 제한)
 func (r *VolumeRepository) FindByParentID(db database.Queryer, parentID string) ([]model.Volume, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
 		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, created_at, updated_at 
-		 FROM volumes WHERE parent_id = ? ORDER BY volume_number`,
+		 FROM volumes 
+		 WHERE parent_id = ? 
+		   AND series_id = (SELECT series_id FROM volumes WHERE id = ?)
+		 ORDER BY volume_number`,
+		parentID,
 		parentID,
 	)
 	if err != nil {

@@ -974,6 +974,16 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 		volumes, err = h.volumeRepo.FindRootVolumesBySeriesID(nil, seriesID)
 	} else if parentIDParam != "" {
 		volumes, err = h.volumeRepo.FindByParentID(nil, parentIDParam)
+		if err == nil {
+			// parent_id로 조회하더라도, 반드시 요청된 seriesID 범위로 스코프를 제한
+			filtered := make([]model.Volume, 0, len(volumes))
+			for _, v := range volumes {
+				if v.SeriesID == seriesID {
+					filtered = append(filtered, v)
+				}
+			}
+			volumes = filtered
+		}
 	} else {
 		volumes, err = h.volumeRepo.FindBySeriesID(nil, seriesID)
 	}
