@@ -1,12 +1,13 @@
 // 챕터 로딩 훅
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
 import { chapterAPI, volumeAPI, seriesAPI, libraryAPI, settingAPI } from "../../../api/client";
 import { useViewerStore } from "../../../stores/viewerStore";
 import type { ViewerSettings, ReadingMode, ReadingDirection, FitMode } from "../../../stores/viewerStore";
-import type { Chapter, PageMeta } from "../types";
-import type { Page } from "../../../types/series";
+import type { Chapter, PageMeta, RestorePosition, ViewStatus } from "../types";
+import type { Page, ReadingProgress } from "../../../types/series";
 import { WIDE_RATIO_THRESHOLD } from "../utils/constants";
 
 interface UseChapterLoaderParams {
@@ -22,6 +23,10 @@ export interface UseChapterLoaderReturn {
   pageMeta: PageMeta[];
   pageMetaMap: Map<number, PageMeta>;
   isInitialScrollingRef: React.RefObject<boolean>;
+  restorePosition?: RestorePosition;
+  isPageMetaReady?: boolean;
+  viewStatus?: ViewStatus;
+  setViewStatus?: Dispatch<SetStateAction<ViewStatus>>;
 }
 
 /**
@@ -35,6 +40,8 @@ export interface UseChapterLoaderReturn {
 export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChapterLoaderReturn {
   const [searchParams] = useSearchParams();
   const urlPage = searchParams.get("page");
+  const urlAnchor = searchParams.get("anchor");
+  const urlOffset = searchParams.get("offset");
 
   const { settings, nextChapterData, initPage, initializeSettings, setCurrentSeriesId, setNextChapterData } =
     useViewerStore();
@@ -46,9 +53,19 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pageMeta, setPageMeta] = useState<PageMeta[]>([]);
+  const [viewStatus, setViewStatus] = useState<ViewStatus>("loading");
+  const [restorePosition, setRestorePosition] = useState<RestorePosition>({
+    currentPage: 1,
+    anchorPage: 1,
+    offsetRatio: 0,
+  });
 
   // 페이지 메타데이터 Map (O(1) 조회용)
   const pageMetaMap = useMemo(() => new Map(pageMeta.map((p) => [p.pageNumber, p])), [pageMeta]);
+  const isPageMetaReady = useMemo(
+    () => pageMeta.length > 0 && pageMeta.every((p) => p.width > 0 && p.height > 0),
+    [pageMeta],
+  );
 
   // 다음 챕터 데이터 캐시를 Ref로 관리
   const nextChapterDataRef = useRef(nextChapterData);
@@ -70,6 +87,53 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
   const clampPageByPageCount = (page: number, pageCount: number) => {
     if (pageCount <= 0) return Math.max(1, page);
     return Math.max(1, Math.min(page, pageCount));
+  };
+  const clampOffsetRatio = (offsetRatio: number | undefined) => {
+    if (typeof offsetRatio !== "number" || Number.isNaN(offsetRatio)) return 0;
+    return Math.max(0, Math.min(1, offsetRatio));
+  };
+  const resolveRestorePosition = useCallback(
+    (pageCount: number, progress?: ReadingProgress | null): RestorePosition => {
+      const shouldUseOffsetRestore = settings.readingMode !== "vertical";
+
+      if (urlPage === "last") {
+        const page = resolveLastPage(pageCount);
+        return { currentPage: page, anchorPage: page, offsetRatio: 0 };
+      }
+
+      if (urlPage) {
+        const parsed = parseInt(urlPage, 10);
+        if (!Number.isNaN(parsed)) {
+          const page = clampPageByPageCount(parsed, pageCount);
+          const parsedAnchor = urlAnchor ? parseInt(urlAnchor, 10) : page;
+          const parsedOffset = urlOffset ? parseFloat(urlOffset) : 0;
+          return {
+            currentPage: page,
+            anchorPage: clampPageByPageCount(Number.isNaN(parsedAnchor) ? page : parsedAnchor, pageCount),
+            offsetRatio: shouldUseOffsetRestore ? clampOffsetRatio(parsedOffset) : 0,
+          };
+        }
+      }
+
+      const currentPage = clampPageByPageCount(progress?.current_page || 1, pageCount);
+      const anchorPage = clampPageByPageCount(progress?.anchor_page || currentPage, pageCount);
+      return {
+        currentPage,
+        anchorPage,
+        offsetRatio: shouldUseOffsetRestore ? clampOffsetRatio(progress?.offset_ratio) : 0,
+      };
+    },
+    [settings.readingMode, urlAnchor, urlOffset, urlPage],
+  );
+  const finishChapterLoad = (mode: ReadingMode) => {
+    setIsLoading(false);
+    if (mode === "vertical") {
+      setViewStatus("hydrating");
+      isInitialScrollingRef.current = true;
+      return;
+    }
+    setViewStatus("ready");
+    isInitialScrollingRef.current = false;
   };
 
   // readingMode Ref (의존성 배열을 피하기 위해 ref로 관리)
@@ -95,10 +159,12 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     const loadChapter = async () => {
       try {
         setIsLoading(true);
+        setViewStatus("loading");
         setError(null);
         setChapter(null);
         setSeriesId(null);
         setVolumeId(null);
+        setRestorePosition({ currentPage: 1, anchorPage: 1, offsetRatio: 0 });
         volumeIdRef.current = null;
         setCurrentSeriesId(null);
         // [Fix] 새 챕터 로딩 시 기존 상태 초기화 (Stale Data 방지)
@@ -122,31 +188,19 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
             if (!cancelled) setVolumeId(cachedChapter.volume_id);
           }
 
-          // 진행도 로드 (URL 파라미터 우선 확인)
-          let startPage = 1;
-          if (urlPage === "last") {
-            startPage = resolveLastPage(cachedChapter.page_count);
-          } else if (urlPage) {
-            const parsed = parseInt(urlPage, 10);
-            if (!isNaN(parsed)) {
-              startPage = clampPageByPageCount(parsed, cachedChapter.page_count);
-            }
-          } else {
-            // URL 파라미터가 없으면 진행도 조회
+          let progress: ReadingProgress | null = null;
+          if (!urlPage) {
             try {
               const progressRes = await chapterAPI.getProgress(chapterId);
               if (cancelled) return;
-              const progress = progressRes.data.progress;
-              // console.log(`[ChapterLoader] Cached load - Progress fetched:`, progress);
-
-              if (progress && progress.current_page > 0) {
-                startPage = clampPageByPageCount(progress.current_page, cachedChapter.page_count);
-                // console.log(`[ChapterLoader] StartPage updated to ${startPage} (from progress)`);
-              }
+              progress = progressRes.data.progress as ReadingProgress | null;
             } catch (err) {
               console.warn("[Viewer] 캐시 로드 중 진행도 조회 실패:", err);
             }
           }
+
+          const nextRestorePosition = resolveRestorePosition(cachedChapter.page_count, progress);
+          const startPage = nextRestorePosition.currentPage;
 
           if (cancelled) return;
 
@@ -155,6 +209,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
             `[ChapterLoader] Rendering cached chapter: ${cachedChapter.id}, startPage=${startPage}, total=${cachedChapter.page_count}`,
           );
           setChapter(cachedChapter);
+          setRestorePosition(nextRestorePosition);
           isInitialScrollingRef.current = true;
           initPage(startPage, cachedChapter.page_count);
 
@@ -176,12 +231,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           // 로딩 상태 및 스크롤 가드 해제 (약간의 지연으로 초기 스크롤 이동 완료 대기)
           timeoutId = setTimeout(() => {
             if (cancelled) return;
-            setIsLoading(false);
-            // 세로 모드일 때는 useVerticalScroll에서 스크롤 보정 후 직접 가드를 해제하도록 위임한다.
-            // 다른 모드(single, double)는 스크롤 개념이 없으므로 여기서 즉시 해제.
-            if (readingModeRef.current !== "vertical") {
-              isInitialScrollingRef.current = false;
-            }
+            finishChapterLoad(readingModeRef.current);
           }, 300); // 150ms -> 300ms로 상향 (렌더링 안정성 확보)
 
           // 부가 정보 로드 (비동기, 백그라운드 처리)
@@ -217,25 +267,12 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
         }
 
         // 2. 진행도 정보도 미리 가져오기
-        let startPage = 1;
-        if (urlPage) {
-          if (urlPage === "last") {
-            startPage = resolveLastPage(chapterData.page_count);
-          } else {
-            const parsedPage = parseInt(urlPage, 10);
-            if (!isNaN(parsedPage)) {
-              startPage = clampPageByPageCount(parsedPage, chapterData.page_count);
-            }
-          }
-        } else {
+        let progress: ReadingProgress | null = null;
+        if (!urlPage) {
           try {
             const progressRes = await chapterAPI.getProgress(chapterId);
             if (cancelled) return;
-            const progress = progressRes.data.progress;
-
-            if (progress && progress.current_page > 0) {
-              startPage = clampPageByPageCount(progress.current_page, chapterData.page_count);
-            }
+            progress = progressRes.data.progress as ReadingProgress | null;
           } catch (progressErr: unknown) {
             const err = progressErr as { response?: { status: number }; message?: string };
             if (err?.response?.status !== 404) {
@@ -243,6 +280,9 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
             }
           }
         }
+
+        let nextRestorePosition = resolveRestorePosition(chapterData.page_count, progress);
+        let startPage = nextRestorePosition.currentPage;
 
         if (cancelled) return;
 
@@ -260,6 +300,11 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
                 // 완독된 볼륨이면 마지막 페이지로 설정
                 if (volumeRes.data.is_completed && !urlPage && startPage === 1) {
                   startPage = chapterData.page_count;
+                  nextRestorePosition = {
+                    currentPage: chapterData.page_count,
+                    anchorPage: chapterData.page_count,
+                    offsetRatio: 0,
+                  };
                 }
 
                 // 1. 전역 기본값 로드
@@ -386,6 +431,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
 
         // 3. 상태 업데이트
         setChapter(chapterData);
+        setRestorePosition(nextRestorePosition);
         isInitialScrollingRef.current = true;
         console.log(`[ChapterLoader] Initializing page: start=${startPage}, total=${chapterData.page_count}`);
         initPage(startPage, chapterData.page_count);
@@ -438,16 +484,14 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
         // 5. 완료 후 가드 해제
         timeoutId = setTimeout(() => {
           if (cancelled) return;
-          setIsLoading(false);
-          if (readingModeRef.current !== "vertical") {
-            isInitialScrollingRef.current = false;
-          }
+          finishChapterLoad(readingModeRef.current);
         }, 300); // 150ms -> 300ms로 상향
       } catch (err) {
         if (cancelled) return;
         console.error("챕터 로드 실패:", err);
         setError("챕터를 불러올 수 없습니다.");
         setIsLoading(false);
+        setViewStatus("ready");
       }
     };
 
@@ -461,7 +505,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     };
     // seriesSettings를 의존성에서 제외:
     // 설정 변경 시 챕터 재로드를 방지하기 위함. 초기 로드에만 필요하고 readingMode 변경 시 재로드하면 안됨.
-  }, [chapterId, initPage, initializeSettings, setCurrentSeriesId, urlPage, setNextChapterData]);
+  }, [chapterId, initPage, initializeSettings, resolveRestorePosition, setCurrentSeriesId, urlPage, setNextChapterData]);
 
   // 세로 모드 -> 다른 모드로 변경 시 이미지 분석 로직
   useEffect(() => {
@@ -508,5 +552,9 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     pageMeta,
     pageMetaMap,
     isInitialScrollingRef,
+    restorePosition,
+    isPageMetaReady,
+    viewStatus,
+    setViewStatus,
   };
 }

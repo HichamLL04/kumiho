@@ -65,6 +65,8 @@ type UpdateProgressRequest struct {
 	VolumeID        *string `json:"volume_id"`
 	ChapterID       *string `json:"chapter_id"`
 	CurrentPage     int     `json:"current_page"`
+	AnchorPage      int     `json:"anchor_page"`
+	OffsetRatio     float64 `json:"offset_ratio"`
 	TotalPages      int     `json:"total_pages"`
 	CurrentPosition int     `json:"current_position"`
 	TotalPositions  int     `json:"total_positions"`
@@ -364,8 +366,17 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 			if req.TotalPositions == 0 && existing.TotalPositions > 0 {
 				req.TotalPositions = existing.TotalPositions
 			}
+			if req.AnchorPage <= 0 {
+				req.AnchorPage = fallbackAnchorPage(existing)
+				req.OffsetRatio = existing.OffsetRatio
+			}
 		}
 	}
+
+	if req.AnchorPage <= 0 {
+		req.AnchorPage = req.CurrentPage
+	}
+	req.OffsetRatio = math.Max(0, math.Min(1, req.OffsetRatio))
 
 	progress := &model.ReadingProgress{
 		UserID:          userID,
@@ -373,6 +384,8 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 		VolumeID:        req.VolumeID,
 		ChapterID:       req.ChapterID,
 		CurrentPage:     req.CurrentPage,
+		AnchorPage:      req.AnchorPage,
+		OffsetRatio:     req.OffsetRatio,
 		TotalPages:      req.TotalPages,
 		CurrentPosition: req.CurrentPosition,
 		TotalPositions:  req.TotalPositions,
@@ -489,6 +502,7 @@ func (h *ProgressHandler) UpdateEpubProgress(c *fiber.Ctx) error {
 		VolumeID:        &volumeID,
 		ChapterID:       &chapterID,
 		CurrentPage:     currentPage,
+		AnchorPage:      currentPage,
 		TotalPages:      totalPages,
 		CurrentPosition: currentPosition,
 		TotalPositions:  totalPositions,
@@ -594,6 +608,7 @@ func (h *ProgressHandler) UpdateProgressWSReplacement(c *fiber.Ctx) error {
 		VolumeID:        volumeID,
 		ChapterID:       &req.ChapterID,
 		CurrentPage:     req.CurrentPage,
+		AnchorPage:      req.CurrentPage,
 		TotalPages:      totalPages,
 		CurrentPosition: currentPosition,
 		TotalPositions:  totalPositions,
@@ -1062,9 +1077,11 @@ func (h *ProgressHandler) CompareProgress(c *fiber.Ctx) error {
 	seriesID := c.Params("seriesId")
 
 	var localProgress struct {
-		VolumeNumber  int `json:"volume_number"`
-		ChapterNumber int `json:"chapter_number"`
-		CurrentPage   int `json:"current_page"`
+		VolumeNumber  int     `json:"volume_number"`
+		ChapterNumber int     `json:"chapter_number"`
+		CurrentPage   int     `json:"current_page"`
+		AnchorPage    int     `json:"anchor_page"`
+		OffsetRatio   float64 `json:"offset_ratio"`
 	}
 
 	if err := c.BodyParser(&localProgress); err != nil {
@@ -1130,12 +1147,24 @@ func (h *ProgressHandler) CompareProgress(c *fiber.Ctx) error {
 			"volume_number":  serverVolumeNum,
 			"chapter_number": serverChapterNum,
 			"current_page":   serverProgress.CurrentPage,
+			"anchor_page":    fallbackAnchorPage(serverProgress),
+			"offset_ratio":   serverProgress.OffsetRatio,
 			"device_name":    serverProgress.DeviceName,
 			"chapter_id":     strOrEmpty(serverProgress.ChapterID),
 			"volume_id":      strOrEmpty(serverProgress.VolumeID),
 			"updated_at":     serverProgress.UpdatedAt,
 		},
 	})
+}
+
+func fallbackAnchorPage(progress *model.ReadingProgress) int {
+	if progress == nil {
+		return 0
+	}
+	if progress.AnchorPage > 0 {
+		return progress.AnchorPage
+	}
+	return progress.CurrentPage
 }
 
 // MarkVolumeComplete 볼륨 완료 표시

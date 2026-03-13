@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type TouchEvent, type RefObject } from "react";
 import type { ReactZoomPanPinchContentRef } from "react-zoom-pan-pinch";
 import { SmartImageViewer } from "../../../../components/SmartImageViewer";
+import type { ViewStatus } from "../../types";
 
 interface VerticalPageProps {
   pageNum: number;
@@ -9,6 +10,8 @@ interface VerticalPageProps {
   minAllowedPage: number;
   maxAllowedPage: number;
   isInitialScrolling?: boolean; // Boolean으로 회복
+  estimatedHeight?: number;
+  viewStatus: ViewStatus;
   handleImageLoad: (pageNum: number) => void;
   handleContentClick: (
     e: MouseEvent | TouchEvent,
@@ -25,6 +28,8 @@ export const VerticalPage = ({
   minAllowedPage,
   maxAllowedPage,
   isInitialScrolling = false,
+  estimatedHeight,
+  viewStatus,
   handleImageLoad,
   handleContentClick,
   styles,
@@ -63,7 +68,8 @@ export const VerticalPage = ({
     return () => observer.disconnect();
   }, [pageHeightCache, pageNum, shouldRenderImage]);
 
-  const placeholderHeight = cachedHeight > 0 ? cachedHeight : 300;
+  const placeholderHeight = cachedHeight > 0 ? cachedHeight : Math.max(estimatedHeight ?? 0, 300);
+  const shouldShowSpinner = viewStatus === "ready";
 
   return (
     <div
@@ -102,7 +108,7 @@ export const VerticalPage = ({
             justifyContent: "center",
           }}
         >
-          <div className={styles.spinner} />
+          {shouldShowSpinner ? <div className={styles.spinner} /> : null}
         </div>
       )}
     </div>

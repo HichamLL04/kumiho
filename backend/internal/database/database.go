@@ -187,6 +187,8 @@ func Migrate() error {
 		volume_id TEXT REFERENCES volumes(id) ON DELETE SET NULL,
 		chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
 		current_page INTEGER NOT NULL DEFAULT 0,
+		anchor_page INTEGER,
+		offset_ratio REAL,
 		total_pages INTEGER NOT NULL DEFAULT 0,
 		current_position INTEGER DEFAULT 0,
 		total_positions INTEGER DEFAULT 0,
@@ -393,6 +395,9 @@ func Migrate() error {
 
 	// 27. 시리즈 확장자 컬럼 추가
 	migrateSeriesExtension()
+
+	// 28. 세로 복원용 앵커 위치 컬럼 추가
+	migrateProgressRestorePosition()
 
 	return nil
 }
@@ -1796,6 +1801,27 @@ func migrateEpubVirtualPositions() {
 			fmt.Printf("Migration error (reading_progress.total_positions): %v\n", err)
 		} else {
 			fmt.Println("Migrated reading_progress table: added total_positions column.")
+		}
+	}
+}
+
+// migrateProgressRestorePosition reading_progress 테이블에 anchor_page, offset_ratio 컬럼 추가
+func migrateProgressRestorePosition() {
+	if !columnExists("reading_progress", "anchor_page") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN anchor_page INTEGER`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.anchor_page): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added anchor_page column.")
+		}
+	}
+
+	if !columnExists("reading_progress", "offset_ratio") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN offset_ratio REAL`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.offset_ratio): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added offset_ratio column.")
 		}
 	}
 }

@@ -4,11 +4,14 @@ import { seriesAPI, volumeAPI } from "../../../api/client";
 import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
 import { finishChapterSwitching, startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
 import type { Chapter } from "../types";
+import type { ViewStatus } from "../types";
 
 interface ServerProgress {
   volume_number: number;
   chapter_number: number;
   current_page: number;
+  anchor_page: number;
+  offset_ratio: number;
   chapter_id: string;
   volume_id: string;
 }
@@ -18,18 +21,36 @@ interface UseProgressSyncParams {
   chapter: Chapter | null;
   currentPage: number;
   isLoading: boolean;
+  anchorPage?: number;
+  offsetRatio?: number;
+  viewStatus?: ViewStatus;
 }
 
-export function useProgressSync({ seriesId, chapter, currentPage, isLoading }: UseProgressSyncParams) {
+export function useProgressSync({
+  seriesId,
+  chapter,
+  currentPage,
+  isLoading,
+  anchorPage = currentPage,
+  offsetRatio = 0,
+  viewStatus = "ready",
+}: UseProgressSyncParams) {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [serverProgress, setServerProgress] = useState<ServerProgress | null>(null);
   const isCheckedRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const skipSyncCheck = location.state?.skipSyncCheck === true;
+
+  useEffect(() => {
+    if (skipSyncCheck) {
+      isCheckedRef.current = true;
+    }
+  }, [skipSyncCheck]);
 
   const checkSync = useCallback(async () => {
-    if (!seriesId || !chapter || isLoading || isCheckedRef.current) return;
+    if (!seriesId || !chapter || isLoading || viewStatus !== "ready" || isCheckedRef.current || skipSyncCheck) return;
 
     try {
       // 볼륨 번호 가져오기
@@ -40,11 +61,13 @@ export function useProgressSync({ seriesId, chapter, currentPage, isLoading }: U
         volume_number: volumeNumber,
         chapter_number: chapter.chapter_number,
         current_page: currentPage,
+        anchor_page: anchorPage,
+        offset_ratio: offsetRatio,
       });
 
       const { server_ahead, server_progress } = response.data;
 
-      if (server_ahead && server_progress) {
+      if (server_ahead && server_progress && server_progress.current_page !== currentPage) {
         setServerProgress(server_progress);
         setShowSyncModal(true);
       }
@@ -53,18 +76,18 @@ export function useProgressSync({ seriesId, chapter, currentPage, isLoading }: U
     } catch (error) {
       console.error("[useProgressSync] Failed to compare progress:", error);
     }
-  }, [seriesId, chapter, currentPage, isLoading]);
+  }, [anchorPage, chapter, currentPage, isLoading, offsetRatio, seriesId, skipSyncCheck, viewStatus]);
 
   useEffect(() => {
     const triggerSync = async () => {
       // 로딩이 막 끝난 시점에 한 번만 체크
-      if (!isLoading && chapter && seriesId && !isCheckedRef.current) {
+      if (!isLoading && viewStatus === "ready" && chapter && seriesId && !isCheckedRef.current) {
         await checkSync();
       }
     };
 
     triggerSync();
-  }, [isLoading, chapter, seriesId, checkSync]);
+  }, [checkSync, chapter, isLoading, seriesId, viewStatus]);
 
   const handleConfirmSync = useCallback(() => {
     if (!serverProgress) return;
@@ -77,9 +100,17 @@ export function useProgressSync({ seriesId, chapter, currentPage, isLoading }: U
     } else {
       finishChapterSwitching();
     }
-    navigate(`/viewer/${serverProgress.chapter_id}?page=${serverProgress.current_page}`, {
+    const searchParams = new URLSearchParams({
+      page: String(serverProgress.current_page),
+      anchor: String(serverProgress.anchor_page || serverProgress.current_page),
+      offset: "0",
+    });
+    navigate(`/viewer/${serverProgress.chapter_id}?${searchParams.toString()}`, {
       replace: true,
-      state: viewerFrom ? { from: viewerFrom } : undefined,
+      state: {
+        ...(viewerFrom ? { from: viewerFrom } : {}),
+        ...(isChapterChanged ? {} : { skipSyncCheck: true }),
+      },
     });
     // 페이지 이동 시 콤포넌트가 재마운트되거나 훅이 다시 실행되므로 isCheckedRef는 그대로 둬도 됨
   }, [serverProgress, navigate, viewerFrom, chapter]);

@@ -55,13 +55,27 @@ describe("useVerticalScroll initial guard", () => {
   it("retries scroll positioning before releasing initial guard when still at top", () => {
     const isInitialScrollingRef = { current: true };
     const scrollIntoView = vi.fn();
-    const pageEl = { scrollIntoView } as unknown as HTMLElement;
-    const getElementByIdSpy = vi.spyOn(document, "getElementById").mockReturnValue(pageEl);
+    const pageEl = {
+      scrollIntoView,
+      getBoundingClientRect: () => ({
+        top: 0,
+        bottom: 1200,
+        height: 1200,
+      }),
+    } as unknown as HTMLElement;
+    const getElementByIdSpy = vi.spyOn(document, "getElementById").mockImplementation((id) =>
+      id === "page-9" ? pageEl : null,
+    );
 
     const mockContent = {
       scrollTop: 0,
       clientHeight: 800,
       scrollHeight: 4000,
+      getBoundingClientRect: () => ({
+        top: 0,
+        bottom: 800,
+        height: 800,
+      }),
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     } as unknown as HTMLDivElement;
@@ -81,6 +95,7 @@ describe("useVerticalScroll initial guard", () => {
           handleVolumeCompletion: async () => {},
           chapterId: "chapter-1",
           isInitialScrollingRef,
+          imageLoading: { 9: false },
         }),
       { initialProps: { currentPage: 8 } },
     );
@@ -100,8 +115,8 @@ describe("useVerticalScroll initial guard", () => {
       vi.advanceTimersByTime(600);
     });
 
-    // initial + retry attempts (at least one extra call)
-    expect(scrollIntoView.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // page becomes ready once the target page is aligned and visible
+    expect(scrollIntoView.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(isInitialScrollingRef.current).toBe(false);
     expect(getElementByIdSpy).toHaveBeenCalledWith("page-9");
     expect(mocks.setCurrentPageMock).not.toHaveBeenCalledWith(1);

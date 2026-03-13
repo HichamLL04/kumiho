@@ -20,6 +20,37 @@
   position: relative;
 }
 
+.viewerLoadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  z-index: 20;
+}
+
+.viewerLoadingSpinnerContainer {
+  min-height: auto;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.viewerContentHidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.viewerLoadingSpinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+
 /* 한 페이지 모드 */
 .viewerContent.modeSingle {
   flex-direction: row;

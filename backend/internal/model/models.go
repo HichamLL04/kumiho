@@ -148,6 +148,8 @@ type ReadingProgress struct {
 	VolumeID        *string   `json:"volume_id,omitempty"`
 	ChapterID       *string   `json:"chapter_id,omitempty"`
 	CurrentPage     int       `json:"current_page"`
+	AnchorPage      int       `json:"anchor_page" db:"anchor_page"`
+	OffsetRatio     float64   `json:"offset_ratio" db:"offset_ratio"`
 	TotalPages      int       `json:"total_pages"`
 	CurrentPosition int       `json:"current_position" db:"current_position"` // 가상 포지션 중심 위치
 	TotalPositions  int       `json:"total_positions" db:"total_positions"`   // 가상 포지션 총수

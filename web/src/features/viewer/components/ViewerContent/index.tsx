@@ -13,8 +13,7 @@ import {
   type PageTransitionType,
   type SubPage,
 } from "../../../../stores/viewerStore";
-import type { PageMeta } from "../../types";
-import type { ViewerAnimationHandles } from "../../types";
+import type { PageMeta, ViewStatus, ViewerAnimationHandles } from "../../types";
 
 interface ViewerContentProps {
   currentPage?: number;
@@ -41,6 +40,8 @@ interface ViewerContentProps {
   prevPreviewSubPage?: SubPage;
   pageMetaMap?: Map<number, PageMeta>;
   isInitialScrolling?: boolean; // Boolean으로 회복
+  estimatedPageHeights?: Map<number, number>;
+  viewStatus?: ViewStatus;
 }
 
 export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentProps>(
@@ -69,6 +70,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       prevPreviewSubPage,
       pageMetaMap,
       isInitialScrolling = false,
+      estimatedPageHeights,
+      viewStatus = "ready",
     },
     ref,
   ) => {
@@ -87,8 +90,6 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       if (animatePrevRef.current) animatePrevRef.current();
       else onPrev();
     }, [onPrev]);
-    const [verticalZoomScale, setVerticalZoomScale] = useState(1);
-
     const { transformComponentRef, isZoomed, setIsZoomed, handleContentClick, handleMouseDown, handleMouseMove } =
       useViewerZoom({
         clickDirection,
@@ -96,11 +97,6 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         onPrev: handleAnimatedPrev,
         doubleTapZoomZone: "center",
         deferSingleTapForDoubleTap: false,
-        isVerticalMode: readingMode === "vertical",
-        onVerticalZoomToggle: (isZoomingIn: boolean) => {
-          const newScale = isZoomingIn ? 2 : 1;
-          setVerticalZoomScale(newScale);
-        },
       });
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -237,6 +233,12 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
 
     if (readingMode === "vertical") {
       const minRenderPage = Math.max(1, currentPage - 3);
+      const verticalRenderPages =
+        isInitialScrolling && viewStatus !== "ready"
+          ? displayPages.filter((pageNum) =>
+              currentPage === 1 ? pageNum >= 1 && pageNum <= 2 : pageNum >= currentPage - 1 && pageNum <= currentPage + 1,
+            )
+          : displayPages;
 
       return (
         <div
@@ -248,14 +250,11 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "flex-start",
-            transition: "transform 0.3s ease-out",
-            transform: `scale(${verticalZoomScale})`,
-            transformOrigin: "top center",
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
         >
-          {displayPages.map((pageNum) => (
+          {verticalRenderPages.map((pageNum) => (
             <VerticalPage
               key={`${chapterId}-${pageNum}`}
               pageNum={pageNum}
@@ -264,6 +263,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
               maxAllowedPage={maxAllowedPage}
               minAllowedPage={minRenderPage}
               isInitialScrolling={isInitialScrolling} // Boolean 전달
+              estimatedHeight={estimatedPageHeights?.get(pageNum)}
+              viewStatus={viewStatus}
               handleImageLoad={handleImageLoad}
               handleContentClick={handleContentClick}
               styles={styles}

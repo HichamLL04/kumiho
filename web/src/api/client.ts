@@ -176,6 +176,8 @@ export const seriesAPI = {
       chapter_id?: string;
       volume_id?: string;
       current_page?: number;
+      anchor_page?: number;
+      offset_ratio?: number;
       total_pages?: number;
       current_position?: number;
       total_positions?: number;
@@ -190,6 +192,8 @@ export const seriesAPI = {
       volume_number: number;
       chapter_number: number;
       current_page: number;
+      anchor_page?: number;
+      offset_ratio?: number;
     },
   ) => api.post(`/series/${seriesId}/progress/compare`, data),
   uploadThumbnail: (seriesId: string, file: File) => {

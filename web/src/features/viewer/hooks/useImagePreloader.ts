@@ -108,7 +108,7 @@ export function useImagePreloader({
     if (!chapter || !chapterId) return;
     const requestChapterId = chapterId;
 
-    const pagesToPreload: number[] = [];
+    const pagesToPreload: number[] = [currentPage];
 
     // 앞뒤로 preloadCount만큼 프리로드
     for (let i = 1; i <= preloadCount; i++) {
@@ -120,8 +120,10 @@ export function useImagePreloader({
       }
     }
 
+    const uniquePagesToPreload = [...new Set(pagesToPreload)];
+
     // 이미지 프리로드 (Image 객체 사용)
-    pagesToPreload.forEach((pageNum) => {
+    uniquePagesToPreload.forEach((pageNum) => {
       if (imageLoading[pageNum] === undefined) {
         // 로딩 시작 표시
         setImageLoadingByChapter((prev) => {

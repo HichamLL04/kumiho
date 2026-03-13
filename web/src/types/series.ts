@@ -85,6 +85,8 @@ export interface ReadingProgress {
   volume_id?: string;
   chapter_id?: string;
   current_page: number;
+  anchor_page?: number;
+  offset_ratio?: number;
   total_pages: number;
   current_position?: number;
   total_positions?: number;
