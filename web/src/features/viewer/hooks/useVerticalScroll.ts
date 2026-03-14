@@ -109,12 +109,6 @@ export function useVerticalScroll({
   );
 
   useEffect(() => {
-    if (readingMode === "vertical" || isLoading) return;
-    isInitialScrollingRef.current = false;
-    setViewStatus("ready");
-  }, [isLoading, isInitialScrollingRef, readingMode, setViewStatus]);
-
-  useEffect(() => {
     if (readingMode !== "vertical" || isLoading) return;
     if (effectiveViewStatus !== "hydrating" && effectiveViewStatus !== "restoring") return;
 
