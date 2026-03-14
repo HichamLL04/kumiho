@@ -119,6 +119,11 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       goToPage(page);
       if (settings.readingMode === "single") {
         setSubPage(getInitialSubPage(page, pageMetaMap, settings.readingDirection));
+      } else if (settings.readingMode === "vertical") {
+        const pageEl = document.getElementById(`page-${page}`);
+        if (pageEl) {
+          pageEl.scrollIntoView({ block: "start" });
+        }
       }
     },
     [goToPage, setSubPage, settings.readingMode, settings.readingDirection, pageMetaMap],
