@@ -108,19 +108,25 @@ export function useVerticalScroll({
     isInitialScrollingRef.current = true;
     setCurrentPage(effectiveRestorePosition.anchorPage);
 
+    const isLastPage = effectiveRestorePosition.anchorPage >= totalPages;
+
     const restoreScroll = () => {
       if (cancelled) return;
 
       const targetPageEl = document.getElementById(`page-${effectiveRestorePosition.anchorPage}`);
-      if (targetPageEl) {
+      if (isLastPage) {
+        // 마지막 페이지: 스크롤을 맨 아래로
+        content.scrollTop = content.scrollHeight - content.clientHeight;
+      } else if (targetPageEl) {
         targetPageEl.scrollIntoView({ block: "start" });
       }
 
-      const isPageAligned =
-        !!targetPageEl &&
-        typeof targetPageEl.getBoundingClientRect === "function" &&
-        typeof content.getBoundingClientRect === "function" &&
-        Math.abs(targetPageEl.getBoundingClientRect().top - content.getBoundingClientRect().top) <= 20;
+      const isPageAligned = isLastPage
+        ? content.scrollTop >= content.scrollHeight - content.clientHeight - RESTORE_TOLERANCE
+        : !!targetPageEl &&
+          typeof targetPageEl.getBoundingClientRect === "function" &&
+          typeof content.getBoundingClientRect === "function" &&
+          Math.abs(targetPageEl.getBoundingClientRect().top - content.getBoundingClientRect().top) <= 20;
       const isFallbackAligned =
         isPageAligned || (effectiveRestorePosition.anchorPage === 1 && content.scrollTop <= RESTORE_TOLERANCE);
       const anchorReady = imageLoading[effectiveRestorePosition.anchorPage] === false;
@@ -140,8 +146,12 @@ export function useVerticalScroll({
       }
 
       if (attempts >= MAX_RESTORE_ATTEMPTS) {
-        if (targetPageEl && anchorReady) {
-          targetPageEl.scrollIntoView({ block: "start" });
+        if (anchorReady) {
+          if (isLastPage) {
+            content.scrollTop = content.scrollHeight - content.clientHeight;
+          } else if (targetPageEl) {
+            targetPageEl.scrollIntoView({ block: "start" });
+          }
         }
         retryId = window.setTimeout(() => {
           if (cancelled) return;
