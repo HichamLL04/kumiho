@@ -23,10 +23,14 @@ export function ViewerPage() {
     );
   }
 
-  const showLoadingBase = loaderData.isLoading || !loaderData.chapter;
+  // 메인 로딩 스피너: 초기 로딩 + 세로 모드 hydration 모두 커버
+  const showLoading =
+    loaderData.isLoading ||
+    !loaderData.chapter ||
+    (loaderData.viewStatus !== undefined && loaderData.viewStatus !== "ready");
 
   if (!loaderData.chapter) {
-    return showLoadingBase ? <LoadingSpinner fullScreen text={undefined} /> : null;
+    return showLoading ? <LoadingSpinner fullScreen text={undefined} /> : null;
   }
 
   const chapterPath = loaderData.chapter.path?.toLowerCase() ?? "";
@@ -34,9 +38,6 @@ export function ViewerPage() {
   const isEpub = chapterPath.endsWith(".epub");
   const isText = chapterPath.endsWith(".txt");
   const shouldUseImageRouteForPdf = isPdf && loaderData.chapter.render_mode === "image";
-  const isImageRoute = !isEpub && !isText && (!isPdf || shouldUseImageRouteForPdf);
-  const showLoading =
-    showLoadingBase || (isImageRoute && loaderData.viewStatus !== undefined && loaderData.viewStatus !== "ready");
 
   const route = isEpub ? (
     <EpubViewerRoute loaderData={loaderData} />

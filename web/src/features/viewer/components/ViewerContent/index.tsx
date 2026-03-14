@@ -90,46 +90,11 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       if (animatePrevRef.current) animatePrevRef.current();
       else onPrev();
     }, [onPrev]);
-
-    const verticalZoomContainerRef = useRef<HTMLDivElement>(null);
-    const [verticalZoomScale, setVerticalZoomScale] = useState(1);
-    const [verticalZoomOrigin, setVerticalZoomOrigin] = useState("50% 50%");
-    const handleVerticalZoomToggle = useCallback(
-      (isZoomingIn: boolean, anchor?: { clientX: number; clientY: number }) => {
-        if (!isZoomingIn) {
-          setVerticalZoomScale(1);
-          setVerticalZoomOrigin("50% 50%");
-          return;
-        }
-
-        const container = verticalZoomContainerRef.current;
-        if (!container || !anchor) {
-          setVerticalZoomScale(2);
-          setVerticalZoomOrigin("50% 50%");
-          return;
-        }
-
-        const rect = container.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) {
-          setVerticalZoomScale(2);
-          setVerticalZoomOrigin("50% 50%");
-          return;
-        }
-
-        const originX = Math.max(0, Math.min(100, ((anchor.clientX - rect.left) / rect.width) * 100));
-        const originY = Math.max(0, Math.min(100, ((anchor.clientY - rect.top) / rect.height) * 100));
-        setVerticalZoomScale(2);
-        setVerticalZoomOrigin(`${originX}% ${originY}%`);
-      },
-      [],
-    );
     const { transformComponentRef, isZoomed, setIsZoomed, handleContentClick, handleMouseDown, handleMouseMove } =
       useViewerZoom({
         clickDirection,
         onNext: handleAnimatedNext,
         onPrev: handleAnimatedPrev,
-        isVerticalMode: readingMode === "vertical",
-        onVerticalZoomToggle: handleVerticalZoomToggle,
         doubleTapZoomZone: "center",
         deferSingleTapForDoubleTap: false,
       });
@@ -277,7 +242,6 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
 
       return (
         <div
-          ref={verticalZoomContainerRef}
           style={{
             width: "100%",
             maxWidth: VERTICAL_MAX_WIDTH,
@@ -286,9 +250,6 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "flex-start",
-            transform: verticalZoomScale > 1 ? `scale(${verticalZoomScale})` : "none",
-            transformOrigin: verticalZoomOrigin,
-            transition: "transform 0.2s ease",
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}

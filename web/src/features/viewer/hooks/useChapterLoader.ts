@@ -145,7 +145,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
 
     const loadChapter = async () => {
       try {
-        const readingModeAtLoad = useViewerStore.getState().settings.readingMode;
+        const readingModeAtLoad = settings.readingMode;
         const shouldUseOffsetRestore = readingModeAtLoad !== "vertical";
         setIsLoading(true);
         setViewStatus("loading");
@@ -501,6 +501,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     resolveRestorePosition,
     setCurrentSeriesId,
     setNextChapterData,
+    settings.readingMode,
     urlAnchor,
     urlOffset,
     urlPage,

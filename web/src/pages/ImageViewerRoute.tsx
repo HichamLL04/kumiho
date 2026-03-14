@@ -175,13 +175,12 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   }, [settings.readingMode]);
 
   useLayoutEffect(() => {
-    if (settings.readingMode === "vertical") return;
     const pos = getViewportAnchorPosition(viewerContentRef.current, totalPages, currentPage);
     setSyncAnchorPosition((prev) => {
       if (prev.anchorPage === pos.anchorPage && prev.offsetRatio === pos.offsetRatio) return prev;
       return pos;
     });
-  }, [currentPage, totalPages, viewStatus, settings.readingMode]);
+  }, [currentPage, totalPages, viewStatus]);
 
   // 진행도 저장
   const { saveProgress, handleVolumeCompletion } = useProgress({

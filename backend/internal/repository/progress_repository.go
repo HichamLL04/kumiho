@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
@@ -31,13 +30,6 @@ func (r *ReadingProgressRepository) Upsert(db database.Queryer, progress *model.
 	if progress.ChapterID == nil || *progress.ChapterID == "" {
 		return fmt.Errorf("chapter_id is required for reading_progress")
 	}
-	if progress.CurrentPage < 1 {
-		progress.CurrentPage = 1
-	}
-	if progress.AnchorPage <= 0 {
-		progress.AnchorPage = progress.CurrentPage
-	}
-	progress.OffsetRatio = math.Max(0, math.Min(1, progress.OffsetRatio))
 
 	// 활동 로그 계산을 위해 기존 페이지를 조회 (없으면 0)
 	// 챕터별 개별 추적 중이므로 chapter_id 기준으로 조회해야 정확한 delta 계산이 가능함
