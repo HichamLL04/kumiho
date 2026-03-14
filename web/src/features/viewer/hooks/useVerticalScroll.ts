@@ -207,6 +207,7 @@ export function useVerticalScroll({
     const content = resolvedViewerContentRef.current;
     if (!content) return;
 
+    let rafId: number | null = null;
     const syncCurrentPage = () => {
       if (isInitialScrollingRef.current) return;
       if (Date.now() - readyAtRef.current < READY_STABILIZE_DELAY) return;
@@ -216,12 +217,22 @@ export function useVerticalScroll({
         setCurrentPage(nextPage);
       }
     };
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        syncCurrentPage();
+      });
+    };
 
     syncCurrentPage();
-    content.addEventListener("scroll", syncCurrentPage, { passive: true });
+    content.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
-      content.removeEventListener("scroll", syncCurrentPage);
+      content.removeEventListener("scroll", onScroll);
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       isInternalScrollRef.current = false;
     };
   }, [
