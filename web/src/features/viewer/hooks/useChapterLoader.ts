@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
-import { chapterAPI, volumeAPI, seriesAPI, libraryAPI, settingAPI } from "../../../api/client";
+import { chapterAPI, volumeAPI, viewerAPI } from "../../../api/client";
 import { useViewerStore } from "../../../stores/viewerStore";
 import type { ViewerSettings, ReadingMode, ReadingDirection, FitMode } from "../../../stores/viewerStore";
 import type { Chapter, PageMeta, RestorePosition, ViewStatus } from "../types";
@@ -250,198 +250,152 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           return;
         }
 
-        // 1. 챕터 정보 먼저 가져와서 검증
-        const response = await chapterAPI.get(chapterId);
+        // 1. 단일 API 호출로 뷰어 초기 데이터 전체 로드 (Waterfall 방지)
+        const initRes = await viewerAPI.getInitData(chapterId);
         if (cancelled) return;
-        const chapterData = response.data;
-        console.log(`[ChapterLoader] API Loaded: ${chapterData.id}, pages=${chapterData.page_count}`);
 
-        // 볼륨 ID 설정
+        const {
+          chapter: chapterData,
+          volume: volumeData,
+          series: seriesData,
+          library,
+          progress,
+          user_settings: serverSeriesSettings,
+          pages: initPages,
+          server_settings: globalData,
+        } = initRes.data;
+
+        console.log(`[ChapterLoader] Init API Loaded: ${chapterData.id}, pages=${chapterData.page_count}`);
+
+        // 볼륨 ID 및 시리즈 ID 설정
         if (chapterData.volume_id && chapterData.volume_id !== volumeIdRef.current) {
           volumeIdRef.current = chapterData.volume_id;
           setVolumeId(chapterData.volume_id);
         }
-
-        // 2. 진행도 정보도 미리 가져오기
-        let progress: ReadingProgress | null = null;
-        if (!urlPage) {
-          try {
-            const progressRes = await chapterAPI.getProgress(chapterId);
-            if (cancelled) return;
-            progress = progressRes.data.progress as ReadingProgress | null;
-          } catch (progressErr: unknown) {
-            const err = progressErr as { response?: { status: number }; message?: string };
-            if (err?.response?.status !== 404) {
-              console.warn("진행도 로드 실패:", err?.message || progressErr);
-            }
-          }
-        }
+        setSeriesId(seriesData.id);
 
         let nextRestorePosition = resolveRestorePosition(chapterData.page_count, shouldUseOffsetRestore, progress);
         let startPage = nextRestorePosition.currentPage;
 
-        if (cancelled) return;
-
-        // 볼륨 정보 로드
-        if (chapterData.volume_id) {
-          try {
-            const volumeRes = await volumeAPI.get(chapterData.volume_id);
-            if (cancelled) return;
-            const loadedSeriesId = volumeRes.data.series_id;
-            setSeriesId(loadedSeriesId);
-
-            if (loadedSeriesId) {
-              // 설정 우선순위 적용
-              try {
-                // 완독된 볼륨이면 마지막 페이지로 설정
-                if (volumeRes.data.is_completed && !urlPage && startPage === 1) {
-                  startPage = chapterData.page_count;
-                  nextRestorePosition = {
-                    currentPage: chapterData.page_count,
-                    anchorPage: chapterData.page_count,
-                    offsetRatio: 0,
-                  };
-                }
-
-                // 1. 전역 기본값 로드
-                const globalRes = await settingAPI.list();
-                if (cancelled) return;
-                const globalData = (globalRes || {}) as Record<string, string>;
-
-                // 2. 시리즈 정보 로드
-                const seriesRes = await seriesAPI.get(loadedSeriesId);
-                if (cancelled) return;
-                const seriesData = seriesRes.data;
-
-                // 3. 라이브러리 기본값 로드
-                const libRes = await libraryAPI.get(seriesData.library_id);
-                if (cancelled) return;
-                const library = libRes.data;
-
-                // 4. 시리즈 개별 설정 로드
-                const seriesOverride: Partial<ViewerSettings> = {};
-                try {
-                  const serverSeriesSettings = await seriesAPI.getViewerSettings(loadedSeriesId);
-                  if (cancelled) return;
-                  if (serverSeriesSettings && Object.keys(serverSeriesSettings).length > 0) {
-                    const mapping: Record<string, keyof ViewerSettings> = {
-                      reading_mode: "readingMode",
-                      reading_direction: "readingDirection",
-                      click_direction: "clickDirection",
-                      keyboard_direction: "keyboardDirection",
-                      wheel_direction: "wheelDirection",
-                      swipe_direction: "swipeDirection",
-                      fit_mode: "fitMode",
-                      background_color: "backgroundColor",
-                      page_transition: "pageTransition",
-                      show_pdf_zoom_controls: "showPdfZoomControls",
-                      preload_count: "preloadCount",
-                      pull_threshold: "pullThreshold",
-                      pull_sensitivity: "pullSensitivity",
-                      show_threshold: "showThreshold",
-                    };
-
-                    Object.entries(serverSeriesSettings).forEach(([key, value]) => {
-                      const camelKey = mapping[key];
-                      if (camelKey && value !== undefined && value !== null) {
-                        (seriesOverride as Record<string, unknown>)[camelKey] = value;
-                      }
-                    });
-                  }
-                } catch (err) {
-                  console.warn("시리즈 개별 설정 서버 로드 실패, 로컬 설정을 사용합니다:", err);
-                }
-
-                // 5. 계층별 병합
-                const resolvedSettings: Partial<ViewerSettings> = {};
-
-                resolvedSettings.readingMode = (seriesOverride.readingMode ||
-                  library.default_view_mode ||
-                  globalData.viewer_reading_mode ||
-                  "vertical") as ReadingMode;
-
-                resolvedSettings.readingDirection = (seriesOverride.readingDirection ||
-                  library.default_read_direction ||
-                  globalData.viewer_reading_direction ||
-                  "ltr") as ReadingDirection;
-
-                resolvedSettings.clickDirection = (seriesOverride.clickDirection ||
-                  globalData.viewer_click_direction ||
-                  globalData.viewer_reading_direction ||
-                  "ltr") as ReadingDirection;
-
-                resolvedSettings.keyboardDirection = (seriesOverride.keyboardDirection ||
-                  globalData.viewer_keyboard_direction ||
-                  "ltr") as ReadingDirection;
-
-                resolvedSettings.wheelDirection = (seriesOverride.wheelDirection ||
-                  globalData.viewer_wheel_direction ||
-                  "down") as ViewerSettings["wheelDirection"];
-
-                resolvedSettings.swipeDirection = (seriesOverride.swipeDirection ||
-                  globalData.swipe_direction ||
-                  "ltr") as ReadingDirection;
-
-                resolvedSettings.fitMode = (seriesOverride.fitMode ||
-                  globalData.viewer_fit_mode ||
-                  "screen") as FitMode;
-
-                resolvedSettings.backgroundColor = seriesOverride.backgroundColor || "#000000";
-                resolvedSettings.pageTransition = (seriesOverride.pageTransition ||
-                  globalData.viewer_page_transition ||
-                  "slide") as ViewerSettings["pageTransition"];
-                resolvedSettings.showPdfZoomControls =
-                  seriesOverride.showPdfZoomControls ??
-                  (globalData.viewer_show_pdf_zoom_controls
-                    ? globalData.viewer_show_pdf_zoom_controls === "true"
-                    : true);
-
-                if (globalData.viewer_preload_count)
-                  resolvedSettings.preloadCount = parseInt(globalData.viewer_preload_count, 10);
-                if (globalData.viewer_pull_threshold)
-                  resolvedSettings.pullThreshold = parseInt(globalData.viewer_pull_threshold, 10);
-                if (globalData.viewer_pull_sensitivity)
-                  resolvedSettings.pullSensitivity = parseFloat(globalData.viewer_pull_sensitivity);
-                if (globalData.viewer_show_threshold)
-                  resolvedSettings.showThreshold = parseInt(globalData.viewer_show_threshold, 10);
-
-                initializeSettings(resolvedSettings);
-                setCurrentSeriesId(loadedSeriesId);
-
-                if (import.meta.env.DEV) {
-                  console.log(`[Viewer] Settings initialized for series ${loadedSeriesId}:`, {
-                    mode: resolvedSettings.readingMode,
-                    dir: resolvedSettings.readingDirection,
-                  });
-                }
-              } catch (err) {
-                console.error("설정 계층 병합 로드 실패:", err);
-              }
-            }
-          } catch (volumeErr) {
-            console.warn("볼륨 정보 로드 실패:", volumeErr);
+        // 설정 우선순위 적용 (Series Override -> Library Default -> Global Default)
+        try {
+          // 완독된 볼륨이면 마지막 페이지로 설정
+          if (volumeData.is_completed && !urlPage && startPage === 1) {
+            startPage = chapterData.page_count;
+            nextRestorePosition = {
+              currentPage: chapterData.page_count,
+              anchorPage: chapterData.page_count,
+              offsetRatio: 0,
+            };
           }
+
+          // 시리즈 개별 설정 매핑
+          const seriesOverride: Partial<ViewerSettings> = {};
+          if (serverSeriesSettings) {
+            const mapping: Record<string, keyof ViewerSettings> = {
+              reading_mode: "readingMode",
+              reading_direction: "readingDirection",
+              click_direction: "clickDirection",
+              keyboard_direction: "keyboardDirection",
+              wheel_direction: "wheelDirection",
+              swipe_direction: "swipeDirection",
+              fit_mode: "fitMode",
+              background_color: "backgroundColor",
+              page_transition: "pageTransition",
+              show_pdf_zoom_controls: "showPdfZoomControls",
+              preload_count: "preloadCount",
+              pull_threshold: "pullThreshold",
+              pull_sensitivity: "pullSensitivity",
+              show_threshold: "showThreshold",
+            };
+
+            Object.entries(serverSeriesSettings).forEach(([key, value]) => {
+              const camelKey = mapping[key];
+              if (camelKey && value !== undefined && value !== null) {
+                (seriesOverride as Record<string, unknown>)[camelKey] = value;
+              }
+            });
+          }
+
+          // 계층별 병합
+          const resolvedSettings: Partial<ViewerSettings> = {};
+
+          resolvedSettings.readingMode = (seriesOverride.readingMode ||
+            library.default_view_mode ||
+            globalData.viewer_reading_mode ||
+            "vertical") as ReadingMode;
+
+          resolvedSettings.readingDirection = (seriesOverride.readingDirection ||
+            library.default_read_direction ||
+            globalData.viewer_reading_direction ||
+            "ltr") as ReadingDirection;
+
+          resolvedSettings.clickDirection = (seriesOverride.clickDirection ||
+            globalData.viewer_click_direction ||
+            globalData.viewer_reading_direction ||
+            "ltr") as ReadingDirection;
+
+          resolvedSettings.keyboardDirection = (seriesOverride.keyboardDirection ||
+            globalData.viewer_keyboard_direction ||
+            "ltr") as ReadingDirection;
+
+          resolvedSettings.wheelDirection = (seriesOverride.wheelDirection ||
+            globalData.viewer_wheel_direction ||
+            "down") as ViewerSettings["wheelDirection"];
+
+          resolvedSettings.swipeDirection = (seriesOverride.swipeDirection ||
+            globalData.swipe_direction ||
+            "ltr") as ReadingDirection;
+
+          resolvedSettings.fitMode = (seriesOverride.fitMode || globalData.viewer_fit_mode || "screen") as FitMode;
+
+          resolvedSettings.backgroundColor = seriesOverride.backgroundColor || "#000000";
+          resolvedSettings.pageTransition = (seriesOverride.pageTransition ||
+            globalData.viewer_page_transition ||
+            "slide") as ViewerSettings["pageTransition"];
+          resolvedSettings.showPdfZoomControls =
+            seriesOverride.showPdfZoomControls ??
+            (globalData.viewer_show_pdf_zoom_controls ? globalData.viewer_show_pdf_zoom_controls === "true" : true);
+
+          if (globalData.viewer_preload_count)
+            resolvedSettings.preloadCount = parseInt(globalData.viewer_preload_count, 10);
+          if (globalData.viewer_pull_threshold)
+            resolvedSettings.pullThreshold = parseInt(globalData.viewer_pull_threshold, 10);
+          if (globalData.viewer_pull_sensitivity)
+            resolvedSettings.pullSensitivity = parseFloat(globalData.viewer_pull_sensitivity);
+          if (globalData.viewer_show_threshold)
+            resolvedSettings.showThreshold = parseInt(globalData.viewer_show_threshold, 10);
+
+          initializeSettings(resolvedSettings);
+          setCurrentSeriesId(seriesData.id);
+
+          if (import.meta.env.DEV) {
+            console.log(`[Viewer] Settings initialized for series ${seriesData.id}:`, {
+              mode: resolvedSettings.readingMode,
+              dir: resolvedSettings.readingDirection,
+            });
+          }
+        } catch (err) {
+          console.error("설정 적용 실패:", err);
         }
 
         if (cancelled) return;
 
-        // 3. 상태 업데이트
+        // 상태 업데이트
         setChapter(chapterData);
         setRestorePosition(nextRestorePosition);
         isInitialScrollingRef.current = true;
         console.log(`[ChapterLoader] Initializing page: start=${startPage}, total=${chapterData.page_count}`);
         initPage(startPage, chapterData.page_count);
 
-        // 4. 페이지 메타데이터 로드
+        // 페이지 메타데이터 처리
         try {
-          let pagesRes = await chapterAPI.getPages(chapterId);
-          if (cancelled) return;
-          let pages = pagesRes.data.pages || [];
+          let pages = initPages || [];
 
           // 분석이 필요한 페이지가 있는지 확인
           const needsAnalysis =
             readingModeAtLoad !== "vertical" &&
-            pages.some((page: { width: number; height: number }) => page.width === 0 || page.height === 0);
+            pages.some((page: Page) => (page.width || 0) === 0 || (page.height || 0) === 0);
 
           if (needsAnalysis) {
             console.log("[Viewer] 이미지 크기 분석 필요, 분석 API 호출 중...");
@@ -454,7 +408,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
                 );
               }
 
-              pagesRes = await chapterAPI.getPages(chapterId);
+              const pagesRes = await chapterAPI.getPages(chapterId);
               if (cancelled) return;
               pages = pagesRes.data.pages || [];
             } catch (analyzeErr) {
@@ -462,11 +416,14 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
             }
           }
 
-          const meta: PageMeta[] = pages.map((page: { page_number: number; width: number; height: number }) => ({
+          const meta: PageMeta[] = pages.map((page: Page) => ({
             pageNumber: page.page_number,
             width: page.width || 0,
             height: page.height || 0,
-            isWide: page.width > 0 && page.height > 0 && page.width > page.height * WIDE_RATIO_THRESHOLD,
+            isWide:
+              (page.width || 0) > 0 &&
+              (page.height || 0) > 0 &&
+              (page.width || 0) > (page.height || 0) * WIDE_RATIO_THRESHOLD,
           }));
           setPageMeta(meta);
         } catch (metaErr) {

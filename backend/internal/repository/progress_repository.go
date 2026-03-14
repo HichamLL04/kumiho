@@ -821,14 +821,47 @@ func (r *ReadingProgressRepository) FindRecentEnrichedByUser(db database.Queryer
 	var results []RecentEnrichedProgress
 	for rows.Next() {
 		var p RecentEnrichedProgress
+		var volID, chapID, devID, devName, currentCFI sql.NullString
 		var chapterPath, volumePath, seriesPath sql.NullString
+		var anchorPage, currentPosition, totalPositions sql.NullInt64
+		var offsetRatio sql.NullFloat64
+
 		err := rows.Scan(
-			&p.ID, &p.UserID, &p.SeriesID, &p.VolumeID, &p.ChapterID, &p.CurrentPage, &p.AnchorPage, &p.OffsetRatio,
-			&p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &p.DeviceID, &p.DeviceName, &p.CurrentCFI, &p.UpdatedAt,
+			&p.ID, &p.UserID, &p.SeriesID, &volID, &chapID, &p.CurrentPage, &anchorPage, &offsetRatio,
+			&p.TotalPages, &currentPosition, &totalPositions, &p.ProgressPercent, &devID, &devName, &currentCFI, &p.UpdatedAt,
 			&chapterPath, &volumePath, &seriesPath,
 		)
 		if err != nil {
 			return nil, err
+		}
+
+		if volID.Valid {
+			p.VolumeID = &volID.String
+		}
+		if chapID.Valid {
+			p.ChapterID = &chapID.String
+		}
+		if devID.Valid {
+			p.DeviceID = &devID.String
+		}
+		if devName.Valid {
+			p.DeviceName = &devName.String
+		}
+		if currentCFI.Valid {
+			p.CurrentCFI = &currentCFI.String
+		}
+
+		if anchorPage.Valid {
+			p.AnchorPage = int(anchorPage.Int64)
+		}
+		if offsetRatio.Valid {
+			p.OffsetRatio = offsetRatio.Float64
+		}
+		if currentPosition.Valid {
+			p.CurrentPosition = int(currentPosition.Int64)
+		}
+		if totalPositions.Valid {
+			p.TotalPositions = int(totalPositions.Int64)
 		}
 
 		if chapterPath.Valid {

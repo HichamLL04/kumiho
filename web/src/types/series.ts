@@ -114,7 +114,31 @@ export interface SeriesProgressSummary {
   read_pages?: number;
 }
 
+export interface UserSeriesSetting {
+  user_id: string;
+  series_id: string;
+  reading_mode?: string;
+  epub_render_mode?: string;
+  epub_theme?: string;
+  epub_spread?: string;
+  epub_wheel_direction?: string;
+  epub_keyboard_direction?: string;
+  epub_click_direction?: string;
+  reading_direction?: string;
+  wheel_direction?: string;
+  swipe_direction?: string;
+  click_direction?: string;
+  keyboard_direction?: string;
+  fit_mode?: string;
+  background_color?: string;
+  updated_at: string;
+}
+
 export interface Library {
   id: string;
   name: string;
+  path?: string;
+  default_view_mode?: string;
+  default_read_direction?: string;
+  default_page_transition?: string;
 }

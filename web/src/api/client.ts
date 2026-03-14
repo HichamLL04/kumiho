@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Chapter, Series, Volume } from "../types/series";
+import type { Chapter, Series, Volume, Library, ReadingProgress, Page, UserSeriesSetting } from "../types/series";
 import type { User } from "../types/user";
 import type { Session } from "../types/session";
 
@@ -316,7 +316,19 @@ export const progressAPI = {
 };
 
 // Viewer API
+export interface ViewerInitResponse {
+  chapter: Chapter;
+  volume: Volume;
+  series: Series;
+  library: Library;
+  progress: ReadingProgress | null;
+  user_settings: UserSeriesSetting | null;
+  pages: Page[];
+  server_settings: Record<string, string>;
+}
+
 export const viewerAPI = {
+  getInitData: (chapterId: string) => api.get<ViewerInitResponse>(`/viewer/init/${chapterId}`),
   start: (data: { series_id: string; chapter_id: string }) => api.post("/viewer/start", data),
   resumeCheck: (data: { series_id: string; chapter_id: string; current_page: number }) =>
     api.post("/viewer/resume-check", data),

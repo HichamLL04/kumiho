@@ -31,6 +31,8 @@ type SeriesHandler struct {
 	completionRepo        *repository.VolumeCompletionRepository
 	chapterCompletionRepo *repository.ChapterCompletionRepository
 	userSeriesSettingRepo repository.UserSeriesSettingRepository
+	progressRepo          *repository.ReadingProgressRepository
+	settingRepo           repository.SettingRepository
 	config                *config.Config
 	seriesEnrichSvc       *service.SeriesEnrichService
 }
@@ -45,6 +47,8 @@ func NewSeriesHandler(
 	completionRepo *repository.VolumeCompletionRepository,
 	chapterCompletionRepo *repository.ChapterCompletionRepository,
 	userSeriesSettingRepo repository.UserSeriesSettingRepository,
+	progressRepo *repository.ReadingProgressRepository,
+	settingRepo repository.SettingRepository,
 	cfg *config.Config,
 	seriesEnrichSvc *service.SeriesEnrichService,
 ) *SeriesHandler {
@@ -58,6 +62,8 @@ func NewSeriesHandler(
 		completionRepo:        completionRepo,
 		chapterCompletionRepo: chapterCompletionRepo,
 		userSeriesSettingRepo: userSeriesSettingRepo,
+		progressRepo:          progressRepo,
+		settingRepo:           settingRepo,
 		config:                cfg,
 		seriesEnrichSvc:       seriesEnrichSvc,
 	}
@@ -88,6 +94,17 @@ type UpdateVolumeRequest struct {
 type VolumeResponse struct {
 	model.Volume
 	IsCompleted bool `json:"is_completed"`
+}
+
+type ViewerInitResponse struct {
+	Chapter        *model.Chapter           `json:"chapter"`
+	Volume         *model.Volume            `json:"volume"`
+	Series         *model.Series            `json:"series"`
+	Library        *model.Library           `json:"library"`
+	Progress       *model.ReadingProgress   `json:"progress"`
+	UserSettings   *model.UserSeriesSetting `json:"user_settings"`
+	Pages          []model.Page             `json:"pages"`
+	ServerSettings map[string]string        `json:"server_settings"`
 }
 
 // ListByLibrary 라이브러리별 시리즈 목록
@@ -1214,6 +1231,90 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(chapter)
+}
+
+// GetViewerInitData 뷰어 초기화 데이터 통합 조회
+// GET /api/v1/viewer/init/:chapterId
+func (h *SeriesHandler) GetViewerInitData(c *fiber.Ctx) error {
+	chapterID := c.Params("chapterId")
+	userID := middleware.GetUserID(c)
+
+	// 1. 챕터 조회
+	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
+	if err != nil || chapter == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter not found"})
+	}
+
+	// 챕터 렌더 모드 설정
+	chapterPath := strings.ToLower(chapter.Path)
+	if strings.HasSuffix(chapterPath, ".pdf") {
+		renderMode := "pdf"
+		if service.ShouldUsePdfImageFallback(c.Get("User-Agent")) {
+			renderMode = "image"
+		}
+		chapter.RenderMode = &renderMode
+	} else if strings.HasSuffix(chapterPath, ".txt") {
+		renderMode := "text"
+		chapter.RenderMode = &renderMode
+	}
+
+	// 2. 볼륨 조회
+	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if err != nil || volume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume not found"})
+	}
+
+	// 3. 시리즈 조회
+	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found"})
+	}
+
+	// 4. 라이브러리 조회
+	library, err := h.libraryRepo.FindByID(nil, series.LibraryID)
+	if err != nil || library == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "library not found"})
+	}
+
+	// 5. 진행도 조회
+	progress, err := h.progressRepo.FindByUserAndChapter(nil, userID, chapterID)
+	if err != nil {
+		// 진행도는 없을 수 있음 (무시)
+		log.Printf("Failed to fetch progress: %v", err)
+	}
+
+	// 6. 사용자 시리즈 설정 조회
+	userSettings, err := h.userSeriesSettingRepo.Get(nil, userID, series.ID)
+	if err != nil {
+		log.Printf("Failed to fetch user settings: %v", err)
+	}
+
+	// 7. 페이지 목록 조회
+	pages, err := h.pageRepo.FindByChapterID(nil, chapterID)
+	if err != nil {
+		log.Printf("Failed to fetch pages: %v", err)
+		pages = []model.Page{}
+	}
+
+	// 8. 서버 설정 조회
+	allSettings, err := h.settingRepo.GetAll(nil)
+	serverSettings := make(map[string]string)
+	if err == nil {
+		for _, s := range allSettings {
+			serverSettings[s.Key] = s.Value
+		}
+	}
+
+	return c.JSON(ViewerInitResponse{
+		Chapter:        chapter,
+		Volume:         volume,
+		Series:         series,
+		Library:        library,
+		Progress:       progress,
+		UserSettings:   userSettings,
+		Pages:          pages,
+		ServerSettings: serverSettings,
+	})
 }
 
 // ListPages 챕터별 페이지 목록
