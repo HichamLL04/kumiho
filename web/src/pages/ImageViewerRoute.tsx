@@ -209,10 +209,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     viewStatus,
   });
 
-  const { estimatedHeights, targetScrollTop, canUsePreciseRestore } = useVerticalRestoreLayout({
+  const { estimatedHeights } = useVerticalRestoreLayout({
     pageMetaMap,
-    restorePosition,
-    fitMode: settings.fitMode,
     containerWidth: viewerContentWidth,
     totalPages,
   });
@@ -234,8 +232,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     restorePosition,
     viewStatus,
     setViewStatus,
-    targetScrollTop,
-    canUsePreciseRestore,
     viewerContentRef,
     imageLoading,
   });

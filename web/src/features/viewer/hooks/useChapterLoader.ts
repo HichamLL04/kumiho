@@ -1,6 +1,6 @@
 // 챕터 로딩 훅
 
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
 import { chapterAPI, volumeAPI, seriesAPI, libraryAPI, settingAPI } from "../../../api/client";
@@ -24,7 +24,6 @@ export interface UseChapterLoaderReturn {
   pageMetaMap: Map<number, PageMeta>;
   isInitialScrollingRef: React.RefObject<boolean>;
   restorePosition?: RestorePosition;
-  isPageMetaReady?: boolean;
   viewStatus?: ViewStatus;
   setViewStatus?: Dispatch<SetStateAction<ViewStatus>>;
 }
@@ -62,10 +61,6 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
 
   // 페이지 메타데이터 Map (O(1) 조회용)
   const pageMetaMap = useMemo(() => new Map(pageMeta.map((p) => [p.pageNumber, p])), [pageMeta]);
-  const isPageMetaReady = useMemo(
-    () => pageMeta.length > 0 && pageMeta.every((p) => p.width > 0 && p.height > 0),
-    [pageMeta],
-  );
 
   // 다음 챕터 데이터 캐시를 Ref로 관리
   const nextChapterDataRef = useRef(nextChapterData);
@@ -93,9 +88,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     return Math.max(0, Math.min(1, offsetRatio));
   };
   const resolveRestorePosition = useCallback(
-    (pageCount: number, progress?: ReadingProgress | null): RestorePosition => {
-      const shouldUseOffsetRestore = readingModeRef.current !== "vertical";
-
+    (pageCount: number, shouldUseOffsetRestore: boolean, progress?: ReadingProgress | null): RestorePosition => {
       if (urlPage === "last") {
         const page = resolveLastPage(pageCount);
         return { currentPage: page, anchorPage: page, offsetRatio: 0 };
@@ -123,8 +116,6 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
         offsetRatio: shouldUseOffsetRestore ? clampOffsetRatio(progress?.offset_ratio) : 0,
       };
     },
-    // readingModeRef를 사용하여 settings.readingMode 변경이 챕터 로드를 재실행하지 않도록 함
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [urlAnchor, urlOffset, urlPage],
   );
   const finishChapterLoad = (mode: ReadingMode) => {
@@ -137,12 +128,6 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     setViewStatus("ready");
     isInitialScrollingRef.current = false;
   };
-
-  // readingMode Ref (의존성 배열을 피하기 위해 ref로 관리)
-  const readingModeRef = useRef(settings.readingMode);
-  useEffect(() => {
-    readingModeRef.current = settings.readingMode;
-  }, [settings.readingMode]);
 
   // 시리즈 ID 관리 및 설정 초기화 (언마운트 시 초기화)
   useEffect(() => {
@@ -160,6 +145,8 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
 
     const loadChapter = async () => {
       try {
+        const readingModeAtLoad = settings.readingMode;
+        const shouldUseOffsetRestore = readingModeAtLoad !== "vertical";
         setIsLoading(true);
         setViewStatus("loading");
         setError(null);
@@ -201,7 +188,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
             }
           }
 
-          const nextRestorePosition = resolveRestorePosition(cachedChapter.page_count, progress);
+          const nextRestorePosition = resolveRestorePosition(cachedChapter.page_count, shouldUseOffsetRestore, progress);
           const startPage = nextRestorePosition.currentPage;
 
           if (cancelled) return;
@@ -233,7 +220,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           // 로딩 상태 및 스크롤 가드 해제 (약간의 지연으로 초기 스크롤 이동 완료 대기)
           timeoutId = setTimeout(() => {
             if (cancelled) return;
-            finishChapterLoad(readingModeRef.current);
+            finishChapterLoad(readingModeAtLoad);
           }, 300); // 150ms -> 300ms로 상향 (렌더링 안정성 확보)
 
           // 부가 정보 로드 (비동기, 백그라운드 처리)
@@ -283,7 +270,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           }
         }
 
-        let nextRestorePosition = resolveRestorePosition(chapterData.page_count, progress);
+        let nextRestorePosition = resolveRestorePosition(chapterData.page_count, shouldUseOffsetRestore, progress);
         let startPage = nextRestorePosition.currentPage;
 
         if (cancelled) return;
@@ -444,9 +431,9 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           if (cancelled) return;
           let pages = pagesRes.data.pages || [];
 
-          // 분석이 필요한 페이지가 있는지 확인 (readingModeRef 사용)
+          // 분석이 필요한 페이지가 있는지 확인
           const needsAnalysis =
-            readingModeRef.current !== "vertical" &&
+            readingModeAtLoad !== "vertical" &&
             pages.some((page: { width: number; height: number }) => page.width === 0 || page.height === 0);
 
           if (needsAnalysis) {
@@ -486,7 +473,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
         // 5. 완료 후 가드 해제
         timeoutId = setTimeout(() => {
           if (cancelled) return;
-          finishChapterLoad(readingModeRef.current);
+          finishChapterLoad(readingModeAtLoad);
         }, 300); // 150ms -> 300ms로 상향
       } catch (err) {
         if (cancelled) return;
@@ -507,7 +494,18 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     };
     // seriesSettings를 의존성에서 제외:
     // 설정 변경 시 챕터 재로드를 방지하기 위함. 초기 로드에만 필요하고 readingMode 변경 시 재로드하면 안됨.
-  }, [chapterId, initPage, initializeSettings, resolveRestorePosition, setCurrentSeriesId, urlPage, setNextChapterData]);
+  }, [
+    chapterId,
+    initPage,
+    initializeSettings,
+    resolveRestorePosition,
+    setCurrentSeriesId,
+    setNextChapterData,
+    settings.readingMode,
+    urlAnchor,
+    urlOffset,
+    urlPage,
+  ]);
 
   // 세로 모드 -> 다른 모드로 변경 시 이미지 분석 로직
   useEffect(() => {
@@ -555,7 +553,6 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     pageMetaMap,
     isInitialScrollingRef,
     restorePosition,
-    isPageMetaReady,
     viewStatus,
     setViewStatus,
   };

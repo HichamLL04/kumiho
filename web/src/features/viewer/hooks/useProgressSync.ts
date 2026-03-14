@@ -37,11 +37,21 @@ export function useProgressSync({
 }: UseProgressSyncParams) {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [serverProgress, setServerProgress] = useState<ServerProgress | null>(null);
+  const [modalContextKey, setModalContextKey] = useState("");
   const isCheckedRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
   const skipSyncCheck = location.state?.skipSyncCheck === true;
+  const syncContextKey = `${seriesId ?? ""}:${chapter?.id ?? ""}`;
+  const syncContextKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    if (syncContextKeyRef.current !== syncContextKey) {
+      syncContextKeyRef.current = syncContextKey;
+      isCheckedRef.current = false;
+    }
+  }, [syncContextKey]);
 
   useEffect(() => {
     if (skipSyncCheck) {
@@ -68,6 +78,7 @@ export function useProgressSync({
       const { server_ahead, server_progress } = response.data;
 
       if (server_ahead && server_progress && server_progress.current_page !== currentPage) {
+        setModalContextKey(syncContextKeyRef.current);
         setServerProgress(server_progress);
         setShowSyncModal(true);
       }
@@ -119,8 +130,10 @@ export function useProgressSync({
     setShowSyncModal(false);
   }, []);
 
+  const effectiveShowSyncModal = showSyncModal && modalContextKey === syncContextKey;
+
   return {
-    showSyncModal,
+    showSyncModal: effectiveShowSyncModal,
     serverProgress,
     handleConfirmSync,
     handleCloseModal,

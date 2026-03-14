@@ -1,6 +1,6 @@
 // 세로 스크롤 모드 전용 훅
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
@@ -26,8 +26,6 @@ interface UseVerticalScrollParams {
   restorePosition?: RestorePosition;
   viewStatus?: ViewStatus;
   setViewStatus?: Dispatch<SetStateAction<ViewStatus>>;
-  targetScrollTop?: number;
-  canUsePreciseRestore?: boolean;
   viewerContentRef?: RefObject<HTMLDivElement | null>;
   imageLoading?: Record<number, boolean>;
 }
@@ -35,8 +33,6 @@ interface UseVerticalScrollParams {
 interface UseVerticalScrollReturn {
   pullOffset: number;
   viewerContentRef: RefObject<HTMLDivElement | null>;
-  isInternalScrollRef: RefObject<boolean>;
-  startYRef: RefObject<number | null>;
   isTouching: boolean;
 }
 
@@ -84,6 +80,27 @@ export function useVerticalScroll({
   const lastYRef = useRef<number | null>(null);
   const isInternalScrollRef = useRef(false);
   const readyAtRef = useRef(0);
+
+  const navigateToChapter = useCallback(
+    (chapterIdToMove: string, options: { preventComplete?: boolean } = {}): Promise<void> => {
+      return (options.preventComplete ? saveProgress() : handleVolumeCompletion().then(() => saveProgress()))
+        .then(() => {
+          startChapterSwitching(isDocumentFullscreen());
+          navigate(`/viewer/${chapterIdToMove}`, {
+            replace: true,
+            state: {
+              ...(options.preventComplete ? { preventComplete: true } : {}),
+              ...(viewerFrom ? { from: viewerFrom } : {}),
+            },
+          });
+        })
+        .catch((error) => {
+          console.error("[useVerticalScroll] chapter navigation failed:", error);
+          isNavigatingRef.current = false;
+        });
+    },
+    [handleVolumeCompletion, navigate, saveProgress, viewerFrom],
+  );
 
   useEffect(() => {
     if (readingMode === "vertical" || isLoading) return;
@@ -141,7 +158,9 @@ export function useVerticalScroll({
       }
 
       if (attempts >= MAX_RESTORE_ATTEMPTS) {
-        if (targetPageEl && isAnchorImageReady) {
+        if (isLastPage) {
+          content.scrollTop = content.scrollHeight - content.clientHeight;
+        } else if (targetPageEl && isAnchorImageReady) {
           targetPageEl.scrollIntoView({ block: "start" });
         }
         retryId = window.setTimeout(() => {
@@ -235,16 +254,7 @@ export function useVerticalScroll({
           pullOffsetRef.current = newOffset;
           if (newOffset >= pullThreshold) {
             isNavigatingRef.current = true;
-            saveProgress().then(() => {
-              startChapterSwitching(isDocumentFullscreen());
-              navigate(`/viewer/${prevChapterId}`, {
-                replace: true,
-                state: {
-                  preventComplete: true,
-                  ...(viewerFrom ? { from: viewerFrom } : {}),
-                },
-              });
-            });
+            void navigateToChapter(prevChapterId, { preventComplete: true });
             return 0;
           }
           return newOffset;
@@ -256,15 +266,7 @@ export function useVerticalScroll({
           pullOffsetRef.current = newOffset;
           if (Math.abs(newOffset) >= pullThreshold) {
             isNavigatingRef.current = true;
-            handleVolumeCompletion()
-              .then(() => saveProgress())
-              .then(() => {
-                startChapterSwitching(isDocumentFullscreen());
-                navigate(`/viewer/${nextChapterId}`, {
-                  replace: true,
-                  state: viewerFrom ? { from: viewerFrom } : undefined,
-                });
-              });
+            void navigateToChapter(nextChapterId);
             return 0;
           }
           return newOffset;
@@ -334,27 +336,10 @@ export function useVerticalScroll({
 
       if (currentOffset >= pullThreshold && prevChapterId) {
         isNavigatingRef.current = true;
-        saveProgress().then(() => {
-          startChapterSwitching(isDocumentFullscreen());
-          navigate(`/viewer/${prevChapterId}`, {
-            replace: true,
-            state: {
-              preventComplete: true,
-              ...(viewerFrom ? { from: viewerFrom } : {}),
-            },
-          });
-        });
+        void navigateToChapter(prevChapterId, { preventComplete: true });
       } else if (currentOffset <= -pullThreshold && nextChapterId) {
         isNavigatingRef.current = true;
-        handleVolumeCompletion()
-          .then(() => saveProgress())
-          .then(() => {
-            startChapterSwitching(isDocumentFullscreen());
-            navigate(`/viewer/${nextChapterId}`, {
-              replace: true,
-              state: viewerFrom ? { from: viewerFrom } : undefined,
-            });
-          });
+        void navigateToChapter(nextChapterId);
       }
 
       setPullOffset(0);
@@ -423,8 +408,7 @@ export function useVerticalScroll({
     pullThreshold,
     readingMode,
     resolvedViewerContentRef,
-    saveProgress,
-    viewerFrom,
+    navigateToChapter,
     effectiveViewStatus,
   ]);
 
@@ -443,8 +427,6 @@ export function useVerticalScroll({
   return {
     pullOffset,
     viewerContentRef: resolvedViewerContentRef,
-    isInternalScrollRef,
-    startYRef,
     isTouching,
   };
 }
