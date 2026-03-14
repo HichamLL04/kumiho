@@ -1,5 +1,3 @@
-// 챕터 로딩 훅
-
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -136,6 +134,11 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     };
   }, [setCurrentSeriesId]);
 
+  const readingModeRef = useRef(settings.readingMode);
+  useEffect(() => {
+    readingModeRef.current = settings.readingMode;
+  }, [settings.readingMode]);
+
   // 챕터 정보 로드
   useEffect(() => {
     if (!chapterId) return;
@@ -145,7 +148,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
 
     const loadChapter = async () => {
       try {
-        const readingModeAtLoad = settings.readingMode;
+        const readingModeAtLoad = readingModeRef.current;
         const shouldUseOffsetRestore = readingModeAtLoad !== "vertical";
         setIsLoading(true);
         setViewStatus("loading");
@@ -505,7 +508,6 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     resolveRestorePosition,
     setCurrentSeriesId,
     setNextChapterData,
-    settings.readingDirection, // 방향 변경은 챕터 내용에 영향 없으므로 유지
     urlAnchor,
     urlOffset,
     urlPage,

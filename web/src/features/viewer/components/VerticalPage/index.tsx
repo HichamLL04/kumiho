@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent, type TouchEvent, type Ref
 import type { ReactZoomPanPinchContentRef } from "react-zoom-pan-pinch";
 import { SmartImageViewer } from "../../../../components/SmartImageViewer";
 import type { ViewStatus } from "../../types";
+import type { FitMode } from "../../../../stores/viewerStore";
 
 interface VerticalPageProps {
   pageNum: number;
@@ -20,6 +21,74 @@ interface VerticalPageProps {
   styles: { readonly [key: string]: string };
   fitMode: string;
 }
+
+interface VerticalPageContentProps {
+  pageNum: number;
+  imageUrl: string;
+  fitMode: FitMode;
+  viewStatus: ViewStatus;
+  onLoadComplete: () => void;
+  onError: () => void;
+  styles: { readonly [key: string]: string }; // styles prop 추가
+}
+
+const VerticalPageContent = ({
+  pageNum,
+  imageUrl,
+  fitMode,
+  viewStatus,
+  onLoadComplete,
+  onError,
+  styles, // styles prop 받기
+}: VerticalPageContentProps) => {
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  const onImageLoadComplete = () => {
+    setImageLoaded(true);
+    onLoadComplete();
+  };
+
+  const onImageError = () => {
+    setImageLoaded(true); // 에러 시에도 플레이스홀더 해제
+    onError();
+  };
+
+  const shouldShowSpinner = viewStatus === "ready" && !imageLoaded;
+
+  return (
+    <>
+      <SmartImageViewer
+        src={imageUrl}
+        alt={`페이지 ${pageNum}`}
+        className={`${styles.verticalPageImage} ${styles[`fit${fitMode.charAt(0).toUpperCase() + fitMode.slice(1)}`]}`}
+        onLoad={onImageLoadComplete}
+        onError={onImageError}
+        style={{
+          display: imageLoaded ? "block" : "none",
+        }}
+      />
+      {shouldShowSpinner && (
+        <div
+          className={styles.pageLoadingPlaceholder}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "transparent",
+            pointerEvents: "none",
+          }}
+        >
+          <div className={styles.spinner} />
+        </div>
+      )}
+    </>
+  );
+};
 
 export const VerticalPage = ({
   pageNum,
@@ -71,20 +140,6 @@ export const VerticalPage = ({
   }, [pageHeightCache, pageNum, shouldRenderImage]);
 
   const placeholderHeight = cachedHeight > 0 ? cachedHeight : Math.max(estimatedHeight ?? 0, 300);
-  const [imageLoaded, setImageLoaded] = useState(false);
-
-  const onImageLoadComplete = () => {
-    setImageLoaded(true);
-    handleImageLoad(pageNum);
-  };
-
-  const onImageError = () => {
-    setImageLoaded(true); // 에러 시에도 플레이스홀더는 해제
-    handleImageLoad(pageNum);
-  };
-
-  // 스피너 표시 조건: 이미 뷰어가 준비(ready)되었고, 아직 이미지가 로드되지 않았을 때
-  const shouldShowSpinner = viewStatus === "ready" && !imageLoaded;
 
   return (
     <div
@@ -117,38 +172,17 @@ export const VerticalPage = ({
         }}
       >
         {shouldRenderImage && (
-          <SmartImageViewer
-            src={imageUrl}
-            alt={`페이지 ${pageNum}`}
-            className={`${styles.verticalPageImage} ${styles[`fit${fitMode.charAt(0).toUpperCase() + fitMode.slice(1)}`]} ${!imageLoaded ? styles.hidden : ""}`}
-            onLoad={onImageLoadComplete}
-            onError={onImageError}
-            style={{
-              display: imageLoaded ? "block" : "none",
-            }}
+          <VerticalPageContent
+            pageNum={pageNum}
+            imageUrl={imageUrl}
+            fitMode={fitMode as FitMode} // fitMode 타입을 FitMode로 캐스팅
+            viewStatus={viewStatus}
+            onLoadComplete={() => handleImageLoad(pageNum)}
+            onError={() => handleImageLoad(pageNum)}
+            styles={styles} // styles prop 전달
           />
         )}
       </div>
-
-      {shouldShowSpinner && (
-        <div
-          className={styles.pageLoadingPlaceholder}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "transparent",
-            pointerEvents: "none",
-          }}
-        >
-          <div className={styles.spinner} />
-        </div>
-      )}
     </div>
   );
 };
