@@ -35,7 +35,6 @@ import { useReadingTime } from "../hooks/useReadingTime";
 import { AlertModal } from "../components/modals/AlertModal";
 import type { ViewerAnimationHandles } from "../features/viewer/types";
 import { useTranslation } from "react-i18next";
-import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 
 import {
@@ -95,8 +94,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     viewStatus = "ready",
     setViewStatus = () => undefined,
   } = loaderData;
-  const shouldShowViewerLoading =
-    isLoading || (settings.readingMode === "vertical" && !error && !!chapter && viewStatus !== "ready");
   const [viewerContentWidth, setViewerContentWidth] = useState(0);
   const [syncAnchorPosition, setSyncAnchorPosition] = useState({
     anchorPage: restorePosition.anchorPage,
@@ -496,12 +493,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       )}
 
       {error || !chapter ? (
-        shouldShowViewerLoading ? (
-          <LoadingSpinner
-            fullScreen
-            text={null}
-          />
-        ) : (
         <div className={styles.viewerContent}>
           <div style={{ color: "white", textAlign: "center" }}>
             <p>{error || "챕터를 찾을 수 없습니다."}</p>
@@ -513,17 +504,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
             </button>
           </div>
         </div>
-        )
       ) : (
         <>
-          {shouldShowViewerLoading && (
-            <div className={styles.viewerLoadingOverlay}>
-              <LoadingSpinner
-                text={null}
-                className={styles.viewerLoadingSpinnerContainer}
-              />
-            </div>
-          )}
 
           {/* 상단 바 */}
           <ViewerHeader
