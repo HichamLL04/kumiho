@@ -651,9 +651,9 @@ func (r *VolumeRepository) GetReadPagesBatch(db database.Queryer, userID string,
 	for rows.Next() {
 		var id string
 		var count int
-		if err := rows.Scan(&id, &count); err != nil {
+		if scanErr := rows.Scan(&id, &count); scanErr != nil {
 			_ = rows.Close()
-			return nil, err
+			return nil, scanErr
 		}
 		completedMap[id] = count
 	}

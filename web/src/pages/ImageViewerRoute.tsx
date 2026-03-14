@@ -147,6 +147,18 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     readingMode: settings.readingMode,
   });
 
+  // [Fix] 단일/두쪽 보기 모드에서 초기 진입 시 이미지가 실제 로드되었을 때만 로딩 스피너를 제거한다.
+  useEffect(() => {
+    if (settings.readingMode === "vertical" || viewStatus !== "rendering") return;
+
+    // 현재 표시되고 있는 페이지 중 하나라도 로드되면 (또는 즉시 로드된 상태면) ready로 전환
+    const isCurrentPageLoaded = imageLoading[currentPage] === false;
+    if (isCurrentPageLoaded) {
+      console.log(`[ImageViewer] Image loaded for page ${currentPage}, setting viewStatus to ready`);
+      setViewStatus("ready");
+    }
+  }, [settings.readingMode, viewStatus, imageLoading, currentPage, setViewStatus]);
+
   // BGM 제어
   const isBgmReady = !isLoading && imageLoading[currentPage] === false;
   const { bgmInfo, isBgmPlaying, setIsBgmPlaying, audioRef } = useBGM({

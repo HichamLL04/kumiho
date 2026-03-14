@@ -36,7 +36,7 @@ export interface RestorePosition {
   offsetRatio: number;
 }
 
-export type ViewStatus = "loading" | "hydrating" | "restoring" | "ready";
+export type ViewStatus = "loading" | "hydrating" | "restoring" | "rendering" | "ready";
 
 // 인접 챕터 정보
 export interface AdjacentChapterInfo {

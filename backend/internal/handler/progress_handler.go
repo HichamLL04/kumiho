@@ -953,9 +953,6 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 			var targetVolumeID string
 			if p.VolumeID != nil {
 				targetVolumeID = *p.VolumeID
-			} else if p.ChapterID != nil {
-				// 이미 챕터 정보를 가져왔다면 좋겠지만, 리포지토리 쿼리에는 chapter.volume_id가 없음.
-				// 하지만 FindRecentEnrichedByUser 쿼리에 v.id를 추가했으므로 p.VolumeID가 있을 확률이 높음.
 			}
 
 			// 볼륨 정보 및 썸네일 설정

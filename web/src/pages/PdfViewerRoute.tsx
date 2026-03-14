@@ -175,8 +175,10 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     (numPages: number) => {
       setTotalPages(numPages);
       setZoomScale(1);
+      // PDF 로딩 완료 시 스피너 제거
+      loaderData.setViewStatus?.("ready");
     },
-    [setTotalPages],
+    [setTotalPages, loaderData],
   );
 
   const handleOutlineLoad = useCallback((outline: PDFOutlineItem[]) => {

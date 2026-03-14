@@ -123,7 +123,9 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
       isInitialScrollingRef.current = true;
       return;
     }
-    setViewStatus("ready");
+    // [Fix] 단일/두쪽 보기 모드에서도 뷰어가 실제 이미지 로드 완료 전까지 스피너를 유지하도록 "rendering" 상태를 거친다.
+    // 기존에는 즉시 "ready"로 바뀌어 스피너가 먼저 사라졌음.
+    setViewStatus("rendering");
     isInitialScrollingRef.current = false;
   };
 
