@@ -63,6 +63,7 @@ export interface Chapter {
   page_count: number;
   total_bytes?: number;
   total_positions?: number;
+  has_audio?: boolean;
   thumbnail_url?: string;
   is_read?: boolean;
   created_at: string;

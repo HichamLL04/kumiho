@@ -399,6 +399,9 @@ func Migrate() error {
 	// 28. 세로 복원용 앵커 위치 컬럼 추가
 	migrateProgressRestorePosition()
 
+	// 29. 챕터별 has_audio 컬럼 추가
+	migrateChaptersHasAudio()
+
 	return nil
 }
 
@@ -1822,6 +1825,18 @@ func migrateProgressRestorePosition() {
 			fmt.Printf("Migration error (reading_progress.offset_ratio): %v\n", err)
 		} else {
 			fmt.Println("Migrated reading_progress table: added offset_ratio column.")
+		}
+	}
+}
+
+// migrateChaptersHasAudio chapters 테이블에 has_audio 컬럼 추가
+func migrateChaptersHasAudio() {
+	if !columnExists("chapters", "has_audio") {
+		_, err := DB.Exec(`ALTER TABLE chapters ADD COLUMN has_audio BOOLEAN DEFAULT 0`)
+		if err != nil {
+			fmt.Printf("Migration error (chapters.has_audio): %v\n", err)
+		} else {
+			fmt.Println("Migrated chapters table: added has_audio column.")
 		}
 	}
 }

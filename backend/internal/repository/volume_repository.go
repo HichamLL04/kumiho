@@ -53,6 +53,13 @@ func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) err
 	return err
 }
 
+// UpdateHasAudio has_audio 플래그만 업데이트
+func (r *VolumeRepository) UpdateHasAudio(db database.Queryer, volumeID string, hasAudio bool) error {
+	db = database.GetQueryer(db)
+	_, err := db.Exec(`UPDATE volumes SET has_audio = ? WHERE id = ?`, hasAudio, volumeID)
+	return err
+}
+
 // FindBySeriesID 시리즈 ID로 볼륨 목록 조회
 func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) ([]model.Volume, error) {
 	db = database.GetQueryer(db)

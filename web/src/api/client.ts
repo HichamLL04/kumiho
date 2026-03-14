@@ -288,6 +288,7 @@ export const chapterAPI = {
     api.post<{ analyzed_count: number; total_pages: number; success: boolean }>(`/chapters/${chapterId}/analyze`),
   markComplete: (chapterId: string) => api.post(`/chapters/${chapterId}/complete`),
   deleteProgress: (chapterId: string) => api.delete(`/chapters/${chapterId}/progress`),
+  getBGM: (chapterId: string) => api.get<{ exists: boolean; url?: string }>(`/chapters/${chapterId}/bgm`),
 };
 
 // EPUB Progress API (EPUB 전용)

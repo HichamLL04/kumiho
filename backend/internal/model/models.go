@@ -123,6 +123,7 @@ type Chapter struct {
 	PageCount      int       `json:"page_count"`
 	TotalBytes     int64     `json:"total_bytes" db:"total_bytes"`         // EPUB 등에서 가상 포지션 계산용 (HTML 합계)
 	TotalPositions int       `json:"total_positions" db:"total_positions"` // 가상 포지션 총수 (6KB = 1포지션)
+	HasAudio       bool      `json:"has_audio" db:"has_audio"`
 	RenderMode     *string   `json:"render_mode,omitempty" db:"-"`
 	ThumbnailURL   *string   `json:"thumbnail_url,omitempty" db:"-"`
 	IsRead         bool      `json:"is_read" db:"-"`

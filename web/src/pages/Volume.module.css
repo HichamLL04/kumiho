@@ -189,6 +189,13 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.audioIcon {
+  color: #667eea;
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0.8;
+}
+
 .playIcon {
   color: var(--text-muted);
   transition: color 0.2s;

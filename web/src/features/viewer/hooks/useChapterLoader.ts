@@ -146,7 +146,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     if (!chapterId) return;
 
     let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let rafId: number | null = null;
 
     const loadChapter = async () => {
       try {
@@ -226,11 +226,11 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           // 캐시 데이터 초기화
           setNextChapterData(null);
 
-          // 로딩 상태 및 스크롤 가드 해제 (약간의 지연으로 초기 스크롤 이동 완료 대기)
-          timeoutId = setTimeout(() => {
+          // 로딩 상태 및 스크롤 가드 해제 — 다음 페인트 사이클까지만 대기
+          rafId = requestAnimationFrame(() => {
             if (cancelled) return;
             finishChapterLoad(readingModeAtLoad);
-          }, 50); // 300ms -> 50ms로 단축 (캐시 로드는 즉시 표시)
+          });
 
           // 부가 정보 로드 (비동기, 백그라운드 처리)
           (async () => {
@@ -436,11 +436,11 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
 
         if (cancelled) return;
 
-        // 5. 완료 후 가드 해제
-        timeoutId = setTimeout(() => {
+        // 5. 완료 후 가드 해제 — 다음 페인트 사이클까지만 대기 (React 18 자동 배칭으로 충분)
+        rafId = requestAnimationFrame(() => {
           if (cancelled) return;
           finishChapterLoad(readingModeAtLoad);
-        }, 150); // 300ms -> 150ms로 단축
+        });
       } catch (err) {
         if (cancelled) return;
         console.error("챕터 로드 실패:", err);
@@ -454,8 +454,8 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
 
     return () => {
       cancelled = true;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      if (rafId) {
+        cancelAnimationFrame(rafId);
       }
     };
     // seriesSettings를 의존성에서 제외:

@@ -715,7 +715,9 @@
     "footer": {
       "pages_1": "1페이지",
       "pages_2": "2페이지",
-      "offset": "오프셋"
+      "offset": "오프셋",
+      "progress": "페이지 탐색",
+      "marker_jump": "목차로 이동: {{label}}"
     },
     "sync": {
       "title": "진행도 동기화",

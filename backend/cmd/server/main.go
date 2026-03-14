@@ -240,6 +240,8 @@ func main() {
 		c.Locals("type", "chapters")
 		return imageHandler.GetThumbnail(c)
 	})
+	chapters.Get("/:id/bgm", seriesHandler.GetChapterBGM)
+	chapters.Get("/:id/bgm/stream", seriesHandler.ServeChapterBGM)
 
 	// 페이지
 	pages := protected.Group("/pages")

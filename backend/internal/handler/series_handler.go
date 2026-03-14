@@ -1401,6 +1401,69 @@ func (h *SeriesHandler) GetVolumeBGM(c *fiber.Ctx) error {
 	})
 }
 
+// GetChapterBGM 챕터 BGM 존재 여부 확인
+// GET /api/v1/chapters/:id/bgm
+func (h *SeriesHandler) GetChapterBGM(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	chapter, err := h.chapterRepo.FindByID(nil, id)
+	if err != nil || chapter == nil {
+		return c.JSON(BGMResponse{Exists: false})
+	}
+
+	bgmPath, exists := h.findBGMFile(chapter.Path)
+	if !exists {
+		return c.JSON(BGMResponse{Exists: false})
+	}
+
+	url := fmt.Sprintf("/api/v1/chapters/%s/bgm/stream", id)
+	info, err := os.Stat(bgmPath)
+	if err == nil {
+		url += fmt.Sprintf("?t=%d", info.ModTime().Unix())
+	}
+
+	return c.JSON(BGMResponse{
+		Exists: true,
+		URL:    &url,
+	})
+}
+
+// ServeChapterBGM 챕터 BGM 스트리밍
+// GET /api/v1/chapters/:id/bgm/stream
+func (h *SeriesHandler) ServeChapterBGM(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	chapter, err := h.chapterRepo.FindByID(nil, id)
+	if err != nil || chapter == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "chapter not found",
+		})
+	}
+
+	bgmPath, exists := h.findBGMFile(chapter.Path)
+	if !exists {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "bgm not found",
+		})
+	}
+
+	ext := strings.ToLower(filepath.Ext(bgmPath))
+	switch ext {
+	case ".mp3":
+		c.Set("Content-Type", "audio/mpeg")
+	case ".ogg":
+		c.Set("Content-Type", "audio/ogg")
+	case ".wav":
+		c.Set("Content-Type", "audio/wav")
+	case ".flac":
+		c.Set("Content-Type", "audio/flac")
+	case ".m4a":
+		c.Set("Content-Type", "audio/mp4")
+	}
+
+	return c.SendFile(bgmPath)
+}
+
 // ServeVolumeBGM 볼륨 BGM 스트리밍
 // GET /api/v1/volumes/:id/bgm/stream
 func (h *SeriesHandler) ServeVolumeBGM(c *fiber.Ctx) error {
