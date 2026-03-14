@@ -94,7 +94,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
   };
   const resolveRestorePosition = useCallback(
     (pageCount: number, progress?: ReadingProgress | null): RestorePosition => {
-      const shouldUseOffsetRestore = settings.readingMode !== "vertical";
+      const shouldUseOffsetRestore = readingModeRef.current !== "vertical";
 
       if (urlPage === "last") {
         const page = resolveLastPage(pageCount);
@@ -123,7 +123,9 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
         offsetRatio: shouldUseOffsetRestore ? clampOffsetRatio(progress?.offset_ratio) : 0,
       };
     },
-    [settings.readingMode, urlAnchor, urlOffset, urlPage],
+    // readingModeRef를 사용하여 settings.readingMode 변경이 챕터 로드를 재실행하지 않도록 함
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [urlAnchor, urlOffset, urlPage],
   );
   const finishChapterLoad = (mode: ReadingMode) => {
     setIsLoading(false);

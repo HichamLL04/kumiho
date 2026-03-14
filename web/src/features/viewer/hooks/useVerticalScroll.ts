@@ -91,6 +91,8 @@ export function useVerticalScroll({
     setViewStatus("ready");
   }, [isLoading, isInitialScrollingRef, readingMode, setViewStatus]);
 
+  const isAnchorImageReady = imageLoading[effectiveRestorePosition.anchorPage] === false;
+
   useEffect(() => {
     if (readingMode !== "vertical" || isLoading) return;
     if (effectiveViewStatus !== "hydrating" && effectiveViewStatus !== "restoring") return;
@@ -121,12 +123,12 @@ export function useVerticalScroll({
         Math.abs(targetPageEl.getBoundingClientRect().top - content.getBoundingClientRect().top) <= 20;
       const isFallbackAligned =
         isPageAligned || (effectiveRestorePosition.anchorPage === 1 && content.scrollTop <= RESTORE_TOLERANCE);
-      const isAnchorImageReady = imageLoading[effectiveRestorePosition.anchorPage] === false;
+      const anchorReady = imageLoading[effectiveRestorePosition.anchorPage] === false;
       const isTargetPageVisible =
         getViewportAnchorPage(content, totalPages, effectiveRestorePosition.anchorPage) === effectiveRestorePosition.anchorPage;
       const isReady =
         content.scrollHeight > 0 &&
-        isAnchorImageReady &&
+        anchorReady &&
         isTargetPageVisible &&
         isFallbackAligned;
 
@@ -138,17 +140,16 @@ export function useVerticalScroll({
       }
 
       if (attempts >= MAX_RESTORE_ATTEMPTS) {
-        if (targetPageEl && isAnchorImageReady) {
+        if (targetPageEl && anchorReady) {
           targetPageEl.scrollIntoView({ block: "start" });
-
-          retryId = window.setTimeout(() => {
-            if (cancelled) return;
-            readyAtRef.current = Date.now();
-            setCurrentPage(effectiveRestorePosition.anchorPage);
-            setViewStatus("ready");
-            isInitialScrollingRef.current = false;
-          }, 80);
         }
+        retryId = window.setTimeout(() => {
+          if (cancelled) return;
+          readyAtRef.current = Date.now();
+          setCurrentPage(effectiveRestorePosition.anchorPage);
+          setViewStatus("ready");
+          isInitialScrollingRef.current = false;
+        }, 80);
         return;
       }
 
@@ -165,18 +166,18 @@ export function useVerticalScroll({
       window.cancelAnimationFrame(frameId);
       window.clearTimeout(retryId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isInitialScrollingRef,
     isLoading,
     readingMode,
-    currentPage,
+    isAnchorImageReady,
     effectiveRestorePosition.anchorPage,
     resolvedViewerContentRef,
     setCurrentPage,
     setViewStatus,
     effectiveViewStatus,
     totalPages,
-    imageLoading,
   ]);
 
   useEffect(() => {
