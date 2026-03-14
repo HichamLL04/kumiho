@@ -60,7 +60,7 @@ var (
 
 	// 볼륨 파싱 정규식 (Global Compile)
 	reVolKorean  = regexp.MustCompile(`(\d+)\s*(권|회|화|부)`)
-	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume)\s*(\d+)`)
+	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume|part|season)\s*(\d+)`)
 	reVolChapter = regexp.MustCompile(`(?i)(?:c|ch\.?|chapter)\s*(\d+)`)
 	reVolSuffix  = regexp.MustCompile(`(?:^|[\s\-_\[\(])(\d+)(?:$|[\s\-_\]\)])`)
 )
@@ -234,6 +234,7 @@ type scannedChapter struct {
 	PageCount      int   // Added for PDFs or single-file chapters
 	TotalBytes     int64 // EPUB 가상 포지션용
 	TotalPositions int   // EPUB 가상 포지션용
+	HasAudio       bool
 }
 
 type scannedVolume struct {
@@ -1222,14 +1223,14 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 		parsedUnit := "volume"
 		entry := entryMap[name]
 
-		// 폴더인 경우 파싱 생략 (사용자 요청: 폴더명 그대로 사용)
-		if entry != nil && entry.IsDir() {
-			parsedUnit = "chapter"
+		// 폴더인 경우에도 번호 및 단위 파싱 시도 (1부, 2부 등 대응)
+		if num, unit, ok := parseVolumeNumber(displayName); ok {
+			parsedNum = num
+			parsedUnit = unit
 		} else {
-			// 0번 볼륨도 유효한 번호로 인정
-			if num, unit, ok := parseVolumeNumber(displayName); ok {
-				parsedNum = num
-				parsedUnit = unit
+			// 파싱 실패 시 기본값 설정
+			if entry != nil && entry.IsDir() {
+				parsedUnit = "volume" // 폴더는 기본적으로 볼륨(권)으로 취급
 			}
 		}
 
@@ -1333,10 +1334,20 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)
 									// 단, Extension 필드가 비어있으면 로직 업데이트를 위해 분석 진행
 									if existingVol.Extension != "" {
-										continue
+									// 오디오 파일이 존재하면 볼륨 및 챕터의 has_audio 업데이트
+									if s.quickCheckHasAudio(entryPath, entry.IsDir(), audioFiles, j.name) {
+										if !existingVol.HasAudio {
+											log.Printf("[SCANNER] Updating has_audio for skipped volume %s", j.name)
+											_ = s.volumeRepo.UpdateHasAudio(nil, existingVol.ID, true)
+										}
+										// 챕터별 has_audio도 업데이트 (미설정된 챕터만)
+										s.updateChaptersHasAudio(existingVol.ID, entryPath, entry.IsDir(), audioFiles, j.name)
 									}
-									// PDF 썸네일 문제는 아니고, Extension 메타데이터 누락으로 인한 강제 업데이트
+									continue
+								} else {
+									// Extension 메타데이터 누락으로 인한 강제 업데이트
 									log.Printf("[SCANNER] Force update for %s: Missing extension metadata", j.name)
+								}
 								} else {
 									// PDF이며 썸네일이 없는 경우 강제 업데이트
 									log.Printf("[SCANNER] Force update for %s: Missing PDF thumbnail", j.name)
@@ -1569,6 +1580,7 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 
 	var imageFiles []string
 	var subEntries []fs.DirEntry
+	audioFiles := make(map[string]bool)
 
 	for _, entry := range entries {
 		if isExcluded(entry.Name(), excludePatterns) {
@@ -1578,6 +1590,9 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 			subEntries = append(subEntries, entry)
 		} else if isImage(entry.Name()) {
 			imageFiles = append(imageFiles, entry.Name())
+		} else if isAudio(entry.Name()) {
+			nameWithoutExt := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			audioFiles[nameWithoutExt] = true
 		}
 	}
 
@@ -1623,6 +1638,10 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 					// 챕터로 처리
 					chapter, chapterErr := s.analyzeChapter(entryPath, name, nextChapterNum)
 					if chapterErr == nil {
+						// 폴더 챕터와 같은 이름의 오디오 파일이 있는지 확인
+						if audioFiles[name] {
+							chapter.HasAudio = true
+						}
 						result.Chapters = append(result.Chapters, *chapter)
 						result.ChapterCount++
 					} else {
@@ -1641,12 +1660,24 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 			} else if isArchive(name) {
 				chapter, err := s.analyzeArchiveAsChapter(entryPath, entryTitle, nextChapterNum)
 				if err == nil {
+					// 아카이브 챕터와 같은 이름의 오디오 파일이 있는지 확인
+					if audioFiles[entryTitle] {
+						chapter.HasAudio = true
+					}
 					result.Chapters = append(result.Chapters, *chapter)
 					result.ChapterCount++
 				} else {
 					log.Printf("[SCANNER] Failed to analyze archive %s: %v", entryPath, err)
 				}
 			}
+		}
+	}
+
+	// 챕터 중 하나라도 오디오가 있으면 볼륨에도 HasAudio 설정
+	for _, ch := range result.Chapters {
+		if ch.HasAudio {
+			result.HasAudio = true
+			break
 		}
 	}
 
@@ -1816,6 +1847,10 @@ func (s *Scanner) analyzeArchiveAsChapter(archivePath, title string, chapterNum 
 
 // analyzeChapter scans a folder as a chapter
 func (s *Scanner) analyzeChapter(chapterPath, title string, chapterNum int) (*scannedChapter, error) {
+	// 폴더명으로부터 챕터 번호 추출 시도
+	if num, _, ok := parseVolumeNumber(title); ok {
+		chapterNum = num
+	}
 	entries, err := os.ReadDir(chapterPath)
 	if err != nil {
 		return nil, err
@@ -1859,6 +1894,65 @@ func (s *Scanner) analyzeImages(basePath string, imageFiles []string) ([]scanned
 	}
 
 	return pages, nil
+}
+
+// quickCheckHasAudio 볼륨에 대응하는 오디오 파일이 존재하는지 빠르게 확인
+// 파일 볼륨: top-level audioFiles 맵에서 확인
+// 폴더 볼륨: 폴더 내부를 스캔하여 오디오 파일 존재 여부 확인
+func (s *Scanner) quickCheckHasAudio(entryPath string, isDir bool, audioFiles map[string]bool, name string) bool {
+	if !isDir {
+		// 파일(아카이브) 볼륨: 같은 디렉토리에 동일 이름의 오디오 파일이 있는지
+		volNameNoExt := strings.TrimSuffix(name, filepath.Ext(name))
+		return audioFiles[volNameNoExt]
+	}
+	// 폴더 볼륨: 폴더 내부에 오디오 파일이 있는지 확인
+	entries, err := os.ReadDir(entryPath)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && isAudio(e.Name()) {
+			return true
+		}
+	}
+	return false
+}
+
+// updateChaptersHasAudio 스킵된 볼륨의 챕터별 has_audio 플래그를 업데이트
+func (s *Scanner) updateChaptersHasAudio(volumeID, entryPath string, isDir bool, topAudioFiles map[string]bool, name string) {
+	chapters, err := s.chapterRepo.FindByVolumeID(nil, volumeID)
+	if err != nil {
+		return
+	}
+
+	// 오디오 파일 맵 구성: 폴더 볼륨이면 내부 스캔, 파일 볼륨이면 top-level 맵 사용
+	localAudioFiles := topAudioFiles
+	if isDir {
+		localAudioFiles = make(map[string]bool)
+		entries, err := os.ReadDir(entryPath)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if !e.IsDir() && isAudio(e.Name()) {
+				nameWithoutExt := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+				localAudioFiles[nameWithoutExt] = true
+			}
+		}
+	}
+
+	for _, ch := range chapters {
+		if ch.HasAudio {
+			continue // 이미 설정됨
+		}
+		// 챕터 경로에서 파일명 추출 후 확장자 제거
+		chFileName := filepath.Base(ch.Path)
+		chNameNoExt := strings.TrimSuffix(chFileName, filepath.Ext(chFileName))
+		if localAudioFiles[chNameNoExt] {
+			log.Printf("[SCANNER] Updating has_audio for chapter %s (%s)", ch.Title, ch.ID)
+			_ = s.chapterRepo.UpdateHasAudio(nil, ch.ID, true)
+		}
+	}
 }
 
 // isImage 이미지 파일 여부 확인
@@ -1971,6 +2065,7 @@ func (s *Scanner) saveVolumeRecursive(tx database.Queryer, seriesID string, pare
 			PageCount:      pageCount,
 			TotalBytes:     chData.TotalBytes,
 			TotalPositions: chData.TotalPositions,
+			HasAudio:       chData.HasAudio,
 			CreatedAt:      time.Now(),
 			UpdatedAt:      time.Now(),
 		}

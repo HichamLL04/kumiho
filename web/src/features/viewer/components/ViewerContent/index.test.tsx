@@ -251,6 +251,25 @@ describe("ViewerContent vertical rendering window", () => {
     // page 14 should remain placeholder
     expect(screen.queryByTestId("smart-/api/v1/chapters/chapter-1/pages/14/image")).not.toBeInTheDocument();
   });
+
+  it("narrows vertical rendering window during initial restore", () => {
+    render(
+      <ViewerContent
+        {...baseProps}
+        currentPage={1}
+        readingMode="vertical"
+        displayPages={Array.from({ length: 10 }, (_, i) => i + 1)}
+        maxAllowedPage={10}
+        imageLoading={{}}
+        isInitialScrolling
+        viewStatus="hydrating"
+      />,
+    );
+
+    expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/1/image")).toBeInTheDocument();
+    expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/2/image")).toBeInTheDocument();
+    expect(screen.queryByTestId("smart-/api/v1/chapters/chapter-1/pages/3/image")).not.toBeInTheDocument();
+  });
 });
 
 describe("ViewerContent split rendering", () => {

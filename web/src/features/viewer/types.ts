@@ -30,6 +30,14 @@ export interface PageMeta {
   isWide: boolean; // width > height * 1.3
 }
 
+export interface RestorePosition {
+  currentPage: number;
+  anchorPage: number;
+  offsetRatio: number;
+}
+
+export type ViewStatus = "loading" | "hydrating" | "restoring" | "rendering" | "ready";
+
 // 인접 챕터 정보
 export interface AdjacentChapterInfo {
   nextChapterId: string | null;

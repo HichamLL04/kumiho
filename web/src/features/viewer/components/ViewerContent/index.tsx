@@ -13,8 +13,8 @@ import {
   type PageTransitionType,
   type SubPage,
 } from "../../../../stores/viewerStore";
-import type { PageMeta } from "../../types";
-import type { ViewerAnimationHandles } from "../../types";
+import { VERTICAL_MAX_WIDTH } from "../../utils/constants";
+import type { PageMeta, ViewStatus, ViewerAnimationHandles } from "../../types";
 
 interface ViewerContentProps {
   currentPage?: number;
@@ -41,6 +41,8 @@ interface ViewerContentProps {
   prevPreviewSubPage?: SubPage;
   pageMetaMap?: Map<number, PageMeta>;
   isInitialScrolling?: boolean; // Boolean으로 회복
+  estimatedPageHeights?: Map<number, number>;
+  viewStatus?: ViewStatus;
 }
 
 export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentProps>(
@@ -69,6 +71,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       prevPreviewSubPage,
       pageMetaMap,
       isInitialScrolling = false,
+      estimatedPageHeights,
+      viewStatus = "ready",
     },
     ref,
   ) => {
@@ -87,8 +91,6 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       if (animatePrevRef.current) animatePrevRef.current();
       else onPrev();
     }, [onPrev]);
-    const [verticalZoomScale, setVerticalZoomScale] = useState(1);
-
     const { transformComponentRef, isZoomed, setIsZoomed, handleContentClick, handleMouseDown, handleMouseMove } =
       useViewerZoom({
         clickDirection,
@@ -96,11 +98,6 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         onPrev: handleAnimatedPrev,
         doubleTapZoomZone: "center",
         deferSingleTapForDoubleTap: false,
-        isVerticalMode: readingMode === "vertical",
-        onVerticalZoomToggle: (isZoomingIn: boolean) => {
-          const newScale = isZoomingIn ? 2 : 1;
-          setVerticalZoomScale(newScale);
-        },
       });
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -215,8 +212,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
                     nextSrc={nextSrc}
                     alt={`페이지 ${pageNum}`}
                     className={`${styles.pageImage} ${styles[`fit${fitMode.charAt(0).toUpperCase() + fitMode.slice(1)}`]} ${shouldHide ? styles.hidden : ""}`}
-                    onLoad={() => handleImageLoad(pageNum)}
-                    onError={() => handleImageLoad(pageNum)}
+                    onVisualReady={() => handleImageLoad(pageNum)}
                   />
                 ) : (
                   <div
@@ -233,29 +229,33 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       );
     };
 
-    const VERTICAL_MAX_WIDTH = "760px";
-
     if (readingMode === "vertical") {
       const minRenderPage = Math.max(1, currentPage - 3);
+      const verticalRenderPages =
+        isInitialScrolling && viewStatus !== "ready"
+          ? displayPages.filter((pageNum) =>
+              currentPage === 1
+                ? pageNum >= 1 && pageNum <= 2
+                : pageNum >= currentPage - 1 && pageNum <= currentPage + 1,
+            )
+          : displayPages;
 
       return (
         <div
           style={{
             width: "100%",
-            maxWidth: VERTICAL_MAX_WIDTH,
+            maxWidth: `${VERTICAL_MAX_WIDTH}px`,
             margin: "0 auto",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "flex-start",
-            transition: "transform 0.3s ease-out",
-            transform: `scale(${verticalZoomScale})`,
-            transformOrigin: "top center",
+            gap: 0,
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
         >
-          {displayPages.map((pageNum) => (
+          {verticalRenderPages.map((pageNum) => (
             <VerticalPage
               key={`${chapterId}-${pageNum}`}
               pageNum={pageNum}
@@ -264,6 +264,8 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
               maxAllowedPage={maxAllowedPage}
               minAllowedPage={minRenderPage}
               isInitialScrolling={isInitialScrolling} // Boolean 전달
+              estimatedHeight={estimatedPageHeights?.get(pageNum)}
+              viewStatus={viewStatus}
               handleImageLoad={handleImageLoad}
               handleContentClick={handleContentClick}
               styles={styles}

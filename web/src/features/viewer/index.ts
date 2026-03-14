@@ -11,4 +11,4 @@ export * from "./types";
 
 // Utils
 export { getPageImageUrl, API_BASE_URL } from "./utils/imageUrl";
-export { PROGRESS_SAVE_INTERVAL, UI_HIDE_DELAY, WIDE_RATIO_THRESHOLD } from "./utils/constants";
+export { PROGRESS_SAVE_INTERVAL, UI_HIDE_DELAY, WIDE_RATIO_THRESHOLD, VERTICAL_MAX_WIDTH } from "./utils/constants";

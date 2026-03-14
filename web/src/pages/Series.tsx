@@ -111,12 +111,17 @@ export function SeriesPage() {
 
   const loadData = useCallback(async () => {
     try {
-      // 시리즈 정보
-      const seriesRes = await api.get(`/series/${id}`);
-      setSeries(seriesRes.data);
+      // 1. 핵심 데이터(시리즈, 볼륨, 진행도) 병렬 페칭
+      const [seriesRes, volumesRes, progressRes] = await Promise.all([
+        api.get(`/series/${id}`),
+        api.get(`/series/${id}/volumes?parent_id=root`),
+        api.get(`/series/${id}/progress`).catch(() => ({ data: null })),
+      ]);
 
-      // 볼륨 목록 (최상위 볼륨만 우선 조회)
-      const volumesRes = await api.get(`/series/${id}/volumes?parent_id=root`);
+      const seriesData = seriesRes.data;
+      setSeries(seriesData);
+
+      // 볼륨 목록 정밀화 및 설정
       const rawVolumes = Array.isArray(volumesRes.data?.volumes) ? volumesRes.data.volumes : [];
       const normalizedVolumes: Volume[] = rawVolumes.map((raw: Volume & { is_completed?: boolean }) => ({
         ...raw,
@@ -124,20 +129,23 @@ export function SeriesPage() {
       }));
       setVolumes(normalizedVolumes);
 
-      // 라이브러리 정보
-      if (seriesRes.data.library_id) {
-        const libRes = await api.get(`/libraries/${seriesRes.data.library_id}`);
-        setLibrary(libRes.data);
-      }
-
-      // 읽기 진행도
-      try {
-        const progressRes = await api.get(`/series/${id}/progress`);
-        setProgress(progressRes.data?.progress ?? undefined);
-        setSummary(progressRes.data?.summary ?? undefined);
-      } catch {
+      // 진행도 설정
+      if (progressRes.data) {
+        setProgress(progressRes.data.progress ?? undefined);
+        setSummary(progressRes.data.summary ?? undefined);
+      } else {
         setProgress(undefined);
         setSummary(undefined);
+      }
+
+      // 2. 라이브러리 정보는 시리즈 데이터 로드 후 비동기로 처리 (병목 방지)
+      if (seriesData.library_id) {
+        api
+          .get(`/libraries/${seriesData.library_id}`)
+          .then((libRes) => {
+            setLibrary(libRes.data);
+          })
+          .catch((err) => console.error("Failed to load library:", err));
       }
     } catch (error) {
       console.error("Failed to load series:", error);

@@ -70,12 +70,14 @@ func (r *ReadingProgressRepository) Upsert(db database.Queryer, progress *model.
 
 	_, err = tx.Exec(
 		`INSERT INTO reading_progress 
-		 (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, current_position, total_positions, progress_percent, device_id, device_name, current_cfi, updated_at, read_time_seconds)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 (id, user_id, series_id, volume_id, chapter_id, current_page, anchor_page, offset_ratio, total_pages, current_position, total_positions, progress_percent, device_id, device_name, current_cfi, updated_at, read_time_seconds)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id, chapter_id) DO UPDATE SET
 			volume_id = excluded.volume_id,
 			chapter_id = excluded.chapter_id,
 			current_page = excluded.current_page,
+			anchor_page = excluded.anchor_page,
+			offset_ratio = excluded.offset_ratio,
 			total_pages = excluded.total_pages,
 			current_position = excluded.current_position,
 			total_positions = excluded.total_positions,
@@ -86,7 +88,8 @@ func (r *ReadingProgressRepository) Upsert(db database.Queryer, progress *model.
 			updated_at = excluded.updated_at,
 			read_time_seconds = reading_progress.read_time_seconds + excluded.read_time_seconds`,
 		progress.ID, progress.UserID, progress.SeriesID, progress.VolumeID, progress.ChapterID,
-		progress.CurrentPage, progress.TotalPages, progress.CurrentPosition, progress.TotalPositions, progress.ProgressPercent,
+		progress.CurrentPage, progress.AnchorPage, progress.OffsetRatio, progress.TotalPages,
+		progress.CurrentPosition, progress.TotalPositions, progress.ProgressPercent,
 		progress.DeviceID, progress.DeviceName, progress.CurrentCFI, progress.UpdatedAt, progress.ReadTimeSeconds,
 	)
 	if err != nil {
@@ -124,13 +127,15 @@ func (r *ReadingProgressRepository) FindByUserAndSeries(db database.Queryer, use
 	db = database.GetQueryer(db)
 	var p model.ReadingProgress
 	var volumeID, chapterID, deviceID, deviceName, currentCFI sql.NullString
+	var anchorPage sql.NullInt64
+	var offsetRatio sql.NullFloat64
 
 	// 시리즈 내 가장 최근 읽은 챕터 진행도 반환
 	// 1. 미완독(progress_percent < 100) 우선
 	// 2. 가장 최근 업데이트된 것 (updated_at DESC)
 	// 3. 챕터 번호가 높은 것 (c.chapter_number DESC) - 동점 시 tiebreaker
 	err := db.QueryRow(
-		`SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, rp.total_pages, 
+		`SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, rp.anchor_page, rp.offset_ratio, rp.total_pages, 
 		 rp.current_position, rp.total_positions, rp.progress_percent, rp.device_id, rp.device_name, rp.current_cfi, rp.updated_at
 		 FROM reading_progress rp
 		 LEFT JOIN chapters c ON rp.chapter_id = c.id
@@ -142,7 +147,7 @@ func (r *ReadingProgressRepository) FindByUserAndSeries(db database.Queryer, use
 		 LIMIT 1`,
 		userID, seriesID,
 	).Scan(&p.ID, &p.UserID, &p.SeriesID, &volumeID, &chapterID,
-		&p.CurrentPage, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &deviceID, &deviceName, &currentCFI, &p.UpdatedAt)
+		&p.CurrentPage, &anchorPage, &offsetRatio, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &deviceID, &deviceName, &currentCFI, &p.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -156,6 +161,14 @@ func (r *ReadingProgressRepository) FindByUserAndSeries(db database.Queryer, use
 	}
 	if chapterID.Valid {
 		p.ChapterID = &chapterID.String
+	}
+	if anchorPage.Valid {
+		p.AnchorPage = int(anchorPage.Int64)
+	} else {
+		p.AnchorPage = p.CurrentPage
+	}
+	if offsetRatio.Valid {
+		p.OffsetRatio = offsetRatio.Float64
 	}
 	if deviceID.Valid {
 		p.DeviceID = &deviceID.String
@@ -175,14 +188,16 @@ func (r *ReadingProgressRepository) FindByUserAndChapter(db database.Queryer, us
 	db = database.GetQueryer(db)
 	var p model.ReadingProgress
 	var volumeID, chapterIDNull, deviceID, deviceName, currentCFI sql.NullString
+	var anchorPage sql.NullInt64
+	var offsetRatio sql.NullFloat64
 
 	err := db.QueryRow(
-		`SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, 
+		`SELECT id, user_id, series_id, volume_id, chapter_id, current_page, anchor_page, offset_ratio, total_pages, 
 		 current_position, total_positions, progress_percent, device_id, device_name, current_cfi, updated_at
 		 FROM reading_progress WHERE user_id = ? AND chapter_id = ?`,
 		userID, chapterID,
 	).Scan(&p.ID, &p.UserID, &p.SeriesID, &volumeID, &chapterIDNull,
-		&p.CurrentPage, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &deviceID, &deviceName, &currentCFI, &p.UpdatedAt)
+		&p.CurrentPage, &anchorPage, &offsetRatio, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &deviceID, &deviceName, &currentCFI, &p.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -196,6 +211,14 @@ func (r *ReadingProgressRepository) FindByUserAndChapter(db database.Queryer, us
 	}
 	if chapterIDNull.Valid {
 		p.ChapterID = &chapterIDNull.String
+	}
+	if anchorPage.Valid {
+		p.AnchorPage = int(anchorPage.Int64)
+	} else {
+		p.AnchorPage = p.CurrentPage
+	}
+	if offsetRatio.Valid {
+		p.OffsetRatio = offsetRatio.Float64
 	}
 	if deviceID.Valid {
 		p.DeviceID = &deviceID.String
@@ -224,7 +247,7 @@ func (r *ReadingProgressRepository) DeleteByUserAndChapter(db database.Queryer, 
 func (r *ReadingProgressRepository) FindByUser(db database.Queryer, userID string) ([]model.ReadingProgress, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, 
+		`SELECT id, user_id, series_id, volume_id, chapter_id, current_page, anchor_page, offset_ratio, total_pages, 
 		 current_position, total_positions, progress_percent, device_id, device_name, current_cfi, updated_at
 		 FROM reading_progress WHERE user_id = ? ORDER BY updated_at DESC`,
 		userID,
@@ -238,9 +261,11 @@ func (r *ReadingProgressRepository) FindByUser(db database.Queryer, userID strin
 	for rows.Next() {
 		var p model.ReadingProgress
 		var volumeID, chapterID, deviceID, deviceName, currentCFI sql.NullString
+		var anchorPage sql.NullInt64
+		var offsetRatio sql.NullFloat64
 
 		if err := rows.Scan(&p.ID, &p.UserID, &p.SeriesID, &volumeID, &chapterID,
-			&p.CurrentPage, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &deviceID, &deviceName, &currentCFI, &p.UpdatedAt); err != nil {
+			&p.CurrentPage, &anchorPage, &offsetRatio, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &deviceID, &deviceName, &currentCFI, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 
@@ -249,6 +274,14 @@ func (r *ReadingProgressRepository) FindByUser(db database.Queryer, userID strin
 		}
 		if chapterID.Valid {
 			p.ChapterID = &chapterID.String
+		}
+		if anchorPage.Valid {
+			p.AnchorPage = int(anchorPage.Int64)
+		} else {
+			p.AnchorPage = p.CurrentPage
+		}
+		if offsetRatio.Valid {
+			p.OffsetRatio = offsetRatio.Float64
 		}
 		if deviceID.Valid {
 			p.DeviceID = &deviceID.String
@@ -272,7 +305,7 @@ func (r *ReadingProgressRepository) FindRecentByUser(db database.Queryer, userID
 	// 완료된 볼륨에 속한 챕터의 진행도는 제외
 	// LEFT JOIN + IS NULL 패턴으로 완료된 볼륨 필터링 (NOT EXISTS보다 대용량에서 효율적)
 	rows, err := db.Query(
-		`SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, 
+		`SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, rp.anchor_page, rp.offset_ratio,
 		 rp.total_pages, rp.current_position, rp.total_positions, rp.progress_percent, rp.device_id, rp.device_name, rp.current_cfi, rp.updated_at
 		 FROM reading_progress rp
 		 LEFT JOIN chapters c ON rp.chapter_id = c.id
@@ -294,9 +327,11 @@ func (r *ReadingProgressRepository) FindRecentByUser(db database.Queryer, userID
 	for rows.Next() {
 		var p model.ReadingProgress
 		var volumeID, chapterID, deviceID, deviceName, currentCFI sql.NullString
+		var anchorPage sql.NullInt64
+		var offsetRatio sql.NullFloat64
 
 		if err := rows.Scan(&p.ID, &p.UserID, &p.SeriesID, &volumeID, &chapterID,
-			&p.CurrentPage, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &deviceID, &deviceName, &currentCFI, &p.UpdatedAt); err != nil {
+			&p.CurrentPage, &anchorPage, &offsetRatio, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &deviceID, &deviceName, &currentCFI, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 
@@ -305,6 +340,14 @@ func (r *ReadingProgressRepository) FindRecentByUser(db database.Queryer, userID
 		}
 		if chapterID.Valid {
 			p.ChapterID = &chapterID.String
+		}
+		if anchorPage.Valid {
+			p.AnchorPage = int(anchorPage.Int64)
+		} else {
+			p.AnchorPage = p.CurrentPage
+		}
+		if offsetRatio.Valid {
+			p.OffsetRatio = offsetRatio.Float64
 		}
 		if deviceID.Valid {
 			p.DeviceID = &deviceID.String
@@ -339,7 +382,7 @@ func (r *ReadingProgressRepository) FindByUserAndVolume(db database.Queryer, use
 			SELECT v.id FROM volumes v
 			JOIN descendant_volumes dv ON v.parent_id = dv.id
 		)
-		SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, 
+		SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, rp.anchor_page, rp.offset_ratio,
 		 rp.total_pages, rp.current_position, rp.total_positions, rp.progress_percent, rp.device_id, rp.device_name, rp.current_cfi, rp.updated_at
 		 FROM reading_progress rp
 		 JOIN chapters c ON rp.chapter_id = c.id
@@ -356,9 +399,11 @@ func (r *ReadingProgressRepository) FindByUserAndVolume(db database.Queryer, use
 	for rows.Next() {
 		var p model.ReadingProgress
 		var volID, chapID, devID, devName, cfi sql.NullString
+		var anchorPage sql.NullInt64
+		var offsetRatio sql.NullFloat64
 
 		if err := rows.Scan(&p.ID, &p.UserID, &p.SeriesID, &volID, &chapID,
-			&p.CurrentPage, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &devID, &devName, &cfi, &p.UpdatedAt); err != nil {
+			&p.CurrentPage, &anchorPage, &offsetRatio, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &devID, &devName, &cfi, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 
@@ -367,6 +412,14 @@ func (r *ReadingProgressRepository) FindByUserAndVolume(db database.Queryer, use
 		}
 		if chapID.Valid {
 			p.ChapterID = &chapID.String
+		}
+		if anchorPage.Valid {
+			p.AnchorPage = int(anchorPage.Int64)
+		} else {
+			p.AnchorPage = p.CurrentPage
+		}
+		if offsetRatio.Valid {
+			p.OffsetRatio = offsetRatio.Float64
 		}
 		if devID.Valid {
 			p.DeviceID = &devID.String
@@ -730,4 +783,98 @@ func (r *ReadingProgressRepository) GetTopSeries(db database.Queryer, userID str
 		seriesList = append(seriesList, s)
 	}
 	return seriesList, nil
+}
+
+// RecentEnrichedProgress 최근 읽기 진행도 (경로 정보 포함)
+type RecentEnrichedProgress struct {
+	model.ReadingProgress
+	ChapterPath *string `json:"chapter_path"`
+	VolumePath  *string `json:"volume_path"`
+	SeriesPath  *string `json:"series_path"`
+}
+
+// FindRecentEnrichedByUser 최근 읽기 진행도 조회 (경로 정보 포함)
+func (r *ReadingProgressRepository) FindRecentEnrichedByUser(db database.Queryer, userID string, limit int) ([]RecentEnrichedProgress, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(`
+		SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, rp.anchor_page, rp.offset_ratio,
+		 rp.total_pages, rp.current_position, rp.total_positions, rp.progress_percent, rp.device_id, rp.device_name, rp.current_cfi, rp.updated_at,
+		 c.path as chapter_path, v.path as volume_path, s.path as series_path
+		 FROM reading_progress rp
+		 LEFT JOIN chapters c ON rp.chapter_id = c.id
+		 LEFT JOIN volumes v ON rp.volume_id = v.id
+		 LEFT JOIN series s ON rp.series_id = s.id
+		 LEFT JOIN volume_completions vc 
+		   ON vc.user_id = rp.user_id 
+		   AND vc.volume_id = COALESCE(rp.volume_id, c.volume_id)
+		 WHERE rp.user_id = ? 
+		   AND vc.id IS NULL
+		   AND rp.progress_percent < 100
+		 ORDER BY rp.updated_at DESC LIMIT ?`,
+		userID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []RecentEnrichedProgress
+	for rows.Next() {
+		var p RecentEnrichedProgress
+		var volID, chapID, devID, devName, currentCFI sql.NullString
+		var chapterPath, volumePath, seriesPath sql.NullString
+		var anchorPage, currentPosition, totalPositions sql.NullInt64
+		var offsetRatio sql.NullFloat64
+
+		err := rows.Scan(
+			&p.ID, &p.UserID, &p.SeriesID, &volID, &chapID, &p.CurrentPage, &anchorPage, &offsetRatio,
+			&p.TotalPages, &currentPosition, &totalPositions, &p.ProgressPercent, &devID, &devName, &currentCFI, &p.UpdatedAt,
+			&chapterPath, &volumePath, &seriesPath,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if volID.Valid {
+			p.VolumeID = &volID.String
+		}
+		if chapID.Valid {
+			p.ChapterID = &chapID.String
+		}
+		if devID.Valid {
+			p.DeviceID = &devID.String
+		}
+		if devName.Valid {
+			p.DeviceName = &devName.String
+		}
+		if currentCFI.Valid {
+			p.CurrentCFI = &currentCFI.String
+		}
+
+		if anchorPage.Valid {
+			p.AnchorPage = int(anchorPage.Int64)
+		}
+		if offsetRatio.Valid {
+			p.OffsetRatio = offsetRatio.Float64
+		}
+		if currentPosition.Valid {
+			p.CurrentPosition = int(currentPosition.Int64)
+		}
+		if totalPositions.Valid {
+			p.TotalPositions = int(totalPositions.Int64)
+		}
+
+		if chapterPath.Valid {
+			p.ChapterPath = &chapterPath.String
+		}
+		if volumePath.Valid {
+			p.VolumePath = &volumePath.String
+		}
+		if seriesPath.Valid {
+			p.SeriesPath = &seriesPath.String
+		}
+
+		results = append(results, p)
+	}
+	return results, nil
 }

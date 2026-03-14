@@ -712,7 +712,9 @@
     "footer": {
       "pages_1": "1ページ",
       "pages_2": "2ページ",
-      "offset": "オフセット"
+      "offset": "オフセット",
+      "progress": "ページナビゲーション",
+      "marker_jump": "目次へ移動: {{label}}"
     },
     "sync": {
       "title": "進捗同期",

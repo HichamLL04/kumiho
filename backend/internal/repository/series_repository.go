@@ -731,3 +731,35 @@ func (r *SeriesRepository) UpdateExtension(db database.Queryer, seriesID string,
 	)
 	return err
 }
+
+// GetExtensionsByIDs 여러 시리즈의 확장자 정보 조회
+func (r *SeriesRepository) GetExtensionsByIDs(db database.Queryer, ids []string) (map[string]string, error) {
+	if len(ids) == 0 {
+		return make(map[string]string), nil
+	}
+	db = database.GetQueryer(db)
+
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := "SELECT id, extension FROM series WHERE id IN (" + strings.Join(placeholders, ",") + ")"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	results := make(map[string]string)
+	for rows.Next() {
+		var id, ext string
+		if err := rows.Scan(&id, &ext); err != nil {
+			return nil, err
+		}
+		results[id] = ext
+	}
+	return results, nil
+}

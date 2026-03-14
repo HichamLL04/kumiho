@@ -7,6 +7,7 @@ export { useProgress } from "./useProgress";
 export { useProgressSync } from "./useProgressSync";
 export { useViewerNavigation } from "./useViewerNavigation";
 export { useVerticalScroll } from "./useVerticalScroll";
+export { useVerticalRestoreLayout } from "./useVerticalRestoreLayout";
 export { useChapterLoader } from "./useChapterLoader";
 export { useNextChapterPreloader } from "./useNextChapterPreloader";
 export { useViewerZoom } from "./useViewerZoom";

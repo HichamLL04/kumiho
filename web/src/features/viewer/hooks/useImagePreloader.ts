@@ -108,7 +108,7 @@ export function useImagePreloader({
     if (!chapter || !chapterId) return;
     const requestChapterId = chapterId;
 
-    const pagesToPreload: number[] = [];
+    const pagesToPreload: number[] = [currentPage];
 
     // 앞뒤로 preloadCount만큼 프리로드
     for (let i = 1; i <= preloadCount; i++) {
@@ -120,8 +120,16 @@ export function useImagePreloader({
       }
     }
 
+    const uniquePagesToPreload = [...new Set(pagesToPreload)];
+
     // 이미지 프리로드 (Image 객체 사용)
-    pagesToPreload.forEach((pageNum) => {
+    uniquePagesToPreload.forEach((pageNum) => {
+      // [Optimization] 현재 페이지는 백그라운드 Image 객체로 미리 로드하지 않음.
+      // 실제 <img> 태그(SmartImageViewer)가 로드하도록 하여 onLoad 신호의 정확도를 높임.
+      // (배경 로딩이 먼저 끝나버리면 이미지가 실제 그려지기 전 스피너가 제거될 수 있음)
+      const isVisiblePage =
+        pageNum === currentPage || (readingMode === "double" && Math.abs(pageNum - currentPage) <= 1);
+
       if (imageLoading[pageNum] === undefined) {
         // 로딩 시작 표시
         setImageLoadingByChapter((prev) => {
@@ -135,31 +143,34 @@ export function useImagePreloader({
           };
         });
 
-        const img = new Image();
-        img.onload = () => {
-          if (currentChapterIdRef.current !== requestChapterId) return;
-          setImageLoadingByChapter((prev) => ({
-            ...pruneChapterLoadingMap(prev, requestChapterId),
-            [requestChapterId]: {
-              ...(prev[requestChapterId] ?? {}),
-              [pageNum]: false,
-            },
-          }));
-        };
-        img.onerror = () => {
-          if (currentChapterIdRef.current !== requestChapterId) return;
-          setImageLoadingByChapter((prev) => ({
-            ...pruneChapterLoadingMap(prev, requestChapterId),
-            [requestChapterId]: {
-              ...(prev[requestChapterId] ?? {}),
-              [pageNum]: false,
-            },
-          }));
-        };
-        img.src = getPageImageUrl(chapter.id, pageNum);
+        // 현재 보이는 페이지가 아니면 백그라운드 프리로드 실행
+        if (!isVisiblePage) {
+          const img = new Image();
+          img.onload = () => {
+            if (currentChapterIdRef.current !== requestChapterId) return;
+            setImageLoadingByChapter((prev) => ({
+              ...pruneChapterLoadingMap(prev, requestChapterId),
+              [requestChapterId]: {
+                ...(prev[requestChapterId] ?? {}),
+                [pageNum]: false,
+              },
+            }));
+          };
+          img.onerror = () => {
+            if (currentChapterIdRef.current !== requestChapterId) return;
+            setImageLoadingByChapter((prev) => ({
+              ...pruneChapterLoadingMap(prev, requestChapterId),
+              [requestChapterId]: {
+                ...(prev[requestChapterId] ?? {}),
+                [pageNum]: false,
+              },
+            }));
+          };
+          img.src = getPageImageUrl(chapter.id, pageNum);
+        }
       }
     });
-  }, [currentPage, totalPages, chapter, chapterId, preloadCount, imageLoading, pruneChapterLoadingMap]);
+  }, [currentPage, totalPages, chapter, chapterId, preloadCount, imageLoading, pruneChapterLoadingMap, readingMode]);
 
   return {
     imageLoading,

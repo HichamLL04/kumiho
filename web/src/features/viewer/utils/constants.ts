@@ -8,3 +8,6 @@ export const UI_HIDE_DELAY = 2000;
 
 // Wide 페이지 판단 기준 (가로 / 세로 비율)
 export const WIDE_RATIO_THRESHOLD = 1.3;
+
+// 세로 모드 최대 너비
+export const VERTICAL_MAX_WIDTH = 760;

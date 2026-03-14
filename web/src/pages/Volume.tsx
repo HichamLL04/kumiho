@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
-import { Play, CheckCircle, Folder, Check, RotateCcw, FileText } from "lucide-react";
+import { Play, CheckCircle, Folder, Check, RotateCcw, FileText, Music } from "lucide-react";
 import { Header } from "../components/headers/Header";
 import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
@@ -344,7 +344,12 @@ export function VolumePage() {
                     </div>
 
                     <div className={styles.chapterInfo}>
-                      <span className={styles.chapterNumber}>Chapter {chapter.chapter_number}</span>
+                      <span className={styles.chapterNumber}>
+                        Chapter {chapter.chapter_number}
+                        {chapter.has_audio && (
+                          <Music size={12} className={styles.audioIcon} />
+                        )}
+                      </span>
                       <span className={styles.chapterTitle}>{chapter.title}</span>
                       <span className={styles.chapterPages}>
                         {chapterProgress

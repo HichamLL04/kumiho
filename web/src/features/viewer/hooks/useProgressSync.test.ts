@@ -59,6 +59,8 @@ describe("useProgressSync fullscreen switching", () => {
           volume_number: 1,
           chapter_number: 2,
           current_page: 7,
+          anchor_page: 7,
+          offset_ratio: 0,
           chapter_id: "chapter-sync",
           volume_id: "volume-1",
         },
@@ -90,7 +92,7 @@ describe("useProgressSync fullscreen switching", () => {
 
     expect(mocks.startChapterSwitchingMock).toHaveBeenCalledWith(true);
     expect(mocks.finishChapterSwitchingMock).not.toHaveBeenCalled();
-    expect(mocks.navigateMock).toHaveBeenCalledWith("/viewer/chapter-sync?page=7", {
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/viewer/chapter-sync?page=7&anchor=7&offset=0", {
       replace: true,
       state: { from: "/series/1" },
     });
@@ -107,6 +109,8 @@ describe("useProgressSync fullscreen switching", () => {
           volume_number: 1,
           chapter_number: 1,
           current_page: 8,
+          anchor_page: 8,
+          offset_ratio: 0,
           chapter_id: "chapter-1",
           volume_id: "volume-1",
         },
@@ -138,9 +142,50 @@ describe("useProgressSync fullscreen switching", () => {
 
     expect(mocks.startChapterSwitchingMock).not.toHaveBeenCalled();
     expect(mocks.finishChapterSwitchingMock).toHaveBeenCalledTimes(1);
-    expect(mocks.navigateMock).toHaveBeenCalledWith("/viewer/chapter-1?page=8", {
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/viewer/chapter-1?page=8&anchor=8&offset=0", {
       replace: true,
-      state: { from: "/series/1" },
+      state: { from: "/series/1", skipSyncCheck: true },
     });
+  });
+
+  it("does not open sync modal when server page matches current page", async () => {
+    mocks.volumeGetMock.mockResolvedValue({
+      data: { volume_number: 1 },
+    });
+    mocks.compareProgressMock.mockResolvedValue({
+      data: {
+        server_ahead: true,
+        server_progress: {
+          volume_number: 1,
+          chapter_number: 1,
+          current_page: 6,
+          anchor_page: 6,
+          offset_ratio: 0,
+          chapter_id: "chapter-1",
+          volume_id: "volume-1",
+        },
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useProgressSync({
+        seriesId: "series-1",
+        chapter: {
+          id: "chapter-1",
+          volume_id: "volume-1",
+          title: "chapter",
+          chapter_number: 1,
+          page_count: 10,
+        },
+        currentPage: 6,
+        isLoading: false,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.compareProgressMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(result.current.showSyncModal).toBe(false);
   });
 });
