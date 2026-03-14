@@ -80,6 +80,12 @@ export function useVerticalScroll({
   const lastYRef = useRef<number | null>(null);
   const isInternalScrollRef = useRef(false);
   const readyAtRef = useRef(0);
+  const currentPageRef = useRef(currentPage);
+
+  // 현재 페이지 상태를 Ref에 동기화 (스크롤 이벤트 핸들러에서 최신 값을 참조하기 위함)
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
 
   const navigateToChapter = useCallback(
     (chapterIdToMove: string, options: { preventComplete?: boolean } = {}): Promise<void> => {
@@ -144,7 +150,12 @@ export function useVerticalScroll({
           Math.abs(targetPageEl.getBoundingClientRect().top - content.getBoundingClientRect().top) <= 20;
       const isFallbackAligned =
         isPageAligned || (effectiveRestorePosition.anchorPage === 1 && content.scrollTop <= RESTORE_TOLERANCE);
-      const isAnchorImageReady = imageLoading[effectiveRestorePosition.anchorPage] === false;
+      // 1페이지거나 이미 몇 번 시도했다면 이미지 로딩이 안 됐더라도 ready로 전환 (레이아웃은 이미 메타데이터로 잡혀있음)
+      const isAnchorImageReady =
+        imageLoading[effectiveRestorePosition.anchorPage] === false ||
+        effectiveRestorePosition.anchorPage === 1 ||
+        attempts >= 3;
+
       const isTargetPageVisible =
         getViewportAnchorPage(content, totalPages, effectiveRestorePosition.anchorPage) ===
         effectiveRestorePosition.anchorPage;
@@ -210,8 +221,8 @@ export function useVerticalScroll({
     const syncCurrentPage = () => {
       if (isInitialScrollingRef.current) return;
       if (Date.now() - readyAtRef.current < READY_STABILIZE_DELAY) return;
-      const nextPage = getViewportAnchorPage(content, totalPages, currentPage);
-      if (nextPage !== currentPage) {
+      const nextPage = getViewportAnchorPage(content, totalPages, currentPageRef.current);
+      if (nextPage !== currentPageRef.current) {
         isInternalScrollRef.current = true;
         setCurrentPage(nextPage);
       }
@@ -225,7 +236,6 @@ export function useVerticalScroll({
       isInternalScrollRef.current = false;
     };
   }, [
-    currentPage,
     effectiveViewStatus,
     isLoading,
     isInitialScrollingRef,

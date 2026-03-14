@@ -36,6 +36,7 @@ export const VerticalPage = ({
   fitMode,
 }: VerticalPageProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [cachedHeight, setCachedHeight] = useState<number>(() => pageHeightCache.get(pageNum) ?? 0);
 
   // 초기 스크롤/점프 시에도 모든 페이지를 한 번에 렌더하지 않도록,
@@ -50,14 +51,15 @@ export const VerticalPage = ({
   useEffect(() => {
     if (!shouldRenderImage) return;
 
-    const el = wrapperRef.current;
+    const el = contentRef.current;
     if (!el || !("ResizeObserver" in window)) return;
 
     const observer = new ResizeObserver((entries) => {
       const nextHeight = entries[0]?.contentRect.height ?? 0;
       if (nextHeight > 0) {
         setCachedHeight((prev) => {
-          if (Math.abs(prev - nextHeight) <= 1) return prev;
+          // 2px 이상의 유의미한 차이가 있을 때만 업데이트하여 잦은 렌더링 방지
+          if (Math.abs(prev - nextHeight) < 2) return prev;
           pageHeightCache.set(pageNum, nextHeight);
           return nextHeight;
         });
@@ -69,16 +71,30 @@ export const VerticalPage = ({
   }, [pageHeightCache, pageNum, shouldRenderImage]);
 
   const placeholderHeight = cachedHeight > 0 ? cachedHeight : Math.max(estimatedHeight ?? 0, 300);
-  const shouldShowSpinner = viewStatus === "ready";
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  const onImageLoadComplete = () => {
+    setImageLoaded(true);
+    handleImageLoad(pageNum);
+  };
+
+  const onImageError = () => {
+    setImageLoaded(true); // 에러 시에도 플레이스홀더는 해제
+    handleImageLoad(pageNum);
+  };
+
+  // 스피너 표시 조건: 이미 뷰어가 준비(ready)되었고, 아직 이미지가 로드되지 않았을 때
+  const shouldShowSpinner = viewStatus === "ready" && !imageLoaded;
 
   return (
     <div
       id={`page-${pageNum}`}
       ref={wrapperRef}
       className={styles.pageImageWrapper}
-      onClick={(e) => handleContentClick(e, { current: null })} // Pass null ref
+      onClick={(e) => handleContentClick(e, { current: null })}
       style={{
         width: "100%",
+        minHeight: `${placeholderHeight}px`, // 항상 높이 유지 (언마운트 시에도 공백 유지)
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -87,28 +103,50 @@ export const VerticalPage = ({
         padding: 0,
         lineHeight: 0,
         backgroundColor: "#000",
+        position: "relative",
       }}
     >
-      {shouldRenderImage ? (
-        <SmartImageViewer
-          src={imageUrl}
-          alt={`페이지 ${pageNum}`}
-          className={`${styles.verticalPageImage} ${styles[`fit${fitMode.charAt(0).toUpperCase() + fitMode.slice(1)}`]}`}
-          onLoad={() => handleImageLoad(pageNum)}
-          onError={() => handleImageLoad(pageNum)}
-        />
-      ) : (
+      <div
+        ref={contentRef}
+        style={{
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "flex-start",
+        }}
+      >
+        {shouldRenderImage && (
+          <SmartImageViewer
+            src={imageUrl}
+            alt={`페이지 ${pageNum}`}
+            className={`${styles.verticalPageImage} ${styles[`fit${fitMode.charAt(0).toUpperCase() + fitMode.slice(1)}`]} ${!imageLoaded ? styles.hidden : ""}`}
+            onLoad={onImageLoadComplete}
+            onError={onImageError}
+            style={{
+              display: imageLoaded ? "block" : "none",
+            }}
+          />
+        )}
+      </div>
+
+      {shouldShowSpinner && (
         <div
           className={styles.pageLoadingPlaceholder}
           style={{
-            minHeight: `${placeholderHeight}px`,
-            height: `${placeholderHeight}px`,
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            background: "transparent",
+            pointerEvents: "none",
           }}
         >
-          {shouldShowSpinner ? <div className={styles.spinner} /> : null}
+          <div className={styles.spinner} />
         </div>
       )}
     </div>

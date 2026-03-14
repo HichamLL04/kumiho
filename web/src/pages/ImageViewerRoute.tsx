@@ -29,6 +29,7 @@ import {
   useRestoreFullscreenAfterChapterSwitch,
   useExitFullscreenOnViewerUnmount,
   useVerticalRestoreLayout,
+  VERTICAL_MAX_WIDTH,
 } from "../features/viewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
@@ -174,13 +175,13 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     return () => observer.disconnect();
   }, [settings.readingMode]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const pos = getViewportAnchorPosition(viewerContentRef.current, totalPages, currentPage);
     setSyncAnchorPosition((prev) => {
       if (prev.anchorPage === pos.anchorPage && prev.offsetRatio === pos.offsetRatio) return prev;
       return pos;
     });
-  }, [currentPage, totalPages, viewStatus]);
+  }, [currentPage, totalPages, settings.readingMode]);
 
   // 진행도 저장
   const { saveProgress, handleVolumeCompletion } = useProgress({
@@ -211,8 +212,10 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
 
   const { estimatedHeights } = useVerticalRestoreLayout({
     pageMetaMap,
-    containerWidth: viewerContentWidth,
+    containerWidth:
+      settings.readingMode === "vertical" ? Math.min(viewerContentWidth, VERTICAL_MAX_WIDTH) : viewerContentWidth,
     totalPages,
+    fitMode: settings.fitMode,
   });
 
   // 세로 스크롤 (vertical 모드)
@@ -502,7 +505,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
         </div>
       ) : (
         <>
-
           {/* 상단 바 */}
           <ViewerHeader
             state={{

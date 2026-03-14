@@ -188,7 +188,11 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
             }
           }
 
-          const nextRestorePosition = resolveRestorePosition(cachedChapter.page_count, shouldUseOffsetRestore, progress);
+          const nextRestorePosition = resolveRestorePosition(
+            cachedChapter.page_count,
+            shouldUseOffsetRestore,
+            progress,
+          );
           const startPage = nextRestorePosition.currentPage;
 
           if (cancelled) return;
@@ -221,7 +225,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           timeoutId = setTimeout(() => {
             if (cancelled) return;
             finishChapterLoad(readingModeAtLoad);
-          }, 300); // 150ms -> 300ms로 상향 (렌더링 안정성 확보)
+          }, 50); // 300ms -> 50ms로 단축 (캐시 로드는 즉시 표시)
 
           // 부가 정보 로드 (비동기, 백그라운드 처리)
           (async () => {
@@ -474,7 +478,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
         timeoutId = setTimeout(() => {
           if (cancelled) return;
           finishChapterLoad(readingModeAtLoad);
-        }, 300); // 150ms -> 300ms로 상향
+        }, 150); // 300ms -> 150ms로 단축
       } catch (err) {
         if (cancelled) return;
         console.error("챕터 로드 실패:", err);
@@ -501,7 +505,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     resolveRestorePosition,
     setCurrentSeriesId,
     setNextChapterData,
-    settings.readingMode,
+    settings.readingDirection, // 방향 변경은 챕터 내용에 영향 없으므로 유지
     urlAnchor,
     urlOffset,
     urlPage,

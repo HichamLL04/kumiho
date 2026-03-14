@@ -9,6 +9,21 @@ function getAnchorPageRect(content: HTMLDivElement, totalPages: number, fallback
   }
 
   const containerTop = content.getBoundingClientRect().top;
+  const { scrollTop, clientHeight, scrollHeight } = content;
+
+  // 스크롤이 바닥에 도달했는지 확인 (약간의 오차 허용)
+  // 바닥에 도달했다면 마지막 페이지를 앵커 페이지로 사용
+  const isAtBottom = scrollHeight > 0 && scrollTop + clientHeight >= scrollHeight - 10;
+  if (isAtBottom && totalPages > 0) {
+    const lastPageEl = document.getElementById(`page-${totalPages}`);
+    if (lastPageEl && typeof lastPageEl.getBoundingClientRect === "function") {
+      const lastRect = lastPageEl.getBoundingClientRect();
+      if (lastRect.height > 0) {
+        return { anchorPage: totalPages, rect: lastRect, containerTop };
+      }
+    }
+  }
+
   let fallbackRect: DOMRect | null = null;
   let fallbackDistance = Number.POSITIVE_INFINITY;
   let previousRect: DOMRect | null = null;
@@ -82,7 +97,11 @@ export function getViewportAnchorPosition(
   };
 }
 
-export function getViewportAnchorPage(content: HTMLDivElement | null, totalPages: number, fallbackPage: number): number {
+export function getViewportAnchorPage(
+  content: HTMLDivElement | null,
+  totalPages: number,
+  fallbackPage: number,
+): number {
   if (!content || totalPages <= 0) {
     return fallbackPage;
   }

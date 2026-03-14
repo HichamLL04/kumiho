@@ -13,6 +13,7 @@ import {
   type PageTransitionType,
   type SubPage,
 } from "../../../../stores/viewerStore";
+import { VERTICAL_MAX_WIDTH } from "../../utils/constants";
 import type { PageMeta, ViewStatus, ViewerAnimationHandles } from "../../types";
 
 interface ViewerContentProps {
@@ -229,14 +230,14 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       );
     };
 
-    const VERTICAL_MAX_WIDTH = "760px";
-
     if (readingMode === "vertical") {
       const minRenderPage = Math.max(1, currentPage - 3);
       const verticalRenderPages =
         isInitialScrolling && viewStatus !== "ready"
           ? displayPages.filter((pageNum) =>
-              currentPage === 1 ? pageNum >= 1 && pageNum <= 2 : pageNum >= currentPage - 1 && pageNum <= currentPage + 1,
+              currentPage === 1
+                ? pageNum >= 1 && pageNum <= 2
+                : pageNum >= currentPage - 1 && pageNum <= currentPage + 1,
             )
           : displayPages;
 
@@ -244,12 +245,13 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         <div
           style={{
             width: "100%",
-            maxWidth: VERTICAL_MAX_WIDTH,
+            maxWidth: `${VERTICAL_MAX_WIDTH}px`,
             margin: "0 auto",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "flex-start",
+            gap: 0,
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
