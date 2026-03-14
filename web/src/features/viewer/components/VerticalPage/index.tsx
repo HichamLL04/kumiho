@@ -61,7 +61,7 @@ const VerticalPageContent = ({
         src={imageUrl}
         alt={`페이지 ${pageNum}`}
         className={`${styles.verticalPageImage} ${styles[`fit${fitMode.charAt(0).toUpperCase() + fitMode.slice(1)}`]}`}
-        onLoad={onImageLoadComplete}
+        onVisualReady={onImageLoadComplete}
         onError={onImageError}
         style={{
           display: imageLoaded ? "block" : "none",

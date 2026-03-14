@@ -147,17 +147,26 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     readingMode: settings.readingMode,
   });
 
+  // 표시할 페이지 계산 (useEffect 등에서 사용하기 위해 상위로 이동)
+  const displayPages = getDisplayPages({
+    currentPage,
+    totalPages,
+    readingMode: settings.readingMode,
+    pageOffset: settings.pageOffset,
+    pageMetaMap,
+  });
+
   // [Fix] 단일/두쪽 보기 모드에서 초기 진입 시 이미지가 실제 로드되었을 때만 로딩 스피너를 제거한다.
+  // SmartImageViewer의 onVisualReady가 이미지 디코딩 + opacity 전환 준비 완료 후 호출되므로 별도 타이머 불필요.
   useEffect(() => {
     if (settings.readingMode === "vertical" || viewStatus !== "rendering") return;
 
-    // 현재 표시되고 있는 페이지 중 하나라도 로드되면 (또는 즉시 로드된 상태면) ready로 전환
-    const isCurrentPageLoaded = imageLoading[currentPage] === false;
-    if (isCurrentPageLoaded) {
-      console.log(`[ImageViewer] Image loaded for page ${currentPage}, setting viewStatus to ready`);
+    const areAllCurrentPagesLoaded = displayPages.every((pageNum) => imageLoading[pageNum] === false);
+
+    if (areAllCurrentPagesLoaded) {
       setViewStatus("ready");
     }
-  }, [settings.readingMode, viewStatus, imageLoading, currentPage, setViewStatus]);
+  }, [settings.readingMode, viewStatus, imageLoading, displayPages, setViewStatus]);
 
   // BGM 제어
   const isBgmReady = !isLoading && imageLoading[currentPage] === false;
@@ -429,15 +438,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       }
     };
   }, [isUIVisible, resetUITimer, currentPage]);
-
-  // 표시할 페이지 계산
-  const displayPages = getDisplayPages({
-    currentPage,
-    totalPages,
-    readingMode: settings.readingMode,
-    pageOffset: settings.pageOffset,
-    pageMetaMap,
-  });
 
   // 이전 뷰의 '기준 페이지'를 구하고 그 페이지의 디스플레이 셋을 구함
   const prevTargetPage = getPrevTargetPage(currentPage, settings.readingMode, pageMetaMap);

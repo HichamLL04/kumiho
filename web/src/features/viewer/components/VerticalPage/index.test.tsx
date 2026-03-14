@@ -7,20 +7,20 @@ vi.mock("../../../../components/SmartImageViewer", () => ({
   SmartImageViewer: ({
     src,
     alt,
-    onLoad,
+    onVisualReady,
     style,
     className,
   }: {
     src?: string;
     alt?: string;
-    onLoad?: () => void;
+    onVisualReady?: () => void;
     style?: React.CSSProperties;
     className?: string;
   }) => (
     <img
       src={src}
       alt={alt}
-      onLoad={onLoad}
+      onLoad={onVisualReady}
       style={style}
       className={className}
       data-testid="smart-image"

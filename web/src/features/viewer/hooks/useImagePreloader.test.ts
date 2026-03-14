@@ -43,6 +43,7 @@ describe("useImagePreloader", () => {
   });
 
   it("resets on chapter change and still settles preloaded page to false", async () => {
+    // single 모드: currentPage만 visible → 나머지 페이지는 백그라운드 프리로드
     const { result, rerender } = renderHook(
       ({ chapter, chapterId }) =>
         useImagePreloader({
@@ -51,7 +52,7 @@ describe("useImagePreloader", () => {
           currentPage: 1,
           totalPages: 5,
           preloadCount: 1,
-          readingMode: "double",
+          readingMode: "single",
         }),
       {
         initialProps: {
@@ -79,6 +80,7 @@ describe("useImagePreloader", () => {
     pageBehavior.set(1, "load");
     pageBehavior.set(3, "error");
 
+    // single 모드: currentPage(2)만 visible → page 1, 3은 백그라운드 프리로드
     const { result } = renderHook(() =>
       useImagePreloader({
         chapter: createChapter("chapter-c"),
@@ -86,7 +88,7 @@ describe("useImagePreloader", () => {
         currentPage: 2,
         totalPages: 5,
         preloadCount: 1,
-        readingMode: "double",
+        readingMode: "single",
       }),
     );
 

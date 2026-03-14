@@ -212,8 +212,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
                     nextSrc={nextSrc}
                     alt={`페이지 ${pageNum}`}
                     className={`${styles.pageImage} ${styles[`fit${fitMode.charAt(0).toUpperCase() + fitMode.slice(1)}`]} ${shouldHide ? styles.hidden : ""}`}
-                    onLoad={() => handleImageLoad(pageNum)}
-                    onError={() => handleImageLoad(pageNum)}
+                    onVisualReady={() => handleImageLoad(pageNum)}
                   />
                 ) : (
                   <div
