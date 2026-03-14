@@ -6,6 +6,7 @@ import { PdfViewerRoute } from "./PdfViewerRoute";
 import { EpubViewerRoute } from "./EpubViewerRoute";
 import { TextViewerRoute } from "./TextViewerRoute";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
+import styles from "./Viewer.module.css";
 
 export function ViewerPage() {
   const { chapterId } = useParams<{ chapterId: string }>();
@@ -50,7 +51,7 @@ export function ViewerPage() {
 
   return (
     <>
-      {showLoading && <LoadingSpinner fullScreen text={undefined} />}
+      {showLoading && <LoadingSpinner fullScreen text={undefined} className={styles.viewerLoadingOverlay} />}
       {route}
     </>
   );
