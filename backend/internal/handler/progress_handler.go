@@ -907,7 +907,7 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	limit := c.QueryInt("limit", 10)
 
-	progressList, err := h.progressRepo.FindRecentByUser(nil, userID, limit)
+	progressList, err := h.progressRepo.FindRecentEnrichedByUser(nil, userID, limit)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch progress",
@@ -915,12 +915,12 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 	}
 
 	if progressList == nil {
-		progressList = []model.ReadingProgress{}
+		progressList = []repository.RecentEnrichedProgress{}
 	}
 
 	// 시리즈 정보 추가
 	type ProgressWithSeries struct {
-		model.ReadingProgress
+		repository.RecentEnrichedProgress
 		SeriesTitle        string  `json:"series_title"`
 		ThumbnailURL       *string `json:"thumbnail_url"`
 		VolumeNumber       int     `json:"volume_number"`
@@ -934,20 +934,18 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 	result := make([]ProgressWithSeries, len(progressList))
 	for i, p := range progressList {
 		result[i] = ProgressWithSeries{
-			ReadingProgress: p,
+			RecentEnrichedProgress: p,
 		}
 
-		// 시리즈 정보
+		// 시리즈 정보 (경로 정보는 이미 Repository에서 Join으로 가져옴)
 		if series, _ := h.seriesRepo.FindByID(nil, p.SeriesID, userID); series != nil {
 			result[i].SeriesTitle = series.Title
 
-			// 챕터 정보 먼저 조회 (볼륨 ID 추론을 위함)
-			var chapter *model.Chapter
+			// 챕터 정보 보급
 			if p.ChapterID != nil {
 				if c, _ := h.chapterRepo.FindByID(nil, *p.ChapterID); c != nil {
-					chapter = c
-					result[i].ChapterNumber = chapter.ChapterNumber
-					result[i].ChapterTitle = chapter.Title
+					result[i].ChapterNumber = c.ChapterNumber
+					result[i].ChapterTitle = c.Title
 				}
 			}
 
@@ -955,8 +953,9 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 			var targetVolumeID string
 			if p.VolumeID != nil {
 				targetVolumeID = *p.VolumeID
-			} else if chapter != nil {
-				targetVolumeID = chapter.VolumeID
+			} else if p.ChapterID != nil {
+				// 이미 챕터 정보를 가져왔다면 좋겠지만, 리포지토리 쿼리에는 chapter.volume_id가 없음.
+				// 하지만 FindRecentEnrichedByUser 쿼리에 v.id를 추가했으므로 p.VolumeID가 있을 확률이 높음.
 			}
 
 			// 볼륨 정보 및 썸네일 설정

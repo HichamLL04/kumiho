@@ -1007,58 +1007,51 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 		}
 	}
 
+	// 진행도 정보 배치 조회를 위한 ID 목록 추출
+	volumeIDs := make([]string, len(volumes))
+	for i, v := range volumes {
+		volumeIDs[i] = v.ID
+	}
+
+	// 페이지 정보 및 진행도 배치 조회
+	totalPageMap, _ := h.volumeRepo.GetTotalPagesBatch(nil, volumeIDs)
+	readPageMap, _ := h.volumeRepo.GetReadPagesBatch(nil, userID, volumeIDs)
+	progressPercentMap, _ := h.volumeRepo.GetProgressPercentBatch(nil, userID, volumeIDs)
+
 	// 응답 데이터 구성 (썸네일 URL + 완독 상태 + 진행도)
 	result := make([]VolumeResponse, len(volumes))
 	for i := range volumes {
+		vID := volumes[i].ID
+
 		// 썸네일 URL 설정
-		// 커스텀 썸네일이 없더라도 볼륨 썸네일 API를 사용해
-		// 이미지/PDF/EPUB 구조를 동일한 방식으로 처리합니다.
-		if volumes[i].ThumbnailPath != nil && *volumes[i].ThumbnailPath != "" {
-			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volumes[i].ID, time.Now().Unix())
-			volumes[i].ThumbnailURL = &url
-		} else {
-			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volumes[i].ID, time.Now().Unix())
-			volumes[i].ThumbnailURL = &url
+		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", vID, time.Now().Unix())
+		volumes[i].ThumbnailURL = &url
+
+		// 배 조회된 데이터 매핑
+		if total, ok := totalPageMap[vID]; ok {
+			volumes[i].TotalPageCount = total
+		}
+		if read, ok := readPageMap[vID]; ok {
+			volumes[i].ReadPageCount = read
+		}
+		if percent, ok := progressPercentMap[vID]; ok {
+			volumes[i].ProgressPercent = percent
 		}
 
-		// 진행도 계산
-		totalPages, err := h.volumeRepo.GetTotalPages(nil, volumes[i].ID)
-		if err != nil {
-			log.Printf("failed to get total pages for volume %s: %v", volumes[i].ID, err)
-		} else {
-			volumes[i].TotalPageCount = totalPages
-		}
-
-		readPages, err := h.volumeRepo.GetReadPages(nil, userID, volumes[i].ID)
-		if err != nil {
-			log.Printf("failed to get read pages for user %s, volume %s: %v", userID, volumes[i].ID, err)
-		} else {
-			volumes[i].ReadPageCount = readPages
-		}
-
-		// TODO: N+1 쿼리 개선 필요 - GetProgressPercent가 볼륨마다 개별 호출됨.
-		// 볼륨 수가 많을 경우 배치 조회 방식으로 성능 개선 고려.
-		progressPercent, err := h.volumeRepo.GetProgressPercent(nil, userID, volumes[i].ID)
-		if err != nil {
-			log.Printf("failed to get progress percent for user %s, volume %s: %v", userID, volumes[i].ID, err)
-		} else {
-			volumes[i].ProgressPercent = progressPercent
-		}
-
-		// 하위 볼륨 개수 조회
-		if subVolCount, err := h.volumeRepo.CountByParentID(nil, volumes[i].ID); err == nil {
+		// 하위 볼륨 개수 조회 (이 부분도 추후 최적화 가능하나 우선 순위 낮음)
+		if subVolCount, err := h.volumeRepo.CountByParentID(nil, vID); err == nil {
 			volumes[i].SubVolumeCount = subVolCount
 		}
 
-		completedByFlag := completedVolumeIDs[volumes[i].ID]
-		// 완독 플래그가 있으나 집계값이 비어있는 경우(과거 데이터 등)에는 100%로 보정.
-		// 이후 최종 완독 여부는 보정된 readPages를 포함해 재검증한다.
+		totalPages := volumes[i].TotalPageCount
+		readPages := volumes[i].ReadPageCount
+		completedByFlag := completedVolumeIDs[vID]
+
+		// 완독 플래그 보정 및 검증
 		if completedByFlag && readPages == 0 && totalPages > 0 {
 			volumes[i].ReadPageCount = totalPages
 			readPages = totalPages
 		}
-		// 완독 플래그가 있더라도 실제 집계 진행도가 100% 미만이면 완독 표시를 하지 않음.
-		// stale completion 레코드로 인해 시리즈 페이지가 100%로 고정되는 케이스를 방지.
 		isCompleted := completedByFlag && (totalPages <= 0 || readPages >= totalPages)
 
 		result[i] = VolumeResponse{
@@ -1532,4 +1525,34 @@ func (h *SeriesHandler) deleteHashFiles(dir, hashString string) {
 			}
 		}
 	}
+}
+
+// BatchGetExtensions 여러 시리즈의 확장자 정보 조회
+// POST /api/v1/series/extensions/batch
+func (h *SeriesHandler) BatchGetExtensions(c *fiber.Ctx) error {
+	var req struct {
+		SeriesIDs []string `json:"series_ids"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	if len(req.SeriesIDs) == 0 {
+		return c.JSON(fiber.Map{
+			"extensions": make(map[string]string),
+		})
+	}
+
+	extensions, err := h.seriesRepo.GetExtensionsByIDs(nil, req.SeriesIDs)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch extensions",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"extensions": extensions,
+	})
 }

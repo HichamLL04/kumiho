@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -554,4 +555,232 @@ func (r *VolumeRepository) GetDistinctExtensions(db database.Queryer, seriesID s
 		return nil, err
 	}
 	return extensions, nil
+}
+// GetTotalPagesBatch 시리즈 내 하위 볼륨들의 전체 페이지 수 배치 조회
+func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []string) (map[string]int, error) {
+	if len(volumeIDs) == 0 {
+		return make(map[string]int), nil
+	}
+	db = database.GetQueryer(db)
+
+	query := `
+		WITH RECURSIVE descendant_volumes(root_id, id) AS (
+			SELECT id, id FROM volumes WHERE id IN (?)
+			UNION ALL
+			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT dv.root_id, COALESCE(SUM(
+			CASE 
+				WHEN c.page_count > 0 THEN c.page_count 
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
+				ELSE 0 
+			END), 0)
+		FROM chapters c
+		JOIN descendant_volumes dv ON c.volume_id = dv.id
+		GROUP BY dv.root_id
+	`
+
+	// ID 목록을 query에 바인딩하기 위해 ? 개수 조절
+	placeholders := make([]string, len(volumeIDs))
+	args := make([]interface{}, len(volumeIDs))
+	for i, id := range volumeIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	actualQuery := strings.Replace(query, "?", strings.Join(placeholders, ","), 1)
+
+	rows, err := db.Query(actualQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var total int
+		if err := rows.Scan(&id, &total); err != nil {
+			return nil, err
+		}
+		result[id] = total
+	}
+	return result, nil
+}
+
+// GetReadPagesBatch 사용자가 시리즈 내 하위 볼륨들에서 읽은 총 페이지 수 배치 조회
+func (r *VolumeRepository) GetReadPagesBatch(db database.Queryer, userID string, volumeIDs []string) (map[string]int, error) {
+	if len(volumeIDs) == 0 {
+		return make(map[string]int), nil
+	}
+	db = database.GetQueryer(db)
+
+	placeholders := make([]string, len(volumeIDs))
+	args := make([]interface{}, 0, len(volumeIDs)*2+1)
+	for i, id := range volumeIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	placeholderStr := strings.Join(placeholders, ",")
+
+	// 1. 완료된 페이지 집계
+	completedQuery := `
+		WITH RECURSIVE descendant_volumes(root_id, id) AS (
+			SELECT id, id FROM volumes WHERE id IN (` + placeholderStr + `)
+			UNION ALL
+			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT dv.root_id, COALESCE(SUM(
+			CASE 
+				WHEN c.page_count > 0 THEN c.page_count 
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
+				ELSE 0 
+			END), 0)
+		FROM chapter_completions cc
+		JOIN chapters c ON cc.chapter_id = c.id
+		JOIN descendant_volumes dv ON c.volume_id = dv.id
+		WHERE cc.user_id = ?
+		GROUP BY dv.root_id
+	`
+	completedArgs := append(args, userID)
+	rows, err := db.Query(completedQuery, completedArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	completedMap := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var count int
+		if err := rows.Scan(&id, &count); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		completedMap[id] = count
+	}
+	_ = rows.Close()
+
+	// 2. 진행 중인 페이지 집계
+	progressQuery := `
+		WITH RECURSIVE descendant_volumes(root_id, id) AS (
+			SELECT id, id FROM volumes WHERE id IN (` + placeholderStr + `)
+			UNION ALL
+			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT dv.root_id, COALESCE(SUM(
+			CASE 
+				WHEN c.page_count > 0 THEN rp.current_page
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
+				ELSE CAST(rp.progress_percent AS INTEGER)
+			END
+		), 0)
+		FROM reading_progress rp
+		JOIN chapters c ON rp.chapter_id = c.id
+		JOIN descendant_volumes dv ON c.volume_id = dv.id
+		WHERE rp.user_id = ?
+		AND rp.chapter_id NOT IN (
+			SELECT chapter_id FROM chapter_completions WHERE user_id = ?
+		)
+		GROUP BY dv.root_id
+	`
+	progressArgs := append(args, userID, userID)
+	rows, err = db.Query(progressQuery, progressArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	progressMap := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var count int
+		if err := rows.Scan(&id, &count); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		progressMap[id] = count
+	}
+	_ = rows.Close()
+
+	// 3. 결과 합산
+	result := make(map[string]int)
+	for _, id := range volumeIDs {
+		result[id] = completedMap[id] + progressMap[id]
+	}
+	return result, nil
+}
+
+// GetProgressPercentBatch 사용자의 볼륨 실제 진행 퍼센트 배치 조회
+func (r *VolumeRepository) GetProgressPercentBatch(db database.Queryer, userID string, volumeIDs []string) (map[string]float64, error) {
+	if len(volumeIDs) == 0 {
+		return make(map[string]float64), nil
+	}
+	db = database.GetQueryer(db)
+
+	placeholders := make([]string, len(volumeIDs))
+	args := make([]interface{}, 0, len(volumeIDs))
+	for i, id := range volumeIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	placeholderStr := strings.Join(placeholders, ",")
+
+	query := `
+		WITH RECURSIVE descendant_volumes(root_id, id) AS (
+			SELECT id, id FROM volumes WHERE id IN (` + placeholderStr + `)
+			UNION ALL
+			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		),
+		chapter_units AS (
+			SELECT
+				dv.root_id,
+				c.id AS chapter_id,
+				CASE
+					WHEN c.total_positions > 0 THEN c.total_positions
+					WHEN c.page_count > 0 THEN c.page_count
+					ELSE 0
+				END AS unit_total
+			FROM chapters c
+			JOIN descendant_volumes dv ON c.volume_id = dv.id
+		),
+		volume_stats AS (
+			SELECT
+				cu.root_id,
+				SUM(cu.unit_total) AS total_units,
+				SUM(CASE WHEN cc.chapter_id IS NOT NULL THEN cu.unit_total ELSE 0 END) AS completed_units,
+				SUM(CASE WHEN rp.chapter_id IS NOT NULL AND cc.chapter_id IS NULL THEN
+					cu.unit_total * (
+						CASE
+							WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
+							ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
+						END
+					)
+					ELSE 0 END) AS inprogress_units
+			FROM chapter_units cu
+			LEFT JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id AND cc.user_id = ?
+			LEFT JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id AND rp.user_id = ?
+			GROUP BY cu.root_id
+		)
+		SELECT root_id, CASE
+			WHEN total_units <= 0 THEN 0.0
+			ELSE MIN(100.0, MAX(0.0, ((completed_units + inprogress_units) * 100.0) / total_units))
+		END
+		FROM volume_stats
+	`
+
+	fullArgs := append(args, userID, userID)
+	rows, err := db.Query(query, fullArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]float64)
+	for rows.Next() {
+		var id string
+		var percent float64
+		if err := rows.Scan(&id, &percent); err != nil {
+			return nil, err
+		}
+		result[id] = percent
+	}
+	return result, nil
 }

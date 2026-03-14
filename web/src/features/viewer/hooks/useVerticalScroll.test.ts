@@ -33,7 +33,7 @@ vi.mock("../../../stores/viewerStore", () => ({
 }));
 
 vi.mock("../utils/progressPosition", () => ({
-  getViewportAnchorPage: vi.fn((content, total, current) => current),
+  getViewportAnchorPage: vi.fn((_content, _total, current) => current),
 }));
 
 class IntersectionObserverMock {
@@ -106,7 +106,7 @@ describe("useVerticalScroll", () => {
             chapterId: "chapter-1",
             isInitialScrollingRef,
             imageLoading: { 9: false },
-            viewerContentRef: viewerContentRef as any,
+            viewerContentRef: viewerContentRef as unknown as React.MutableRefObject<HTMLDivElement | null>,
           }),
         { initialProps: { currentPage: 8 } },
       );
@@ -159,14 +159,14 @@ describe("useVerticalScroll", () => {
           chapterId: "chapter-1",
           isInitialScrollingRef,
           viewStatus: "ready",
-          viewerContentRef: viewerContentRef as any,
+          viewerContentRef: viewerContentRef as unknown as React.MutableRefObject<HTMLDivElement | null>,
         }),
       );
 
       // simulate scroll event
-      const scrollHandler = (mockContent.addEventListener as any).mock.calls.find(
-        (call: any) => call[0] === "scroll",
-      )[1];
+      const scrollHandler = (vi
+        .mocked(mockContent.addEventListener)
+        .mock.calls.find((call) => call[0] === "scroll")?.[1] || (() => {})) as () => void;
       expect(scrollHandler).toBeDefined();
 
       act(() => {
@@ -215,11 +215,13 @@ describe("useVerticalScroll", () => {
           chapterId: "chapter-1",
           isInitialScrollingRef,
           viewStatus: "ready",
-          viewerContentRef: viewerContentRef as any,
+          viewerContentRef: viewerContentRef as unknown as React.MutableRefObject<HTMLDivElement | null>,
         }),
       );
 
-      const wheelHandler = (mockContent.addEventListener as any).mock.calls.find((call: any) => call[0] === "wheel")[1];
+      const wheelHandler = (vi
+        .mocked(mockContent.addEventListener)
+        .mock.calls.find((call) => call[0] === "wheel")?.[1] || (() => {})) as (e: WheelEvent) => void;
       expect(wheelHandler).toBeDefined();
 
       const event = {

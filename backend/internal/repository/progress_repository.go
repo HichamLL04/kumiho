@@ -784,3 +784,64 @@ func (r *ReadingProgressRepository) GetTopSeries(db database.Queryer, userID str
 	}
 	return seriesList, nil
 }
+
+// RecentEnrichedProgress 최근 읽기 진행도 (경로 정보 포함)
+type RecentEnrichedProgress struct {
+	model.ReadingProgress
+	ChapterPath *string `json:"chapter_path"`
+	VolumePath  *string `json:"volume_path"`
+	SeriesPath  *string `json:"series_path"`
+}
+
+// FindRecentEnrichedByUser 최근 읽기 진행도 조회 (경로 정보 포함)
+func (r *ReadingProgressRepository) FindRecentEnrichedByUser(db database.Queryer, userID string, limit int) ([]RecentEnrichedProgress, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(`
+		SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, rp.anchor_page, rp.offset_ratio,
+		 rp.total_pages, rp.current_position, rp.total_positions, rp.progress_percent, rp.device_id, rp.device_name, rp.current_cfi, rp.updated_at,
+		 c.path as chapter_path, v.path as volume_path, s.path as series_path
+		 FROM reading_progress rp
+		 LEFT JOIN chapters c ON rp.chapter_id = c.id
+		 LEFT JOIN volumes v ON rp.volume_id = v.id
+		 LEFT JOIN series s ON rp.series_id = s.id
+		 LEFT JOIN volume_completions vc 
+		   ON vc.user_id = rp.user_id 
+		   AND vc.volume_id = COALESCE(rp.volume_id, c.volume_id)
+		 WHERE rp.user_id = ? 
+		   AND vc.id IS NULL
+		   AND rp.progress_percent < 100
+		 ORDER BY rp.updated_at DESC LIMIT ?`,
+		userID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []RecentEnrichedProgress
+	for rows.Next() {
+		var p RecentEnrichedProgress
+		var chapterPath, volumePath, seriesPath sql.NullString
+		err := rows.Scan(
+			&p.ID, &p.UserID, &p.SeriesID, &p.VolumeID, &p.ChapterID, &p.CurrentPage, &p.AnchorPage, &p.OffsetRatio,
+			&p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &p.ProgressPercent, &p.DeviceID, &p.DeviceName, &p.CurrentCFI, &p.UpdatedAt,
+			&chapterPath, &volumePath, &seriesPath,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if chapterPath.Valid {
+			p.ChapterPath = &chapterPath.String
+		}
+		if volumePath.Valid {
+			p.VolumePath = &volumePath.String
+		}
+		if seriesPath.Valid {
+			p.SeriesPath = &seriesPath.String
+		}
+
+		results = append(results, p)
+	}
+	return results, nil
+}

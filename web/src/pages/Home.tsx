@@ -2,19 +2,14 @@ import { useEffect, useState, useCallback, useRef, type JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { BookOpen, Clock, Heart } from "lucide-react";
 import { useLibraryStore } from "../stores/libraryStore";
-import { chapterAPI, libraryAPI, progressAPI, seriesAPI, settingAPI, volumeAPI } from "../api/client";
+import { libraryAPI, progressAPI, seriesAPI, settingAPI } from "../api/client";
 import { Header } from "../components/headers/Header";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { HorizontalDragScroll } from "../components/common/HorizontalDragScroll";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import type { Series } from "../types/series";
-import {
-  parseSupportedExtension,
-  resolveSeriesExtensionMapWithCache,
-  type ExtensionBadge,
-  type SupportedExtension,
-} from "../utils/extension";
+import { parseSupportedExtension, type ExtensionBadge, type SupportedExtension } from "../utils/extension";
 import styles from "./Home.module.css";
 
 interface RecentProgress {
@@ -37,6 +32,7 @@ interface RecentProgress {
   path?: string;
   chapter_path?: string;
   volume_path?: string;
+  series_path?: string;
 }
 
 export function HomePage() {
@@ -82,6 +78,15 @@ export function HomePage() {
 
         const recentList: RecentProgress[] = progressRes.data.recent_progress || [];
         setRecentProgress(recentList);
+
+        // 1. 최근 읽은 목록 확장자 해결 (백엔드에서 강화된 경로 정보 활용 - N+1 제거)
+        const recentExtMap: Partial<Record<string, ExtensionBadge>> = {};
+        recentList.forEach((progress) => {
+          const ext = parseSupportedExtension(progress.chapter_path || progress.volume_path || progress.series_path);
+          if (ext) recentExtMap[progress.id] = ext;
+        });
+        setRecentProgressExtensionMap(recentExtMap);
+
         const likedSeriesList = (likedRes.data.series || []) as Series[];
         setLikedSeries(likedSeriesList);
 
@@ -145,76 +150,30 @@ export function HomePage() {
         if (currentLoad !== loadSequenceRef.current) return;
         setIsLoading(false);
 
+        // 2. 홈 시리즈 확장자 해결 (배치 API 활용 - N+1 제거)
         void (async () => {
-          const resolvedRecentExtensions: Array<readonly [string, ExtensionBadge | ""]> = await Promise.all(
-            recentList.map(async (progress) => {
-              const directExt = parseSupportedExtension(progress.path || progress.chapter_path || progress.volume_path);
-              if (directExt) return [progress.id, directExt] as const;
+          const seriesIds = seriesForExtension.map((s) => s.id);
+          if (seriesIds.length === 0) return;
 
-              if (progress.chapter_id) {
-                if (!chapterExtensionCacheRef.current.has(progress.chapter_id)) {
-                  try {
-                    const chapterRes = await chapterAPI.get(progress.chapter_id);
-                    chapterExtensionCacheRef.current.set(
-                      progress.chapter_id,
-                      parseSupportedExtension((chapterRes.data as { path?: string } | undefined)?.path),
-                    );
-                  } catch {
-                    chapterExtensionCacheRef.current.set(progress.chapter_id, null);
-                  }
-                }
-                const chapterExt = chapterExtensionCacheRef.current.get(progress.chapter_id);
-                if (chapterExt) return [progress.id, chapterExt] as const;
+          try {
+            const extRes = await seriesAPI.getExtensionsBatch(seriesIds);
+            const extensions = extRes.data.extensions || {};
+
+            if (currentLoad !== loadSequenceRef.current) return;
+
+            const nextMap: Partial<Record<string, ExtensionBadge>> = {};
+            seriesForExtension.forEach((series) => {
+              const ext = extensions[series.id];
+              if (ext) {
+                const badge = parseSupportedExtension(ext);
+                if (badge) nextMap[series.id] = badge;
               }
-
-              if (progress.volume_id) {
-                if (!volumeExtensionCacheRef.current.has(progress.volume_id)) {
-                  try {
-                    const volumeRes = await volumeAPI.get(progress.volume_id);
-                    volumeExtensionCacheRef.current.set(
-                      progress.volume_id,
-                      parseSupportedExtension((volumeRes.data as { path?: string } | undefined)?.path),
-                    );
-                  } catch {
-                    volumeExtensionCacheRef.current.set(progress.volume_id, null);
-                  }
-                }
-                const volumeExt = volumeExtensionCacheRef.current.get(progress.volume_id);
-                if (volumeExt) return [progress.id, volumeExt] as const;
-              }
-
-              return [progress.id, ""] as const;
-            }),
-          );
-
-          if (currentLoad !== loadSequenceRef.current) return;
-          const extensionMap: Partial<Record<string, ExtensionBadge>> = {};
-          resolvedRecentExtensions.forEach(([progressId, ext]) => {
-            if (ext) extensionMap[progressId] = ext;
-          });
-          setRecentProgressExtensionMap(extensionMap);
-        })().catch((error) => {
-          console.warn("Failed to resolve recent progress extensions:", error);
-        });
-
-        void (async () => {
-          const nextMap = await resolveSeriesExtensionMapWithCache({
-            seriesList: seriesForExtension,
-            cache: seriesExtensionCacheRef.current,
-            fetchVolumePaths: async (seriesId) => {
-              const volumesRes = await seriesAPI.getVolumes(seriesId);
-              const volumes = Array.isArray(volumesRes.data?.volumes) ? volumesRes.data.volumes : [];
-              return volumes.map((volume: { path?: string }) => volume.path);
-            },
-            onError: (seriesId, error) => {
-              console.warn(`Failed to resolve extension for home series ${seriesId}:`, error);
-            },
-          });
-          if (currentLoad !== loadSequenceRef.current) return;
-          setHomeSeriesExtensionMap(nextMap);
-        })().catch((error) => {
-          console.warn("Failed to resolve home series extensions:", error);
-        });
+            });
+            setHomeSeriesExtensionMap(nextMap);
+          } catch (error) {
+            console.warn("Failed to fetch series extensions in batch:", error);
+          }
+        })();
       } catch (error) {
         console.error("Failed to load data:", error);
         if (currentLoad === loadSequenceRef.current) {
@@ -335,7 +294,6 @@ export function HomePage() {
                 volumeId={progress.volume_id}
                 onStatusChange={loadData}
                 showExtensionBadge
-                extensionBadgePlacement="meta"
                 extensionBadgeText={recentProgressExtensionMap[progress.id]}
               />
             );

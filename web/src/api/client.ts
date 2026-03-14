@@ -211,6 +211,9 @@ export const seriesAPI = {
   resetProgress: (seriesId: string) => api.delete(`/series/${seriesId}/progress`),
   // 시리즈 검색
   search: (query: string) => api.get<{ series: Series[] }>(`/series/search?q=${encodeURIComponent(query)}`),
+  // 확장자 배치 조회
+  getExtensionsBatch: (seriesIds: string[]) =>
+    api.post<{ extensions: Record<string, string> }>("/series/extensions/batch", { series_ids: seriesIds }),
   // 뷰어 설정
   getViewerSettings: (seriesId: string) => api.get(`/series/${seriesId}/viewer-settings`).then((res) => res.data),
   updateViewerSettings: (seriesId: string, data: Record<string, unknown>) =>

@@ -4,7 +4,19 @@ import { VerticalPage } from "./index";
 
 // Mock SmartImageViewer
 vi.mock("../../../../components/SmartImageViewer", () => ({
-  SmartImageViewer: ({ src, alt, onLoad, style, className }: any) => (
+  SmartImageViewer: ({
+    src,
+    alt,
+    onLoad,
+    style,
+    className,
+  }: {
+    src?: string;
+    alt?: string;
+    onLoad?: () => void;
+    style?: React.CSSProperties;
+    className?: string;
+  }) => (
     <img
       src={src}
       alt={alt}
