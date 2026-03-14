@@ -60,7 +60,7 @@ var (
 
 	// 볼륨 파싱 정규식 (Global Compile)
 	reVolKorean  = regexp.MustCompile(`(\d+)\s*(권|회|화|부)`)
-	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume)\s*(\d+)`)
+	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume|part|season)\s*(\d+)`)
 	reVolChapter = regexp.MustCompile(`(?i)(?:c|ch\.?|chapter)\s*(\d+)`)
 	reVolSuffix  = regexp.MustCompile(`(?:^|[\s\-_\[\(])(\d+)(?:$|[\s\-_\]\)])`)
 )
@@ -1222,14 +1222,14 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 		parsedUnit := "volume"
 		entry := entryMap[name]
 
-		// 폴더인 경우 파싱 생략 (사용자 요청: 폴더명 그대로 사용)
-		if entry != nil && entry.IsDir() {
-			parsedUnit = "chapter"
+		// 폴더인 경우에도 번호 및 단위 파싱 시도 (1부, 2부 등 대응)
+		if num, unit, ok := parseVolumeNumber(displayName); ok {
+			parsedNum = num
+			parsedUnit = unit
 		} else {
-			// 0번 볼륨도 유효한 번호로 인정
-			if num, unit, ok := parseVolumeNumber(displayName); ok {
-				parsedNum = num
-				parsedUnit = unit
+			// 파싱 실패 시 기본값 설정
+			if entry != nil && entry.IsDir() {
+				parsedUnit = "volume" // 폴더는 기본적으로 볼륨(권)으로 취급
 			}
 		}
 
@@ -1816,6 +1816,10 @@ func (s *Scanner) analyzeArchiveAsChapter(archivePath, title string, chapterNum 
 
 // analyzeChapter scans a folder as a chapter
 func (s *Scanner) analyzeChapter(chapterPath, title string, chapterNum int) (*scannedChapter, error) {
+	// 폴더명으로부터 챕터 번호 추출 시도
+	if num, _, ok := parseVolumeNumber(title); ok {
+		chapterNum = num
+	}
 	entries, err := os.ReadDir(chapterPath)
 	if err != nil {
 		return nil, err
