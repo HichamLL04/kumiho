@@ -1967,8 +1967,19 @@ func (s *Scanner) resolveVolumeExtension(volumeID string) string {
 		hasError = true
 	} else {
 		for _, sv := range subVols {
-			if sv.Extension != "" {
-				extSet[strings.ToUpper(sv.Extension)] = true
+			ext := strings.ToUpper(sv.Extension)
+			if ext == "" {
+				// 서브볼륨의 extension도 비어있으면 (업그레이드 직후) 경로/챕터 기반으로 산출
+				pathExt := strings.ToUpper(strings.TrimPrefix(filepath.Ext(sv.Path), "."))
+				if pathExt != "" {
+					ext = pathExt
+				} else {
+					// 디렉터리 서브볼륨: 재귀적으로 챕터 기반 확인
+					ext = s.resolveVolumeExtension(sv.ID)
+				}
+			}
+			if ext != "" {
+				extSet[ext] = true
 			}
 		}
 	}
