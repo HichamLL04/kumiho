@@ -1337,7 +1337,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 										var ext string
 										if entry.IsDir() {
 											// DB의 챕터/서브볼륨 정보 기반으로 extension 산출
-											ext = s.resolveVolumeExtension(existingVol.ID, entryPath)
+											ext = s.resolveVolumeExtension(existingVol.ID)
 										} else {
 											ext = strings.ToUpper(strings.TrimPrefix(filepath.Ext(entryPath), "."))
 										}
@@ -1934,7 +1934,7 @@ func (s *Scanner) hasChildVolumes(volumeID string) bool {
 
 // resolveVolumeExtension DB의 챕터/서브볼륨 정보를 기반으로 디렉터리 볼륨의 extension을 산출
 // DB 조회 실패 시 빈 문자열을 반환하여 호출부에서 업데이트를 스킵하도록 함
-func (s *Scanner) resolveVolumeExtension(volumeID, entryPath string) string {
+func (s *Scanner) resolveVolumeExtension(volumeID string) string {
 	extSet := make(map[string]bool)
 	var hasError bool
 
