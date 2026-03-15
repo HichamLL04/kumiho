@@ -1929,9 +1929,14 @@ func (s *Scanner) quickCheckHasAudio(entryPath string, isDir bool, audioFiles ma
 }
 
 // hasChildVolumes 볼륨에 하위 볼륨이 존재하는지 확인
+// DB 에러 시 보수적으로 true를 반환하여 강제 재스캔(진행도 삭제)을 방지
 func (s *Scanner) hasChildVolumes(volumeID string) bool {
 	count, err := s.volumeRepo.CountByParentID(nil, volumeID)
-	return err == nil && count > 0
+	if err != nil {
+		log.Printf("[SCANNER] Failed to count child volumes for %s: %v (assuming exists to prevent data loss)", volumeID, err)
+		return true
+	}
+	return count > 0
 }
 
 // resolveVolumeExtension DB의 챕터/서브볼륨 정보를 기반으로 디렉터리 볼륨의 extension을 산출
