@@ -939,6 +939,9 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 
 		// 시리즈 정보 (경로 정보는 이미 Repository에서 Join으로 가져옴)
 		if series, _ := h.seriesRepo.FindByID(nil, p.SeriesID, userID); series != nil {
+			// 데이터 보정 (썸네일, 진행도 등)
+			h.enrichSingleSeries(series, userID)
+
 			result[i].SeriesTitle = series.Title
 
 			// 챕터 정보 보급
@@ -982,10 +985,16 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 
 			// 썸네일 fallback
 			if result[i].ThumbnailURL == nil || *result[i].ThumbnailURL == "" {
-				pageID, err := h.seriesRepo.GetFirstPageID(nil, series.ID)
-				if err == nil && pageID != "" {
-					url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-					result[i].ThumbnailURL = &url
+				// 1. 이미 보정된 시리즈 썸네일이 있으면 사용 (EPUB 등 커버 이미지)
+				if series.ThumbnailURL != nil && *series.ThumbnailURL != "" {
+					result[i].ThumbnailURL = series.ThumbnailURL
+				} else {
+					// 2. 없으면 첫 번째 페이지 이미지 시도
+					pageID, err := h.seriesRepo.GetFirstPageID(nil, series.ID)
+					if err == nil && pageID != "" {
+						url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
+						result[i].ThumbnailURL = &url
+					}
 				}
 			}
 		}

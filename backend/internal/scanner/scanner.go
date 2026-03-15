@@ -1325,15 +1325,29 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 							if chapErr != nil {
 								log.Printf("[SCANNER] Error getting chapter count for %s: %v. Continuing with forced scan.", j.name, chapErr)
 								// 에러 발생 시 안전을 위해 continue하지 않고 분석 진행
-							} else if existingVol.VolumeNumber == volNum && existingVol.Unit == volUnit && chapCount > 0 {
-								// PDF인 경우 썸네일이 있는지 추가로 확인
-								isPdf := strings.ToLower(filepath.Ext(entryPath)) == ".pdf"
+							} else if existingVol.VolumeNumber == volNum && existingVol.Unit == volUnit && (chapCount > 0 || s.hasChildVolumes(existingVol.ID)) {
+								// PDF인 경우 썸네일이 있는지 추가로 확인 (디렉터리는 PDF가 아님)
+								isPdf := !entry.IsDir() && strings.ToLower(filepath.Ext(entryPath)) == ".pdf"
 								hasThumbnail := existingVol.ThumbnailPath != nil && *existingVol.ThumbnailPath != ""
 
 								if !isPdf || hasThumbnail {
 									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)
-									// 단, Extension 필드가 비어있으면 로직 업데이트를 위해 분석 진행
-									if existingVol.Extension != "" {
+									// Extension 필드가 비어있으면 in-place로 업데이트 (볼륨 삭제 없이)
+									if existingVol.Extension == "" {
+										var ext string
+										if entry.IsDir() {
+											// DB의 챕터/서브볼륨 정보 기반으로 extension 산출
+											ext = s.resolveVolumeExtension(existingVol.ID)
+										} else {
+											ext = strings.ToUpper(strings.TrimPrefix(filepath.Ext(entryPath), "."))
+										}
+										if ext != "" {
+											log.Printf("[SCANNER] Updating extension metadata for %s: %s", j.name, ext)
+											if extErr := s.volumeRepo.UpdateExtension(nil, existingVol.ID, ext); extErr != nil {
+												log.Printf("[SCANNER] Failed to update extension for %s: %v", j.name, extErr)
+											}
+										}
+									}
 									// 오디오 파일이 존재하면 볼륨 및 챕터의 has_audio 업데이트
 									if s.quickCheckHasAudio(entryPath, entry.IsDir(), audioFiles, j.name) {
 										if !existingVol.HasAudio {
@@ -1344,10 +1358,6 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 										s.updateChaptersHasAudio(existingVol.ID, entryPath, entry.IsDir(), audioFiles, j.name)
 									}
 									continue
-								} else {
-									// Extension 메타데이터 누락으로 인한 강제 업데이트
-									log.Printf("[SCANNER] Force update for %s: Missing extension metadata", j.name)
-								}
 								} else {
 									// PDF이며 썸네일이 없는 경우 강제 업데이트
 									log.Printf("[SCANNER] Force update for %s: Missing PDF thumbnail", j.name)
@@ -1916,6 +1926,101 @@ func (s *Scanner) quickCheckHasAudio(entryPath string, isDir bool, audioFiles ma
 		}
 	}
 	return false
+}
+
+// hasChildVolumes 볼륨에 하위 볼륨이 존재하는지 확인
+// DB 에러 시 보수적으로 true를 반환하여 강제 재스캔(진행도 삭제)을 방지
+func (s *Scanner) hasChildVolumes(volumeID string) bool {
+	count, err := s.volumeRepo.CountByParentID(nil, volumeID)
+	if err != nil {
+		log.Printf("[SCANNER] Failed to count child volumes for %s: %v (assuming exists to prevent data loss)", volumeID, err)
+		return true
+	}
+	return count > 0
+}
+
+// resolveVolumeExtension DB의 챕터/서브볼륨 정보를 기반으로 디렉터리 볼륨의 extension을 산출
+// DB 조회 실패 시 빈 문자열을 반환하여 호출부에서 업데이트를 스킵하도록 함
+func (s *Scanner) resolveVolumeExtension(volumeID string) string {
+	visited := make(map[string]bool)
+	return s.resolveVolumeExtensionRecursive(volumeID, visited)
+}
+
+// isKnownArchiveExt 알려진 아카이브 확장자인지 확인 (대문자)
+func isKnownArchiveExt(ext string) bool {
+	return archiveExtensions["."+strings.ToLower(ext)]
+}
+
+func (s *Scanner) resolveVolumeExtensionRecursive(volumeID string, visited map[string]bool) string {
+	// 순환 방지
+	if visited[volumeID] {
+		return ""
+	}
+	visited[volumeID] = true
+
+	extSet := make(map[string]bool)
+	var hasError bool
+
+	// 챕터 경로 기반 확장자 수집
+	chapters, err := s.chapterRepo.FindByVolumeID(nil, volumeID)
+	if err != nil {
+		log.Printf("[SCANNER] Failed to query chapters for extension resolution (volume %s): %v", volumeID, err)
+		hasError = true
+	} else {
+		for _, ch := range chapters {
+			ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(ch.Path), "."))
+			// 알려진 아카이브 확장자만 사용, 아니면 폴더 챕터로 간주
+			if ext == "" || !isKnownArchiveExt(ext) {
+				ext = "IMG"
+			}
+			extSet[ext] = true
+		}
+	}
+
+	// 서브볼륨 확장자 수집
+	subVols, err := s.volumeRepo.FindByParentID(nil, volumeID)
+	if err != nil {
+		log.Printf("[SCANNER] Failed to query sub-volumes for extension resolution (volume %s): %v", volumeID, err)
+		hasError = true
+	} else {
+		for _, sv := range subVols {
+			ext := strings.ToUpper(sv.Extension)
+			if ext == "" {
+				// 서브볼륨의 extension도 비어있으면 (업그레이드 직후) 경로/챕터 기반으로 산출
+				pathExt := strings.ToUpper(strings.TrimPrefix(filepath.Ext(sv.Path), "."))
+				// 확장자가 아카이브로 보여도 실제 디렉터리일 수 있으므로 파일 여부 확인
+				if isKnownArchiveExt(pathExt) {
+					if info, statErr := os.Stat(sv.Path); statErr == nil && !info.IsDir() {
+						ext = pathExt
+					} else {
+						// stat 실패 또는 디렉터리: 재귀로 산출
+						ext = s.resolveVolumeExtensionRecursive(sv.ID, visited)
+					}
+				} else {
+					// 디렉터리 서브볼륨 또는 점 포함 폴더명: 재귀적으로 확인
+					ext = s.resolveVolumeExtensionRecursive(sv.ID, visited)
+				}
+			}
+			if ext != "" {
+				extSet[ext] = true
+			}
+		}
+	}
+
+	// DB 조회 에러가 하나라도 있으면 불완전한 데이터로 잘못된 extension을 저장할 수 있으므로 스킵
+	if hasError {
+		return ""
+	}
+
+	if len(extSet) > 1 {
+		return "MIX"
+	}
+	if len(extSet) == 1 {
+		for ext := range extSet {
+			return ext
+		}
+	}
+	return ""
 }
 
 // updateChaptersHasAudio 스킵된 볼륨의 챕터별 has_audio 플래그를 업데이트
