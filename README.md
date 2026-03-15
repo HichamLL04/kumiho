@@ -35,10 +35,15 @@
 ---
 
 > [!IMPORTANT]
+>
 > **v0.9.0 Security Enhancement & Breaking Change**
 > For improved security, the container execution privilege has been changed from `root` to a standard user (`appuser`).
+>
 > **Note for existing users**: If thumbnails are broken or you encounter "Permission Denied" errors, please ensure you set the `PUID` and `PGID` environment variables to match your account IDs (check with the `id` command in your terminal).
+>
 > **v0.10.x Docker update**: Docker base images were changed for CGO/native-library compatibility. Please re-pull the image and recreate the container when updating.
+>
+> **v0.11.1 Library Rescan**: Due to metadata structural changes, a full library rescan is required after updating to v0.11.1.
 
 ---
 
@@ -188,10 +193,15 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 ---
 
 > [!IMPORTANT]
+>
 > **v0.9.0 セキュリティ強化および重大な変更 (Breaking Change)**
 > セキュリティ向上のため、コンテナの実行権限を `root` から一般ユーザー (`appuser`) に変更しました。
+>
 > **既存ユーザーの方へ**: サムネイルが表示されない、または "Permission Denied" エラーが発生する場合は、必ず `PUID` と `PGID` 環境変数を自身のユーザー ID（ターミナルで `id` コマンドで確認）に設定してください。
-> **v0.10.x Docker更新**: CGO/ネイティブライブラリ互換性のため、Dockerベースイメージを変更しました。更新時はイメージを再Pullし、コンテナを再作成してください。
+>
+> **v0.10.x Docker更新**: CGO/ネイティブライブラリ互換性のため、Dockerベースイメージを変更しました. 更新時はイメージを再Pullし, コンテナを再作成してください.
+>
+> **v0.11.1 ライブラリの再スキャン**: メタデータの構造変更に伴い、v0.11.1へのアップデート後にライブラリの全体再スキャンが必要です。
 
 ---
 
@@ -341,10 +351,15 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 ---
 
 > [!IMPORTANT]
+>
 > **v0.9.0 보안 강화 및 중대 변경 사항 (Breaking Change)**
-> 이번 업데이트는 보안 향상을 위해 컨테이너 실행 권한을 `root`에서 일반 사용자(`appuser`)로 변경하였습니다。
+> 이번 업데이트는 보안 향상을 위해 컨테이너 실행 권한을 `root`에서 일반 사용자(`appuser`)로 변경하였습니다.
+>
 > **기존 사용자 유의사항**: 썸네일이 깨지거나 "Permission Denied" 에러가 발생하는 경우, 반드시 `PUID`와 `PGID` 환경변수를 자신의 계정 ID(터미널에서 `id` 명령어로 확인)로 설정해 주시기 바랍니다.
+>
 > **v0.10.x Docker 업데이트**: CGO/네이티브 라이브러리 호환성을 위해 Docker 베이스 이미지를 변경했습니다. 업데이트 시 이미지를 다시 pull하고 컨테이너를 recreate 해주세요.
+>
+> **v0.11.1 라이브러리 전체 재스캔**: 메타데이터 구조 변경으로 인해 v0.11.1 업데이트 후 라이브러리 전체 재스캔이 필요합니다.
 
 ---
 
