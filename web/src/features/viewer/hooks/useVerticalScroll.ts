@@ -38,7 +38,7 @@ interface UseVerticalScrollReturn {
 
 const RESTORE_TOLERANCE = 4;
 const READY_STABILIZE_DELAY = 250;
-const MAX_RESTORE_ATTEMPTS = 12;
+const MAX_RESTORE_ATTEMPTS = 40;
 
 export function useVerticalScroll({
   readingMode,
@@ -150,11 +150,8 @@ export function useVerticalScroll({
           Math.abs(targetPageEl.getBoundingClientRect().top - content.getBoundingClientRect().top) <= 20;
       const isFallbackAligned =
         isPageAligned || (effectiveRestorePosition.anchorPage === 1 && content.scrollTop <= RESTORE_TOLERANCE);
-      // 1페이지거나 이미 몇 번 시도했다면 이미지 로딩이 안 됐더라도 ready로 전환 (레이아웃은 이미 메타데이터로 잡혀있음)
       const isAnchorImageReady =
-        imageLoadingRef.current[effectiveRestorePosition.anchorPage] === false ||
-        effectiveRestorePosition.anchorPage === 1 ||
-        attempts >= 3;
+        imageLoadingRef.current[effectiveRestorePosition.anchorPage] === false;
 
       const isTargetPageVisible =
         getViewportAnchorPage(content, totalPages, effectiveRestorePosition.anchorPage) ===
