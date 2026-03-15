@@ -231,14 +231,6 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
 
     if (readingMode === "vertical") {
       const minRenderPage = Math.max(1, currentPage - 3);
-      const verticalRenderPages =
-        isInitialScrolling && viewStatus !== "ready"
-          ? displayPages.filter((pageNum) =>
-              currentPage === 1
-                ? pageNum >= 1 && pageNum <= 2
-                : pageNum >= currentPage - 1 && pageNum <= currentPage + 1,
-            )
-          : displayPages;
 
       return (
         <div
@@ -255,7 +247,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
         >
-          {verticalRenderPages.map((pageNum) => (
+          {displayPages.map((pageNum) => (
             <VerticalPage
               key={`${chapterId}-${pageNum}`}
               pageNum={pageNum}

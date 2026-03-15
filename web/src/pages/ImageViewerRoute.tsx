@@ -567,8 +567,14 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
             className={`${styles.viewerContent} ${styles[`mode${settings.readingMode.charAt(0).toUpperCase() + settings.readingMode.slice(1)}`]} ${styles[`direction${settings.readingDirection.charAt(0).toUpperCase() + settings.readingDirection.slice(1)}`]} ${settings.readingMode === "vertical" && viewStatus !== "ready" ? styles.viewerContentHidden : ""}`}
             style={{
               background: settings.backgroundColor,
-              transform: settings.readingMode === "vertical" ? `translateY(${pullOffset * 0.3}px)` : "none",
-              transition: !isTouching && pullOffset === 0 ? "transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)" : "none",
+              transform:
+                settings.readingMode === "vertical"
+                  ? `translateY(${pullOffset * 0.3}px)`
+                  : "none",
+              transition:
+                !isTouching && pullOffset === 0
+                  ? "transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)"
+                  : "none",
               willChange: "transform",
             }}
           >

@@ -81,11 +81,17 @@ export function useVerticalScroll({
   const isInternalScrollRef = useRef(false);
   const readyAtRef = useRef(0);
   const currentPageRef = useRef(currentPage);
+  const imageLoadingRef = useRef(imageLoading);
 
   // 현재 페이지 상태를 Ref에 동기화 (스크롤 이벤트 핸들러에서 최신 값을 참조하기 위함)
   useEffect(() => {
     currentPageRef.current = currentPage;
   }, [currentPage]);
+
+  // imageLoading을 Ref에 동기화 (스크롤 복원 effect가 imageLoading 변경으로 재시작되지 않도록)
+  useEffect(() => {
+    imageLoadingRef.current = imageLoading;
+  }, [imageLoading]);
 
   const navigateToChapter = useCallback(
     (chapterIdToMove: string, options: { preventComplete?: boolean } = {}): Promise<void> => {
@@ -146,7 +152,7 @@ export function useVerticalScroll({
         isPageAligned || (effectiveRestorePosition.anchorPage === 1 && content.scrollTop <= RESTORE_TOLERANCE);
       // 1페이지거나 이미 몇 번 시도했다면 이미지 로딩이 안 됐더라도 ready로 전환 (레이아웃은 이미 메타데이터로 잡혀있음)
       const isAnchorImageReady =
-        imageLoading[effectiveRestorePosition.anchorPage] === false ||
+        imageLoadingRef.current[effectiveRestorePosition.anchorPage] === false ||
         effectiveRestorePosition.anchorPage === 1 ||
         attempts >= 3;
 
@@ -191,18 +197,17 @@ export function useVerticalScroll({
       window.cancelAnimationFrame(frameId);
       window.clearTimeout(retryId);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- imageLoading은 Ref로 참조, currentPage는 restorePosition으로 대체
   }, [
     isInitialScrollingRef,
     isLoading,
     readingMode,
-    currentPage,
     effectiveRestorePosition.anchorPage,
     resolvedViewerContentRef,
     setCurrentPage,
     setViewStatus,
     effectiveViewStatus,
     totalPages,
-    imageLoading,
   ]);
 
   useEffect(() => {
