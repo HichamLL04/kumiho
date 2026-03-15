@@ -1,22 +1,27 @@
 // 진행도 저장/로드 훅
 
 import { useEffect, useCallback, useRef } from "react";
+import type { RefObject } from "react";
 import { useLocation } from "react-router-dom";
 import { seriesAPI, volumeAPI } from "../../../api/client";
 import { PROGRESS_SAVE_INTERVAL } from "../utils/constants";
 import { API_BASE_URL } from "../utils/imageUrl";
-import type { Chapter } from "../types";
+import type { Chapter, ViewStatus } from "../types";
+import { getViewportAnchorPosition } from "../utils/progressPosition";
 
 interface UseProgressParams {
   seriesId: string | null;
   chapterId: string | undefined;
   chapter: Chapter | null;
   currentPage: number;
+  readingMode?: "single" | "double" | "vertical";
   totalPages: number;
   isLoading: boolean;
   isIncognito: boolean;
   isLastChapterOfVolume: boolean;
-  isInitialScrollingRef: React.RefObject<boolean>;
+  isInitialScrollingRef: RefObject<boolean>;
+  viewStatus?: ViewStatus;
+  viewerContentRef?: RefObject<HTMLDivElement | null>;
 }
 
 interface UseProgressReturn {
@@ -35,11 +40,14 @@ export function useProgress({
   chapterId,
   chapter,
   currentPage,
+  readingMode = "single",
   totalPages,
   isLoading,
   isIncognito,
   isLastChapterOfVolume,
   isInitialScrollingRef,
+  viewStatus = "ready",
+  viewerContentRef,
 }: UseProgressParams): UseProgressReturn {
   const volumeCompletedRef = useRef(false);
   const lastSaveTimeRef = useRef<number>(0);
@@ -47,6 +55,9 @@ export function useProgress({
   const hasNavigatedRef = useRef(false);
   const initialPageSettledRef = useRef(false); // 초기 페이지 위치가 한 번 안정적으로 정해졌는지 여부
   const location = useLocation();
+  const getAnchorPosition = useCallback(() => {
+    return getViewportAnchorPosition(viewerContentRef?.current ?? null, totalPages, currentPage);
+  }, [currentPage, totalPages, viewerContentRef]);
 
   // 챕터가 변경되면 완료 상태, 네비게이션 상태 초기화
   useEffect(() => {
@@ -58,7 +69,7 @@ export function useProgress({
   // 페이지가 변경되면, 초기 로딩/초기 스크롤 이후의 변경부터 hasNavigatedRef를 true로 설정
   useEffect(() => {
     // 로딩 중이거나 초기 정렬(자동 스크롤) 중에는 아무 것도 하지 않음
-    if (isLoading || isInitialScrollingRef.current) {
+    if (isLoading || viewStatus !== "ready" || isInitialScrollingRef.current) {
       return;
     }
 
@@ -71,7 +82,7 @@ export function useProgress({
 
     // 그 이후의 페이지 변경만 "사용자가 실제로 이동한 것"으로 간주
     hasNavigatedRef.current = true;
-  }, [currentPage, isLoading, isInitialScrollingRef]);
+  }, [currentPage, isLoading, isInitialScrollingRef, viewStatus]);
 
   // 볼륨 완료 처리 함수 (중복 호출 방지 포함)
   const handleVolumeCompletion = useCallback(async () => {
@@ -88,7 +99,7 @@ export function useProgress({
     });
 
     // 초기 로딩 중이거나 초기 정렬 중이면 절대 완료 처리 하지 않음
-    if (isLoading || isInitialScrollingRef.current || !chapter || chapter.id !== chapterId) {
+    if (isLoading || viewStatus !== "ready" || isInitialScrollingRef.current || !chapter || chapter.id !== chapterId) {
       console.log("[handleVolumeCompletion] blocked by loading/chapter check");
       return;
     }
@@ -134,6 +145,7 @@ export function useProgress({
     totalPages,
     isLastChapterOfVolume,
     isInitialScrollingRef,
+    viewStatus,
     location.state,
   ]);
 
@@ -145,7 +157,17 @@ export function useProgress({
     if (isIncognito) return;
 
     // 초기 로딩 중이거나 초기 정렬(스크롤 이동) 중이면 절대 저장 안 함
-    if (isLoading || isInitialScrollingRef.current || !chapterId || !chapter || !seriesId || totalPages <= 0) return;
+    if (
+      isLoading ||
+      viewStatus !== "ready" ||
+      isInitialScrollingRef.current ||
+      !chapterId ||
+      !chapter ||
+      !seriesId ||
+      totalPages <= 0
+    ) {
+      return;
+    }
 
     // 현재 URL의 챕터 ID와 렌더링된 데이터가 일치하는지 한 번 더 확인
     if (chapter.id !== chapterId) return;
@@ -158,21 +180,38 @@ export function useProgress({
 
     try {
       isSavingRef.current = true;
+      const { anchorPage, offsetRatio } = getAnchorPosition();
+      const progressPage = readingMode === "vertical" ? anchorPage : currentPage;
+      const progressOffset = readingMode === "vertical" ? 0 : offsetRatio;
       await seriesAPI.updateProgress(seriesId, {
         chapter_id: chapterId,
         volume_id: chapter.volume_id,
-        current_page: currentPage,
+        current_page: progressPage,
+        anchor_page: progressPage,
+        offset_ratio: progressOffset,
         total_pages: totalPages,
-        progress_percent: (currentPage / totalPages) * 100,
+        progress_percent: (progressPage / totalPages) * 100,
       });
-      console.log(`진행도 저장: ${currentPage}/${totalPages} 페이지`);
+      console.log(`진행도 저장: ${progressPage}/${totalPages} 페이지`);
       // 볼륨 완료 처리는 별도로 분리됨 (마지막 페이지 감지 시 직접 호출)
     } catch (err) {
       console.error("진행도 저장 실패:", err);
     } finally {
       isSavingRef.current = false;
     }
-  }, [isLoading, isIncognito, chapterId, chapter, seriesId, currentPage, totalPages, isInitialScrollingRef]);
+  }, [
+    chapter,
+    chapterId,
+    currentPage,
+    getAnchorPosition,
+    isIncognito,
+    isInitialScrollingRef,
+    isLoading,
+    readingMode,
+    seriesId,
+    totalPages,
+    viewStatus,
+  ]);
 
   // 마지막 페이지 도달 시 즉시 완료 처리 (Throttle 무시)
   // 빠른 스크롤로 마지막 페이지를 빠르게 지나가도 확실하게 완료 처리
@@ -181,7 +220,7 @@ export function useProgress({
     if (currentPage !== totalPages || totalPages <= 0) return;
 
     // 초기 스크롤 중에는 완료 처리 하지 않음
-    if (isInitialScrollingRef.current) return;
+    if (viewStatus !== "ready" || isInitialScrollingRef.current) return;
 
     // 이미 완료되었으면 무시
     if (volumeCompletedRef.current) return;
@@ -199,6 +238,7 @@ export function useProgress({
     isIncognito,
     isLastChapterOfVolume,
     isInitialScrollingRef,
+    viewStatus,
     location.state,
     handleVolumeCompletion,
   ]);
@@ -246,13 +286,18 @@ export function useProgress({
       if (isIncognito) return;
 
       // 페이지 종료 시 진행도 저장 (fetch + keepalive + credentials 사용)
-      if (seriesId && chapterId) {
+      if (seriesId && chapterId && viewStatus === "ready" && !isInitialScrollingRef.current) {
+        const { anchorPage, offsetRatio } = getAnchorPosition();
+        const progressPage = readingMode === "vertical" ? anchorPage : currentPage;
+        const progressOffset = readingMode === "vertical" ? 0 : offsetRatio;
         const data = JSON.stringify({
           chapter_id: chapterId,
           volume_id: chapter?.volume_id,
-          current_page: currentPage,
+          current_page: progressPage,
+          anchor_page: progressPage,
+          offset_ratio: progressOffset,
           total_pages: totalPages,
-          progress_percent: totalPages > 0 ? (currentPage / totalPages) * 100 : 0,
+          progress_percent: totalPages > 0 ? (progressPage / totalPages) * 100 : 0,
         });
 
         fetch(`${API_BASE_URL}/series/${seriesId}/progress`, {
@@ -267,7 +312,18 @@ export function useProgress({
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [seriesId, chapterId, currentPage, totalPages, chapter, isIncognito]);
+  }, [
+    chapter,
+    chapterId,
+    currentPage,
+    getAnchorPosition,
+    isIncognito,
+    isInitialScrollingRef,
+    readingMode,
+    seriesId,
+    totalPages,
+    viewStatus,
+  ]);
 
   return { saveProgress, handleVolumeCompletion };
 }

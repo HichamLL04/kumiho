@@ -31,6 +31,8 @@ type SeriesHandler struct {
 	completionRepo        *repository.VolumeCompletionRepository
 	chapterCompletionRepo *repository.ChapterCompletionRepository
 	userSeriesSettingRepo repository.UserSeriesSettingRepository
+	progressRepo          *repository.ReadingProgressRepository
+	settingRepo           repository.SettingRepository
 	config                *config.Config
 	seriesEnrichSvc       *service.SeriesEnrichService
 }
@@ -45,6 +47,8 @@ func NewSeriesHandler(
 	completionRepo *repository.VolumeCompletionRepository,
 	chapterCompletionRepo *repository.ChapterCompletionRepository,
 	userSeriesSettingRepo repository.UserSeriesSettingRepository,
+	progressRepo *repository.ReadingProgressRepository,
+	settingRepo repository.SettingRepository,
 	cfg *config.Config,
 	seriesEnrichSvc *service.SeriesEnrichService,
 ) *SeriesHandler {
@@ -58,6 +62,8 @@ func NewSeriesHandler(
 		completionRepo:        completionRepo,
 		chapterCompletionRepo: chapterCompletionRepo,
 		userSeriesSettingRepo: userSeriesSettingRepo,
+		progressRepo:          progressRepo,
+		settingRepo:           settingRepo,
 		config:                cfg,
 		seriesEnrichSvc:       seriesEnrichSvc,
 	}
@@ -88,6 +94,17 @@ type UpdateVolumeRequest struct {
 type VolumeResponse struct {
 	model.Volume
 	IsCompleted bool `json:"is_completed"`
+}
+
+type ViewerInitResponse struct {
+	Chapter        *model.Chapter           `json:"chapter"`
+	Volume         *model.Volume            `json:"volume"`
+	Series         *model.Series            `json:"series"`
+	Library        *model.Library           `json:"library"`
+	Progress       *model.ReadingProgress   `json:"progress"`
+	UserSettings   *model.UserSeriesSetting `json:"user_settings"`
+	Pages          []model.Page             `json:"pages"`
+	ServerSettings map[string]string        `json:"server_settings"`
 }
 
 // ListByLibrary 라이브러리별 시리즈 목록
@@ -965,7 +982,29 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 		})
 	}
 
-	volumes, err := h.volumeRepo.FindBySeriesID(nil, seriesID)
+	// parent_id 쿼리 파라미터 처리
+	parentIDParam := c.Query("parent_id")
+	var volumes []model.Volume
+	var err error
+
+	if parentIDParam == "root" {
+		volumes, err = h.volumeRepo.FindRootVolumesBySeriesID(nil, seriesID)
+	} else if parentIDParam != "" {
+		volumes, err = h.volumeRepo.FindByParentID(nil, parentIDParam)
+		if err == nil {
+			// parent_id로 조회하더라도, 반드시 요청된 seriesID 범위로 스코프를 제한
+			filtered := make([]model.Volume, 0, len(volumes))
+			for _, v := range volumes {
+				if v.SeriesID == seriesID {
+					filtered = append(filtered, v)
+				}
+			}
+			volumes = filtered
+		}
+	} else {
+		volumes, err = h.volumeRepo.FindBySeriesID(nil, seriesID)
+	}
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch volumes",
@@ -985,53 +1024,51 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 		}
 	}
 
+	// 진행도 정보 배치 조회를 위한 ID 목록 추출
+	volumeIDs := make([]string, len(volumes))
+	for i, v := range volumes {
+		volumeIDs[i] = v.ID
+	}
+
+	// 페이지 정보 및 진행도 배치 조회
+	totalPageMap, _ := h.volumeRepo.GetTotalPagesBatch(nil, volumeIDs)
+	readPageMap, _ := h.volumeRepo.GetReadPagesBatch(nil, userID, volumeIDs)
+	progressPercentMap, _ := h.volumeRepo.GetProgressPercentBatch(nil, userID, volumeIDs)
+
 	// 응답 데이터 구성 (썸네일 URL + 완독 상태 + 진행도)
 	result := make([]VolumeResponse, len(volumes))
 	for i := range volumes {
+		vID := volumes[i].ID
+
 		// 썸네일 URL 설정
-		// 커스텀 썸네일이 없더라도 볼륨 썸네일 API를 사용해
-		// 이미지/PDF/EPUB 구조를 동일한 방식으로 처리합니다.
-		if volumes[i].ThumbnailPath != nil && *volumes[i].ThumbnailPath != "" {
-			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volumes[i].ID, time.Now().Unix())
-			volumes[i].ThumbnailURL = &url
-		} else {
-			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volumes[i].ID, time.Now().Unix())
-			volumes[i].ThumbnailURL = &url
+		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", vID, time.Now().Unix())
+		volumes[i].ThumbnailURL = &url
+
+		// 배 조회된 데이터 매핑
+		if total, ok := totalPageMap[vID]; ok {
+			volumes[i].TotalPageCount = total
+		}
+		if read, ok := readPageMap[vID]; ok {
+			volumes[i].ReadPageCount = read
+		}
+		if percent, ok := progressPercentMap[vID]; ok {
+			volumes[i].ProgressPercent = percent
 		}
 
-		// 진행도 계산
-		totalPages, err := h.volumeRepo.GetTotalPages(nil, volumes[i].ID)
-		if err != nil {
-			log.Printf("failed to get total pages for volume %s: %v", volumes[i].ID, err)
-		} else {
-			volumes[i].TotalPageCount = totalPages
+		// 하위 볼륨 개수 조회 (이 부분도 추후 최적화 가능하나 우선 순위 낮음)
+		if subVolCount, err := h.volumeRepo.CountByParentID(nil, vID); err == nil {
+			volumes[i].SubVolumeCount = subVolCount
 		}
 
-		readPages, err := h.volumeRepo.GetReadPages(nil, userID, volumes[i].ID)
-		if err != nil {
-			log.Printf("failed to get read pages for user %s, volume %s: %v", userID, volumes[i].ID, err)
-		} else {
-			volumes[i].ReadPageCount = readPages
-		}
+		totalPages := volumes[i].TotalPageCount
+		readPages := volumes[i].ReadPageCount
+		completedByFlag := completedVolumeIDs[vID]
 
-		// TODO: N+1 쿼리 개선 필요 - GetProgressPercent가 볼륨마다 개별 호출됨.
-		// 볼륨 수가 많을 경우 배치 조회 방식으로 성능 개선 고려.
-		progressPercent, err := h.volumeRepo.GetProgressPercent(nil, userID, volumes[i].ID)
-		if err != nil {
-			log.Printf("failed to get progress percent for user %s, volume %s: %v", userID, volumes[i].ID, err)
-		} else {
-			volumes[i].ProgressPercent = progressPercent
-		}
-
-		completedByFlag := completedVolumeIDs[volumes[i].ID]
-		// 완독 플래그가 있으나 집계값이 비어있는 경우(과거 데이터 등)에는 100%로 보정.
-		// 이후 최종 완독 여부는 보정된 readPages를 포함해 재검증한다.
+		// 완독 플래그 보정 및 검증
 		if completedByFlag && readPages == 0 && totalPages > 0 {
 			volumes[i].ReadPageCount = totalPages
 			readPages = totalPages
 		}
-		// 완독 플래그가 있더라도 실제 집계 진행도가 100% 미만이면 완독 표시를 하지 않음.
-		// stale completion 레코드로 인해 시리즈 페이지가 100%로 고정되는 케이스를 방지.
 		isCompleted := completedByFlag && (totalPages <= 0 || readPages >= totalPages)
 
 		result[i] = VolumeResponse{
@@ -1196,6 +1233,90 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 	return c.JSON(chapter)
 }
 
+// GetViewerInitData 뷰어 초기화 데이터 통합 조회
+// GET /api/v1/viewer/init/:chapterId
+func (h *SeriesHandler) GetViewerInitData(c *fiber.Ctx) error {
+	chapterID := c.Params("chapterId")
+	userID := middleware.GetUserID(c)
+
+	// 1. 챕터 조회
+	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
+	if err != nil || chapter == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter not found"})
+	}
+
+	// 챕터 렌더 모드 설정
+	chapterPath := strings.ToLower(chapter.Path)
+	if strings.HasSuffix(chapterPath, ".pdf") {
+		renderMode := "pdf"
+		if service.ShouldUsePdfImageFallback(c.Get("User-Agent")) {
+			renderMode = "image"
+		}
+		chapter.RenderMode = &renderMode
+	} else if strings.HasSuffix(chapterPath, ".txt") {
+		renderMode := "text"
+		chapter.RenderMode = &renderMode
+	}
+
+	// 2. 볼륨 조회
+	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if err != nil || volume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume not found"})
+	}
+
+	// 3. 시리즈 조회
+	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found"})
+	}
+
+	// 4. 라이브러리 조회
+	library, err := h.libraryRepo.FindByID(nil, series.LibraryID)
+	if err != nil || library == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "library not found"})
+	}
+
+	// 5. 진행도 조회
+	progress, err := h.progressRepo.FindByUserAndChapter(nil, userID, chapterID)
+	if err != nil {
+		// 진행도는 없을 수 있음 (무시)
+		log.Printf("Failed to fetch progress: %v", err)
+	}
+
+	// 6. 사용자 시리즈 설정 조회
+	userSettings, err := h.userSeriesSettingRepo.Get(nil, userID, series.ID)
+	if err != nil {
+		log.Printf("Failed to fetch user settings: %v", err)
+	}
+
+	// 7. 페이지 목록 조회
+	pages, err := h.pageRepo.FindByChapterID(nil, chapterID)
+	if err != nil {
+		log.Printf("Failed to fetch pages: %v", err)
+		pages = []model.Page{}
+	}
+
+	// 8. 서버 설정 조회
+	allSettings, err := h.settingRepo.GetAll(nil)
+	serverSettings := make(map[string]string)
+	if err == nil {
+		for _, s := range allSettings {
+			serverSettings[s.Key] = s.Value
+		}
+	}
+
+	return c.JSON(ViewerInitResponse{
+		Chapter:        chapter,
+		Volume:         volume,
+		Series:         series,
+		Library:        library,
+		Progress:       progress,
+		UserSettings:   userSettings,
+		Pages:          pages,
+		ServerSettings: serverSettings,
+	})
+}
+
 // ListPages 챕터별 페이지 목록
 // GET /api/v1/chapters/:chapterId/pages
 func (h *SeriesHandler) ListPages(c *fiber.Ctx) error {
@@ -1278,6 +1399,69 @@ func (h *SeriesHandler) GetVolumeBGM(c *fiber.Ctx) error {
 		Exists: true,
 		URL:    &url,
 	})
+}
+
+// GetChapterBGM 챕터 BGM 존재 여부 확인
+// GET /api/v1/chapters/:id/bgm
+func (h *SeriesHandler) GetChapterBGM(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	chapter, err := h.chapterRepo.FindByID(nil, id)
+	if err != nil || chapter == nil {
+		return c.JSON(BGMResponse{Exists: false})
+	}
+
+	bgmPath, exists := h.findBGMFile(chapter.Path)
+	if !exists {
+		return c.JSON(BGMResponse{Exists: false})
+	}
+
+	url := fmt.Sprintf("/api/v1/chapters/%s/bgm/stream", id)
+	info, err := os.Stat(bgmPath)
+	if err == nil {
+		url += fmt.Sprintf("?t=%d", info.ModTime().Unix())
+	}
+
+	return c.JSON(BGMResponse{
+		Exists: true,
+		URL:    &url,
+	})
+}
+
+// ServeChapterBGM 챕터 BGM 스트리밍
+// GET /api/v1/chapters/:id/bgm/stream
+func (h *SeriesHandler) ServeChapterBGM(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	chapter, err := h.chapterRepo.FindByID(nil, id)
+	if err != nil || chapter == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "chapter not found",
+		})
+	}
+
+	bgmPath, exists := h.findBGMFile(chapter.Path)
+	if !exists {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "bgm not found",
+		})
+	}
+
+	ext := strings.ToLower(filepath.Ext(bgmPath))
+	switch ext {
+	case ".mp3":
+		c.Set("Content-Type", "audio/mpeg")
+	case ".ogg":
+		c.Set("Content-Type", "audio/ogg")
+	case ".wav":
+		c.Set("Content-Type", "audio/wav")
+	case ".flac":
+		c.Set("Content-Type", "audio/flac")
+	case ".m4a":
+		c.Set("Content-Type", "audio/mp4")
+	}
+
+	return c.SendFile(bgmPath)
 }
 
 // ServeVolumeBGM 볼륨 BGM 스트리밍
@@ -1505,4 +1689,34 @@ func (h *SeriesHandler) deleteHashFiles(dir, hashString string) {
 			}
 		}
 	}
+}
+
+// BatchGetExtensions 여러 시리즈의 확장자 정보 조회
+// POST /api/v1/series/extensions/batch
+func (h *SeriesHandler) BatchGetExtensions(c *fiber.Ctx) error {
+	var req struct {
+		SeriesIDs []string `json:"series_ids"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	if len(req.SeriesIDs) == 0 {
+		return c.JSON(fiber.Map{
+			"extensions": make(map[string]string),
+		})
+	}
+
+	extensions, err := h.seriesRepo.GetExtensionsByIDs(nil, req.SeriesIDs)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch extensions",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"extensions": extensions,
+	})
 }

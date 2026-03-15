@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
-import { Play, CheckCircle, Folder, Check, RotateCcw, FileText } from "lucide-react";
+import { Play, CheckCircle, Folder, Check, RotateCcw, FileText, Music } from "lucide-react";
 import { Header } from "../components/headers/Header";
 import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
+import { SeriesCard } from "../components/SeriesCard";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
 import { api, volumeAPI, downloadAPI } from "../api/client";
 import { initiateDownload } from "../utils/download";
@@ -22,6 +23,7 @@ export function VolumePage() {
   const location = useLocation();
   const viewerFrom = `${location.pathname}${location.search}`;
   const [volume, setVolume] = useState<Volume | null>(null);
+  const [subVolumes, setSubVolumes] = useState<Volume[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [series, setSeries] = useState<Series | null>(null);
   const [lastProgress, setLastProgress] = useState<ReadingProgress | null>(null);
@@ -61,18 +63,29 @@ export function VolumePage() {
     try {
       // 볼륨 상세 정보
       const volRes = await api.get(`/volumes/${volumeId}`);
-      setVolume(volRes.data);
+      const volData = volRes.data as Volume;
+      setVolume(volData);
+
+      // 하위 볼륨 목록 조회
+      if (volData.series_id) {
+        const subVolsRes = await api.get(`/series/${volData.series_id}/volumes?parent_id=${volumeId}`);
+        const rawSubVols = Array.isArray(subVolsRes.data?.volumes) ? subVolsRes.data.volumes : [];
+        setSubVolumes(
+          rawSubVols.map((v: Volume & { is_completed?: boolean }) => ({
+            ...v,
+            is_completed: v.is_completed === true,
+          })),
+        );
+
+        // 부모 시리즈 정보
+        const seriesRes = await api.get(`/series/${volData.series_id}`);
+        setSeries(seriesRes.data);
+      }
 
       // 챕터 목록
       const chapRes = await volumeAPI.getChapters(volumeId!);
       const chapterList = Array.isArray(chapRes.data) ? chapRes.data : chapRes.data.chapters || [];
       setChapters(chapterList.sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number));
-
-      // 부모 시리즈 정보
-      if (volRes.data.series_id) {
-        const seriesRes = await api.get(`/series/${volRes.data.series_id}`);
-        setSeries(seriesRes.data);
-      }
 
       // 최근 읽기 진행도 가져오기 (볼륨 단위)
       try {
@@ -83,24 +96,17 @@ export function VolumePage() {
           setProgressList(list);
 
           if (list.length > 0) {
-            // 가장 최근 기록 찾기 (미완독 우선, 그 다음 최신 타임스탬프, 그 다음 높은 챕터 번호)
+            // 가장 최근 기록 찾기 (업데이트 시간 최우선, 동일 시 마지막 챕터 우선)
             const sorted = list.sort((a: ReadingProgress, b: ReadingProgress) => {
-              // 1. 미완독(progress_percent < 100) 우선
-              const aIncomplete = a.progress_percent < 100 ? 0 : 1;
-              const bIncomplete = b.progress_percent < 100 ? 0 : 1;
-              if (aIncomplete !== bIncomplete) return aIncomplete - bIncomplete;
+              const timeA = new Date(a.updated_at).getTime();
+              const timeB = new Date(b.updated_at).getTime();
+              if (timeB !== timeA) return timeB - timeA;
 
-              // 2. 최신 타임스탬프 우선
-              const timeDiff = new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-              if (timeDiff !== 0) return timeDiff;
-
-              // 3. 같은 타임스탬프면 챕터 번호가 높은 것 (최근 읽은 것)
-              // chapter_id로 chapters 배열에서 chapter_number 찾기
-              const chapterA = chapterList.find((c: Chapter) => c.id === a.chapter_id);
-              const chapterB = chapterList.find((c: Chapter) => c.id === b.chapter_id);
-              const numA = chapterA?.chapter_number ?? 0;
-              const numB = chapterB?.chapter_number ?? 0;
-              return numB - numA;
+              // 업데이트 시간이 같으면(완독 시 등) 챕터 번호가 큰 것을 우선
+              const chapA = chapterList.find((c) => c.id === a.chapter_id);
+              const chapB = chapterList.find((c) => c.id === b.chapter_id);
+              if (chapA && chapB) return chapB.chapter_number - chapA.chapter_number;
+              return 0;
             });
             setLastProgress(sorted[0]);
           } else {
@@ -170,27 +176,33 @@ export function VolumePage() {
   }
 
   // 이어보기 또는 첫 챕터 읽기
-  const handlePlay = () => {
+  const handlePlay = async () => {
     if (lastProgress && lastProgress.chapter_id) {
       navigate(`/viewer/${lastProgress.chapter_id}`, { state: { from: viewerFrom } });
       return;
     }
 
-    if (chapters.length > 0) {
-      navigate(`/viewer/${chapters[0].id}`, { state: { from: viewerFrom } });
+    // 재귀적으로 첫 번째 챕터 탐색
+    const firstChapter = await volumeAPI.findFirstChapterRecursively(volumeId!);
+    if (firstChapter) {
+      navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
     } else {
       showAlert(t("series.alert.no_readable_chapter"), "warning");
     }
   };
-  const handleDownloadVolume = () => {
-    if (!volume) return;
+  const handleDownloadVolume = (volId?: string, volTitle?: string) => {
+    const targetId = volId || volume?.id;
+    const targetTitle = volTitle || volume?.title;
+
+    if (!targetId) return;
+
     setAlertModal({
       isOpen: true,
       type: "info",
-      message: t("series.alert.download_volume_confirm", { title: volume.title }),
+      message: t("series.alert.download_volume_confirm", { title: targetTitle }),
       onConfirm: () => {
         try {
-          const url = downloadAPI.getVolumeUrl(volume.id);
+          const url = downloadAPI.getVolumeUrl(targetId);
           initiateDownload(url);
           closeAlert();
         } catch (error: unknown) {
@@ -216,7 +228,6 @@ export function VolumePage() {
         onClose={() => setSidebarOpen(false)}
       />
 
-      {/* 서브 헤더 */}
       <SubHeader
         items={[
           {
@@ -230,7 +241,9 @@ export function VolumePage() {
           { label: volume.title },
         ]}
         onBack={() => {
-          if (series) {
+          if (volume.parent_id) {
+            navigate(`/volumes/${volume.parent_id}`);
+          } else if (series) {
             navigate(`/series/${series.id}`);
           } else {
             navigate(-1);
@@ -253,15 +266,42 @@ export function VolumePage() {
             onDownload={canDownload ? handleDownloadVolume : undefined}
           />
 
-          <div className={styles.chapterCount}>
-            <Trans
-              i18nKey="series.chapter_count"
-              count={chapters.length}
-              components={{ strong: <strong /> }}
-            />
-          </div>
+          {subVolumes.length > 0 && (
+            <>
+              <div className={styles.volumeCount}>
+                <Trans
+                  i18nKey="series.count"
+                  count={subVolumes.length}
+                  components={{ strong: <strong /> }}
+                />
+              </div>
+              <div className={styles.volumeGrid}>
+                {subVolumes.map((vol) => (
+                  <SeriesCard
+                    key={vol.id}
+                    item={vol}
+                    type="volume"
+                    progressStyle="overlay"
+                    extensionBadgePlacement="meta"
+                    onStatusChange={loadData}
+                    onDownload={canDownload ? () => handleDownloadVolume(vol.id, vol.title) : undefined}
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
-          {chapters.length === 0 ? (
+          {chapters.length > 0 && (
+            <div className={styles.chapterCount}>
+              <Trans
+                i18nKey="series.chapter_count"
+                count={chapters.length}
+                components={{ strong: <strong /> }}
+              />
+            </div>
+          )}
+
+          {chapters.length === 0 && subVolumes.length === 0 ? (
             <div className={styles.emptyState}>
               <p>{t("series.empty_chapters")}</p>
             </div>
@@ -304,7 +344,12 @@ export function VolumePage() {
                     </div>
 
                     <div className={styles.chapterInfo}>
-                      <span className={styles.chapterNumber}>Chapter {chapter.chapter_number}</span>
+                      <span className={styles.chapterNumber}>
+                        Chapter {chapter.chapter_number}
+                        {chapter.has_audio && (
+                          <Music size={12} className={styles.audioIcon} />
+                        )}
+                      </span>
                       <span className={styles.chapterTitle}>{chapter.title}</span>
                       <span className={styles.chapterPages}>
                         {chapterProgress

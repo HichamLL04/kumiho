@@ -2,19 +2,14 @@ import { useEffect, useState, useCallback, useRef, type JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { BookOpen, Clock, Heart } from "lucide-react";
 import { useLibraryStore } from "../stores/libraryStore";
-import { chapterAPI, libraryAPI, progressAPI, seriesAPI, settingAPI, volumeAPI } from "../api/client";
+import { libraryAPI, progressAPI, seriesAPI, settingAPI } from "../api/client";
 import { Header } from "../components/headers/Header";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { HorizontalDragScroll } from "../components/common/HorizontalDragScroll";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import type { Series } from "../types/series";
-import {
-  parseSupportedExtension,
-  resolveSeriesExtensionMapWithCache,
-  type ExtensionBadge,
-  type SupportedExtension,
-} from "../utils/extension";
+import { parseSupportedExtension, type ExtensionBadge, type SupportedExtension } from "../utils/extension";
 import styles from "./Home.module.css";
 
 interface RecentProgress {
@@ -37,6 +32,7 @@ interface RecentProgress {
   path?: string;
   chapter_path?: string;
   volume_path?: string;
+  series_path?: string;
 }
 
 export function HomePage() {
@@ -59,173 +55,141 @@ export function HomePage() {
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const loadData = useCallback(async () => {
-    const currentLoad = ++loadSequenceRef.current;
-    setIsLoading(true);
-    setRecentProgressExtensionMap({});
-    setHomeSeriesExtensionMap({});
+  const loadData = useCallback(
+    async (options: { isInitial?: boolean } = {}) => {
+      const currentLoad = ++loadSequenceRef.current;
+      if (options.isInitial) {
+        setIsLoading(true);
+      }
+      setRecentProgressExtensionMap({});
+      setHomeSeriesExtensionMap({});
 
-    try {
-      // 라이브러리 목록도 전역 스토어에서 갱신
-      await fetchLibraries();
+      try {
+        // 라이브러리 목록도 전역 스토어에서 갱신
+        await fetchLibraries();
 
-      // 병렬로 데이터 요청
-      const [progressRes, settingsRes, likedRes] = await Promise.all([
-        progressAPI.getRecent(10),
-        settingAPI.list(),
-        libraryAPI.getSeries("system-likes"),
-      ]);
-      if (currentLoad !== loadSequenceRef.current) return;
+        // 병렬로 데이터 요청
+        const [progressRes, settingsRes, likedRes] = await Promise.all([
+          progressAPI.getRecent(10),
+          settingAPI.list(),
+          libraryAPI.getSeries("system-likes"),
+        ]);
+        if (currentLoad !== loadSequenceRef.current) return;
 
-      const recentList: RecentProgress[] = progressRes.data.recent_progress || [];
-      setRecentProgress(recentList);
-      const likedSeriesList = (likedRes.data.series || []) as Series[];
-      setLikedSeries(likedSeriesList);
+        const recentList: RecentProgress[] = progressRes.data.recent_progress || [];
+        setRecentProgress(recentList);
 
-      if (settingsRes.home_layout_order) {
-        const order = settingsRes.home_layout_order;
-        if (order === "swapped") {
-          setSectionOrder(["updated", "continue", "liked"]);
-        } else if (order === "default") {
-          setSectionOrder(["continue", "liked", "updated"]);
+        // 1. 최근 읽은 목록 확장자 해결 (백엔드에서 강화된 경로 정보 활용 - N+1 제거)
+        const recentExtMap: Partial<Record<string, ExtensionBadge>> = {};
+        recentList.forEach((progress) => {
+          const ext = parseSupportedExtension(progress.chapter_path || progress.volume_path || progress.series_path);
+          if (ext) recentExtMap[progress.id] = ext;
+        });
+        setRecentProgressExtensionMap(recentExtMap);
+
+        const likedSeriesList = (likedRes.data.series || []) as Series[];
+        setLikedSeries(likedSeriesList);
+
+        if (settingsRes.home_layout_order) {
+          const order = settingsRes.home_layout_order;
+          if (order === "swapped") {
+            setSectionOrder(["updated", "continue", "liked"]);
+          } else if (order === "default") {
+            setSectionOrder(["continue", "liked", "updated"]);
+          } else {
+            // 쉼표로 구분된 섹션 ID 목록 (예: "continue,liked,updated")
+            const parts = order.split(",").filter((s: string) => s);
+            if (parts.length > 0) setSectionOrder(parts);
+          }
+        }
+
+        // 라이브러리 목록이 업데이트된 후, 최신 상태를 스토어에서 직접 가져옴
+        const currentLibraries = useLibraryStore.getState().libraries;
+
+        // SYSTEM 라이브러리(좋아요 등)는 제외하고 실제 로컬 라이브러리만 순회
+        const localLibraries = currentLibraries.filter((lib) => lib.type !== "SYSTEM");
+        let seriesForExtension: Series[] = likedSeriesList;
+
+        if (localLibraries.length > 0) {
+          const allSeriesPromises = localLibraries.map((lib) => libraryAPI.getSeries(lib.id));
+          const seriesResponses = await Promise.all(allSeriesPromises);
+
+          const allSeries: Series[] = [];
+          seriesResponses.forEach((res) => {
+            const series = (res.data.series || []) as Series[];
+            allSeries.push(...series);
+          });
+
+          // updated_series_period 설정 적용 (기본값 7일)
+          const rawPeriod = settingsRes.updated_series_period;
+          const parsedPeriod = rawPeriod ? parseInt(rawPeriod, 10) : NaN;
+          const periodDays = !Number.isNaN(parsedPeriod) && parsedPeriod > 0 ? parsedPeriod : 7;
+
+          const cutoffDate = new Date();
+          cutoffDate.setDate(cutoffDate.getDate() - periodDays);
+
+          // updated_at 기준 최신순 정렬
+          allSeries.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+
+          // 기간 필터링 적용
+          const filteredSeries = allSeries.filter((series) => {
+            const updatedDate = new Date(series.updated_at);
+            return updatedDate >= cutoffDate;
+          });
+
+          setUpdatedSeries(filteredSeries);
+          const uniqueSeriesMap = new Map<string, Series>();
+          [...likedSeriesList, ...filteredSeries].forEach((series) => {
+            uniqueSeriesMap.set(series.id, series);
+          });
+          seriesForExtension = Array.from(uniqueSeriesMap.values());
         } else {
-          // 쉼표로 구분된 섹션 ID 목록 (예: "continue,liked,updated")
-          const parts = order.split(",").filter((s: string) => s);
-          if (parts.length > 0) setSectionOrder(parts);
+          setUpdatedSeries([]);
+        }
+
+        if (currentLoad !== loadSequenceRef.current) return;
+        setIsLoading(false);
+
+        // 2. 홈 시리즈 확장자 해결 (배치 API 활용 - N+1 제거)
+        void (async () => {
+          const seriesIds = seriesForExtension.map((s) => s.id);
+          if (seriesIds.length === 0) return;
+
+          try {
+            const extRes = await seriesAPI.getExtensionsBatch(seriesIds);
+            const extensions = extRes.data.extensions || {};
+
+            if (currentLoad !== loadSequenceRef.current) return;
+
+            const nextMap: Partial<Record<string, ExtensionBadge>> = {};
+            seriesForExtension.forEach((series) => {
+              const ext = extensions[series.id];
+              if (ext) {
+                const badge = parseSupportedExtension(ext);
+                if (badge) nextMap[series.id] = badge;
+              }
+            });
+            setHomeSeriesExtensionMap(nextMap);
+          } catch (error) {
+            console.warn("Failed to fetch series extensions in batch:", error);
+          }
+        })();
+      } catch (error) {
+        console.error("Failed to load data:", error);
+        if (currentLoad === loadSequenceRef.current) {
+          setIsLoading(false);
         }
       }
-
-      // 라이브러리 목록이 업데이트된 후, 최신 상태를 스토어에서 직접 가져옴
-      const currentLibraries = useLibraryStore.getState().libraries;
-
-      // SYSTEM 라이브러리(좋아요 등)는 제외하고 실제 로컬 라이브러리만 순회
-      const localLibraries = currentLibraries.filter((lib) => lib.type !== "SYSTEM");
-      let seriesForExtension: Series[] = likedSeriesList;
-
-      if (localLibraries.length > 0) {
-        const allSeriesPromises = localLibraries.map((lib) => libraryAPI.getSeries(lib.id));
-        const seriesResponses = await Promise.all(allSeriesPromises);
-
-        const allSeries: Series[] = [];
-        seriesResponses.forEach((res) => {
-          const series = (res.data.series || []) as Series[];
-          allSeries.push(...series);
-        });
-
-        // updated_series_period 설정 적용 (기본값 7일)
-        const rawPeriod = settingsRes.updated_series_period;
-        const parsedPeriod = rawPeriod ? parseInt(rawPeriod, 10) : NaN;
-        const periodDays = !Number.isNaN(parsedPeriod) && parsedPeriod > 0 ? parsedPeriod : 7;
-
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - periodDays);
-
-        // updated_at 기준 최신순 정렬
-        allSeries.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-
-        // 기간 필터링 적용
-        const filteredSeries = allSeries.filter((series) => {
-          const updatedDate = new Date(series.updated_at);
-          return updatedDate >= cutoffDate;
-        });
-
-        setUpdatedSeries(filteredSeries);
-        const uniqueSeriesMap = new Map<string, Series>();
-        [...likedSeriesList, ...filteredSeries].forEach((series) => {
-          uniqueSeriesMap.set(series.id, series);
-        });
-        seriesForExtension = Array.from(uniqueSeriesMap.values());
-      } else {
-        setUpdatedSeries([]);
-      }
-
-      if (currentLoad !== loadSequenceRef.current) return;
-      setIsLoading(false);
-
-      void (async () => {
-        const resolvedRecentExtensions: Array<readonly [string, ExtensionBadge | ""]> = await Promise.all(
-          recentList.map(async (progress) => {
-            const directExt = parseSupportedExtension(progress.path || progress.chapter_path || progress.volume_path);
-            if (directExt) return [progress.id, directExt] as const;
-
-            if (progress.chapter_id) {
-              if (!chapterExtensionCacheRef.current.has(progress.chapter_id)) {
-                try {
-                  const chapterRes = await chapterAPI.get(progress.chapter_id);
-                  chapterExtensionCacheRef.current.set(
-                    progress.chapter_id,
-                    parseSupportedExtension((chapterRes.data as { path?: string } | undefined)?.path),
-                  );
-                } catch {
-                  chapterExtensionCacheRef.current.set(progress.chapter_id, null);
-                }
-              }
-              const chapterExt = chapterExtensionCacheRef.current.get(progress.chapter_id);
-              if (chapterExt) return [progress.id, chapterExt] as const;
-            }
-
-            if (progress.volume_id) {
-              if (!volumeExtensionCacheRef.current.has(progress.volume_id)) {
-                try {
-                  const volumeRes = await volumeAPI.get(progress.volume_id);
-                  volumeExtensionCacheRef.current.set(
-                    progress.volume_id,
-                    parseSupportedExtension((volumeRes.data as { path?: string } | undefined)?.path),
-                  );
-                } catch {
-                  volumeExtensionCacheRef.current.set(progress.volume_id, null);
-                }
-              }
-              const volumeExt = volumeExtensionCacheRef.current.get(progress.volume_id);
-              if (volumeExt) return [progress.id, volumeExt] as const;
-            }
-
-            return [progress.id, ""] as const;
-          }),
-        );
-
-        if (currentLoad !== loadSequenceRef.current) return;
-        const extensionMap: Partial<Record<string, ExtensionBadge>> = {};
-        resolvedRecentExtensions.forEach(([progressId, ext]) => {
-          if (ext) extensionMap[progressId] = ext;
-        });
-        setRecentProgressExtensionMap(extensionMap);
-      })().catch((error) => {
-        console.warn("Failed to resolve recent progress extensions:", error);
-      });
-
-      void (async () => {
-        const nextMap = await resolveSeriesExtensionMapWithCache({
-          seriesList: seriesForExtension,
-          cache: seriesExtensionCacheRef.current,
-          fetchVolumePaths: async (seriesId) => {
-            const volumesRes = await seriesAPI.getVolumes(seriesId);
-            const volumes = Array.isArray(volumesRes.data?.volumes) ? volumesRes.data.volumes : [];
-            return volumes.map((volume: { path?: string }) => volume.path);
-          },
-          onError: (seriesId, error) => {
-            console.warn(`Failed to resolve extension for home series ${seriesId}:`, error);
-          },
-        });
-        if (currentLoad !== loadSequenceRef.current) return;
-        setHomeSeriesExtensionMap(nextMap);
-      })().catch((error) => {
-        console.warn("Failed to resolve home series extensions:", error);
-      });
-    } catch (error) {
-      console.error("Failed to load data:", error);
-      if (currentLoad === loadSequenceRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [fetchLibraries]);
+    },
+    [fetchLibraries],
+  );
 
   useEffect(() => {
     chapterExtensionCacheRef.current.clear();
     volumeExtensionCacheRef.current.clear();
     seriesExtensionCacheRef.current.clear();
     const timer = window.setTimeout(() => {
-      void loadData();
+      void loadData({ isInitial: true });
     }, 0);
     return () => {
       window.clearTimeout(timer);
@@ -330,7 +294,6 @@ export function HomePage() {
                 volumeId={progress.volume_id}
                 onStatusChange={loadData}
                 showExtensionBadge
-                extensionBadgePlacement="meta"
                 extensionBadgeText={recentProgressExtensionMap[progress.id]}
               />
             );

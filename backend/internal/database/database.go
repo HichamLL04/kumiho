@@ -117,6 +117,7 @@ func Migrate() error {
 		title TEXT NOT NULL,
 		path TEXT NOT NULL,
 		thumbnail_path TEXT,
+		extension TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -146,9 +147,12 @@ func Migrate() error {
 		thumbnail_path TEXT,
 		has_audio BOOLEAN DEFAULT 0,
 		unit TEXT DEFAULT 'volume',
+		chapter_count INTEGER DEFAULT 0,
+		parent_id TEXT REFERENCES volumes(id) ON DELETE CASCADE,
 		description TEXT DEFAULT '',
 		authors TEXT DEFAULT '',
 		publication_year TEXT DEFAULT '',
+		extension TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -183,6 +187,8 @@ func Migrate() error {
 		volume_id TEXT REFERENCES volumes(id) ON DELETE SET NULL,
 		chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
 		current_page INTEGER NOT NULL DEFAULT 0,
+		anchor_page INTEGER,
+		offset_ratio REAL,
 		total_pages INTEGER NOT NULL DEFAULT 0,
 		current_position INTEGER DEFAULT 0,
 		total_positions INTEGER DEFAULT 0,
@@ -378,7 +384,63 @@ func Migrate() error {
 	// 23. 라이브러리 EPUB 기본값 컬럼 추가
 	migrateLibraryEpubDefaults()
 
+	// 24. 볼륨 챕터 수 컬럼 추가
+	migrateVolumesChapterCount()
+
+	// 25. 볼륨 부모 ID 컬럼 추가 (계층형 볼륨 지원)
+	migrateVolumesParentID()
+
+	// 26. 볼륨 확장자 컬럼 추가
+	migrateVolumesExtension()
+
+	// 27. 시리즈 확장자 컬럼 추가
+	migrateSeriesExtension()
+
+	// 28. 세로 복원용 앵커 위치 컬럼 추가
+	migrateProgressRestorePosition()
+
+	// 29. 챕터별 has_audio 컬럼 추가
+	migrateChaptersHasAudio()
+
 	return nil
+}
+
+// migrateVolumesParentID volumes 테이블에 parent_id 컬럼 추가
+func migrateVolumesParentID() {
+	if !columnExists("volumes", "parent_id") {
+		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN parent_id TEXT REFERENCES volumes(id) ON DELETE CASCADE`)
+		if err != nil {
+			fmt.Printf("Migration error (volumes.parent_id): %v\n", err)
+		} else {
+			fmt.Println("Migrated volumes table: added parent_id column.")
+			// 인덱스 추가
+			_, _ = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_volumes_parent ON volumes(parent_id)`)
+		}
+	}
+}
+
+// migrateVolumesExtension volumes 테이블에 extension 컬럼 추가
+func migrateVolumesExtension() {
+	if !columnExists("volumes", "extension") {
+		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN extension TEXT DEFAULT ''`)
+		if err != nil {
+			fmt.Printf("Migration error (volumes.extension): %v\n", err)
+		} else {
+			fmt.Println("Migrated volumes table: added extension column.")
+		}
+	}
+}
+
+// migrateSeriesExtension series 테이블에 extension 컬럼 추가
+func migrateSeriesExtension() {
+	if !columnExists("series", "extension") {
+		_, err := DB.Exec(`ALTER TABLE series ADD COLUMN extension TEXT DEFAULT ''`)
+		if err != nil {
+			fmt.Printf("Migration error (series.extension): %v\n", err)
+		} else {
+			fmt.Println("Migrated series table: added extension column.")
+		}
+	}
 }
 
 // migrateSessions 세션 테이블 생성 (기기별 로그인 관리)
@@ -450,6 +512,18 @@ func migrateChapterCompletions() {
 	}
 
 	fmt.Println("Migrated database: added chapter_completions table.")
+}
+
+// migrateVolumesChapterCount volumes 테이블에 chapter_count 컬럼 추가
+func migrateVolumesChapterCount() {
+	if !columnExists("volumes", "chapter_count") {
+		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN chapter_count INTEGER DEFAULT 0`)
+		if err != nil {
+			fmt.Printf("Migration error (volumes.chapter_count): %v\n", err)
+		} else {
+			fmt.Println("Migrated volumes table: added chapter_count column.")
+		}
+	}
 }
 
 // migrateVolumesMetadata volumes 테이블에 메타 데이터(description, authors, publication_year) 컬럼 추가
@@ -1730,6 +1804,39 @@ func migrateEpubVirtualPositions() {
 			fmt.Printf("Migration error (reading_progress.total_positions): %v\n", err)
 		} else {
 			fmt.Println("Migrated reading_progress table: added total_positions column.")
+		}
+	}
+}
+
+// migrateProgressRestorePosition reading_progress 테이블에 anchor_page, offset_ratio 컬럼 추가
+func migrateProgressRestorePosition() {
+	if !columnExists("reading_progress", "anchor_page") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN anchor_page INTEGER`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.anchor_page): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added anchor_page column.")
+		}
+	}
+
+	if !columnExists("reading_progress", "offset_ratio") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN offset_ratio REAL`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.offset_ratio): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added offset_ratio column.")
+		}
+	}
+}
+
+// migrateChaptersHasAudio chapters 테이블에 has_audio 컬럼 추가
+func migrateChaptersHasAudio() {
+	if !columnExists("chapters", "has_audio") {
+		_, err := DB.Exec(`ALTER TABLE chapters ADD COLUMN has_audio BOOLEAN DEFAULT 0`)
+		if err != nil {
+			fmt.Printf("Migration error (chapters.has_audio): %v\n", err)
+		} else {
+			fmt.Println("Migrated chapters table: added has_audio column.")
 		}
 	}
 }

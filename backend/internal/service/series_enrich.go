@@ -66,6 +66,14 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 		s.TotalPageCount = totalPages
 	}
 
+	// 권수 및 챕터 수 보정
+	if volCount, err := svc.volumeRepo.CountBySeriesID(nil, s.ID); err == nil {
+		s.VolumeCount = volCount
+	}
+	if chapCount, err := svc.chapterRepo.CountBySeriesID(nil, s.ID); err == nil {
+		s.ChapterCount = chapCount
+	}
+
 	// PDF 또는 누락된 페이지 정보 보정 (Data Repair/Fallback)
 	// 스캔 시점에 페이지 수가 추출되지 않은 PDF 등을 위해 온더플라이로 보정합니다.
 	if s.TotalPageCount <= 0 {

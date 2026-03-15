@@ -1162,6 +1162,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             frameThree = window.requestAnimationFrame(() => {
               updateVirtualPage(targetX);
               isRestoringRef.current = false;
+              loaderData.setViewStatus?.("ready");
             });
           }
           applyParagraphHighlight(pendingHighlightParagraphRef.current ?? resolved.paragraphId);
@@ -1169,8 +1170,10 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           lastRestoredPagedPageRef.current = estimatedPageFromOffset;
           setCurrentPage(estimatedPageFromOffset);
           isRestoringRef.current = false;
+          loaderData.setViewStatus?.("ready");
         } else {
           isRestoringRef.current = false;
+          loaderData.setViewStatus?.("ready");
         }
 
         pendingHighlightParagraphRef.current = null;
@@ -1194,6 +1197,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     setOffset,
     settings.readingMode,
     text.length,
+    loaderData,
     updateVirtualPage,
   ]);
 
@@ -1639,7 +1643,6 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               type="prev"
               pullOffset={pullOffset}
               pullThreshold={settings.pullThreshold}
-
               chapterId={prevChapterId}
               chapterTitle={prevChapterTitle}
               saveProgress={saveProgress}
@@ -1648,7 +1651,6 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               type="next"
               pullOffset={pullOffset}
               pullThreshold={settings.pullThreshold}
-
               chapterId={nextChapterId}
               chapterTitle={nextChapterTitle}
               saveProgress={saveProgress}

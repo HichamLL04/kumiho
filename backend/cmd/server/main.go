@@ -90,7 +90,7 @@ func main() {
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
 	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
-	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, cfg, seriesEnrichSvc)
+	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가
 	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo, viewerSessionRepo)
@@ -101,7 +101,7 @@ func main() {
 
 	// Fiber 앱 생성
 	app := fiber.New(fiber.Config{
-		AppName:   "Kumiho API v0.11.0",
+		AppName:   "Kumiho API v0.11.1",
 		BodyLimit: 50 * 1024 * 1024, // 50MB
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -183,6 +183,7 @@ func main() {
 	// 시리즈
 	series := protected.Group("/series")
 	series.Get("/search", seriesHandler.Search)
+	series.Post("/extensions/batch", seriesHandler.BatchGetExtensions)
 	series.Get("/:id", seriesHandler.GetSeries)
 	series.Patch("/:id", seriesHandler.UpdateSeries)
 	series.Get("/:seriesId/volumes", seriesHandler.ListVolumes)
@@ -239,6 +240,8 @@ func main() {
 		c.Locals("type", "chapters")
 		return imageHandler.GetThumbnail(c)
 	})
+	chapters.Get("/:id/bgm", seriesHandler.GetChapterBGM)
+	chapters.Get("/:id/bgm/stream", seriesHandler.ServeChapterBGM)
 
 	// 페이지
 	pages := protected.Group("/pages")
@@ -253,6 +256,7 @@ func main() {
 
 	// 뷰어
 	viewer := protected.Group("/viewer")
+	viewer.Get("/init/:chapterId", seriesHandler.GetViewerInitData)
 	viewer.Post("/start", progressHandler.StartViewing)
 	viewer.Post("/resume-check", progressHandler.ResumeCheck)
 

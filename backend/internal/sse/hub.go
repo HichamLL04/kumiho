@@ -67,12 +67,12 @@ func (h *Hub) Run() {
 						break
 					}
 				}
-				
+
 				dropClient := sessionClients[dropIdx]
-				
+
 				// 락 안에서 슬라이스에서 즉시 제거
 				h.clients[client.UserID][client.SessionID] = append(sessionClients[:dropIdx], sessionClients[dropIdx+1:]...)
-				
+
 				// 별도 고루틴에서 FORCE_LOGOUT 알림 후 채널 정리
 				// (이미 슬라이스에서 제거되었으므로 unregister 불필요, SafeClose로 안전하게 닫기)
 				go func(c *Client) {
@@ -83,7 +83,7 @@ func (h *Hub) Run() {
 					}
 					c.SafeClose()
 				}(dropClient)
-				
+
 				log.Printf("[SSE HUB] Connection Limit Exceeded: dropping for session=%s, source=%s", client.SessionID, dropClient.Source)
 			}
 
@@ -150,7 +150,7 @@ func (h *Hub) Run() {
 			h.mu.RLock()
 			if sessions, ok := h.clients[req.UserID]; ok {
 				msgBytes, err := FormatSSEMessage("FORCE_LOGOUT", json.RawMessage(`{"reason": "DUPLICATE_LOGIN"}`))
-				
+
 				if err == nil {
 					log.Printf("[SSE HUB] ForceLogout triggered by: user=%s, session=%s", req.UserID, req.SessionID)
 
@@ -188,7 +188,7 @@ func (h *Hub) SendToSession(userID, sessionID string, msgType string, payload in
 		log.Printf("[SSE HUB] Failed to format msg: %v", err)
 		return
 	}
-	
+
 	h.broadcast <- broadcastMessage{
 		userID:    userID,
 		sessionID: sessionID,

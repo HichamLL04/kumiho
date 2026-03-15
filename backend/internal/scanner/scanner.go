@@ -59,8 +59,8 @@ var (
 	reYear         = regexp.MustCompile(`\b(19|20)\d{2}\b`)
 
 	// 볼륨 파싱 정규식 (Global Compile)
-	reVolKorean  = regexp.MustCompile(`(\d+)\s*(권|회|화)`)
-	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume)\s*(\d+)`)
+	reVolKorean  = regexp.MustCompile(`(\d+)\s*(권|회|화|부)`)
+	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume|part|season)\s*(\d+)`)
 	reVolChapter = regexp.MustCompile(`(?i)(?:c|ch\.?|chapter)\s*(\d+)`)
 	reVolSuffix  = regexp.MustCompile(`(?:^|[\s\-_\[\(])(\d+)(?:$|[\s\-_\]\)])`)
 )
@@ -234,16 +234,23 @@ type scannedChapter struct {
 	PageCount      int   // Added for PDFs or single-file chapters
 	TotalBytes     int64 // EPUB 가상 포지션용
 	TotalPositions int   // EPUB 가상 포지션용
+	HasAudio       bool
 }
 
 type scannedVolume struct {
-	Title        string
-	VolumeNumber int
-	Path         string
-	ModTime      time.Time
-	HasAudio     bool
-	Unit         string // "volume" or "chapter"
-	Chapters     []scannedChapter
+	Title           string
+	VolumeNumber    int
+	Path            string
+	ModTime         time.Time
+	HasAudio        bool
+	Unit            string // "volume" or "chapter"
+	ChapterCount    int
+	Extension       string
+	Description     string
+	Authors         string
+	PublicationYear string
+	Chapters        []scannedChapter
+	SubVolumes      []*scannedVolume // Added for recursion
 }
 
 // ScanLibrary 라이브러리 스캔
@@ -903,6 +910,14 @@ func (s *Scanner) processArchiveAsSeries(
 			}
 		}
 
+		// 확장자 필드 보정 (기존 시리즈 중 extension이 비어있는 경우)
+		if series.Extension == "" {
+			series.Extension = strings.ToUpper(strings.TrimPrefix(filepath.Ext(archivePath), "."))
+			if uErr := s.seriesRepo.UpdateExtension(tx, series.ID, series.Extension); uErr != nil {
+				return nil, uErr
+			}
+		}
+
 		// 업데이트가 필요한 경우
 		if lastModified.After(series.UpdatedAt) {
 			if sErr := s.seriesRepo.UpdateUpdatedAt(tx, series.ID, lastModified); sErr != nil {
@@ -953,6 +968,7 @@ func (s *Scanner) processArchiveAsSeries(
 			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
+			Extension: strings.ToUpper(strings.TrimPrefix(filepath.Ext(archivePath), ".")),
 		}
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
@@ -1007,7 +1023,7 @@ func (s *Scanner) processArchiveAsSeries(
 	}
 
 	// 저장
-	saveRes, err := s.saveVolume(tx, series.ID, volData)
+	saveRes, err := s.saveVolumeRecursive(tx, series.ID, nil, volData)
 	if err != nil {
 		return nil, err
 	}
@@ -1205,10 +1221,17 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 
 		parsedNum := 0
 		parsedUnit := "volume"
-		// 0번 볼륨도 유효한 번호로 인정
+		entry := entryMap[name]
+
+		// 폴더인 경우에도 번호 및 단위 파싱 시도 (1부, 2부 등 대응)
 		if num, unit, ok := parseVolumeNumber(displayName); ok {
 			parsedNum = num
 			parsedUnit = unit
+		} else {
+			// 파싱 실패 시 기본값 설정
+			if entry != nil && entry.IsDir() {
+				parsedUnit = "volume" // 폴더는 기본적으로 볼륨(권)으로 취급
+			}
 		}
 
 		// 할당할 번호 결정 (Strategy: Monotonic)
@@ -1269,7 +1292,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 				mu.Unlock()
 
 				var volResult *scannedVolume
-				var err error
+				var loopErr error // Renamed from 'err'
 
 				entry := entryMap[j.name]
 
@@ -1298,9 +1321,9 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 						if !modTime.After(existingVol.UpdatedAt) {
 							// 챕터 개수 확인 (0개면 내용물 인식 실패 후 수정되었을 수 있으므로 재스캔)
 							var chapCount int
-							chapCount, err = s.volumeRepo.GetChapterCount(nil, existingVol.ID)
-							if err != nil {
-								log.Printf("[SCANNER] Error getting chapter count for %s: %v. Continuing with forced scan.", j.name, err)
+							chapCount, chapErr := s.volumeRepo.GetChapterCount(nil, existingVol.ID)
+							if chapErr != nil {
+								log.Printf("[SCANNER] Error getting chapter count for %s: %v. Continuing with forced scan.", j.name, chapErr)
 								// 에러 발생 시 안전을 위해 continue하지 않고 분석 진행
 							} else if existingVol.VolumeNumber == volNum && existingVol.Unit == volUnit && chapCount > 0 {
 								// PDF인 경우 썸네일이 있는지 추가로 확인
@@ -1308,13 +1331,30 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 								hasThumbnail := existingVol.ThumbnailPath != nil && *existingVol.ThumbnailPath != ""
 
 								if !isPdf || hasThumbnail {
-									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음) -> 분석 스킵
+									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)
+									// 단, Extension 필드가 비어있으면 로직 업데이트를 위해 분석 진행
+									if existingVol.Extension != "" {
+									// 오디오 파일이 존재하면 볼륨 및 챕터의 has_audio 업데이트
+									if s.quickCheckHasAudio(entryPath, entry.IsDir(), audioFiles, j.name) {
+										if !existingVol.HasAudio {
+											log.Printf("[SCANNER] Updating has_audio for skipped volume %s", j.name)
+											_ = s.volumeRepo.UpdateHasAudio(nil, existingVol.ID, true)
+										}
+										// 챕터별 has_audio도 업데이트 (미설정된 챕터만)
+										s.updateChaptersHasAudio(existingVol.ID, entryPath, entry.IsDir(), audioFiles, j.name)
+									}
 									continue
+								} else {
+									// Extension 메타데이터 누락으로 인한 강제 업데이트
+									log.Printf("[SCANNER] Force update for %s: Missing extension metadata", j.name)
 								}
-								log.Printf("[SCANNER] Force update for %s: Missing PDF thumbnail", j.name)
+								} else {
+									// PDF이며 썸네일이 없는 경우 강제 업데이트
+									log.Printf("[SCANNER] Force update for %s: Missing PDF thumbnail", j.name)
+								}
 							}
 
-							if err == nil {
+							if chapErr == nil {
 								if chapCount == 0 {
 									log.Printf("[SCANNER] Force update for %s: Volume has 0 chapters", j.name)
 								} else {
@@ -1325,16 +1365,25 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 					}
 				}
 
-				if volNum == 0 {
+				if volNum == 0 && !entry.IsDir() {
 					displayName = "프롤로그"
 				}
 
+				// 비동기 분석 (Analyze Volume Task)
+				var aErr error
 				if entry.IsDir() {
-					volResult, err = s.analyzeVolume(entryPath, displayName, volNum, volUnit, excludePatterns)
+					volResult, aErr = s.analyzeVolumeRecursive(entryPath, displayName, volNum, volUnit, excludePatterns)
 				} else if isArchive(j.name) {
-					volResult, err = s.analyzeArchiveAsVolume(entryPath, displayName, volNum, volUnit)
+					volResult, aErr = s.analyzeArchiveAsVolume(entryPath, displayName, volNum, volUnit)
 				} else {
 					continue
+				}
+
+				if aErr != nil {
+					mu.Lock()
+					result.Errors = append(result.Errors, fmt.Sprintf("failed to analyze volume %s: %v", displayName, aErr))
+					mu.Unlock()
+					loopErr = aErr // Assign aErr to loopErr for later check
 				}
 
 				// 오디오 파일 존재 여부 확인
@@ -1350,14 +1399,24 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 					}
 				}
 
-				if err != nil {
-					mu.Lock()
-					result.Errors = append(result.Errors, fmt.Sprintf("failed to analyze volume %s: %v", j.name, err))
-					mu.Unlock()
+				if loopErr != nil { // New check for loopErr
+					// 이미 aErr 단계에서 result.Errors에 추가되었거나 statErr는 보수적으로 분석 진행됨
+					// 추가적인 에러 중복 append 방지 로직 필요 시 적용
 					continue
 				}
 
 				if volResult != nil {
+					// 모든 하위 볼륨 경로를 processedPaths에 등록하여 삭제 루프에서 제외되도록 함
+					var addPaths func(v *scannedVolume)
+					addPaths = func(v *scannedVolume) {
+						mu.Lock()
+						processedPaths[v.Path] = true
+						mu.Unlock()
+						for _, sv := range v.SubVolumes {
+							addPaths(sv)
+						}
+					}
+					addPaths(volResult)
 					resultChan <- volResult
 				}
 			}
@@ -1407,15 +1466,18 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 			}
 
 			// 트랜잭션 시작
-			tx, err := database.DB.BeginTx(ctx, nil)
-			if err != nil {
+			var txErr error
+			tx, txErr := database.DB.BeginTx(ctx, nil)
+			if txErr != nil {
 				mu.Lock()
-				result.Errors = append(result.Errors, fmt.Sprintf("failed to start transaction for %s: %v", volData.Title, err))
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to start transaction for %s: %v", volData.Title, txErr))
 				mu.Unlock()
 				continue
 			}
 
 			if existingVol != nil {
+				// 기존 볼륨이 있고, 업데이트가 필요한 경우 (예: 볼륨 번호 변경, 챕터 수 변경 등)
+				// 기존 볼륨을 삭제하고 새로 생성하는 방식으로 처리 (챕터/페이지도 함께 삭제됨)
 				if delErr := s.volumeRepo.Delete(tx, existingVol.ID); delErr != nil {
 					_ = tx.Rollback()
 					mu.Lock()
@@ -1426,18 +1488,19 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 			}
 
 			// 저장 (Consumer Helper)
-			saveRes, err := s.saveVolume(tx, series.ID, volData)
-			if err != nil {
+			saveRes, sErr := s.saveVolumeRecursive(tx, series.ID, nil, volData)
+			if sErr != nil {
 				_ = tx.Rollback()
 				mu.Lock()
-				result.Errors = append(result.Errors, fmt.Sprintf("failed to save volume %s: %v", volData.Title, err))
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to save volume %s: %v", volData.Title, sErr))
 				mu.Unlock()
 				continue
 			}
 
-			if err := tx.Commit(); err != nil {
+			// 트랜잭션 커밋
+			if cErr := tx.Commit(); cErr != nil {
 				mu.Lock()
-				result.Errors = append(result.Errors, fmt.Sprintf("failed to commit volume %s: %v", volData.Title, err))
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to commit transaction: %v", cErr))
 				mu.Unlock()
 				continue
 			}
@@ -1454,23 +1517,45 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 	// Wait for Consumer
 	<-consumerDone
 
-	// Collect errors from log channel - 제거됨 (직접 append)
-
 	// 3. 디스크에 없는 DB 볼륨 삭제 (Deleted Items)
 	for path, vol := range existingVolMap {
 		if !processedPaths[path] {
 			log.Printf("Removing deleted volume: %s", path)
-			if err := s.volumeRepo.Delete(nil, vol.ID); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("failed to delete volume %s: %v", vol.Title, err))
+			if dErr := s.volumeRepo.Delete(nil, vol.ID); dErr != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to delete volume %s: %v", vol.Title, dErr))
 			}
 		}
+	}
+
+	// 4. 시리즈 대표 확장자 업데이트
+	exts, err := s.volumeRepo.GetDistinctExtensions(nil, series.ID)
+	if err == nil {
+		representativeExt := ""
+		if len(exts) > 1 {
+			representativeExt = "MIX"
+		} else if len(exts) == 1 {
+			representativeExt = exts[0]
+		}
+
+		if series.Extension != representativeExt {
+			// 메타데이터를 건드리지 않도록 extension 전용 업데이트 로직 사용
+			// 증분 스캔 무결성을 위해 updated_at은 갱신하지 않음
+			if _, upErr := database.DB.Exec(`UPDATE series SET extension = ? WHERE id = ?`, representativeExt, series.ID); upErr != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to update series extension: %v", upErr))
+			} else {
+				// 메모리 상의 시리즈 객체도 함께 갱신
+				series.Extension = representativeExt
+			}
+		}
+	} else {
+		result.Errors = append(result.Errors, fmt.Sprintf("failed to get distinct extensions for series %s: %v", series.Title, err))
 	}
 
 	return result, nil
 }
 
-// analyzeVolume scans a folder based volume
-func (s *Scanner) analyzeVolume(volumePath, title string, volumeNum int, unit string, excludePatterns []string) (*scannedVolume, error) {
+// analyzeVolumeRecursive scans a folder based volume recursively
+func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int, unit string, excludePatterns []string) (*scannedVolume, error) {
 	// 파일 수정 시간 확인
 	info, err := os.Stat(volumePath)
 	modTime := time.Now()
@@ -1484,6 +1569,8 @@ func (s *Scanner) analyzeVolume(volumePath, title string, volumeNum int, unit st
 		Path:         volumePath,
 		ModTime:      modTime,
 		Unit:         unit,
+		ChapterCount: 0,
+		Extension:    "",
 	}
 
 	entries, err := os.ReadDir(volumePath)
@@ -1492,73 +1579,150 @@ func (s *Scanner) analyzeVolume(volumePath, title string, volumeNum int, unit st
 	}
 
 	var imageFiles []string
-	var chapterEntries []fs.DirEntry
+	var subEntries []fs.DirEntry
+	audioFiles := make(map[string]bool)
 
 	for _, entry := range entries {
 		if isExcluded(entry.Name(), excludePatterns) {
 			continue
 		}
 		if entry.IsDir() || isArchive(entry.Name()) {
-			chapterEntries = append(chapterEntries, entry)
+			subEntries = append(subEntries, entry)
 		} else if isImage(entry.Name()) {
 			imageFiles = append(imageFiles, entry.Name())
+		} else if isAudio(entry.Name()) {
+			nameWithoutExt := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			audioFiles[nameWithoutExt] = true
 		}
 	}
 
-	if len(chapterEntries) > 0 {
-		// 챕터(폴더 또는 아카이브)가 존재하는 경우
-
-		// 이름순 정렬
-		entryMap := make(map[string]fs.DirEntry)
-		var names []string
-		for _, e := range chapterEntries {
-			names = append(names, e.Name())
-			entryMap[e.Name()] = e
-		}
-		natsort.Sort(names)
-
-		var analysisErrors []error
-		for i, name := range names {
-			entry := entryMap[name]
-			entryName := entry.Name()
-			chapterPath := filepath.Join(volumePath, entryName)
-			chapterTitle := strings.TrimSuffix(entryName, filepath.Ext(entryName)) // 확장자 제거
-
-			var chapter *scannedChapter
-			var err error
-
-			if entry.IsDir() {
-				chapter, err = s.analyzeChapter(chapterPath, entryName, i+1)
-			} else {
-				chapter, err = s.analyzeArchiveAsChapter(chapterPath, chapterTitle, i+1)
-			}
-
-			if err != nil {
-				log.Printf("Failed to analyze chapter %s: %v", entryName, err)
-				analysisErrors = append(analysisErrors, fmt.Errorf("chapter %s: %w", entryName, err))
-				continue
-			}
-			result.Chapters = append(result.Chapters, *chapter)
-		}
-
-		if len(result.Chapters) == 0 && len(names) > 0 {
-			return nil, fmt.Errorf("failed to analyze any chapters in %s: %v", volumePath, analysisErrors)
-		}
-	} else if len(imageFiles) > 0 {
+	// 1. 이미지가 직접 포함된 경우 (Terminal folder) -> 챕터로 취급
+	//    단, 하위 폴더/아카이브가 없는 '터미널' 폴더에만 적용하여
+	//    혼재 케이스(이미지 + 하위 엔트리)에서 챕터 번호 중복을 방지한다.
+	if len(imageFiles) > 0 && len(subEntries) == 0 {
 		pages, err := s.analyzeImages(volumePath, imageFiles)
 		if err != nil {
 			return nil, err
 		}
-		// 단일 챕터
 		result.Chapters = append(result.Chapters, scannedChapter{
 			Title:         title,
 			ChapterNumber: 1,
 			Path:          volumePath,
 			Pages:         pages,
 		})
+		result.ChapterCount = 1
 	}
 
+	// 2. 하위 항목(폴더/아카이브) 처리
+	if len(subEntries) > 0 {
+		// 이름순 정렬
+		entryMap := make(map[string]fs.DirEntry)
+		var names []string
+		for _, e := range subEntries {
+			names = append(names, e.Name())
+			entryMap[e.Name()] = e
+		}
+		natsort.Sort(names)
+
+		for _, name := range names {
+			entry := entryMap[name]
+			entryPath := filepath.Join(volumePath, name)
+			entryTitle := strings.TrimSuffix(name, filepath.Ext(name))
+
+			// 현재까지 누적된 챕터 수를 기준으로 다음 번호 부여 (중복 방지)
+			nextChapterNum := result.ChapterCount + 1
+
+			if entry.IsDir() {
+				// 폴더가 챕터인지(이미지 포함) 아니면 하위 볼륨인지 확인
+				if s.isTerminalFolder(entryPath, excludePatterns) {
+					// 챕터로 처리
+					chapter, chapterErr := s.analyzeChapter(entryPath, name, nextChapterNum)
+					if chapterErr == nil {
+						// 폴더 챕터와 같은 이름의 오디오 파일이 있는지 확인
+						if audioFiles[name] {
+							chapter.HasAudio = true
+						}
+						result.Chapters = append(result.Chapters, *chapter)
+						result.ChapterCount++
+					} else {
+						log.Printf("[SCANNER] Failed to analyze chapter folder %s: %v", entryPath, chapterErr)
+					}
+				} else {
+					// 하위 볼륨으로 처리 (재귀)
+					// 볼륨 번호는 해당 부모 볼륨 내에서의 순서이므로 1부터 시작해도 됨 (SubVolumes 리스트 내의 순서)
+					subVol, subVolErr := s.analyzeVolumeRecursive(entryPath, entryTitle, len(result.SubVolumes)+1, "volume", excludePatterns)
+					if subVolErr == nil {
+						result.SubVolumes = append(result.SubVolumes, subVol)
+					} else {
+						log.Printf("[SCANNER] Failed to analyze sub-volume %s: %v", entryPath, subVolErr)
+					}
+				}
+			} else if isArchive(name) {
+				chapter, err := s.analyzeArchiveAsChapter(entryPath, entryTitle, nextChapterNum)
+				if err == nil {
+					// 아카이브 챕터와 같은 이름의 오디오 파일이 있는지 확인
+					if audioFiles[entryTitle] {
+						chapter.HasAudio = true
+					}
+					result.Chapters = append(result.Chapters, *chapter)
+					result.ChapterCount++
+				} else {
+					log.Printf("[SCANNER] Failed to analyze archive %s: %v", entryPath, err)
+				}
+			}
+		}
+	}
+
+	// 챕터 중 하나라도 오디오가 있으면 볼륨에도 HasAudio 설정
+	for _, ch := range result.Chapters {
+		if ch.HasAudio {
+			result.HasAudio = true
+			break
+		}
+	}
+
+	// 확장자 결정 로직 (MIX 또는 단일 확장자)
+	extSet := make(map[string]bool)
+	for _, ch := range result.Chapters {
+		ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(ch.Path), "."))
+		if ext == "" && len(ch.Pages) > 0 {
+			ext = "IMG" // 폴더 챕터 (이미지 포함)
+		}
+		if ext != "" {
+			extSet[ext] = true
+		}
+	}
+	for _, sv := range result.SubVolumes {
+		if sv.Extension != "" {
+			extSet[sv.Extension] = true
+		}
+	}
+
+	if len(extSet) > 1 {
+		result.Extension = "MIX"
+	} else if len(extSet) == 1 {
+		for ext := range extSet {
+			result.Extension = ext
+		}
+	}
 	return result, nil
+}
+
+// isTerminalFolder checks if a folder directly contains images (making it a chapter)
+func (s *Scanner) isTerminalFolder(path string, excludePatterns []string) bool {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if isExcluded(entry.Name(), excludePatterns) {
+			continue
+		}
+		if !entry.IsDir() && isImage(entry.Name()) {
+			return true
+		}
+	}
+	return false
 }
 
 // analyzeArchiveAsVolume scans an archive as a volume
@@ -1576,6 +1740,8 @@ func (s *Scanner) analyzeArchiveAsVolume(archivePath, title string, volumeNum in
 		Path:         archivePath,
 		ModTime:      modTime,
 		Unit:         unit,
+		ChapterCount: 1, // 아카이브는 단일 챕터로 간주
+		Extension:    strings.ToUpper(strings.TrimPrefix(filepath.Ext(archivePath), ".")),
 	}
 
 	// 아카이브를 챕터로 분석하여 추가 (Chapter 1)
@@ -1681,6 +1847,10 @@ func (s *Scanner) analyzeArchiveAsChapter(archivePath, title string, chapterNum 
 
 // analyzeChapter scans a folder as a chapter
 func (s *Scanner) analyzeChapter(chapterPath, title string, chapterNum int) (*scannedChapter, error) {
+	// 폴더명으로부터 챕터 번호 추출 시도
+	if num, _, ok := parseVolumeNumber(title); ok {
+		chapterNum = num
+	}
 	entries, err := os.ReadDir(chapterPath)
 	if err != nil {
 		return nil, err
@@ -1726,6 +1896,65 @@ func (s *Scanner) analyzeImages(basePath string, imageFiles []string) ([]scanned
 	return pages, nil
 }
 
+// quickCheckHasAudio 볼륨에 대응하는 오디오 파일이 존재하는지 빠르게 확인
+// 파일 볼륨: top-level audioFiles 맵에서 확인
+// 폴더 볼륨: 폴더 내부를 스캔하여 오디오 파일 존재 여부 확인
+func (s *Scanner) quickCheckHasAudio(entryPath string, isDir bool, audioFiles map[string]bool, name string) bool {
+	if !isDir {
+		// 파일(아카이브) 볼륨: 같은 디렉토리에 동일 이름의 오디오 파일이 있는지
+		volNameNoExt := strings.TrimSuffix(name, filepath.Ext(name))
+		return audioFiles[volNameNoExt]
+	}
+	// 폴더 볼륨: 폴더 내부에 오디오 파일이 있는지 확인
+	entries, err := os.ReadDir(entryPath)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && isAudio(e.Name()) {
+			return true
+		}
+	}
+	return false
+}
+
+// updateChaptersHasAudio 스킵된 볼륨의 챕터별 has_audio 플래그를 업데이트
+func (s *Scanner) updateChaptersHasAudio(volumeID, entryPath string, isDir bool, topAudioFiles map[string]bool, name string) {
+	chapters, err := s.chapterRepo.FindByVolumeID(nil, volumeID)
+	if err != nil {
+		return
+	}
+
+	// 오디오 파일 맵 구성: 폴더 볼륨이면 내부 스캔, 파일 볼륨이면 top-level 맵 사용
+	localAudioFiles := topAudioFiles
+	if isDir {
+		localAudioFiles = make(map[string]bool)
+		entries, err := os.ReadDir(entryPath)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if !e.IsDir() && isAudio(e.Name()) {
+				nameWithoutExt := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+				localAudioFiles[nameWithoutExt] = true
+			}
+		}
+	}
+
+	for _, ch := range chapters {
+		if ch.HasAudio {
+			continue // 이미 설정됨
+		}
+		// 챕터 경로에서 파일명 추출 후 확장자 제거
+		chFileName := filepath.Base(ch.Path)
+		chNameNoExt := strings.TrimSuffix(chFileName, filepath.Ext(chFileName))
+		if localAudioFiles[chNameNoExt] {
+			log.Printf("[SCANNER] Updating has_audio for chapter %s (%s)", ch.Title, ch.ID)
+			_ = s.chapterRepo.UpdateHasAudio(nil, ch.ID, true)
+		}
+	}
+}
+
 // isImage 이미지 파일 여부 확인
 func isImage(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
@@ -1745,7 +1974,7 @@ func isAudio(filename string) bool {
 }
 
 // saveVolume saves the analyzed volume data to the database
-func (s *Scanner) saveVolume(tx database.Queryer, seriesID string, volData *scannedVolume) (*ScanResult, error) {
+func (s *Scanner) saveVolumeRecursive(tx database.Queryer, seriesID string, parentID *string, volData *scannedVolume) (*ScanResult, error) {
 	result := &ScanResult{}
 
 	// 볼륨 생성
@@ -1767,14 +1996,20 @@ func (s *Scanner) saveVolume(tx database.Queryer, seriesID string, volData *scan
 	}
 
 	volume := &model.Volume{
-		ID:           uuid.New().String(),
-		SeriesID:     seriesID,
-		Title:        volData.Title,
-		VolumeNumber: volData.VolumeNumber,
-		Path:         volData.Path,
-		UpdatedAt:    volData.ModTime,
-		HasAudio:     volData.HasAudio,
-		Unit:         volData.Unit,
+		ID:              uuid.New().String(),
+		SeriesID:        seriesID,
+		Title:           volData.Title,
+		VolumeNumber:    volData.VolumeNumber,
+		Path:            volData.Path,
+		Description:     volData.Description,
+		Authors:         volData.Authors,
+		PublicationYear: volData.PublicationYear,
+		Extension:       volData.Extension,
+		UpdatedAt:       volData.ModTime,
+		HasAudio:        volData.HasAudio,
+		Unit:            volData.Unit,
+		ChapterCount:    volData.ChapterCount,
+		ParentID:        parentID,
 	}
 
 	if foundThumbnailPath != "" {
@@ -1797,6 +2032,17 @@ func (s *Scanner) saveVolume(tx database.Queryer, seriesID string, volData *scan
 		return nil, fmt.Errorf("failed to create volume: %w", err)
 	}
 	result.VolumeCount++
+
+	// 하위 볼륨 저장 (재귀)
+	for _, subVol := range volData.SubVolumes {
+		subRes, err := s.saveVolumeRecursive(tx, seriesID, &volume.ID, subVol)
+		if err != nil {
+			return nil, err
+		}
+		result.VolumeCount += subRes.VolumeCount
+		result.ChapterCount += subRes.ChapterCount
+		result.PageCount += subRes.PageCount
+	}
 	// 챕터 및 페이지 생성
 	for _, chData := range volData.Chapters {
 		pageCount := len(chData.Pages)
@@ -1819,6 +2065,7 @@ func (s *Scanner) saveVolume(tx database.Queryer, seriesID string, volData *scan
 			PageCount:      pageCount,
 			TotalBytes:     chData.TotalBytes,
 			TotalPositions: chData.TotalPositions,
+			HasAudio:       chData.HasAudio,
 			CreatedAt:      time.Now(),
 			UpdatedAt:      time.Now(),
 		}

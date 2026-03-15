@@ -129,10 +129,11 @@ export function useViewerZoom({
 
       // Use provided zoomRef (for vertical mode) or global one
       const refToUse = zoomRef || transformComponentRef;
+      const isTouchEvent = "changedTouches" in e && e.changedTouches.length > 0;
 
       // Get clientX to determine zone
       let clientX = 0;
-      if ("changedTouches" in e && e.changedTouches.length > 0) {
+      if (isTouchEvent) {
         clientX = e.changedTouches[0].clientX;
       } else if ("clientX" in e) {
         clientX = (e as React.MouseEvent).clientX;
@@ -156,12 +157,13 @@ export function useViewerZoom({
       const nativeEvent = e.nativeEvent;
       const isMouseNativeEvent = nativeEvent instanceof MouseEvent;
       const isDoubleByDetail = isMouseNativeEvent && nativeEvent.detail === 2;
-      const isDoubleByTime = deferSingleTapForDoubleTap && now - lastTapTimeRef.current < DOUBLE_TAP_DELAY;
+      const isDoubleByTime = isTouchEvent && now - lastTapTimeRef.current < DOUBLE_TAP_DELAY;
       const isDoubleTapZoomAllowed = doubleTapZoomZone === "any" || zone === "center";
 
       if ((isDoubleByDetail || isDoubleByTime) && isDoubleTapZoomAllowed) {
+        lastTapTimeRef.current = 0;
         if (isVerticalMode && onVerticalZoomToggle) {
-          const clientY = "changedTouches" in e ? e.changedTouches[0].clientY : (e as React.MouseEvent).clientY;
+          const clientY = isTouchEvent ? e.changedTouches[0].clientY : (e as React.MouseEvent).clientY;
           const targetEl = e.target instanceof HTMLElement ? e.target : null;
           const pageEl = targetEl?.closest("[data-page]") as HTMLElement | null;
           const pageNum = pageEl ? Number(pageEl.dataset.page) : undefined;
@@ -193,7 +195,8 @@ export function useViewerZoom({
             zoomIn(exactStepTo200, 200);
           }
         }
-      } else if (deferSingleTapForDoubleTap) {
+        return;
+      } else if (deferSingleTapForDoubleTap && isTouchEvent) {
         // If text is selected (e.g. user just finished text drag), keep it and do nothing
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed) {

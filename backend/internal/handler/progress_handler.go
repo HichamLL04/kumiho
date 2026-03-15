@@ -65,6 +65,8 @@ type UpdateProgressRequest struct {
 	VolumeID        *string `json:"volume_id"`
 	ChapterID       *string `json:"chapter_id"`
 	CurrentPage     int     `json:"current_page"`
+	AnchorPage      int     `json:"anchor_page"`
+	OffsetRatio     float64 `json:"offset_ratio"`
 	TotalPages      int     `json:"total_pages"`
 	CurrentPosition int     `json:"current_position"`
 	TotalPositions  int     `json:"total_positions"`
@@ -364,8 +366,17 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 			if req.TotalPositions == 0 && existing.TotalPositions > 0 {
 				req.TotalPositions = existing.TotalPositions
 			}
+			if req.AnchorPage <= 0 {
+				req.AnchorPage = fallbackAnchorPage(existing)
+				req.OffsetRatio = existing.OffsetRatio
+			}
 		}
 	}
+
+	if req.AnchorPage <= 0 {
+		req.AnchorPage = req.CurrentPage
+	}
+	req.OffsetRatio = math.Max(0, math.Min(1, req.OffsetRatio))
 
 	progress := &model.ReadingProgress{
 		UserID:          userID,
@@ -373,6 +384,8 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 		VolumeID:        req.VolumeID,
 		ChapterID:       req.ChapterID,
 		CurrentPage:     req.CurrentPage,
+		AnchorPage:      req.AnchorPage,
+		OffsetRatio:     req.OffsetRatio,
 		TotalPages:      req.TotalPages,
 		CurrentPosition: req.CurrentPosition,
 		TotalPositions:  req.TotalPositions,
@@ -489,6 +502,7 @@ func (h *ProgressHandler) UpdateEpubProgress(c *fiber.Ctx) error {
 		VolumeID:        &volumeID,
 		ChapterID:       &chapterID,
 		CurrentPage:     currentPage,
+		AnchorPage:      currentPage,
 		TotalPages:      totalPages,
 		CurrentPosition: currentPosition,
 		TotalPositions:  totalPositions,
@@ -594,6 +608,7 @@ func (h *ProgressHandler) UpdateProgressWSReplacement(c *fiber.Ctx) error {
 		VolumeID:        volumeID,
 		ChapterID:       &req.ChapterID,
 		CurrentPage:     req.CurrentPage,
+		AnchorPage:      req.CurrentPage,
 		TotalPages:      totalPages,
 		CurrentPosition: currentPosition,
 		TotalPositions:  totalPositions,
@@ -892,7 +907,7 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	limit := c.QueryInt("limit", 10)
 
-	progressList, err := h.progressRepo.FindRecentByUser(nil, userID, limit)
+	progressList, err := h.progressRepo.FindRecentEnrichedByUser(nil, userID, limit)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch progress",
@@ -900,12 +915,12 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 	}
 
 	if progressList == nil {
-		progressList = []model.ReadingProgress{}
+		progressList = []repository.RecentEnrichedProgress{}
 	}
 
 	// 시리즈 정보 추가
 	type ProgressWithSeries struct {
-		model.ReadingProgress
+		repository.RecentEnrichedProgress
 		SeriesTitle        string  `json:"series_title"`
 		ThumbnailURL       *string `json:"thumbnail_url"`
 		VolumeNumber       int     `json:"volume_number"`
@@ -919,20 +934,18 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 	result := make([]ProgressWithSeries, len(progressList))
 	for i, p := range progressList {
 		result[i] = ProgressWithSeries{
-			ReadingProgress: p,
+			RecentEnrichedProgress: p,
 		}
 
-		// 시리즈 정보
+		// 시리즈 정보 (경로 정보는 이미 Repository에서 Join으로 가져옴)
 		if series, _ := h.seriesRepo.FindByID(nil, p.SeriesID, userID); series != nil {
 			result[i].SeriesTitle = series.Title
 
-			// 챕터 정보 먼저 조회 (볼륨 ID 추론을 위함)
-			var chapter *model.Chapter
+			// 챕터 정보 보급
 			if p.ChapterID != nil {
 				if c, _ := h.chapterRepo.FindByID(nil, *p.ChapterID); c != nil {
-					chapter = c
-					result[i].ChapterNumber = chapter.ChapterNumber
-					result[i].ChapterTitle = chapter.Title
+					result[i].ChapterNumber = c.ChapterNumber
+					result[i].ChapterTitle = c.Title
 				}
 			}
 
@@ -940,8 +953,6 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 			var targetVolumeID string
 			if p.VolumeID != nil {
 				targetVolumeID = *p.VolumeID
-			} else if chapter != nil {
-				targetVolumeID = chapter.VolumeID
 			}
 
 			// 볼륨 정보 및 썸네일 설정
@@ -1062,9 +1073,11 @@ func (h *ProgressHandler) CompareProgress(c *fiber.Ctx) error {
 	seriesID := c.Params("seriesId")
 
 	var localProgress struct {
-		VolumeNumber  int `json:"volume_number"`
-		ChapterNumber int `json:"chapter_number"`
-		CurrentPage   int `json:"current_page"`
+		VolumeNumber  int     `json:"volume_number"`
+		ChapterNumber int     `json:"chapter_number"`
+		CurrentPage   int     `json:"current_page"`
+		AnchorPage    int     `json:"anchor_page"`
+		OffsetRatio   float64 `json:"offset_ratio"`
 	}
 
 	if err := c.BodyParser(&localProgress); err != nil {
@@ -1130,12 +1143,24 @@ func (h *ProgressHandler) CompareProgress(c *fiber.Ctx) error {
 			"volume_number":  serverVolumeNum,
 			"chapter_number": serverChapterNum,
 			"current_page":   serverProgress.CurrentPage,
+			"anchor_page":    fallbackAnchorPage(serverProgress),
+			"offset_ratio":   serverProgress.OffsetRatio,
 			"device_name":    serverProgress.DeviceName,
 			"chapter_id":     strOrEmpty(serverProgress.ChapterID),
 			"volume_id":      strOrEmpty(serverProgress.VolumeID),
 			"updated_at":     serverProgress.UpdatedAt,
 		},
 	})
+}
+
+func fallbackAnchorPage(progress *model.ReadingProgress) int {
+	if progress == nil {
+		return 0
+	}
+	if progress.AnchorPage > 0 {
+		return progress.AnchorPage
+	}
+	return progress.CurrentPage
 }
 
 // MarkVolumeComplete 볼륨 완료 표시
@@ -1170,55 +1195,83 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// 볼륨 내 모든 챕터의 진행도를 100%로 업데이트 (벌크 처리)
 	now := time.Now()
 
-	// 1. 기존 진행도 업데이트 (이미 존재하는 레코드)
+	// 1. 재귀적 CTE를 사용하여 모든 하위 볼륨 ID 목록 가져오기
+	// 2. 해당되는 모든 챕터의 진행도를 100%로 업데이트 (이미 존재하는 레코드)
 	_, err = tx.Exec(`
+		WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
 		UPDATE reading_progress 
 		SET current_page = total_pages, 
 			progress_percent = 100.0, 
 			updated_at = ?
-		WHERE user_id = ? AND chapter_id IN (SELECT id FROM chapters WHERE volume_id = ?)
-	`, now, userID, volumeID)
+		WHERE user_id = ? AND chapter_id IN (
+			SELECT id FROM chapters WHERE volume_id IN (SELECT id FROM descendant_volumes)
+		)
+	`, volumeID, now, userID)
 	if err != nil {
-		log.Printf("Failed to bulk update progress for volume %s: %v", volumeID, err)
+		log.Printf("Failed to bulk update progress for descendants of volume %s: %v", volumeID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to update progress records",
 		})
 	}
 
-	// 2. 누락된 진행도 생성 (처음 읽는 챕터들)
-	// SQLite에서 UUID 생성이 어려우므로 간단한 ID 생성 로직 사용하거나
-	// 기존 데이터를 유지하는 방향으로 함. 완독 표시가 우선이므로.
+	// 3. 누락된 진행도 생성 (처음 읽는 챕터들)
 	_, err = tx.Exec(`
-		INSERT INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
-		SELECT Lower(Hex(RandomBlob(16))), ?, ?, ?, id, page_count, page_count, 100.0, ?
-		FROM chapters
-		WHERE volume_id = ? AND id NOT IN (SELECT chapter_id FROM reading_progress WHERE user_id = ?)
-	`, userID, volume.SeriesID, volumeID, now, volumeID, userID)
+		WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		INSERT INTO reading_progress (id, user_id, series_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, ?, c.id, c.page_count, c.page_count, 100.0, ?
+		FROM chapters c
+		WHERE c.volume_id IN (SELECT id FROM descendant_volumes) 
+		  AND c.id NOT IN (SELECT chapter_id FROM reading_progress WHERE user_id = ?)
+	`, volumeID, userID, volume.SeriesID, now, userID)
 	if err != nil {
-		log.Printf("Failed to bulk insert progress for volume %s: %v", volumeID, err)
-		// 에러가 나더라도 계속 진행 (이미 있는 레코드는 업데이트됨)
+		log.Printf("Failed to bulk insert progress for descendants of volume %s: %v", volumeID, err)
 	}
 
-	// 3. 챕터 완독 기록 추가 (벌크)
+	// 4. 챕터 완독 기록 추가 (벌크)
 	_, err = tx.Exec(`
+		WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
 		INSERT OR IGNORE INTO chapter_completions (id, user_id, chapter_id, completed_at)
 		SELECT Lower(Hex(RandomBlob(16))), ?, id, ?
 		FROM chapters
-		WHERE volume_id = ?
-	`, userID, now, volumeID)
+		WHERE volume_id IN (SELECT id FROM descendant_volumes)
+	`, volumeID, userID, now)
 	if err != nil {
-		log.Printf("Failed to bulk mark chapter completions for volume %s: %v", volumeID, err)
+		log.Printf("Failed to bulk mark chapter completions for descendants of volume %s: %v", volumeID, err)
 	}
 
-	// 완료 표시
-	completion, err := h.completionRepo.MarkComplete(tx, userID, volumeID)
+	// 5. 볼륨 완독 기록 추가 (모든 하위 볼륨 포함)
+	_, err = tx.Exec(`
+		WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		INSERT OR REPLACE INTO volume_completions (id, user_id, volume_id, completed_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, id, ?
+		FROM descendant_volumes
+	`, volumeID, userID, now)
 	if err != nil {
-		log.Printf("Failed to mark volume %s as complete: %v", volumeID, err)
+		log.Printf("Failed to bulk mark volume completions for descendants of volume %s: %v", volumeID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to mark volume as complete",
+			"error": "failed to mark volumes as complete",
 		})
 	}
 
@@ -1231,8 +1284,7 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"message":    "volume marked as complete",
-		"completion": completion,
+		"message": "volume and descendants marked as complete",
 	})
 }
 
@@ -1283,37 +1335,58 @@ func (h *ProgressHandler) DeleteVolumeCompletion(c *fiber.Ctx) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// 1. 볼륨 완료 상태 삭제
-	if delErr := h.completionRepo.Delete(tx, userID, volumeID); delErr != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to delete completion",
-		})
-	}
-
-	// 2. 볼륨 내 모든 챕터의 읽기 진행도 삭제 (1페이지로 초기화)
-	chapters, err := h.chapterRepo.FindByVolumeID(tx, volumeID)
+	// 1. 재귀적 CTE를 사용하여 모든 하위 볼륨 ID 목록 가져오기
+	// 2. 모든 대상 볼륨의 완독 상태 삭제
+	_, err = tx.Exec(`
+		WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		DELETE FROM volume_completions
+		WHERE user_id = ? AND volume_id IN (SELECT id FROM descendant_volumes)
+	`, volumeID, userID)
 	if err != nil {
-		log.Printf("Failed to get chapters for volume %s: %v", volumeID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get chapters",
+			"error": "failed to delete completions for volume and descendants",
 		})
 	}
 
-	for _, chapter := range chapters {
-		// a) 읽기 진행도 삭제
-		if err := h.progressRepo.DeleteByUserAndChapter(tx, userID, chapter.ID); err != nil {
-			log.Printf("Failed to delete progress for chapter %s: %v", chapter.ID, err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": fmt.Sprintf("failed to reset progress for chapter %s", chapter.ID),
-			})
-		}
-		// b) 챕터 완독 기록 삭제 (추가: 볼륨 초기화 시 챕터 완독도 취소되어야 함)
-		if err := h.chapterCompletionRepo.DeleteByChapter(tx, userID, chapter.ID); err != nil {
-			log.Printf("Failed to delete completion for chapter %s: %v", chapter.ID, err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": fmt.Sprintf("failed to delete completion for chapter %s", chapter.ID),
-			})
-		}
+	// 3. 모든 대상 볼륨 내 챕터들의 읽기 진행도 및 완독 기록 삭제
+	_, err = tx.Exec(`
+		WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		DELETE FROM reading_progress
+		WHERE user_id = ? AND chapter_id IN (
+			SELECT id FROM chapters WHERE volume_id IN (SELECT id FROM descendant_volumes)
+		)
+	`, volumeID, userID)
+	if err != nil {
+		log.Printf("Failed to bulk delete progress for descendants of volume %s: %v", volumeID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to reset progress records",
+		})
+	}
+
+	_, err = tx.Exec(`
+		WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v
+			JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		DELETE FROM chapter_completions
+		WHERE user_id = ? AND chapter_id IN (
+			SELECT id FROM chapters WHERE volume_id IN (SELECT id FROM descendant_volumes)
+		)
+	`, volumeID, userID)
+	if err != nil {
+		log.Printf("Failed to bulk delete chapter completions for descendants of volume %s: %v", volumeID, err)
 	}
 
 	// 트랜잭션 커밋
@@ -1325,7 +1398,7 @@ func (h *ProgressHandler) DeleteVolumeCompletion(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"message": "볼륨 완료 상태 및 진행도가 삭제되었습니다",
+		"message": "볼륨 및 하위 항목들의 완료 상태와 진행도가 삭제되었습니다",
 	})
 }
 

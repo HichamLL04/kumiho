@@ -28,13 +28,14 @@ import {
   SyncConfirmModal,
   useRestoreFullscreenAfterChapterSwitch,
   useExitFullscreenOnViewerUnmount,
+  useVerticalRestoreLayout,
+  VERTICAL_MAX_WIDTH,
 } from "../features/viewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
 import { AlertModal } from "../components/modals/AlertModal";
 import type { ViewerAnimationHandles } from "../features/viewer/types";
 import { useTranslation } from "react-i18next";
-import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 
 import {
@@ -45,6 +46,7 @@ import {
   getNextNavState,
   getPrevNavState,
 } from "../utils/pageCalculator";
+import { getViewportAnchorPosition } from "../features/viewer/utils/progressPosition";
 import styles from "./Viewer.module.css";
 
 import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapterLoader";
@@ -80,7 +82,25 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   // ===== Custom Hooks =====
 
   // 챕터 로딩 데이터
-  const { chapter, isLoading, error, seriesId, volumeId, pageMetaMap, isInitialScrollingRef } = loaderData;
+  // Feature imports
+  const {
+    chapter,
+    isLoading,
+    error,
+    seriesId,
+    volumeId,
+    pageMetaMap,
+    isInitialScrollingRef,
+    restorePosition = { currentPage: 1, anchorPage: 1, offsetRatio: 0 },
+    viewStatus = "ready",
+    setViewStatus = () => undefined,
+  } = loaderData;
+  const [viewerContentWidth, setViewerContentWidth] = useState(0);
+  const [syncAnchorPosition, setSyncAnchorPosition] = useState({
+    anchorPage: restorePosition.anchorPage,
+    offsetRatio: restorePosition.offsetRatio,
+  });
+  const viewerContentRef = useRef<HTMLDivElement>(null);
 
   // subPage 초기화/재계산: 챕터/페이지/모드/방향/메타 변경 시 일관 처리
   useLayoutEffect(() => {
@@ -97,6 +117,11 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       goToPage(page);
       if (settings.readingMode === "single") {
         setSubPage(getInitialSubPage(page, pageMetaMap, settings.readingDirection));
+      } else if (settings.readingMode === "vertical") {
+        const pageEl = document.getElementById(`page-${page}`);
+        if (pageEl) {
+          pageEl.scrollIntoView({ block: "start" });
+        }
       }
     },
     [goToPage, setSubPage, settings.readingMode, settings.readingDirection, pageMetaMap],
@@ -122,6 +147,27 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     readingMode: settings.readingMode,
   });
 
+  // 표시할 페이지 계산 (useEffect 등에서 사용하기 위해 상위로 이동)
+  const displayPages = getDisplayPages({
+    currentPage,
+    totalPages,
+    readingMode: settings.readingMode,
+    pageOffset: settings.pageOffset,
+    pageMetaMap,
+  });
+
+  // [Fix] 단일/두쪽 보기 모드에서 초기 진입 시 이미지가 실제 로드되었을 때만 로딩 스피너를 제거한다.
+  // SmartImageViewer의 onVisualReady가 이미지 디코딩 + opacity 전환 준비 완료 후 호출되므로 별도 타이머 불필요.
+  useEffect(() => {
+    if (settings.readingMode === "vertical" || viewStatus !== "rendering") return;
+
+    const areAllCurrentPagesLoaded = displayPages.every((pageNum) => imageLoading[pageNum] === false);
+
+    if (areAllCurrentPagesLoaded) {
+      setViewStatus("ready");
+    }
+  }, [settings.readingMode, viewStatus, imageLoading, displayPages, setViewStatus]);
+
   // BGM 제어
   const isBgmReady = !isLoading && imageLoading[currentPage] === false;
   const { bgmInfo, isBgmPlaying, setIsBgmPlaying, audioRef } = useBGM({
@@ -130,29 +176,71 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     isReady: isBgmReady,
   });
 
+  useLayoutEffect(() => {
+    const content = viewerContentRef.current;
+    if (!content) return;
+
+    const updateWidth = () => {
+      setViewerContentWidth(content.clientWidth);
+    };
+
+    updateWidth();
+
+    if (!("ResizeObserver" in window)) {
+      globalThis.addEventListener("resize", updateWidth);
+      return () => globalThis.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [settings.readingMode]);
+
+  useLayoutEffect(() => {
+    const pos = getViewportAnchorPosition(viewerContentRef.current, totalPages, currentPage);
+    setSyncAnchorPosition((prev) => {
+      if (prev.anchorPage === pos.anchorPage && prev.offsetRatio === pos.offsetRatio) return prev;
+      return pos;
+    });
+  }, [currentPage, totalPages, settings.readingMode, viewStatus]);
+
   // 진행도 저장
   const { saveProgress, handleVolumeCompletion } = useProgress({
     seriesId,
     chapterId,
     chapter,
     currentPage,
+    readingMode: settings.readingMode,
     totalPages,
     isLoading,
     isIncognito,
     isLastChapterOfVolume,
     isInitialScrollingRef,
+    viewStatus,
+    viewerContentRef,
   });
 
   // 진행도 동기화
   const { showSyncModal, serverProgress, handleConfirmSync, handleCloseModal } = useProgressSync({
     seriesId,
     chapter,
-    currentPage,
+    currentPage: settings.readingMode === "vertical" ? restorePosition.currentPage : currentPage,
     isLoading,
+    anchorPage: settings.readingMode === "vertical" ? restorePosition.currentPage : syncAnchorPosition.anchorPage,
+    offsetRatio: settings.readingMode === "vertical" ? 0 : syncAnchorPosition.offsetRatio,
+    viewStatus,
+  });
+
+  const { estimatedHeights } = useVerticalRestoreLayout({
+    pageMetaMap,
+    containerWidth:
+      settings.readingMode === "vertical" ? Math.min(viewerContentWidth, VERTICAL_MAX_WIDTH) : viewerContentWidth,
+    totalPages,
+    fitMode: settings.fitMode,
   });
 
   // 세로 스크롤 (vertical 모드)
-  const { pullOffset, viewerContentRef, isTouching } = useVerticalScroll({
+  const { pullOffset, isTouching } = useVerticalScroll({
     readingMode: settings.readingMode,
     isLoading,
     currentPage,
@@ -165,6 +253,11 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     handleVolumeCompletion,
     chapterId,
     isInitialScrollingRef,
+    restorePosition,
+    viewStatus,
+    setViewStatus,
+    viewerContentRef,
+    imageLoading,
   });
 
   // 읽기 모드 변경 핸들러: store 업데이트 + 서버 설정 저장
@@ -346,15 +439,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     };
   }, [isUIVisible, resetUITimer, currentPage]);
 
-  // 표시할 페이지 계산
-  const displayPages = getDisplayPages({
-    currentPage,
-    totalPages,
-    readingMode: settings.readingMode,
-    pageOffset: settings.pageOffset,
-    pageMetaMap,
-  });
-
   // 이전 뷰의 '기준 페이지'를 구하고 그 페이지의 디스플레이 셋을 구함
   const prevTargetPage = getPrevTargetPage(currentPage, settings.readingMode, pageMetaMap);
   let prevDisplayPages =
@@ -419,12 +503,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
         />
       )}
 
-      {isLoading ? (
-        <LoadingSpinner
-          fullScreen
-          text={null}
-        />
-      ) : error || !chapter ? (
+      {error || !chapter ? (
         <div className={styles.viewerContent}>
           <div style={{ color: "white", textAlign: "center" }}>
             <p>{error || "챕터를 찾을 수 없습니다."}</p>
@@ -467,7 +546,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
                 type="prev"
                 pullOffset={pullOffset}
                 pullThreshold={settings.pullThreshold}
-
                 chapterId={prevChapterId}
                 chapterTitle={prevChapterTitle}
                 saveProgress={saveProgress}
@@ -476,7 +554,6 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
                 type="next"
                 pullOffset={pullOffset}
                 pullThreshold={settings.pullThreshold}
-
                 chapterId={nextChapterId}
                 chapterTitle={nextChapterTitle}
                 saveProgress={saveProgress}
@@ -487,11 +564,17 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
           {/* 이미지 영역 */}
           <div
             ref={viewerContentRef}
-            className={`${styles.viewerContent} ${styles[`mode${settings.readingMode.charAt(0).toUpperCase() + settings.readingMode.slice(1)}`]} ${styles[`direction${settings.readingDirection.charAt(0).toUpperCase() + settings.readingDirection.slice(1)}`]}`}
+            className={`${styles.viewerContent} ${styles[`mode${settings.readingMode.charAt(0).toUpperCase() + settings.readingMode.slice(1)}`]} ${styles[`direction${settings.readingDirection.charAt(0).toUpperCase() + settings.readingDirection.slice(1)}`]} ${settings.readingMode === "vertical" && viewStatus !== "ready" ? styles.viewerContentHidden : ""}`}
             style={{
               background: settings.backgroundColor,
-              transform: settings.readingMode === "vertical" ? `translateY(${pullOffset * 0.3}px)` : "none",
-              transition: !isTouching && pullOffset === 0 ? "transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)" : "none",
+              transform:
+                settings.readingMode === "vertical"
+                  ? `translateY(${pullOffset * 0.3}px)`
+                  : "none",
+              transition:
+                !isTouching && pullOffset === 0
+                  ? "transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)"
+                  : "none",
               willChange: "transform",
             }}
           >
@@ -520,6 +603,9 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
               nextPreviewSubPage={nextPreviewSubPage}
               prevPreviewSubPage={prevPreviewSubPage}
               pageMetaMap={pageMetaMap}
+              isInitialScrolling={viewStatus !== "ready"}
+              estimatedPageHeights={estimatedHeights}
+              viewStatus={viewStatus}
             />
           </div>
 

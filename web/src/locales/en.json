@@ -489,6 +489,7 @@
     "unit": {
       "volume": "Vol. {{count}}",
       "chapter": "Ch. {{count}}",
+      "chapter_count": "{{count}} chapters",
       "page": "{{count}} P"
     },
     "status": {
@@ -713,7 +714,9 @@
       "footer": {
         "pages_1": "1 Page",
         "pages_2": "2 Pages",
-        "offset": "Offset"
+        "offset": "Offset",
+        "progress": "Page navigation",
+        "marker_jump": "Jump to: {{label}}"
       }
     },
     "sync": {

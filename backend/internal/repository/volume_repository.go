@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,13 +24,17 @@ func (r *VolumeRepository) Create(db database.Queryer, volume *model.Volume) err
 		volume.ID = uuid.New().String()
 	}
 	now := time.Now()
-	volume.CreatedAt = now
-	volume.UpdatedAt = now
+	if volume.CreatedAt.IsZero() {
+		volume.CreatedAt = now
+	}
+	if volume.UpdatedAt.IsZero() {
+		volume.UpdatedAt = now
+	}
 
 	_, err := db.Exec(
-		`INSERT INTO volumes (id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, description, authors, publication_year, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		volume.ID, volume.SeriesID, volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.Description, volume.Authors, volume.PublicationYear, volume.CreatedAt, volume.UpdatedAt,
+		`INSERT INTO volumes (id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		volume.ID, volume.SeriesID, volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.Extension, volume.CreatedAt, volume.UpdatedAt,
 	)
 	return err
 }
@@ -41,10 +46,17 @@ func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) err
 
 	_, err := db.Exec(
 		`UPDATE volumes 
-		 SET title = ?, volume_number = ?, path = ?, thumbnail_path = ?, has_audio = ?, unit = ?, description = ?, authors = ?, publication_year = ?, updated_at = ?
+		 SET title = ?, volume_number = ?, path = ?, thumbnail_path = ?, has_audio = ?, unit = ?, chapter_count = ?, parent_id = ?, description = ?, authors = ?, publication_year = ?, extension = ?, updated_at = ?
 		 WHERE id = ?`,
-		volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.Description, volume.Authors, volume.PublicationYear, volume.UpdatedAt, volume.ID,
+		volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.Extension, volume.UpdatedAt, volume.ID,
 	)
+	return err
+}
+
+// UpdateHasAudio has_audio 플래그만 업데이트
+func (r *VolumeRepository) UpdateHasAudio(db database.Queryer, volumeID string, hasAudio bool) error {
+	db = database.GetQueryer(db)
+	_, err := db.Exec(`UPDATE volumes SET has_audio = ? WHERE id = ?`, hasAudio, volumeID)
 	return err
 }
 
@@ -52,7 +64,7 @@ func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) err
 func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) ([]model.Volume, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, description, authors, publication_year, created_at, updated_at 
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
 		 FROM volumes WHERE series_id = ? ORDER BY volume_number`,
 		seriesID,
 	)
@@ -64,11 +76,10 @@ func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) 
 	var volumes []model.Volume
 	for rows.Next() {
 		var v model.Volume
-		var thumbnail sql.NullString
-		var unit sql.NullString
-		var description, authors, pubYear sql.NullString
+		var thumbnail, unit, parentID sql.NullString
+		var description, authors, pubYear, extension sql.NullString
 
-		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if unit.Valid {
@@ -76,6 +87,9 @@ func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) 
 		}
 		if thumbnail.Valid {
 			v.ThumbnailPath = &thumbnail.String
+		}
+		if parentID.Valid {
+			v.ParentID = &parentID.String
 		}
 		if description.Valid {
 			v.Description = description.String
@@ -86,6 +100,9 @@ func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) 
 		if pubYear.Valid {
 			v.PublicationYear = pubYear.String
 		}
+		if extension.Valid {
+			v.Extension = extension.String
+		}
 		volumes = append(volumes, v)
 	}
 	return volumes, nil
@@ -95,14 +112,13 @@ func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) 
 func (r *VolumeRepository) FindByID(db database.Queryer, id string) (*model.Volume, error) {
 	db = database.GetQueryer(db)
 	var v model.Volume
-	var thumbnail sql.NullString
-	var unit sql.NullString
-	var description, authors, pubYear sql.NullString
+	var thumbnail, unit, parentID sql.NullString
+	var description, authors, pubYear, extension sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, description, authors, publication_year, created_at, updated_at FROM volumes WHERE id = ?`,
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at FROM volumes WHERE id = ?`,
 		id,
-	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt)
+	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -116,6 +132,9 @@ func (r *VolumeRepository) FindByID(db database.Queryer, id string) (*model.Volu
 	if unit.Valid {
 		v.Unit = unit.String
 	}
+	if parentID.Valid {
+		v.ParentID = &parentID.String
+	}
 	if description.Valid {
 		v.Description = description.String
 	}
@@ -124,6 +143,9 @@ func (r *VolumeRepository) FindByID(db database.Queryer, id string) (*model.Volu
 	}
 	if pubYear.Valid {
 		v.PublicationYear = pubYear.String
+	}
+	if extension.Valid {
+		v.Extension = extension.String
 	}
 	return &v, nil
 }
@@ -132,14 +154,13 @@ func (r *VolumeRepository) FindByID(db database.Queryer, id string) (*model.Volu
 func (r *VolumeRepository) FindByPath(db database.Queryer, path string) (*model.Volume, error) {
 	db = database.GetQueryer(db)
 	var v model.Volume
-	var thumbnail sql.NullString
-	var unit sql.NullString
-	var description, authors, pubYear sql.NullString
+	var thumbnail, unit, parentID sql.NullString
+	var description, authors, pubYear, extension sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, description, authors, publication_year, created_at, updated_at FROM volumes WHERE path = ?`,
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at FROM volumes WHERE path = ?`,
 		path,
-	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt)
+	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -153,6 +174,9 @@ func (r *VolumeRepository) FindByPath(db database.Queryer, path string) (*model.
 	if unit.Valid {
 		v.Unit = unit.String
 	}
+	if parentID.Valid {
+		v.ParentID = &parentID.String
+	}
 	if description.Valid {
 		v.Description = description.String
 	}
@@ -161,6 +185,9 @@ func (r *VolumeRepository) FindByPath(db database.Queryer, path string) (*model.
 	}
 	if pubYear.Valid {
 		v.PublicationYear = pubYear.String
+	}
+	if extension.Valid {
+		v.Extension = extension.String
 	}
 	return &v, nil
 }
@@ -225,44 +252,42 @@ func (r *VolumeRepository) GetChapterCount(db database.Queryer, volumeID string)
 	return count, nil
 }
 
-// GetTotalPages 볼륨의 전체 페이지 수 조회
+// GetTotalPages 볼륨의 전체 페이지 수 조회 (하위 볼륨 포함)
 func (r *VolumeRepository) GetTotalPages(db database.Queryer, volumeID string) (int, error) {
 	db = database.GetQueryer(db)
 	var totalPages int
 	err := db.QueryRow(
-		`SELECT COALESCE(SUM(
+		`WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		 SELECT COALESCE(SUM(
 			CASE 
-				WHEN page_count > 0 THEN page_count 
-				WHEN page_count <= 0 AND total_positions > 0 THEN total_positions
+				WHEN c.page_count > 0 THEN c.page_count 
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
 			END), 0)
-		 FROM chapters
-		 WHERE volume_id = ?`,
+		 FROM chapters c
+		 WHERE c.volume_id IN (SELECT id FROM descendant_volumes)`,
 		volumeID,
 	).Scan(&totalPages)
 	return totalPages, err
 }
 
-// GetReadPages 사용자가 볼륨에서 읽은 총 페이지 수 조회
-// 1. 완독된 챕터들의 총 페이지 수 합산
-// 2. 진행 중인(완독되지 않은) 챕터들의 현재 페이지 합산
+// GetReadPages 사용자가 볼륨에서 읽은 총 페이지 수 조회 (하위 볼륨 포함)
 func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID string) (int, error) {
 	db = database.GetQueryer(db)
 
-	// 볼륨 완독 여부 확인 (최우선)
-	var volumeCompleted bool
-	err := db.QueryRow(
-		`SELECT EXISTS(SELECT 1 FROM volume_completions WHERE user_id = ? AND volume_id = ?)`,
-		userID, volumeID,
-	).Scan(&volumeCompleted)
-	if err == nil && volumeCompleted {
-		return r.GetTotalPages(db, volumeID)
-	}
-
-	// 1. 완독된 챕터들의 페이지 수 합계
+	// 하위 볼륨 포함 재귀 집계
 	var completedPages int
-	err = db.QueryRow(
-		`SELECT COALESCE(SUM(
+	err := db.QueryRow(
+		`WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		 SELECT COALESCE(SUM(
 			CASE 
 				WHEN c.page_count > 0 THEN c.page_count 
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
@@ -270,18 +295,21 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 			END), 0)
 		 FROM chapter_completions cc
 		 JOIN chapters c ON cc.chapter_id = c.id
-		 WHERE cc.user_id = ? AND c.volume_id = ?`,
-		userID, volumeID,
+		 WHERE cc.user_id = ? AND c.volume_id IN (SELECT id FROM descendant_volumes)`,
+		volumeID, userID,
 	).Scan(&completedPages)
 	if err != nil {
 		return 0, err
 	}
 
-	// 2. 진행 중인(완독되지 않은) 챕터들의 현재 페이지 합계
-	// 이미 완독 테이블에 있는 챕터는 제외 (중복 합산 방지)
 	var progressPages int
 	err = db.QueryRow(
-		`SELECT COALESCE(SUM(
+		`WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		 SELECT COALESCE(SUM(
 			CASE 
 				WHEN c.page_count > 0 THEN rp.current_page
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
@@ -290,11 +318,11 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 			 ), 0)
 		 FROM reading_progress rp
 		 JOIN chapters c ON rp.chapter_id = c.id
-		 WHERE rp.user_id = ? AND rp.volume_id = ?
+		 WHERE rp.user_id = ? AND c.volume_id IN (SELECT id FROM descendant_volumes)
 		 AND rp.chapter_id NOT IN (
 			 SELECT chapter_id FROM chapter_completions WHERE user_id = ?
 		 )`,
-		userID, volumeID, userID,
+		volumeID, userID, userID,
 	).Scan(&progressPages)
 	if err != nil {
 		return 0, err
@@ -303,15 +331,18 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 	return completedPages + progressPages, nil
 }
 
-// GetProgressPercent 사용자의 볼륨 실제 진행 퍼센트 조회
-// - 총량은 고정 집계값(total_positions 우선, 없으면 page_count)을 사용
-// - 진행량은 뷰어 진행(current_page/total_pages, fallback: progress_percent) 비율을 반영
+// GetProgressPercent 사용자의 볼륨 실제 진행 퍼센트 조회 (하위 볼륨 포함)
 func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volumeID string) (float64, error) {
 	db = database.GetQueryer(db)
 
 	var percent float64
 	err := db.QueryRow(
-		`WITH chapter_units AS (
+		`WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		),
+		chapter_units AS (
 			SELECT
 				c.id AS chapter_id,
 				CASE
@@ -320,7 +351,7 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 					ELSE 0
 				END AS unit_total
 			FROM chapters c
-			WHERE c.volume_id = ?
+			WHERE c.volume_id IN (SELECT id FROM descendant_volumes)
 		),
 		total_units AS (
 			SELECT COALESCE(SUM(cu.unit_total), 0) AS value
@@ -345,7 +376,6 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 			JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id
 			LEFT JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id AND cc.user_id = rp.user_id
 			WHERE rp.user_id = ?
-			  AND rp.volume_id = ?
 			  AND cc.chapter_id IS NULL
 		)
 		SELECT CASE
@@ -353,7 +383,7 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 			ELSE MIN(100.0, MAX(0.0, ((completed_units.value + inprogress_units.value) * 100.0) / total_units.value))
 		END
 		FROM total_units, completed_units, inprogress_units`,
-		volumeID, userID, userID, volumeID,
+		volumeID, userID, userID,
 	).Scan(&percent)
 	return percent, err
 }
@@ -362,15 +392,14 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 func (r *VolumeRepository) GetFirstVolume(db database.Queryer, seriesID string) (*model.Volume, error) {
 	db = database.GetQueryer(db)
 	var v model.Volume
-	var thumbnail sql.NullString
-	var unit sql.NullString
-	var description, authors, pubYear sql.NullString
+	var thumbnail, unit, parentID sql.NullString
+	var description, authors, pubYear, extension sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, description, authors, publication_year, created_at, updated_at 
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
 		 FROM volumes WHERE series_id = ? ORDER BY volume_number LIMIT 1`,
 		seriesID,
-	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &description, &authors, &pubYear, &v.CreatedAt, &v.UpdatedAt)
+	).Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -384,6 +413,9 @@ func (r *VolumeRepository) GetFirstVolume(db database.Queryer, seriesID string) 
 	if unit.Valid {
 		v.Unit = unit.String
 	}
+	if parentID.Valid {
+		v.ParentID = &parentID.String
+	}
 	if description.Valid {
 		v.Description = description.String
 	}
@@ -393,5 +425,369 @@ func (r *VolumeRepository) GetFirstVolume(db database.Queryer, seriesID string) 
 	if pubYear.Valid {
 		v.PublicationYear = pubYear.String
 	}
+	if extension.Valid {
+		v.Extension = extension.String
+	}
 	return &v, nil
+}
+
+// FindByParentID 부모 볼륨 ID로 볼륨 목록 조회 (시리즈 스코프 제한)
+func (r *VolumeRepository) FindByParentID(db database.Queryer, parentID string) ([]model.Volume, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
+		 FROM volumes 
+		 WHERE parent_id = ? 
+		   AND series_id = (SELECT series_id FROM volumes WHERE id = ?)
+		 ORDER BY volume_number`,
+		parentID,
+		parentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var volumes []model.Volume
+	for rows.Next() {
+		var v model.Volume
+		var thumbnail, unit, pID sql.NullString
+		var description, authors, pubYear, extension sql.NullString
+
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &pID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if unit.Valid {
+			v.Unit = unit.String
+		}
+		if thumbnail.Valid {
+			v.ThumbnailPath = &thumbnail.String
+		}
+		if pID.Valid {
+			v.ParentID = &pID.String
+		}
+		if description.Valid {
+			v.Description = description.String
+		}
+		if authors.Valid {
+			v.Authors = authors.String
+		}
+		if pubYear.Valid {
+			v.PublicationYear = pubYear.String
+		}
+		if extension.Valid {
+			v.Extension = extension.String
+		}
+		volumes = append(volumes, v)
+	}
+	return volumes, nil
+}
+
+// CountByParentID 부모 볼륨 ID로 하위 볼륨 개수 조회
+func (r *VolumeRepository) CountByParentID(db database.Queryer, parentID string) (int, error) {
+	db = database.GetQueryer(db)
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM volumes WHERE parent_id = ?`, parentID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// FindRootVolumesBySeriesID 시리즈의 최상위 볼륨 목록 조회
+func (r *VolumeRepository) FindRootVolumesBySeriesID(db database.Queryer, seriesID string) ([]model.Volume, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
+		 FROM volumes WHERE series_id = ? AND parent_id IS NULL ORDER BY volume_number`,
+		seriesID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var volumes []model.Volume
+	for rows.Next() {
+		var v model.Volume
+		var thumbnail, unit, pID sql.NullString
+		var description, authors, pubYear, extension sql.NullString
+
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &pID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if unit.Valid {
+			v.Unit = unit.String
+		}
+		if thumbnail.Valid {
+			v.ThumbnailPath = &thumbnail.String
+		}
+		if pID.Valid {
+			v.ParentID = &pID.String
+		}
+		if description.Valid {
+			v.Description = description.String
+		}
+		if authors.Valid {
+			v.Authors = authors.String
+		}
+		if pubYear.Valid {
+			v.PublicationYear = pubYear.String
+		}
+		if extension.Valid {
+			v.Extension = extension.String
+		}
+		volumes = append(volumes, v)
+	}
+	return volumes, nil
+}
+// GetDistinctExtensions 시리즈 내 모든 볼륨의 고유한 확장자 목록 조회
+func (r *VolumeRepository) GetDistinctExtensions(db database.Queryer, seriesID string) ([]string, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(`SELECT DISTINCT extension FROM volumes WHERE series_id = ? AND (extension IS NOT NULL AND extension != '')`, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var extensions []string
+	for rows.Next() {
+		var ext string
+		if err := rows.Scan(&ext); err != nil {
+			return nil, err
+		}
+		extensions = append(extensions, ext)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return extensions, nil
+}
+// GetTotalPagesBatch 시리즈 내 하위 볼륨들의 전체 페이지 수 배치 조회
+func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []string) (map[string]int, error) {
+	if len(volumeIDs) == 0 {
+		return make(map[string]int), nil
+	}
+	db = database.GetQueryer(db)
+
+	query := `
+		WITH RECURSIVE descendant_volumes(root_id, id) AS (
+			SELECT id, id FROM volumes WHERE id IN (?)
+			UNION ALL
+			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT dv.root_id, COALESCE(SUM(
+			CASE 
+				WHEN c.page_count > 0 THEN c.page_count 
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
+				ELSE 0 
+			END), 0)
+		FROM chapters c
+		JOIN descendant_volumes dv ON c.volume_id = dv.id
+		GROUP BY dv.root_id
+	`
+
+	// ID 목록을 query에 바인딩하기 위해 ? 개수 조절
+	placeholders := make([]string, len(volumeIDs))
+	args := make([]interface{}, len(volumeIDs))
+	for i, id := range volumeIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	actualQuery := strings.Replace(query, "?", strings.Join(placeholders, ","), 1)
+
+	rows, err := db.Query(actualQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var total int
+		if err := rows.Scan(&id, &total); err != nil {
+			return nil, err
+		}
+		result[id] = total
+	}
+	return result, nil
+}
+
+// GetReadPagesBatch 사용자가 시리즈 내 하위 볼륨들에서 읽은 총 페이지 수 배치 조회
+func (r *VolumeRepository) GetReadPagesBatch(db database.Queryer, userID string, volumeIDs []string) (map[string]int, error) {
+	if len(volumeIDs) == 0 {
+		return make(map[string]int), nil
+	}
+	db = database.GetQueryer(db)
+
+	placeholders := make([]string, len(volumeIDs))
+	args := make([]interface{}, 0, len(volumeIDs)*2+1)
+	for i, id := range volumeIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	placeholderStr := strings.Join(placeholders, ",")
+
+	// 1. 완료된 페이지 집계
+	completedQuery := `
+		WITH RECURSIVE descendant_volumes(root_id, id) AS (
+			SELECT id, id FROM volumes WHERE id IN (` + placeholderStr + `)
+			UNION ALL
+			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT dv.root_id, COALESCE(SUM(
+			CASE 
+				WHEN c.page_count > 0 THEN c.page_count 
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
+				ELSE 0 
+			END), 0)
+		FROM chapter_completions cc
+		JOIN chapters c ON cc.chapter_id = c.id
+		JOIN descendant_volumes dv ON c.volume_id = dv.id
+		WHERE cc.user_id = ?
+		GROUP BY dv.root_id
+	`
+	completedArgs := append(args, userID)
+	rows, err := db.Query(completedQuery, completedArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	completedMap := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var count int
+		if scanErr := rows.Scan(&id, &count); scanErr != nil {
+			_ = rows.Close()
+			return nil, scanErr
+		}
+		completedMap[id] = count
+	}
+	_ = rows.Close()
+
+	// 2. 진행 중인 페이지 집계
+	progressQuery := `
+		WITH RECURSIVE descendant_volumes(root_id, id) AS (
+			SELECT id, id FROM volumes WHERE id IN (` + placeholderStr + `)
+			UNION ALL
+			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT dv.root_id, COALESCE(SUM(
+			CASE 
+				WHEN c.page_count > 0 THEN rp.current_page
+				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
+				ELSE CAST(rp.progress_percent AS INTEGER)
+			END
+		), 0)
+		FROM reading_progress rp
+		JOIN chapters c ON rp.chapter_id = c.id
+		JOIN descendant_volumes dv ON c.volume_id = dv.id
+		WHERE rp.user_id = ?
+		AND rp.chapter_id NOT IN (
+			SELECT chapter_id FROM chapter_completions WHERE user_id = ?
+		)
+		GROUP BY dv.root_id
+	`
+	progressArgs := append(args, userID, userID)
+	rows, err = db.Query(progressQuery, progressArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	progressMap := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var count int
+		if err := rows.Scan(&id, &count); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		progressMap[id] = count
+	}
+	_ = rows.Close()
+
+	// 3. 결과 합산
+	result := make(map[string]int)
+	for _, id := range volumeIDs {
+		result[id] = completedMap[id] + progressMap[id]
+	}
+	return result, nil
+}
+
+// GetProgressPercentBatch 사용자의 볼륨 실제 진행 퍼센트 배치 조회
+func (r *VolumeRepository) GetProgressPercentBatch(db database.Queryer, userID string, volumeIDs []string) (map[string]float64, error) {
+	if len(volumeIDs) == 0 {
+		return make(map[string]float64), nil
+	}
+	db = database.GetQueryer(db)
+
+	placeholders := make([]string, len(volumeIDs))
+	args := make([]interface{}, 0, len(volumeIDs))
+	for i, id := range volumeIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	placeholderStr := strings.Join(placeholders, ",")
+
+	query := `
+		WITH RECURSIVE descendant_volumes(root_id, id) AS (
+			SELECT id, id FROM volumes WHERE id IN (` + placeholderStr + `)
+			UNION ALL
+			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		),
+		chapter_units AS (
+			SELECT
+				dv.root_id,
+				c.id AS chapter_id,
+				CASE
+					WHEN c.total_positions > 0 THEN c.total_positions
+					WHEN c.page_count > 0 THEN c.page_count
+					ELSE 0
+				END AS unit_total
+			FROM chapters c
+			JOIN descendant_volumes dv ON c.volume_id = dv.id
+		),
+		volume_stats AS (
+			SELECT
+				cu.root_id,
+				SUM(cu.unit_total) AS total_units,
+				SUM(CASE WHEN cc.chapter_id IS NOT NULL THEN cu.unit_total ELSE 0 END) AS completed_units,
+				SUM(CASE WHEN rp.chapter_id IS NOT NULL AND cc.chapter_id IS NULL THEN
+					cu.unit_total * (
+						CASE
+							WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
+							ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
+						END
+					)
+					ELSE 0 END) AS inprogress_units
+			FROM chapter_units cu
+			LEFT JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id AND cc.user_id = ?
+			LEFT JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id AND rp.user_id = ?
+			GROUP BY cu.root_id
+		)
+		SELECT root_id, CASE
+			WHEN total_units <= 0 THEN 0.0
+			ELSE MIN(100.0, MAX(0.0, ((completed_units + inprogress_units) * 100.0) / total_units))
+		END
+		FROM volume_stats
+	`
+
+	fullArgs := append(args, userID, userID)
+	rows, err := db.Query(query, fullArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]float64)
+	for rows.Next() {
+		var id string
+		var percent float64
+		if err := rows.Scan(&id, &percent); err != nil {
+			return nil, err
+		}
+		result[id] = percent
+	}
+	return result, nil
 }

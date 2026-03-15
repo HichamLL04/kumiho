@@ -53,10 +53,12 @@ export function SeriesPage() {
 
   const user = useAuthStore((state) => state.user);
   const canDownload = user?.role === "MASTER" || user?.can_download;
-  const preferPercentLabel = volumes.length > 0 && volumes.every((volume) => {
-    const lowerPath = String(volume.path || "").toLowerCase();
-    return lowerPath.endsWith(".txt") || lowerPath.endsWith(".epub");
-  });
+  const preferPercentLabel =
+    volumes.length > 0 &&
+    volumes.every((volume) => {
+      const lowerPath = String(volume.path || "").toLowerCase();
+      return lowerPath.endsWith(".txt") || lowerPath.endsWith(".epub");
+    });
 
   const showAlert = (message: string, type: AlertType = "info") => {
     setAlertModal({ isOpen: true, type, message });
@@ -109,12 +111,17 @@ export function SeriesPage() {
 
   const loadData = useCallback(async () => {
     try {
-      // 시리즈 정보
-      const seriesRes = await api.get(`/series/${id}`);
-      setSeries(seriesRes.data);
+      // 1. 핵심 데이터(시리즈, 볼륨, 진행도) 병렬 페칭
+      const [seriesRes, volumesRes, progressRes] = await Promise.all([
+        api.get(`/series/${id}`),
+        api.get(`/series/${id}/volumes?parent_id=root`),
+        api.get(`/series/${id}/progress`).catch(() => ({ data: null })),
+      ]);
 
-      // 볼륨 목록
-      const volumesRes = await api.get(`/series/${id}/volumes`);
+      const seriesData = seriesRes.data;
+      setSeries(seriesData);
+
+      // 볼륨 목록 정밀화 및 설정
       const rawVolumes = Array.isArray(volumesRes.data?.volumes) ? volumesRes.data.volumes : [];
       const normalizedVolumes: Volume[] = rawVolumes.map((raw: Volume & { is_completed?: boolean }) => ({
         ...raw,
@@ -122,20 +129,23 @@ export function SeriesPage() {
       }));
       setVolumes(normalizedVolumes);
 
-      // 라이브러리 정보
-      if (seriesRes.data.library_id) {
-        const libRes = await api.get(`/libraries/${seriesRes.data.library_id}`);
-        setLibrary(libRes.data);
-      }
-
-      // 읽기 진행도
-      try {
-        const progressRes = await api.get(`/series/${id}/progress`);
-        setProgress(progressRes.data?.progress ?? undefined);
-        setSummary(progressRes.data?.summary ?? undefined);
-      } catch {
+      // 진행도 설정
+      if (progressRes.data) {
+        setProgress(progressRes.data.progress ?? undefined);
+        setSummary(progressRes.data.summary ?? undefined);
+      } else {
         setProgress(undefined);
         setSummary(undefined);
+      }
+
+      // 2. 라이브러리 정보는 시리즈 데이터 로드 후 비동기로 처리 (병목 방지)
+      if (seriesData.library_id) {
+        api
+          .get(`/libraries/${seriesData.library_id}`)
+          .then((libRes) => {
+            setLibrary(libRes.data);
+          })
+          .catch((err) => console.error("Failed to load library:", err));
       }
     } catch (error) {
       console.error("Failed to load series:", error);
@@ -218,23 +228,19 @@ export function SeriesPage() {
                   navigate(`/viewer/${progress.chapter_id}`, { state: { from: viewerFrom } });
                 } else if (volumes.length > 0) {
                   const sortedVolumes = [...volumes].sort((a, b) => a.volume_number - b.volume_number);
-                  const firstVolume = sortedVolumes[0];
 
-                  try {
-                    const res = await volumeAPI.getChapters(firstVolume.id);
-                    const chapters = Array.isArray(res.data) ? res.data : res.data.chapters || [];
+                  // 재귀적으로 첫 번째 챕터 탐색
+                  let firstChapter: Chapter | null = null;
+                  for (const vol of sortedVolumes) {
+                    firstChapter = await volumeAPI.findFirstChapterRecursively(vol.id);
+                    if (firstChapter) break;
+                  }
 
-                    if (chapters.length > 0) {
-                      const sortedChapters = [...chapters].sort(
-                        (a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number,
-                      );
-                      navigate(`/viewer/${sortedChapters[0].id}`, { state: { from: viewerFrom } });
-                    } else {
-                      openVolume(firstVolume);
-                    }
-                  } catch (error) {
-                    console.error("Failed to load chapters for first play:", error);
-                    openVolume(firstVolume);
+                  if (firstChapter) {
+                    navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
+                  } else {
+                    // 챕터를 전혀 찾지 못한 경우 첫 번째 볼륨으로 이동
+                    openVolume(sortedVolumes[0]);
                   }
                 } else {
                   showAlert(t("series.alert.no_readable_volume"), "warning");
@@ -245,8 +251,12 @@ export function SeriesPage() {
 
             <div className={styles.volumeCount}>
               <Trans
-                i18nKey="series.count"
-                count={volumes.length}
+                i18nKey={series.chapter_count && series.chapter_count > 0 ? "series.chapter_count" : "series.count"}
+                count={
+                  series.chapter_count && series.chapter_count > 0
+                    ? series.chapter_count
+                    : series.volume_count || volumes.length
+                }
                 components={{ strong: <strong /> }}
               />
             </div>

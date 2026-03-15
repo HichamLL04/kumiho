@@ -251,6 +251,27 @@ describe("ViewerContent vertical rendering window", () => {
     // page 14 should remain placeholder
     expect(screen.queryByTestId("smart-/api/v1/chapters/chapter-1/pages/14/image")).not.toBeInTheDocument();
   });
+
+  it("renders all pages during initial restore (hidden by CSS until ready)", () => {
+    render(
+      <ViewerContent
+        {...baseProps}
+        currentPage={1}
+        readingMode="vertical"
+        displayPages={Array.from({ length: 10 }, (_, i) => i + 1)}
+        maxAllowedPage={10}
+        imageLoading={{}}
+        isInitialScrolling
+        viewStatus="hydrating"
+      />,
+    );
+
+    // All pages should be in the DOM during hydrating (content is visually hidden by viewerContentHidden CSS)
+    // This prevents scroll position shifts when transitioning from hydrating to ready
+    expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/1/image")).toBeInTheDocument();
+    expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/2/image")).toBeInTheDocument();
+    expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/3/image")).toBeInTheDocument();
+  });
 });
 
 describe("ViewerContent split rendering", () => {

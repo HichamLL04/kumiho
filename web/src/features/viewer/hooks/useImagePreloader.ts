@@ -67,7 +67,7 @@ export function useImagePreloader({
   );
 
   const imageLoading = useMemo(
-    () => (chapterId ? imageLoadingByChapter[chapterId] ?? {} : {}),
+    () => (chapterId ? (imageLoadingByChapter[chapterId] ?? {}) : {}),
     [imageLoadingByChapter, chapterId],
   );
 
@@ -98,9 +98,9 @@ export function useImagePreloader({
         break;
       }
     }
-    // 순차 로딩된 지점 + 3장, 혹은 현재 보고 있는 페이지 + preloadCount 중 더 큰 범위까지 렌더링 허용
-    // 이를 통해 뒤쪽 페이지로 점프했을 때 해당 페이지가 렌더링되지 않는 문제 해결
-    return Math.max(sequentialLoaded + 3, currentPage + preloadCount);
+    // 순차 로딩된 지점 + 5장, 혹은 현재 보고 있는 페이지 + (preloadCount * 1.5) 중 더 큰 범위까지 렌더링 허용
+    // 렌더링 범위를 더 넉넉하게 잡아(기존 +3 -> +5) 세로 모드 스크롤 시 무한 로딩 현상 방지
+    return Math.max(sequentialLoaded + 5, currentPage + Math.floor(preloadCount * 1.5));
   }, [readingMode, totalPages, imageLoading, currentPage, preloadCount]);
 
   // 이미지 프리로딩 - 현재 페이지 주변 이미지를 미리 로드
@@ -108,7 +108,7 @@ export function useImagePreloader({
     if (!chapter || !chapterId) return;
     const requestChapterId = chapterId;
 
-    const pagesToPreload: number[] = [];
+    const pagesToPreload: number[] = [currentPage];
 
     // 앞뒤로 preloadCount만큼 프리로드
     for (let i = 1; i <= preloadCount; i++) {
@@ -120,8 +120,16 @@ export function useImagePreloader({
       }
     }
 
+    const uniquePagesToPreload = [...new Set(pagesToPreload)];
+
     // 이미지 프리로드 (Image 객체 사용)
-    pagesToPreload.forEach((pageNum) => {
+    uniquePagesToPreload.forEach((pageNum) => {
+      // [Optimization] 현재 페이지는 백그라운드 Image 객체로 미리 로드하지 않음.
+      // 실제 <img> 태그(SmartImageViewer)가 로드하도록 하여 onLoad 신호의 정확도를 높임.
+      // (배경 로딩이 먼저 끝나버리면 이미지가 실제 그려지기 전 스피너가 제거될 수 있음)
+      const isVisiblePage =
+        pageNum === currentPage || (readingMode === "double" && Math.abs(pageNum - currentPage) <= 1);
+
       if (imageLoading[pageNum] === undefined) {
         // 로딩 시작 표시
         setImageLoadingByChapter((prev) => {
@@ -135,31 +143,34 @@ export function useImagePreloader({
           };
         });
 
-        const img = new Image();
-        img.onload = () => {
-          if (currentChapterIdRef.current !== requestChapterId) return;
-          setImageLoadingByChapter((prev) => ({
-            ...pruneChapterLoadingMap(prev, requestChapterId),
-            [requestChapterId]: {
-              ...(prev[requestChapterId] ?? {}),
-              [pageNum]: false,
-            },
-          }));
-        };
-        img.onerror = () => {
-          if (currentChapterIdRef.current !== requestChapterId) return;
-          setImageLoadingByChapter((prev) => ({
-            ...pruneChapterLoadingMap(prev, requestChapterId),
-            [requestChapterId]: {
-              ...(prev[requestChapterId] ?? {}),
-              [pageNum]: false,
-            },
-          }));
-        };
-        img.src = getPageImageUrl(chapter.id, pageNum);
+        // 현재 보이는 페이지가 아니면 백그라운드 프리로드 실행
+        if (!isVisiblePage) {
+          const img = new Image();
+          img.onload = () => {
+            if (currentChapterIdRef.current !== requestChapterId) return;
+            setImageLoadingByChapter((prev) => ({
+              ...pruneChapterLoadingMap(prev, requestChapterId),
+              [requestChapterId]: {
+                ...(prev[requestChapterId] ?? {}),
+                [pageNum]: false,
+              },
+            }));
+          };
+          img.onerror = () => {
+            if (currentChapterIdRef.current !== requestChapterId) return;
+            setImageLoadingByChapter((prev) => ({
+              ...pruneChapterLoadingMap(prev, requestChapterId),
+              [requestChapterId]: {
+                ...(prev[requestChapterId] ?? {}),
+                [pageNum]: false,
+              },
+            }));
+          };
+          img.src = getPageImageUrl(chapter.id, pageNum);
+        }
       }
     });
-  }, [currentPage, totalPages, chapter, chapterId, preloadCount, imageLoading, pruneChapterLoadingMap]);
+  }, [currentPage, totalPages, chapter, chapterId, preloadCount, imageLoading, pruneChapterLoadingMap, readingMode]);
 
   return {
     imageLoading,

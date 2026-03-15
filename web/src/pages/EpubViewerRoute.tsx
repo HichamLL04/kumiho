@@ -10,7 +10,11 @@ import { api, epubProgressAPI, libraryAPI, seriesAPI, settingAPI } from "../api/
 import type { EpubTOCItem } from "../features/epub-viewer/components/EpubChapterViewer";
 import { AlertModal } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
-import { useAdjacentChapters, useExitFullscreenOnViewerUnmount, useRestoreFullscreenAfterChapterSwitch } from "../features/viewer";
+import {
+  useAdjacentChapters,
+  useExitFullscreenOnViewerUnmount,
+  useRestoreFullscreenAfterChapterSwitch,
+} from "../features/viewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 import { useViewerSync } from "../hooks/useViewerSync";
 
@@ -562,7 +566,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     }
     setIsInitializing(false);
     isInitializingRef.current = false;
-  }, []);
+    loaderData.setViewStatus?.("ready");
+  }, [loaderData]);
 
   const handleReady = useCallback(
     (total: number) => {

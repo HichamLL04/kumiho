@@ -20,6 +20,19 @@
   position: relative;
 }
 
+.viewerLoadingOverlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 1001;
+}
+
+.viewerContentHidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* 한 페이지 모드 */
 .viewerContent.modeSingle {
   flex-direction: row;

@@ -1,7 +1,7 @@
 // BGM 제어 훅
 
 import { useEffect, useState, useRef } from "react";
-import { volumeAPI, settingAPI } from "../../../api/client";
+import { chapterAPI, volumeAPI, settingAPI } from "../../../api/client";
 import type { BGMInfo } from "../types";
 
 interface UseBGMParams {
@@ -28,15 +28,32 @@ export function useBGM({ volumeId, chapterId, isReady }: UseBGMParams): UseBGMRe
   const [isBgmPlaying, setIsBgmPlaying] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // 볼륨(권)이 바뀌면 BGM 정보 로드
+  // 챕터별 BGM 정보 로드 (챕터 → 볼륨 순으로 시도)
   useEffect(() => {
-    if (volumeId) {
-      volumeAPI
-        .getBGM(volumeId)
-        .then((res) => setBgmInfo(res.data))
-        .catch((err) => console.warn("Failed to load BGM info:", err));
-    }
-  }, [volumeId]); // chapterId가 바뀌어도 volumeId가 같으면 재호출 안 함
+    if (!chapterId) return;
+
+    const loadBGM = async () => {
+      try {
+        // 1. 챕터별 BGM 확인
+        const chapterRes = await chapterAPI.getBGM(chapterId);
+        if (chapterRes.data.exists) {
+          setBgmInfo(chapterRes.data);
+          return;
+        }
+        // 2. 챕터에 없으면 볼륨별 BGM 확인 (fallback)
+        if (volumeId) {
+          const volumeRes = await volumeAPI.getBGM(volumeId);
+          setBgmInfo(volumeRes.data);
+          return;
+        }
+        setBgmInfo({ exists: false });
+      } catch (err) {
+        console.warn("[useBGM] Failed to load BGM info:", err);
+        setBgmInfo({ exists: false });
+      }
+    };
+    loadBGM();
+  }, [chapterId, volumeId]);
 
   // 전역 설정에서 BGM 자동 재생 여부 확인
   useEffect(() => {

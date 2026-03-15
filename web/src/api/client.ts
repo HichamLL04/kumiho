@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Chapter, Series, Volume } from "../types/series";
+import type { Chapter, Series, Volume, Library, ReadingProgress, Page, UserSeriesSetting } from "../types/series";
 import type { User } from "../types/user";
 import type { Session } from "../types/session";
 
@@ -139,8 +139,7 @@ export const libraryAPI = {
     default_epub_wheel_direction?: string;
     default_epub_keyboard_direction?: string;
     default_epub_click_direction?: string;
-  }) =>
-    api.post("/libraries", data),
+  }) => api.post("/libraries", data),
   update: (
     id: string,
     data: {
@@ -177,6 +176,8 @@ export const seriesAPI = {
       chapter_id?: string;
       volume_id?: string;
       current_page?: number;
+      anchor_page?: number;
+      offset_ratio?: number;
       total_pages?: number;
       current_position?: number;
       total_positions?: number;
@@ -191,6 +192,8 @@ export const seriesAPI = {
       volume_number: number;
       chapter_number: number;
       current_page: number;
+      anchor_page?: number;
+      offset_ratio?: number;
     },
   ) => api.post(`/series/${seriesId}/progress/compare`, data),
   uploadThumbnail: (seriesId: string, file: File) => {
@@ -208,6 +211,9 @@ export const seriesAPI = {
   resetProgress: (seriesId: string) => api.delete(`/series/${seriesId}/progress`),
   // 시리즈 검색
   search: (query: string) => api.get<{ series: Series[] }>(`/series/search?q=${encodeURIComponent(query)}`),
+  // 확장자 배치 조회
+  getExtensionsBatch: (seriesIds: string[]) =>
+    api.post<{ extensions: Record<string, string> }>("/series/extensions/batch", { series_ids: seriesIds }),
   // 뷰어 설정
   getViewerSettings: (seriesId: string) => api.get(`/series/${seriesId}/viewer-settings`).then((res) => res.data),
   updateViewerSettings: (seriesId: string, data: Record<string, unknown>) =>
@@ -234,6 +240,41 @@ export const volumeAPI = {
   getCompletion: (volumeId: string) => api.get(`/volumes/${volumeId}/completion`),
   deleteCompletion: (volumeId: string) => api.delete(`/volumes/${volumeId}/completion`),
   getBGM: (volumeId: string) => api.get<{ exists: boolean; url?: string }>(`/volumes/${volumeId}/bgm`),
+  // 재귀적으로 첫 번째 챕터 찾기
+  findFirstChapterRecursively: async (volumeId: string): Promise<Chapter | null> => {
+    try {
+      // 1. 현재 볼륨의 직계 챕터 확인
+      const chapRes = await volumeAPI.getChapters(volumeId);
+      const chapters = Array.isArray(chapRes.data) ? chapRes.data : chapRes.data.chapters || [];
+
+      if (chapters.length > 0) {
+        return [...chapters].sort((a, b) => a.chapter_number - b.chapter_number)[0];
+      }
+
+      // 2. 챕터가 없으면 하위 볼륨 확인
+      const volRes = await volumeAPI.get(volumeId);
+      const volume = volRes.data;
+
+      if (!volume.series_id) return null;
+
+      const subVolsRes = await api.get(`/series/${volume.series_id}/volumes?parent_id=${volumeId}`);
+      const subVolumes = Array.isArray(subVolsRes.data?.volumes) ? subVolsRes.data.volumes : [];
+
+      if (subVolumes.length > 0) {
+        // 첫 번째 하위 볼륨부터 재귀 탐색
+        const sortedSubVols = [...subVolumes].sort((a, b) => a.volume_number - b.volume_number);
+        for (const subVol of sortedSubVols) {
+          const firstChap = await volumeAPI.findFirstChapterRecursively(subVol.id);
+          if (firstChap) return firstChap;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Failed to find first chapter recursively:", error);
+      return null;
+    }
+  },
 };
 
 // Chapter API
@@ -247,6 +288,7 @@ export const chapterAPI = {
     api.post<{ analyzed_count: number; total_pages: number; success: boolean }>(`/chapters/${chapterId}/analyze`),
   markComplete: (chapterId: string) => api.post(`/chapters/${chapterId}/complete`),
   deleteProgress: (chapterId: string) => api.delete(`/chapters/${chapterId}/progress`),
+  getBGM: (chapterId: string) => api.get<{ exists: boolean; url?: string }>(`/chapters/${chapterId}/bgm`),
 };
 
 // EPUB Progress API (EPUB 전용)
@@ -275,7 +317,19 @@ export const progressAPI = {
 };
 
 // Viewer API
+export interface ViewerInitResponse {
+  chapter: Chapter;
+  volume: Volume;
+  series: Series;
+  library: Library;
+  progress: ReadingProgress | null;
+  user_settings: UserSeriesSetting | null;
+  pages: Page[];
+  server_settings: Record<string, string>;
+}
+
 export const viewerAPI = {
+  getInitData: (chapterId: string) => api.get<ViewerInitResponse>(`/viewer/init/${chapterId}`),
   start: (data: { series_id: string; chapter_id: string }) => api.post("/viewer/start", data),
   resumeCheck: (data: { series_id: string; chapter_id: string; current_page: number }) =>
     api.post("/viewer/resume-check", data),

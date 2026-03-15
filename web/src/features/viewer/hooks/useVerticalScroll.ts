@@ -1,11 +1,14 @@
 // 세로 스크롤 모드 전용 훅
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
+import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
 import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
 import { startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
 import type { ReadingMode } from "../../../stores/viewerStore";
+import type { RestorePosition, ViewStatus } from "../types";
+import { getViewportAnchorPage } from "../utils/progressPosition";
 
 interface UseVerticalScrollParams {
   readingMode: ReadingMode;
@@ -19,23 +22,24 @@ interface UseVerticalScrollParams {
   saveProgress: () => Promise<void>;
   handleVolumeCompletion: () => Promise<void>;
   chapterId: string | undefined;
-  isInitialScrollingRef: React.MutableRefObject<boolean>; // 부모에서 전달받는 스크롤 가드 ref (쓰기 가능)
+  isInitialScrollingRef: MutableRefObject<boolean>;
+  restorePosition?: RestorePosition;
+  viewStatus?: ViewStatus;
+  setViewStatus?: Dispatch<SetStateAction<ViewStatus>>;
+  viewerContentRef?: RefObject<HTMLDivElement | null>;
+  imageLoading?: Record<number, boolean>;
 }
 
 interface UseVerticalScrollReturn {
   pullOffset: number;
-  viewerContentRef: React.RefObject<HTMLDivElement | null>;
-  isInternalScrollRef: React.RefObject<boolean>;
-  startYRef: React.RefObject<number | null>;
+  viewerContentRef: RefObject<HTMLDivElement | null>;
   isTouching: boolean;
 }
 
-/**
- * 세로 스크롤 모드 전용 커스텀 훅
- * - 스크롤 위치에 따른 페이지 변경 (IntersectionObserver)
- * - 상/하단 당김 네비게이션
- * - 터치/휠 이벤트 처리
- */
+const RESTORE_TOLERANCE = 4;
+const READY_STABILIZE_DELAY = 250;
+const MAX_RESTORE_ATTEMPTS = 40;
+
 export function useVerticalScroll({
   readingMode,
   isLoading,
@@ -49,6 +53,11 @@ export function useVerticalScroll({
   handleVolumeCompletion,
   chapterId,
   isInitialScrollingRef,
+  restorePosition,
+  viewStatus,
+  setViewStatus = () => undefined,
+  viewerContentRef,
+  imageLoading = {},
 }: UseVerticalScrollParams): UseVerticalScrollReturn {
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,191 +66,191 @@ export function useVerticalScroll({
 
   const [pullOffset, setPullOffset] = useState(0);
   const [isTouching, setIsTouching] = useState(false);
+  const effectiveRestorePosition = restorePosition ?? {
+    currentPage,
+    anchorPage: currentPage,
+    offsetRatio: 0,
+  };
+  const effectiveViewStatus = viewStatus ?? (readingMode === "vertical" ? "hydrating" : "ready");
   const pullOffsetRef = useRef(0);
   const isNavigatingRef = useRef(false);
-  const viewerContentRef = useRef<HTMLDivElement>(null);
+  const internalViewerContentRef = useRef<HTMLDivElement>(null);
+  const resolvedViewerContentRef = viewerContentRef ?? internalViewerContentRef;
   const startYRef = useRef<number | null>(null);
   const lastYRef = useRef<number | null>(null);
   const isInternalScrollRef = useRef(false);
-  // isInitialScrollingRef는 부모(useChapterLoader)에서 전달받음 - 캐시 로딩 시에도 동기화되도록
+  const readyAtRef = useRef(0);
+  const currentPageRef = useRef(currentPage);
+  const imageLoadingRef = useRef(imageLoading);
 
-  // 세로 모드 스크롤 동기화 및 관찰
+  // 현재 페이지 상태를 Ref에 동기화 (스크롤 이벤트 핸들러에서 최신 값을 참조하기 위함)
   useEffect(() => {
-    if (readingMode !== "vertical") return;
-    if (isLoading) return;
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
 
-    const content = viewerContentRef.current;
+  // imageLoading을 Ref에 동기화 (스크롤 복원 effect가 imageLoading 변경으로 재시작되지 않도록)
+  useEffect(() => {
+    imageLoadingRef.current = imageLoading;
+  }, [imageLoading]);
 
-    let initialReleaseTimeoutId: number | null = null;
-    let retryReleaseTimeoutId: number | null = null;
-    let disposed = false;
-
-    // 현재 페이지로 스크롤 이동 (외부 요인으로 변경된 경우만)
-    if (!isInternalScrollRef.current) {
-      // 마지막 페이지인 경우: 스크롤 컨테이너 맨 아래로 직접 이동
-      if (currentPage === totalPages && content) {
-        requestAnimationFrame(() => {
-          if (disposed) return;
-          content.scrollTop = content.scrollHeight;
-          // 마지막 페이지 스크롤 후에는 isInternalScrollRef를 true로 유지하여
-          // IntersectionObserver가 중간 페이지를 감지해도 스크롤이 다시 이동하지 않도록 함
-          isInternalScrollRef.current = true;
-          initialReleaseTimeoutId = window.setTimeout(() => {
-            if (disposed) return;
-            isInitialScrollingRef.current = false;
-          }, 150);
-        });
-      } else {
-        // 일반 페이지: 해당 페이지 요소로 스크롤
-        const pageEl = document.getElementById(`page-${currentPage}`);
-        if (pageEl) {
-          requestAnimationFrame(() => {
-            if (disposed) return;
-            pageEl.scrollIntoView({ block: "start" });
-            // 이미지 레이아웃 변동으로 초기 위치가 흔들릴 수 있어
-            // 목표 페이지로 실제 스크롤되었는지 확인한 뒤 가드를 해제한다.
-            let attempts = 0;
-            const releaseGuard = () => {
-              if (disposed) return;
-              const currentContent = viewerContentRef.current;
-              if (!currentContent) {
-                isInitialScrollingRef.current = false;
-                return;
-              }
-
-              if (currentPage > 1 && currentContent.scrollTop <= 4 && attempts < 3) {
-                attempts += 1;
-                pageEl.scrollIntoView({ block: "start" });
-                retryReleaseTimeoutId = window.setTimeout(releaseGuard, 120);
-                return;
-              }
-
-              isInitialScrollingRef.current = false;
-            };
-
-            initialReleaseTimeoutId = window.setTimeout(releaseGuard, 150);
+  const navigateToChapter = useCallback(
+    (chapterIdToMove: string, options: { preventComplete?: boolean } = {}): Promise<void> => {
+      return (options.preventComplete ? saveProgress() : handleVolumeCompletion().then(() => saveProgress()))
+        .then(() => {
+          startChapterSwitching(isDocumentFullscreen());
+          navigate(`/viewer/${chapterIdToMove}`, {
+            replace: true,
+            state: {
+              ...(options.preventComplete ? { preventComplete: true } : {}),
+              ...(viewerFrom ? { from: viewerFrom } : {}),
+            },
           });
-        } else {
-          isInitialScrollingRef.current = false;
-        }
-      }
-    } else {
-      // 마지막 페이지가 아닐 때만 리셋 (마지막 페이지에서는 유지)
-      if (currentPage !== totalPages) {
-        isInternalScrollRef.current = false;
-      }
-    }
+        })
+        .catch((error) => {
+          console.error("[useVerticalScroll] chapter navigation failed:", error);
+          isNavigatingRef.current = false;
+        });
+    },
+    [handleVolumeCompletion, navigate, saveProgress, viewerFrom],
+  );
 
-    return () => {
-      disposed = true;
-      if (initialReleaseTimeoutId !== null) {
-        window.clearTimeout(initialReleaseTimeoutId);
-      }
-      if (retryReleaseTimeoutId !== null) {
-        window.clearTimeout(retryReleaseTimeoutId);
-      }
-    };
-  }, [currentPage, totalPages, readingMode, isLoading, isInitialScrollingRef]);
-
-  // 페이지 모드(한/두페이지)에서는 로딩 완료 시 즉시 가드 해제
-  useEffect(() => {
-    if (readingMode === "vertical") return;
-    if (!isLoading) {
-      isInitialScrollingRef.current = false;
-    }
-  }, [isLoading, readingMode, isInitialScrollingRef]);
-
-  // IntersectionObserver로 현재 페이지 감지
-  useEffect(() => {
-    if (readingMode !== "vertical") return;
-    if (isLoading) return;
-
-    const content = viewerContentRef.current;
-    if (!content) return; // 컨테이너가 없으면 종료
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // 초기 가드 중이면 무시
-        if (isInitialScrollingRef.current) return;
-
-        // 내부 스크롤 중이면 페이지 감지 무시 (마지막 페이지에서 중간 페이지 감지 방지)
-        if (isInternalScrollRef.current) {
-          // 단, 마지막 페이지에 있는데 스크롤이 바닥이 아니라면(사용자가 위로 스크롤함), 잠금 해제하고 감지 허용
-          const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 50;
-          const currentStorePage = useViewerStore.getState().currentPage;
-
-          if (currentStorePage === totalPages && !isAtBottom) {
-            isInternalScrollRef.current = false;
-          } else {
-            // console.log("[VerticalScroll] skip observer (internal scroll)");
-            return;
-          }
-        }
-
-        // 스크롤이 맨 아래에 있으면 마지막 페이지가 아닌 페이지 감지 무시
-        const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 10;
-        if (isAtBottom && totalPages > 0) {
-          // 맨 아래에서는 무조건 마지막 페이지로 고정
-          const currentStorePage = useViewerStore.getState().currentPage;
-          if (currentStorePage !== totalPages) {
-            // console.log(`[VerticalScroll] at bottom, force last page: ${currentStorePage} -> ${totalPages}`);
-            isInternalScrollRef.current = true;
-            setCurrentPage(totalPages);
-          }
-          return; // 다른 페이지 감지는 무시
-        }
-
-        const intersectingEntry = entries.find((entry) => entry.isIntersecting);
-        if (intersectingEntry) {
-          const pageNum = parseInt(intersectingEntry.target.id.replace("page-", ""), 10);
-          const currentStorePage = useViewerStore.getState().currentPage;
-
-          if (!isNaN(pageNum) && pageNum !== currentStorePage) {
-            // console.log(`[VerticalScroll] page changed: ${currentStorePage} -> ${pageNum}`);
-            isInternalScrollRef.current = true;
-            setCurrentPage(pageNum);
-          }
-        }
-      },
-      {
-        root: content, // 스크롤 컨테이너를 기준으로 감지
-        rootMargin: "-50% 0px -50% 0px",
-        threshold: 0,
-      },
-    );
-
-    // 모든 페이지 관찰
-    const pages = document.querySelectorAll('[id^="page-"]');
-    pages.forEach((page) => observer.observe(page));
-
-    // 스크롤 끝 감지: 마지막 페이지가 화면 중앙에 안 와도 인식되도록
-    const handleScroll = () => {
-      if (!content || isInitialScrollingRef.current) return;
-
-      const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 5;
-      if (isAtBottom && totalPages > 0) {
-        const currentStorePage = useViewerStore.getState().currentPage;
-        if (currentStorePage !== totalPages) {
-          isInternalScrollRef.current = true;
-          setCurrentPage(totalPages);
-        }
-      }
-    };
-
-    content?.addEventListener("scroll", handleScroll, { passive: true });
-
-    return () => {
-      observer.disconnect();
-      content?.removeEventListener("scroll", handleScroll);
-    };
-  }, [totalPages, readingMode, setCurrentPage, isLoading, chapterId, isInitialScrollingRef]);
-
-  // 오버스크롤 감지 (당기기 네비게이션)
   useEffect(() => {
     if (readingMode !== "vertical" || isLoading) return;
+    if (effectiveViewStatus !== "hydrating" && effectiveViewStatus !== "restoring") return;
 
-    const content = viewerContentRef.current;
+    const content = resolvedViewerContentRef.current;
     if (!content) return;
+
+    let frameId = 0;
+    let retryId = 0;
+    let attempts = 0;
+    let cancelled = false;
+
+    isInitialScrollingRef.current = true;
+    setCurrentPage(effectiveRestorePosition.anchorPage);
+
+    const isLastPage = effectiveRestorePosition.anchorPage >= totalPages;
+
+    const restoreScroll = () => {
+      if (cancelled) return;
+
+      const targetPageEl = document.getElementById(`page-${effectiveRestorePosition.anchorPage}`);
+      if (isLastPage) {
+        // 마지막 페이지: 스크롤을 맨 아래로
+        content.scrollTop = content.scrollHeight - content.clientHeight;
+      } else if (targetPageEl) {
+        targetPageEl.scrollIntoView({ block: "start" });
+      }
+
+      const isPageAligned = isLastPage
+        ? content.scrollTop >= content.scrollHeight - content.clientHeight - RESTORE_TOLERANCE
+        : !!targetPageEl &&
+          typeof targetPageEl.getBoundingClientRect === "function" &&
+          typeof content.getBoundingClientRect === "function" &&
+          Math.abs(targetPageEl.getBoundingClientRect().top - content.getBoundingClientRect().top) <= 20;
+      const isFallbackAligned =
+        isPageAligned || (effectiveRestorePosition.anchorPage === 1 && content.scrollTop <= RESTORE_TOLERANCE);
+      const isAnchorImageReady =
+        imageLoadingRef.current[effectiveRestorePosition.anchorPage] === false;
+
+      const isTargetPageVisible =
+        getViewportAnchorPage(content, totalPages, effectiveRestorePosition.anchorPage) ===
+        effectiveRestorePosition.anchorPage;
+      const isReady = content.scrollHeight > 0 && isAnchorImageReady && isTargetPageVisible && isFallbackAligned;
+
+      if (isReady) {
+        readyAtRef.current = Date.now();
+        setViewStatus("ready");
+        isInitialScrollingRef.current = false;
+        return;
+      }
+
+      if (attempts >= MAX_RESTORE_ATTEMPTS) {
+        if (isLastPage) {
+          content.scrollTop = content.scrollHeight - content.clientHeight;
+        } else if (targetPageEl && isAnchorImageReady) {
+          targetPageEl.scrollIntoView({ block: "start" });
+        }
+        retryId = window.setTimeout(() => {
+          if (cancelled) return;
+          readyAtRef.current = Date.now();
+          setCurrentPage(effectiveRestorePosition.anchorPage);
+          setViewStatus("ready");
+          isInitialScrollingRef.current = false;
+        }, 80);
+        return;
+      }
+
+      attempts += 1;
+      retryId = window.setTimeout(() => {
+        frameId = window.requestAnimationFrame(restoreScroll);
+      }, 120);
+    };
+
+    frameId = window.requestAnimationFrame(restoreScroll);
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(retryId);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- imageLoading은 Ref로 참조, currentPage는 restorePosition으로 대체
+  }, [
+    isInitialScrollingRef,
+    isLoading,
+    readingMode,
+    effectiveRestorePosition.anchorPage,
+    resolvedViewerContentRef,
+    setCurrentPage,
+    setViewStatus,
+    effectiveViewStatus,
+    totalPages,
+  ]);
+
+  useEffect(() => {
+    if (readingMode !== "vertical") return;
+    if (isLoading || effectiveViewStatus !== "ready") return;
+
+    const content = resolvedViewerContentRef.current;
+    if (!content) return;
+
+    const syncCurrentPage = () => {
+      if (isInitialScrollingRef.current) return;
+      if (Date.now() - readyAtRef.current < READY_STABILIZE_DELAY) return;
+      const nextPage = getViewportAnchorPage(content, totalPages, currentPageRef.current);
+      if (nextPage !== currentPageRef.current) {
+        isInternalScrollRef.current = true;
+        setCurrentPage(nextPage);
+      }
+    };
+
+    syncCurrentPage();
+    content.addEventListener("scroll", syncCurrentPage, { passive: true });
+
+    return () => {
+      content.removeEventListener("scroll", syncCurrentPage);
+      isInternalScrollRef.current = false;
+    };
+  }, [
+    effectiveViewStatus,
+    isLoading,
+    isInitialScrollingRef,
+    readingMode,
+    resolvedViewerContentRef,
+    setCurrentPage,
+    totalPages,
+  ]);
+
+  useEffect(() => {
+    if (readingMode !== "vertical" || isLoading || effectiveViewStatus !== "ready") return;
+
+    const content = resolvedViewerContentRef.current;
+    if (!content) return;
+
+    // 민감(high) 모드: 점진적 당김 대신 2단계 스냅 방식
+    // 1단계: 경계에서 스크롤 → 인디케이터 100% 표시 (고정)
+    // 2단계: 같은 방향 스크롤 → 회차 이동 / 반대 방향 → 인디케이터 해제
+    const isSnapMode = pullSensitivity >= 0.8;
 
     let handleWheel = (e: WheelEvent) => {
       if (isNavigatingRef.current) return;
@@ -249,6 +258,57 @@ export function useVerticalScroll({
       const isAtTop = content.scrollTop <= 0;
       const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
 
+      if (isSnapMode) {
+        const currentPull = pullOffsetRef.current;
+
+        // 인디케이터가 표시 중인 경우 (prev)
+        if (currentPull > 0) {
+          e.preventDefault();
+          if (e.deltaY < 0 && prevChapterId) {
+            // 같은 방향(위) → 회차 이동
+            isNavigatingRef.current = true;
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+            void navigateToChapter(prevChapterId, { preventComplete: true });
+          } else if (e.deltaY > 0) {
+            // 반대 방향(아래) → 해제
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+          }
+          return;
+        }
+
+        // 인디케이터가 표시 중인 경우 (next)
+        if (currentPull < 0) {
+          e.preventDefault();
+          if (e.deltaY > 0 && nextChapterId) {
+            // 같은 방향(아래) → 회차 이동
+            isNavigatingRef.current = true;
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+            void navigateToChapter(nextChapterId);
+          } else if (e.deltaY < 0) {
+            // 반대 방향(위) → 해제
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+          }
+          return;
+        }
+
+        // 인디케이터 미표시 → 경계에서 첫 스크롤 시 100% 스냅
+        if (isAtTop && e.deltaY < 0 && prevChapterId) {
+          e.preventDefault();
+          pullOffsetRef.current = pullThreshold;
+          setPullOffset(pullThreshold);
+        } else if (isAtBottom && e.deltaY > 0 && nextChapterId) {
+          e.preventDefault();
+          pullOffsetRef.current = -pullThreshold;
+          setPullOffset(-pullThreshold);
+        }
+        return;
+      }
+
+      // 일반 모드(low/medium): 기존 점진적 당김
       if (isAtTop && e.deltaY < 0 && prevChapterId) {
         e.preventDefault();
         setPullOffset((prev) => {
@@ -256,16 +316,7 @@ export function useVerticalScroll({
           pullOffsetRef.current = newOffset;
           if (newOffset >= pullThreshold) {
             isNavigatingRef.current = true;
-            saveProgress().then(() => {
-              startChapterSwitching(isDocumentFullscreen());
-              navigate(`/viewer/${prevChapterId}`, {
-                replace: true,
-                state: {
-                  preventComplete: true,
-                  ...(viewerFrom ? { from: viewerFrom } : {}),
-                },
-              });
-            });
+            void navigateToChapter(prevChapterId, { preventComplete: true });
             return 0;
           }
           return newOffset;
@@ -277,16 +328,7 @@ export function useVerticalScroll({
           pullOffsetRef.current = newOffset;
           if (Math.abs(newOffset) >= pullThreshold) {
             isNavigatingRef.current = true;
-            // 다음 챕터로 이동 전에 완료 처리를 먼저 수행
-            handleVolumeCompletion()
-              .then(() => saveProgress())
-              .then(() => {
-                startChapterSwitching(isDocumentFullscreen());
-                navigate(`/viewer/${nextChapterId}`, {
-                  replace: true,
-                  state: viewerFrom ? { from: viewerFrom } : undefined,
-                });
-              });
+            void navigateToChapter(nextChapterId);
             return 0;
           }
           return newOffset;
@@ -319,11 +361,9 @@ export function useVerticalScroll({
       const isAtTop = content.scrollTop <= 0;
       const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
 
-      // Top Pulling
       if ((isAtTop && diff > 0 && prevChapterId) || pullOffsetRef.current > 0) {
         setPullOffset((prev) => {
           const maxPull = 180;
-          // 민감도 값 안전장치 (0.1 ~ 1.0 범위로 제한)
           const safeSensitivity = Math.max(0.1, Math.min(pullSensitivity, 1.0));
           const resistance = safeSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
           const newOffset = Math.max(0, Math.min(prev + diff * resistance, maxPull));
@@ -331,9 +371,7 @@ export function useVerticalScroll({
           return newOffset;
         });
         if (content.scrollTop <= 0 && pullOffsetRef.current > 0) e.preventDefault();
-      }
-      // Bottom Pulling
-      else if ((isAtBottom && diff < 0 && nextChapterId) || pullOffsetRef.current < 0) {
+      } else if ((isAtBottom && diff < 0 && nextChapterId) || pullOffsetRef.current < 0) {
         setPullOffset((prev) => {
           const maxPull = 180;
           const resistance = pullSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
@@ -358,31 +396,12 @@ export function useVerticalScroll({
 
       const currentOffset = pullOffsetRef.current;
 
-      // 임계값 확인 및 이동
       if (currentOffset >= pullThreshold && prevChapterId) {
         isNavigatingRef.current = true;
-        saveProgress().then(() => {
-          startChapterSwitching(isDocumentFullscreen());
-          navigate(`/viewer/${prevChapterId}`, {
-            replace: true,
-            state: {
-              preventComplete: true,
-              ...(viewerFrom ? { from: viewerFrom } : {}),
-            },
-          });
-        });
+        void navigateToChapter(prevChapterId, { preventComplete: true });
       } else if (currentOffset <= -pullThreshold && nextChapterId) {
         isNavigatingRef.current = true;
-        // 다음 챕터로 이동 전에 완료 처리를 먼저 수행
-        handleVolumeCompletion()
-          .then(() => saveProgress())
-          .then(() => {
-            startChapterSwitching(isDocumentFullscreen());
-            navigate(`/viewer/${nextChapterId}`, {
-              replace: true,
-              state: viewerFrom ? { from: viewerFrom } : undefined,
-            });
-          });
+        void navigateToChapter(nextChapterId);
       }
 
       setPullOffset(0);
@@ -392,7 +411,6 @@ export function useVerticalScroll({
       setIsTouching(false);
     };
 
-    // 감쇠 애니메이션
     let rafId: number | null = null;
     const runDecay = () => {
       if (startYRef.current !== null) {
@@ -422,7 +440,10 @@ export function useVerticalScroll({
     const originalHandleWheel = handleWheel;
     handleWheel = (e: WheelEvent) => {
       originalHandleWheel(e);
-      startDecay();
+      // 스냅 모드에서는 decay 불필요 (인디케이터가 100% 고정되므로)
+      if (!isSnapMode) {
+        startDecay();
+      }
     };
 
     content.addEventListener("wheel", handleWheel, { passive: false });
@@ -439,41 +460,38 @@ export function useVerticalScroll({
       content.removeEventListener("touchcancel", handleTouchEnd);
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
-        rafId = null;
       }
       isNavigatingRef.current = false;
     };
   }, [
-    readingMode,
-    prevChapterId,
-    nextChapterId,
-    navigate,
-    isLoading,
-    saveProgress,
     handleVolumeCompletion,
+    isLoading,
+    navigate,
+    nextChapterId,
+    prevChapterId,
     pullSensitivity,
     pullThreshold,
-    viewerFrom,
+    readingMode,
+    resolvedViewerContentRef,
+    navigateToChapter,
+    effectiveViewStatus,
   ]);
 
-  // 챕터 변경 시 상태 리셋 - flushSync를 사용하여 동기 업데이트
   useEffect(() => {
-    // 아무 작업 없이 ref만 업데이트하면 setState를 피할 수 있음
     pullOffsetRef.current = 0;
     isNavigatingRef.current = false;
-    isInternalScrollRef.current = false; // 챕터 변경 시 내부 스크롤 상태 리셋
-    isInitialScrollingRef.current = true; // 챕터 변경 시 가드 다시 활성화
-    // State 업데이트는 다음 프레임에서 처리 (queueMicrotask)
+    isInternalScrollRef.current = false;
+    if (readingMode === "vertical") {
+      isInitialScrollingRef.current = true;
+    }
     queueMicrotask(() => {
       setPullOffset(0);
     });
-  }, [chapterId, isInitialScrollingRef]);
+  }, [chapterId, isInitialScrollingRef, readingMode]);
 
   return {
     pullOffset,
-    viewerContentRef,
-    isInternalScrollRef,
-    startYRef,
+    viewerContentRef: resolvedViewerContentRef,
     isTouching,
   };
 }

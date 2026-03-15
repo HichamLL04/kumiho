@@ -61,6 +61,7 @@ type Series struct {
 	IsBookmarked  bool      `json:"is_bookmarked" db:"is_bookmarked"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	Extension     string    `json:"extension" db:"extension"` // 시리즈 대표 확장자
 
 	// 시리즈 부가 메타데이터 (필요 시 로드)
 	Metadata *SeriesMetadata `json:"metadata,omitempty" db:"-"`
@@ -68,6 +69,8 @@ type Series struct {
 	// 진행도 정보 (계산 필드)
 	TotalPageCount int `json:"total_page_count" db:"-"`
 	ReadPageCount  int `json:"read_page_count" db:"-"`
+	VolumeCount    int `json:"volume_count" db:"-"`
+	ChapterCount   int `json:"chapter_count" db:"-"`
 }
 
 // SeriesMetadata 시리즈 부가 메타데이터
@@ -102,8 +105,12 @@ type Volume struct {
 	TotalPageCount  int       `json:"total_page_count" db:"-"`
 	ReadPageCount   int       `json:"read_page_count" db:"-"`
 	ProgressPercent float64   `json:"progress_percent" db:"-"`
+	ChapterCount    int       `json:"chapter_count"`
+	SubVolumeCount  int       `json:"sub_volume_count" db:"-"`
+	ParentID        *string   `json:"parent_id" db:"parent_id"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+	Extension       string    `json:"extension" db:"extension"` // 확장자 ( ZIP, EPUB, PDF 등)
 }
 
 // Chapter 챕터 모델
@@ -116,6 +123,7 @@ type Chapter struct {
 	PageCount      int       `json:"page_count"`
 	TotalBytes     int64     `json:"total_bytes" db:"total_bytes"`         // EPUB 등에서 가상 포지션 계산용 (HTML 합계)
 	TotalPositions int       `json:"total_positions" db:"total_positions"` // 가상 포지션 총수 (6KB = 1포지션)
+	HasAudio       bool      `json:"has_audio" db:"has_audio"`
 	RenderMode     *string   `json:"render_mode,omitempty" db:"-"`
 	ThumbnailURL   *string   `json:"thumbnail_url,omitempty" db:"-"`
 	IsRead         bool      `json:"is_read" db:"-"`
@@ -141,6 +149,8 @@ type ReadingProgress struct {
 	VolumeID        *string   `json:"volume_id,omitempty"`
 	ChapterID       *string   `json:"chapter_id,omitempty"`
 	CurrentPage     int       `json:"current_page"`
+	AnchorPage      int       `json:"anchor_page" db:"anchor_page"`
+	OffsetRatio     float64   `json:"offset_ratio" db:"offset_ratio"`
 	TotalPages      int       `json:"total_pages"`
 	CurrentPosition int       `json:"current_position" db:"current_position"` // 가상 포지션 중심 위치
 	TotalPositions  int       `json:"total_positions" db:"total_positions"`   // 가상 포지션 총수

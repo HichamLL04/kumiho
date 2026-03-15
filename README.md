@@ -107,6 +107,22 @@ It was originally developed by a developer for personal convenience, after feeli
         └── 001.epub
 ```
 
+#### 3) Nested Folders (Infinite Hierarchy)
+
+Kumiho supports **infinite folder hierarchy**. You can organize your series with any level of subfolders.
+
+```text
+/books
+└── Grand Parent Category
+    └── Parent Category
+        └── My Series
+            ├── Volume 01
+            │   ├── Chapter 01
+            │   │   └── 001.zip
+            │   └── Chapter 02.pdf
+            └── 002.epub
+```
+
 ### 🎵 BGM Auto-Play Rule
 
 - Supported audio formats: `.mp3`, `.ogg`, `.wav`, `.flac`, `.m4a`
@@ -230,7 +246,7 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
     └── 003.epub
 ```
 
-#### 2) シリーズ配下にチャプター(または巻)フォルダを分けて配置
+#### 2) シリーズ配下にチャプター(または巻)フォルダを 나눠서 배치
 
 ```text
 /books
@@ -242,6 +258,22 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
     │   └── 001.pdf
     └── Chapter 03
         └── 001.epub
+```
+
+#### 3) 入れ子構造（無制限の階層）
+
+Kumihoは**無制限のフォルダ階層**をサポートしています。サブフォルダを使用して、シリーズを自由に整理できます。
+
+```text
+/books
+└── 大分類
+    └── 中分類
+        └── My Series
+            ├── 第01巻
+            │   ├── 第01話
+            │   │   └── 001.zip
+            │   └── 第02話.pdf
+            └── 002.epub
 ```
 
 ### 🎵 BGM自動再生ルール
@@ -310,7 +342,7 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 
 > [!IMPORTANT]
 > **v0.9.0 보안 강화 및 중대 변경 사항 (Breaking Change)**
-> 이번 업데이트는 보안 향상을 위해 컨테이너 실행 권한을 `root`에서 일반 사용자(`appuser`)로 변경하였습니다.
+> 이번 업데이트는 보안 향상을 위해 컨테이너 실행 권한을 `root`에서 일반 사용자(`appuser`)로 변경하였습니다。
 > **기존 사용자 유의사항**: 썸네일이 깨지거나 "Permission Denied" 에러가 발생하는 경우, 반드시 `PUID`와 `PGID` 환경변수를 자신의 계정 ID(터미널에서 `id` 명령어로 확인)로 설정해 주시기 바랍니다.
 > **v0.10.x Docker 업데이트**: CGO/네이티브 라이브러리 호환성을 위해 Docker 베이스 이미지를 변경했습니다. 업데이트 시 이미지를 다시 pull하고 컨테이너를 recreate 해주세요.
 
@@ -357,7 +389,7 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 
 ### 📁 추천 라이브러리 구조
 
-#### 1) 시리즈 폴더 바로 아래에 권/챕터 파일 배치
+#### 1) 시리즈 폴더에 볼륨/챕터 파일 직접 배치
 
 ```text
 /books
@@ -367,7 +399,7 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
     └── 003.epub
 ```
 
-#### 2) 시리즈 폴더 아래에 챕터(또는 권) 폴더를 나눠서 배치
+#### 2) 시리즈 폴더 하위에 챕터(또는 볼륨) 폴더를 나누어 배치
 
 ```text
 /books
@@ -379,6 +411,22 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
     │   └── 001.pdf
     └── Chapter 03
         └── 001.epub
+```
+
+#### 3) 중첩 폴더 구조 (무제한 계층)
+
+구미호는 **무제한 폴더 계층 구조**를 지원합니다. 하위 폴더를 활용하여 시리즈를 자유롭게 구성할 수 있습니다.
+
+```text
+/books
+└── 대분류 폴더
+    └── 중분류 폴더
+        └── My Series
+            ├── 01권 폴더
+            │   ├── 01화 폴더
+            │   │   └── 01.zip
+            │   └── 02화.pdf
+            └── 02권.epub
 ```
 
 ### 🎵 BGM 자동 재생 규칙
