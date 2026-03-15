@@ -1332,8 +1332,15 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 
 								if !isPdf || hasThumbnail {
 									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)
-									// 단, Extension 필드가 비어있으면 로직 업데이트를 위해 분석 진행
-									if existingVol.Extension != "" {
+									// Extension 필드가 비어있으면 in-place로 업데이트 (볼륨 삭제 없이)
+									if existingVol.Extension == "" {
+										ext := strings.ToLower(filepath.Ext(entryPath))
+										if ext != "" {
+											ext = ext[1:] // "." 제거
+										}
+										log.Printf("[SCANNER] Updating extension metadata for %s: %s", j.name, ext)
+										_ = s.volumeRepo.UpdateExtension(nil, existingVol.ID, ext)
+									}
 									// 오디오 파일이 존재하면 볼륨 및 챕터의 has_audio 업데이트
 									if s.quickCheckHasAudio(entryPath, entry.IsDir(), audioFiles, j.name) {
 										if !existingVol.HasAudio {
@@ -1344,10 +1351,6 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 										s.updateChaptersHasAudio(existingVol.ID, entryPath, entry.IsDir(), audioFiles, j.name)
 									}
 									continue
-								} else {
-									// Extension 메타데이터 누락으로 인한 강제 업데이트
-									log.Printf("[SCANNER] Force update for %s: Missing extension metadata", j.name)
-								}
 								} else {
 									// PDF이며 썸네일이 없는 경우 강제 업데이트
 									log.Printf("[SCANNER] Force update for %s: Missing PDF thumbnail", j.name)

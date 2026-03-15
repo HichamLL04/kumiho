@@ -60,6 +60,13 @@ func (r *VolumeRepository) UpdateHasAudio(db database.Queryer, volumeID string, 
 	return err
 }
 
+// UpdateExtension extension 필드만 업데이트
+func (r *VolumeRepository) UpdateExtension(db database.Queryer, volumeID string, extension string) error {
+	db = database.GetQueryer(db)
+	_, err := db.Exec(`UPDATE volumes SET extension = ?, updated_at = ? WHERE id = ?`, extension, time.Now(), volumeID)
+	return err
+}
+
 // FindBySeriesID 시리즈 ID로 볼륨 목록 조회
 func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) ([]model.Volume, error) {
 	db = database.GetQueryer(db)
