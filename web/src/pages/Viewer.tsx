@@ -23,14 +23,12 @@ export function ViewerPage() {
     );
   }
 
-  // 메인 로딩 스피너: 초기 API 로딩 + 세로 모드 hydration/restoring 커버
-  // "rendering" 상태에서는 오버레이를 보여주지 않고 SmartImageViewer의 opacity 전환에 맡김
+  // 메인 로딩 스피너: viewStatus가 "ready"가 될 때까지 오버레이 유지
+  // 이미지가 실제 로드 완료된 후에만 오버레이를 제거하여 검은 화면 깜빡임 방지
   const showLoading =
     loaderData.isLoading ||
     !loaderData.chapter ||
-    (loaderData.viewStatus !== undefined &&
-      loaderData.viewStatus !== "ready" &&
-      loaderData.viewStatus !== "rendering");
+    (loaderData.viewStatus !== undefined && loaderData.viewStatus !== "ready");
 
   if (!loaderData.chapter) {
     return showLoading ? <LoadingSpinner fullScreen text={undefined} /> : null;
