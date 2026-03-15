@@ -467,7 +467,6 @@ export function LibrariesTab() {
       setStatus({ type: "info", message: t("settings.libraries.toast.scan_started") });
       startPolling();
       await libraryAPI.scan(id);
-      setStatus({ type: "success", message: t("settings.libraries.toast.scan_completed") });
       fetchLibraries();
     } catch (error: unknown) {
       console.error("Failed to scan library:", error);
@@ -485,7 +484,6 @@ export function LibrariesTab() {
       setStatus({ type: "info", message: t("settings.libraries.toast.scan_started") });
       startPolling();
       await libraryAPI.scanAll();
-      setStatus({ type: "success", message: t("settings.libraries.toast.scan_completed") });
       fetchLibraries();
     } catch (error: unknown) {
       console.error("Failed to scan all libraries:", error);
