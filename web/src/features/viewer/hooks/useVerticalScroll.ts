@@ -247,12 +247,68 @@ export function useVerticalScroll({
     const content = resolvedViewerContentRef.current;
     if (!content) return;
 
+    // 민감(high) 모드: 점진적 당김 대신 2단계 스냅 방식
+    // 1단계: 경계에서 스크롤 → 인디케이터 100% 표시 (고정)
+    // 2단계: 같은 방향 스크롤 → 회차 이동 / 반대 방향 → 인디케이터 해제
+    const isSnapMode = pullSensitivity >= 0.8;
+
     let handleWheel = (e: WheelEvent) => {
       if (isNavigatingRef.current) return;
 
       const isAtTop = content.scrollTop <= 0;
       const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
 
+      if (isSnapMode) {
+        const currentPull = pullOffsetRef.current;
+
+        // 인디케이터가 표시 중인 경우 (prev)
+        if (currentPull > 0) {
+          e.preventDefault();
+          if (e.deltaY < 0 && prevChapterId) {
+            // 같은 방향(위) → 회차 이동
+            isNavigatingRef.current = true;
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+            void navigateToChapter(prevChapterId, { preventComplete: true });
+          } else if (e.deltaY > 0) {
+            // 반대 방향(아래) → 해제
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+          }
+          return;
+        }
+
+        // 인디케이터가 표시 중인 경우 (next)
+        if (currentPull < 0) {
+          e.preventDefault();
+          if (e.deltaY > 0 && nextChapterId) {
+            // 같은 방향(아래) → 회차 이동
+            isNavigatingRef.current = true;
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+            void navigateToChapter(nextChapterId);
+          } else if (e.deltaY < 0) {
+            // 반대 방향(위) → 해제
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+          }
+          return;
+        }
+
+        // 인디케이터 미표시 → 경계에서 첫 스크롤 시 100% 스냅
+        if (isAtTop && e.deltaY < 0 && prevChapterId) {
+          e.preventDefault();
+          pullOffsetRef.current = pullThreshold;
+          setPullOffset(pullThreshold);
+        } else if (isAtBottom && e.deltaY > 0 && nextChapterId) {
+          e.preventDefault();
+          pullOffsetRef.current = -pullThreshold;
+          setPullOffset(-pullThreshold);
+        }
+        return;
+      }
+
+      // 일반 모드(low/medium): 기존 점진적 당김
       if (isAtTop && e.deltaY < 0 && prevChapterId) {
         e.preventDefault();
         setPullOffset((prev) => {
@@ -384,7 +440,10 @@ export function useVerticalScroll({
     const originalHandleWheel = handleWheel;
     handleWheel = (e: WheelEvent) => {
       originalHandleWheel(e);
-      startDecay();
+      // 스냅 모드에서는 decay 불필요 (인디케이터가 100% 고정되므로)
+      if (!isSnapMode) {
+        startDecay();
+      }
     };
 
     content.addEventListener("wheel", handleWheel, { passive: false });
