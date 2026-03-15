@@ -1988,8 +1988,14 @@ func (s *Scanner) resolveVolumeExtensionRecursive(volumeID string, visited map[s
 			if ext == "" {
 				// 서브볼륨의 extension도 비어있으면 (업그레이드 직후) 경로/챕터 기반으로 산출
 				pathExt := strings.ToUpper(strings.TrimPrefix(filepath.Ext(sv.Path), "."))
+				// 확장자가 아카이브로 보여도 실제 디렉터리일 수 있으므로 파일 여부 확인
 				if isKnownArchiveExt(pathExt) {
-					ext = pathExt
+					if info, statErr := os.Stat(sv.Path); statErr == nil && !info.IsDir() {
+						ext = pathExt
+					} else {
+						// stat 실패 또는 디렉터리: 재귀로 산출
+						ext = s.resolveVolumeExtensionRecursive(sv.ID, visited)
+					}
 				} else {
 					// 디렉터리 서브볼륨 또는 점 포함 폴더명: 재귀적으로 확인
 					ext = s.resolveVolumeExtensionRecursive(sv.ID, visited)
