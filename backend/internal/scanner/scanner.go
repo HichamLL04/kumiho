@@ -1325,7 +1325,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 							if chapErr != nil {
 								log.Printf("[SCANNER] Error getting chapter count for %s: %v. Continuing with forced scan.", j.name, chapErr)
 								// 에러 발생 시 안전을 위해 continue하지 않고 분석 진행
-							} else if existingVol.VolumeNumber == volNum && existingVol.Unit == volUnit && chapCount > 0 {
+							} else if existingVol.VolumeNumber == volNum && existingVol.Unit == volUnit && (chapCount > 0 || s.hasChildVolumes(existingVol.ID)) {
 								// PDF인 경우 썸네일이 있는지 추가로 확인 (디렉터리는 PDF가 아님)
 								isPdf := !entry.IsDir() && strings.ToLower(filepath.Ext(entryPath)) == ".pdf"
 								hasThumbnail := existingVol.ThumbnailPath != nil && *existingVol.ThumbnailPath != ""
@@ -1926,13 +1926,24 @@ func (s *Scanner) quickCheckHasAudio(entryPath string, isDir bool, audioFiles ma
 	return false
 }
 
+// hasChildVolumes 볼륨에 하위 볼륨이 존재하는지 확인
+func (s *Scanner) hasChildVolumes(volumeID string) bool {
+	count, err := s.volumeRepo.CountByParentID(nil, volumeID)
+	return err == nil && count > 0
+}
+
 // resolveVolumeExtension DB의 챕터/서브볼륨 정보를 기반으로 디렉터리 볼륨의 extension을 산출
+// DB 조회 실패 시 빈 문자열을 반환하여 호출부에서 업데이트를 스킵하도록 함
 func (s *Scanner) resolveVolumeExtension(volumeID, entryPath string) string {
 	extSet := make(map[string]bool)
+	var hasError bool
 
 	// 챕터 경로 기반 확장자 수집
 	chapters, err := s.chapterRepo.FindByVolumeID(nil, volumeID)
-	if err == nil {
+	if err != nil {
+		log.Printf("[SCANNER] Failed to query chapters for extension resolution (volume %s): %v", volumeID, err)
+		hasError = true
+	} else {
 		for _, ch := range chapters {
 			ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(ch.Path), "."))
 			if ext == "" {
@@ -1944,12 +1955,20 @@ func (s *Scanner) resolveVolumeExtension(volumeID, entryPath string) string {
 
 	// 서브볼륨 확장자 수집
 	subVols, err := s.volumeRepo.FindByParentID(nil, volumeID)
-	if err == nil {
+	if err != nil {
+		log.Printf("[SCANNER] Failed to query sub-volumes for extension resolution (volume %s): %v", volumeID, err)
+		hasError = true
+	} else {
 		for _, sv := range subVols {
 			if sv.Extension != "" {
-				extSet[sv.Extension] = true
+				extSet[strings.ToUpper(sv.Extension)] = true
 			}
 		}
+	}
+
+	// DB 조회 에러가 있고 데이터를 얻지 못했으면 빈 문자열 반환 (업데이트 스킵)
+	if hasError && len(extSet) == 0 {
+		return ""
 	}
 
 	if len(extSet) > 1 {
@@ -1960,7 +1979,7 @@ func (s *Scanner) resolveVolumeExtension(volumeID, entryPath string) string {
 			return ext
 		}
 	}
-	return "IMG" // 기본값
+	return ""
 }
 
 // updateChaptersHasAudio 스킵된 볼륨의 챕터별 has_audio 플래그를 업데이트
