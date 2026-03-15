@@ -53,6 +53,7 @@ export function AlertModal({
   const color = colorMap[type];
 
   const handleBackdropClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (e.target === e.currentTarget) {
       if (showCancel && onCancel) {
         onCancel();

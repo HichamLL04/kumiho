@@ -19,11 +19,13 @@ import { normalizeExtensionBadge, parseSupportedExtension } from "../utils/exten
 import type { Chapter, Series, Volume } from "../types/series";
 import { useViewerStore } from "../stores/viewerStore";
 import styles from "./SeriesCard.module.css";
+import { AlertModal, type AlertType } from "./modals/AlertModal";
 
 export interface SeriesCardProps {
   item: Series | Volume;
   type?: "series" | "volume";
   customSubtitle?: string;
+  hideMarkPrevious?: boolean;
   progress?: number;
   chapterId?: string;
   volumeId?: string;
@@ -39,6 +41,7 @@ export function SeriesCard({
   item,
   type = "series",
   customSubtitle,
+  hideMarkPrevious,
   progress,
   chapterId,
   volumeId,
@@ -64,6 +67,20 @@ export function SeriesCard({
   const menuRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const setIncognito = useViewerStore((state) => state.setIncognito);
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    type: AlertType;
+    message: string;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    type: "info",
+    message: "",
+  });
+
+  const closeAlert = () => {
+    setAlertModal((prev) => ({ ...prev, isOpen: false }));
+  };
 
   let calculatedProgress = progress;
   if (calculatedProgress === undefined && "progress_percent" in item && typeof item.progress_percent === "number") {
@@ -230,59 +247,107 @@ export function SeriesCard({
     e.preventDefault();
     e.stopPropagation();
     setMenuOpen(false);
-    setForceShowProgress(true);
-    setOptimisticCompleted(true);
-    setOptimisticProgress(100);
 
-    setIsUpdating(true);
-    try {
-      if (chapterId && type === "series") {
-        await chapterAPI.markComplete(chapterId);
-      } else if (type === "volume") {
-        await volumeAPI.markComplete(item.id);
-      } else if (volumeId) {
-        await volumeAPI.markComplete(volumeId);
-      } else if (type === "series") {
-        await seriesAPI.markComplete(item.id);
-      }
-      await Promise.resolve(onStatusChange?.());
-    } catch (error) {
-      console.error("Failed to mark as read:", error);
-      setOptimisticCompleted(null);
-      setOptimisticProgress(null);
-    } finally {
-      setIsUpdating(false);
-    }
+    setAlertModal({
+      isOpen: true,
+      type: "warning",
+      message:
+        type === "series" ? t("series.alert.mark_complete_series_msg") : t("series.alert.mark_complete_volume_msg"),
+      onConfirm: async () => {
+        setForceShowProgress(true);
+        setOptimisticCompleted(true);
+        setOptimisticProgress(100);
+        setIsUpdating(true);
+        try {
+          if (chapterId && type === "series") {
+            await chapterAPI.markComplete(chapterId);
+          } else if (type === "volume") {
+            await volumeAPI.markComplete(item.id);
+          } else if (volumeId) {
+            await volumeAPI.markComplete(volumeId);
+          } else if (type === "series") {
+            await seriesAPI.markComplete(item.id);
+          }
+          await Promise.resolve(onStatusChange?.());
+          closeAlert();
+        } catch (error) {
+          console.error("Failed to mark as read:", error);
+          setOptimisticCompleted(null);
+          setOptimisticProgress(null);
+          setAlertModal({ isOpen: true, type: "error", message: t("series.alert.complete_failed") });
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
+  };
+
+  const handleMarkPreviousAsRead = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(false);
+
+    if (type !== "volume") return;
+
+    setAlertModal({
+      isOpen: true,
+      type: "warning",
+      message: t("series.alert.mark_previous_completed_msg"),
+      onConfirm: async () => {
+        setIsUpdating(true);
+        try {
+          const volume = item as Volume;
+          await seriesAPI.markPreviousComplete(volume.series_id, volume.id);
+          await Promise.resolve(onStatusChange?.());
+          closeAlert();
+        } catch (error) {
+          console.error("Failed to mark previous as read:", error);
+          setAlertModal({ isOpen: true, type: "error", message: t("series.alert.complete_failed") });
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
   };
 
   const handleMarkAsUnread = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setMenuOpen(false);
-    setForceShowProgress(true);
-    setOptimisticCompleted(false);
-    setOptimisticProgress(0);
 
-    setIsUpdating(true);
-    try {
-      if (chapterId && type === "series") {
-        await chapterAPI.deleteProgress(chapterId);
-      } else if (type === "volume") {
-        await volumeAPI.deleteCompletion(item.id);
-      } else if (volumeId) {
-        await volumeAPI.deleteCompletion(volumeId);
-      } else if (type === "series") {
-        await seriesAPI.resetProgress(item.id);
-      }
-      await Promise.resolve(onStatusChange?.());
-    } catch (error) {
-      console.error("Failed to mark as unread:", error);
-      setOptimisticCompleted(null);
-      setOptimisticProgress(null);
-    } finally {
-      setForceShowProgress(false);
-      setIsUpdating(false);
-    }
+    setAlertModal({
+      isOpen: true,
+      type: "warning",
+      message:
+        type === "series" ? t("series.alert.reset_progress_series_msg") : t("series.alert.reset_progress_volume_msg"),
+      onConfirm: async () => {
+        setForceShowProgress(true);
+        setOptimisticCompleted(false);
+        setOptimisticProgress(0);
+        setIsUpdating(true);
+        try {
+          if (chapterId && type === "series") {
+            await chapterAPI.deleteProgress(chapterId);
+          } else if (type === "volume") {
+            await volumeAPI.deleteCompletion(item.id);
+          } else if (volumeId) {
+            await volumeAPI.deleteCompletion(volumeId);
+          } else if (type === "series") {
+            await seriesAPI.resetProgress(item.id);
+          }
+          await Promise.resolve(onStatusChange?.());
+          closeAlert();
+        } catch (error) {
+          console.error("Failed to mark as unread:", error);
+          setOptimisticCompleted(null);
+          setOptimisticProgress(null);
+          setAlertModal({ isOpen: true, type: "error", message: t("series.alert.reset_failed") });
+        } finally {
+          setForceShowProgress(false);
+          setIsUpdating(false);
+        }
+      },
+    });
   };
 
   const showMenu = true;
@@ -452,6 +517,15 @@ export function SeriesCard({
                   <BookCheck size={16} />
                   <span>{t("series.action.mark_completed")}</span>
                 </button>
+                {type === "volume" && !hideMarkPrevious && (
+                  <button
+                    className={styles.seriesMenuItem}
+                    onClick={handleMarkPreviousAsRead}
+                  >
+                    <BookCheck size={16} />
+                    <span>{t("series.action.mark_previous_completed")}</span>
+                  </button>
+                )}
                 <button
                   className={styles.seriesMenuItem}
                   onClick={handleMarkAsUnread}
@@ -529,6 +603,19 @@ export function SeriesCard({
             />
           </div>
         )}
+      </div>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <AlertModal
+          isOpen={alertModal.isOpen}
+          type={alertModal.type}
+          message={alertModal.message}
+          onConfirm={alertModal.onConfirm || closeAlert}
+          onCancel={alertModal.onConfirm ? closeAlert : undefined}
+          showCancel={!!alertModal.onConfirm}
+        />
       </div>
     </div>
   );

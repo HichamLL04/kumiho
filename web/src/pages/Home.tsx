@@ -247,9 +247,10 @@ export function HomePage() {
       ) : (
         <HorizontalDragScroll className={styles.seriesGrid}>
           {recentProgress.map((progress) => {
-            // RecentProgress를 Series 객체로 변환
+            // RecentProgress를 Series/Volume 객체로 변환
+            const isVolume = !!progress.volume_id;
             const seriesData: Series = {
-              id: progress.series_id,
+              id: isVolume ? progress.volume_id! : progress.series_id,
               title: progress.series_title,
               library_id: "", // 필수지만 카드에서 사용 안 함
               path: progress.chapter_path || progress.volume_path || progress.path,
@@ -287,7 +288,7 @@ export function HomePage() {
               <SeriesCard
                 key={progress.id}
                 item={seriesData}
-                type="series"
+                type={progress.volume_id ? "volume" : "series"}
                 customSubtitle={subtitle}
                 progress={progress.progress_percent}
                 chapterId={progress.chapter_id}
@@ -295,6 +296,7 @@ export function HomePage() {
                 onStatusChange={loadData}
                 showExtensionBadge
                 extensionBadgeText={recentProgressExtensionMap[progress.id]}
+                hideMarkPrevious
               />
             );
           })}

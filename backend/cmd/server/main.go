@@ -193,6 +193,8 @@ func main() {
 	series.Post("/:seriesId/progress/compare", progressHandler.CompareProgress)
 	series.Get("/:seriesId/completions", progressHandler.GetSeriesCompletions)
 	series.Post("/:seriesId/complete", progressHandler.MarkSeriesComplete)
+	series.Post("/:seriesId/volumes/:volumeId/complete-previous", progressHandler.MarkPreviousVolumesComplete)
+	series.Post("/:seriesId/chapters/:chapterId/complete-previous", progressHandler.MarkPreviousChaptersComplete)
 	series.Delete("/:seriesId/progress", progressHandler.ResetSeriesProgress)
 	series.Post("/:id/thumbnail", seriesHandler.UploadThumbnail)
 	series.Post("/:id/thumbnail/url", seriesHandler.DownloadThumbnail)

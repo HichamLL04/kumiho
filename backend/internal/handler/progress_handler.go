@@ -1411,6 +1411,232 @@ func (h *ProgressHandler) DeleteVolumeCompletion(c *fiber.Ctx) error {
 	})
 }
 
+// MarkPreviousVolumesComplete 특정 볼륨 이전의 모든 회차 완독 처리
+// POST /api/v1/series/:seriesId/volumes/:volumeId/complete-previous
+func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	seriesID := c.Params("seriesId")
+	volumeID := c.Params("volumeId")
+
+	// 기준 볼륨 존재 확인
+	baseVolume, err := h.volumeRepo.FindByID(nil, volumeID)
+	if err != nil || baseVolume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "base volume not found",
+		})
+	}
+
+	// 시리즈 존재 확인
+	series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	// 트랜잭션 시작
+	tx, err := database.DB.Begin()
+	if err != nil {
+		log.Printf("Failed to begin transaction: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to start transaction",
+		})
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now()
+
+	// 1. 기준 볼륨보다 번호가 작은 모든 볼륨들의 ID 목록 가져오기 (같은 시리즈 내)
+	// 2. 해당되는 모든 챕터의 진행도를 100%로 업데이트
+	_, err = tx.Exec(`
+		UPDATE reading_progress 
+		SET current_page = total_pages, 
+			progress_percent = 100.0, 
+			updated_at = ?
+		WHERE user_id = ? AND series_id = ? AND chapter_id IN (
+			SELECT c.id FROM chapters c
+			JOIN volumes v ON c.volume_id = v.id
+			WHERE v.series_id = ? AND v.volume_number < ?
+		)
+	`, now, userID, seriesID, seriesID, baseVolume.VolumeNumber)
+	if err != nil {
+		log.Printf("Failed to bulk update progress for previous volumes of series %s: %v", seriesID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to update progress records",
+		})
+	}
+
+	// 3. 누락된 진행도 생성
+	_, err = tx.Exec(`
+		INSERT INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, ?, c.volume_id, c.id, c.page_count, c.page_count, 100.0, ?
+		FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		WHERE v.series_id = ? AND v.volume_number < ?
+		  AND c.id NOT IN (SELECT chapter_id FROM reading_progress WHERE user_id = ?)
+	`, userID, seriesID, now, seriesID, baseVolume.VolumeNumber, userID)
+	if err != nil {
+		log.Printf("Failed to bulk insert progress for previous volumes of series %s: %v", seriesID, err)
+	}
+
+	// 4. 챕터 완독 기록 추가
+	_, err = tx.Exec(`
+		INSERT OR IGNORE INTO chapter_completions (id, user_id, chapter_id, completed_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, c.id, ?
+		FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		WHERE v.series_id = ? AND v.volume_number < ?
+	`, userID, now, seriesID, baseVolume.VolumeNumber)
+	if err != nil {
+		log.Printf("Failed to bulk mark chapter completions for previous volumes of series %s: %v", seriesID, err)
+	}
+
+	// 5. 볼륨 완독 기록 추가
+	_, err = tx.Exec(`
+		INSERT OR REPLACE INTO volume_completions (id, user_id, volume_id, completed_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, id, ?
+		FROM volumes
+		WHERE series_id = ? AND volume_number < ?
+	`, userID, now, seriesID, baseVolume.VolumeNumber)
+	if err != nil {
+		log.Printf("Failed to bulk mark volume completions for previous volumes of series %s: %v", seriesID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to mark volumes as complete",
+		})
+	}
+
+	// 트랜잭션 커밋
+	if err := tx.Commit(); err != nil {
+		log.Printf("Failed to commit transaction: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to commit transaction",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "previous volumes marked as complete",
+	})
+}
+
+// MarkPreviousChaptersComplete 특정 챕터 이전의 모든 회차 완독 처리
+// POST /api/v1/series/:seriesId/chapters/:chapterId/complete-previous
+func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	seriesID := c.Params("seriesId")
+	chapterID := c.Params("chapterId")
+
+	// 기준 챕터 존재 확인
+	baseChapter, err := h.chapterRepo.FindByID(nil, chapterID)
+	if err != nil || baseChapter == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "base chapter not found",
+		})
+	}
+
+	// 기준 볼륨 확인 (순서 비교용)
+	baseVolume, err := h.volumeRepo.FindByID(nil, baseChapter.VolumeID)
+	if err != nil || baseVolume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "base volume not found",
+		})
+	}
+
+	// 시리즈 존재 확인
+	series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	// 트랜잭션 시작
+	tx, err := database.DB.Begin()
+	if err != nil {
+		log.Printf("Failed to begin transaction: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to start transaction",
+		})
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now()
+
+	// 1. 기준 챕터보다 이전인 모든 챕터들의 진행도를 100%로 업데이트
+	// 이전 권의 모든 챕터 + 현재 권의 이전 챕터들
+	_, err = tx.Exec(`
+		UPDATE reading_progress 
+		SET current_page = total_pages, 
+			progress_percent = 100.0, 
+			updated_at = ?
+		WHERE user_id = ? AND series_id = ? AND chapter_id IN (
+			SELECT c.id FROM chapters c
+			JOIN volumes v ON c.volume_id = v.id
+			WHERE v.series_id = ? AND (
+				v.volume_number < ? OR (v.volume_number = ? AND c.chapter_number < ?)
+			)
+		)
+	`, now, userID, seriesID, seriesID, baseVolume.VolumeNumber, baseVolume.VolumeNumber, baseChapter.ChapterNumber)
+	if err != nil {
+		log.Printf("Failed to bulk update progress for previous chapters of series %s: %v", seriesID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to update progress records",
+		})
+	}
+
+	// 2. 누락된 진행도 생성
+	_, err = tx.Exec(`
+		INSERT INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, ?, c.volume_id, c.id, c.page_count, c.page_count, 100.0, ?
+		FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		WHERE v.series_id = ? AND (
+			v.volume_number < ? OR (v.volume_number = ? AND c.chapter_number < ?)
+		)
+		  AND c.id NOT IN (SELECT chapter_id FROM reading_progress WHERE user_id = ?)
+	`, userID, seriesID, now, seriesID, baseVolume.VolumeNumber, baseVolume.VolumeNumber, baseChapter.ChapterNumber, userID)
+	if err != nil {
+		log.Printf("Failed to bulk insert progress for previous chapters of series %s: %v", seriesID, err)
+	}
+
+	// 3. 챕터 완독 기록 추가
+	_, err = tx.Exec(`
+		INSERT OR IGNORE INTO chapter_completions (id, user_id, chapter_id, completed_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, c.id, ?
+		FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		WHERE v.series_id = ? AND (
+			v.volume_number < ? OR (v.volume_number = ? AND c.chapter_number < ?)
+		)
+	`, userID, now, seriesID, baseVolume.VolumeNumber, baseVolume.VolumeNumber, baseChapter.ChapterNumber)
+	if err != nil {
+		log.Printf("Failed to bulk mark chapter completions for previous chapters of series %s: %v", seriesID, err)
+	}
+
+	// 4. 볼륨 완독 기록 추가 (이전 권들은 확실히 완독, 현재 권은 다른 챕터 상태에 따라 다름)
+	// 이전 권들 완독 처리
+	_, err = tx.Exec(`
+		INSERT OR REPLACE INTO volume_completions (id, user_id, volume_id, completed_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, id, ?
+		FROM volumes
+		WHERE series_id = ? AND volume_number < ?
+	`, userID, now, seriesID, baseVolume.VolumeNumber)
+	if err != nil {
+		log.Printf("Failed to bulk mark volume completions for previous chapters of series %s: %v", seriesID, err)
+	}
+
+	// 트랜잭션 커밋
+	if err := tx.Commit(); err != nil {
+		log.Printf("Failed to commit transaction: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to commit transaction",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "previous chapters marked as complete",
+	})
+}
+
 // GetSeriesCompletions 시리즈 내 완료된 볼륨 목록 조회
 // GET /api/v1/series/:seriesId/completions
 func (h *ProgressHandler) GetSeriesCompletions(c *fiber.Ctx) error {

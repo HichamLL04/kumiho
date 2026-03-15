@@ -209,6 +209,8 @@ export const seriesAPI = {
   deleteThumbnail: (seriesId: string) => api.delete<Series>(`/series/${seriesId}/thumbnail`),
   // 시리즈 완독/초기화
   markComplete: (seriesId: string) => api.post(`/series/${seriesId}/complete`),
+  markPreviousComplete: (seriesId: string, volumeId: string) =>
+    api.post(`/series/${seriesId}/volumes/${volumeId}/complete-previous`),
   resetProgress: (seriesId: string) => api.delete(`/series/${seriesId}/progress`),
   // 시리즈 검색
   search: (query: string) => api.get<{ series: Series[] }>(`/series/search?q=${encodeURIComponent(query)}`),
@@ -288,6 +290,8 @@ export const chapterAPI = {
   analyze: (chapterId: string) =>
     api.post<{ analyzed_count: number; total_pages: number; success: boolean }>(`/chapters/${chapterId}/analyze`),
   markComplete: (chapterId: string) => api.post(`/chapters/${chapterId}/complete`),
+  markPreviousComplete: (seriesId: string, chapterId: string) =>
+    api.post(`/series/${seriesId}/chapters/${chapterId}/complete-previous`),
   deleteProgress: (chapterId: string) => api.delete(`/chapters/${chapterId}/progress`),
   getBGM: (chapterId: string) => api.get<{ exists: boolean; url?: string }>(`/chapters/${chapterId}/bgm`),
 };
