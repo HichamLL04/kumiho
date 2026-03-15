@@ -229,11 +229,23 @@ describe("useVerticalScroll", () => {
         preventDefault: vi.fn(),
       } as unknown as WheelEvent;
 
+      // 스냅 모드(pullSensitivity >= 0.8): 첫 스크롤은 인디케이터 표시
       await act(async () => {
         wheelHandler(event);
       });
 
       expect(event.preventDefault).toHaveBeenCalled();
+
+      // 두 번째 같은 방향 스크롤로 회차 이동
+      const event2 = {
+        deltaY: 100,
+        preventDefault: vi.fn(),
+      } as unknown as WheelEvent;
+
+      await act(async () => {
+        wheelHandler(event2);
+      });
+
       expect(mocks.navigateMock).toHaveBeenCalledWith(expect.stringContaining("next-ch"), expect.anything());
     });
   });

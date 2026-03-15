@@ -116,9 +116,9 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
     },
     [urlAnchor, urlOffset, urlPage],
   );
-  const finishChapterLoad = (mode: ReadingMode) => {
+  const finishChapterLoad = () => {
     setIsLoading(false);
-    if (mode === "vertical") {
+    if (readingModeRef.current === "vertical") {
       setViewStatus("hydrating");
       isInitialScrollingRef.current = true;
       return;
@@ -229,7 +229,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
           // 로딩 상태 및 스크롤 가드 해제 — 다음 페인트 사이클까지만 대기
           rafId = requestAnimationFrame(() => {
             if (cancelled) return;
-            finishChapterLoad(readingModeAtLoad);
+            finishChapterLoad();
           });
 
           // 부가 정보 로드 (비동기, 백그라운드 처리)
@@ -369,6 +369,12 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
             resolvedSettings.showThreshold = parseInt(globalData.viewer_show_threshold, 10);
 
           initializeSettings(resolvedSettings);
+          // initializeSettings는 동기적으로 스토어를 업데이트하지만,
+          // readingModeRef는 useEffect로 갱신되어 rAF 콜백 시점에 아직 옛 값일 수 있다.
+          // finishChapterLoad가 올바른 모드로 분기하도록 즉시 동기화한다.
+          if (resolvedSettings.readingMode) {
+            readingModeRef.current = resolvedSettings.readingMode;
+          }
           setCurrentSeriesId(seriesData.id);
 
           if (import.meta.env.DEV) {
@@ -439,7 +445,7 @@ export function useChapterLoader({ chapterId }: UseChapterLoaderParams): UseChap
         // 5. 완료 후 가드 해제 — 다음 페인트 사이클까지만 대기 (React 18 자동 배칭으로 충분)
         rafId = requestAnimationFrame(() => {
           if (cancelled) return;
-          finishChapterLoad(readingModeAtLoad);
+          finishChapterLoad();
         });
       } catch (err) {
         if (cancelled) return;

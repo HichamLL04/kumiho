@@ -252,7 +252,7 @@ describe("ViewerContent vertical rendering window", () => {
     expect(screen.queryByTestId("smart-/api/v1/chapters/chapter-1/pages/14/image")).not.toBeInTheDocument();
   });
 
-  it("narrows vertical rendering window during initial restore", () => {
+  it("renders all pages during initial restore (hidden by CSS until ready)", () => {
     render(
       <ViewerContent
         {...baseProps}
@@ -266,9 +266,11 @@ describe("ViewerContent vertical rendering window", () => {
       />,
     );
 
+    // All pages should be in the DOM during hydrating (content is visually hidden by viewerContentHidden CSS)
+    // This prevents scroll position shifts when transitioning from hydrating to ready
     expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/1/image")).toBeInTheDocument();
     expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/2/image")).toBeInTheDocument();
-    expect(screen.queryByTestId("smart-/api/v1/chapters/chapter-1/pages/3/image")).not.toBeInTheDocument();
+    expect(screen.getByTestId("smart-/api/v1/chapters/chapter-1/pages/3/image")).toBeInTheDocument();
   });
 });
 
