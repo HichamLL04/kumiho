@@ -173,6 +173,7 @@ func main() {
 	//       그렇지 않으면 "order"가 ID 파라미터로 매칭될 수 있습니다.
 	libraries.Post("", libraryHandler.Create)
 	libraries.Put("/order", libraryHandler.UpdateOrder)
+	libraries.Post("/scan", libraryHandler.ScanAll)
 	libraries.Get("/:id", libraryHandler.Get)
 	libraries.Put("/:id", libraryHandler.Update)
 	libraries.Post("/:id/scan", libraryHandler.Scan)

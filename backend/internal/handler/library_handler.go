@@ -372,6 +372,48 @@ func (h *LibraryHandler) Scan(c *fiber.Ctx) error {
 	})
 }
 
+// ScanAll 모든 라이브러리 스캔
+// POST /api/v1/libraries/scan
+func (h *LibraryHandler) ScanAll(c *fiber.Ctx) error {
+	// MASTER 권한 확인
+	role := middleware.GetUserRole(c)
+	if role != model.RoleMaster {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "master access required",
+		})
+	}
+
+	libraries, err := h.libraryRepo.FindAll(nil)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch libraries",
+		})
+	}
+
+	triggered := 0
+	for _, lib := range libraries {
+		if lib.Type == "SYSTEM" {
+			continue
+		}
+
+		// 각 라이브러리 스캔은 별도 고루틴에서 비동기 실행 (세마포어로 제어됨)
+		go func(l model.Library) {
+			if _, err := h.scanner.ScanLibrary(h.appCtx, &l); err != nil {
+				// 에러 로그는 ScanLibrary 내부에서 처리됨 (상태 업데이트 등)
+				if err != scanner.ErrAlreadyScanning {
+					log.Printf("Manual full scan error for library %s: %v", l.Name, err)
+				}
+			}
+		}(lib)
+		triggered++
+	}
+
+	return c.JSON(fiber.Map{
+		"message":   "scan triggered for all libraries",
+		"triggered": triggered,
+	})
+}
+
 // CancelScan 라이브러리 스캔 취소
 // POST /api/v1/libraries/:id/scan/cancel
 func (h *LibraryHandler) CancelScan(c *fiber.Ctx) error {
