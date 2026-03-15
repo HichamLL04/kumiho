@@ -157,6 +157,7 @@ export const libraryAPI = {
     },
   ) => api.put(`/libraries/${id}`, data),
   scan: (id: string) => api.post(`/libraries/${id}/scan`),
+  scanAll: () => api.post("/libraries/scan"),
   cancelScan: (id: string) => api.post(`/libraries/${id}/scan/cancel`),
   delete: (id: string) => api.delete(`/libraries/${id}`),
   updateOrder: (ids: string[]) => api.put("/libraries/order", ids),

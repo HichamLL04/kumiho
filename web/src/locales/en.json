@@ -311,6 +311,7 @@
       "title": "Library Management",
       "desc": "Manage folders where media files are located.",
       "add_button": "Add Library",
+      "scan_all_button": "Scan All Libraries",
       "add_title": "Add New Library",
       "path_label": "Set Path",
       "path_desc": "Enter the actual folder path on the server.",
