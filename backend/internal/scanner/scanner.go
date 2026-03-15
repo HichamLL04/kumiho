@@ -1968,8 +1968,8 @@ func (s *Scanner) resolveVolumeExtension(volumeID string) string {
 		}
 	}
 
-	// DB 조회 에러가 있고 데이터를 얻지 못했으면 빈 문자열 반환 (업데이트 스킵)
-	if hasError && len(extSet) == 0 {
+	// DB 조회 에러가 하나라도 있으면 불완전한 데이터로 잘못된 extension을 저장할 수 있으므로 스킵
+	if hasError {
 		return ""
 	}
 
