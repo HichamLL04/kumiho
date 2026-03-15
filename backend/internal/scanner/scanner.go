@@ -1326,8 +1326,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 								log.Printf("[SCANNER] Error getting chapter count for %s: %v. Continuing with forced scan.", j.name, chapErr)
 								// 에러 발생 시 안전을 위해 continue하지 않고 분석 진행
 							} else if existingVol.VolumeNumber == volNum && existingVol.Unit == volUnit && chapCount > 0 {
-								// PDF인 경우 썸네일이 있는지 추가로 확인
-								isPdf := strings.ToLower(filepath.Ext(entryPath)) == ".pdf"
+								// PDF인 경우 썸네일이 있는지 추가로 확인 (디렉터리는 PDF가 아님)
+								isPdf := !entry.IsDir() && strings.ToLower(filepath.Ext(entryPath)) == ".pdf"
 								hasThumbnail := existingVol.ThumbnailPath != nil && *existingVol.ThumbnailPath != ""
 
 								if !isPdf || hasThumbnail {
@@ -1336,7 +1336,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 									if existingVol.Extension == "" {
 										var ext string
 										if entry.IsDir() {
-											ext = "IMG"
+											// DB의 챕터/서브볼륨 정보 기반으로 extension 산출
+											ext = s.resolveVolumeExtension(existingVol.ID, entryPath)
 										} else {
 											ext = strings.ToUpper(strings.TrimPrefix(filepath.Ext(entryPath), "."))
 										}
@@ -1923,6 +1924,43 @@ func (s *Scanner) quickCheckHasAudio(entryPath string, isDir bool, audioFiles ma
 		}
 	}
 	return false
+}
+
+// resolveVolumeExtension DB의 챕터/서브볼륨 정보를 기반으로 디렉터리 볼륨의 extension을 산출
+func (s *Scanner) resolveVolumeExtension(volumeID, entryPath string) string {
+	extSet := make(map[string]bool)
+
+	// 챕터 경로 기반 확장자 수집
+	chapters, err := s.chapterRepo.FindByVolumeID(nil, volumeID)
+	if err == nil {
+		for _, ch := range chapters {
+			ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(ch.Path), "."))
+			if ext == "" {
+				ext = "IMG" // 폴더 챕터 (이미지 포함)
+			}
+			extSet[ext] = true
+		}
+	}
+
+	// 서브볼륨 확장자 수집
+	subVols, err := s.volumeRepo.FindByParentID(nil, volumeID)
+	if err == nil {
+		for _, sv := range subVols {
+			if sv.Extension != "" {
+				extSet[sv.Extension] = true
+			}
+		}
+	}
+
+	if len(extSet) > 1 {
+		return "MIX"
+	}
+	if len(extSet) == 1 {
+		for ext := range extSet {
+			return ext
+		}
+	}
+	return "IMG" // 기본값
 }
 
 // updateChaptersHasAudio 스킵된 볼륨의 챕터별 has_audio 플래그를 업데이트
