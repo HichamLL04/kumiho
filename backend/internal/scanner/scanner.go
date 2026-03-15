@@ -1334,12 +1334,14 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)
 									// Extension 필드가 비어있으면 in-place로 업데이트 (볼륨 삭제 없이)
 									if existingVol.Extension == "" {
-										ext := strings.ToLower(filepath.Ext(entryPath))
-										if ext != "" {
-											ext = ext[1:] // "." 제거
+										ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(entryPath), "."))
+										if ext == "" && entry.IsDir() {
+											ext = "IMG" // 폴더 볼륨 기본값
 										}
-										log.Printf("[SCANNER] Updating extension metadata for %s: %s", j.name, ext)
-										_ = s.volumeRepo.UpdateExtension(nil, existingVol.ID, ext)
+										if ext != "" {
+											log.Printf("[SCANNER] Updating extension metadata for %s: %s", j.name, ext)
+											_ = s.volumeRepo.UpdateExtension(nil, existingVol.ID, ext)
+										}
 									}
 									// 오디오 파일이 존재하면 볼륨 및 챕터의 has_audio 업데이트
 									if s.quickCheckHasAudio(entryPath, entry.IsDir(), audioFiles, j.name) {

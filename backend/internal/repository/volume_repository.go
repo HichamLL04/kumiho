@@ -60,10 +60,10 @@ func (r *VolumeRepository) UpdateHasAudio(db database.Queryer, volumeID string, 
 	return err
 }
 
-// UpdateExtension extension 필드만 업데이트
+// UpdateExtension extension 필드만 업데이트 (updated_at은 변경하지 않음 - 스캐너 ModTime 비교에 영향 방지)
 func (r *VolumeRepository) UpdateExtension(db database.Queryer, volumeID string, extension string) error {
 	db = database.GetQueryer(db)
-	_, err := db.Exec(`UPDATE volumes SET extension = ?, updated_at = ? WHERE id = ?`, extension, time.Now(), volumeID)
+	_, err := db.Exec(`UPDATE volumes SET extension = ? WHERE id = ?`, extension, volumeID)
 	return err
 }
 
