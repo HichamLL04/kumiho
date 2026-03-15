@@ -1334,9 +1334,11 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)
 									// Extension 필드가 비어있으면 in-place로 업데이트 (볼륨 삭제 없이)
 									if existingVol.Extension == "" {
-										ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(entryPath), "."))
-										if ext == "" && entry.IsDir() {
-											ext = "IMG" // 폴더 볼륨 기본값
+										var ext string
+										if entry.IsDir() {
+											ext = "IMG"
+										} else {
+											ext = strings.ToUpper(strings.TrimPrefix(filepath.Ext(entryPath), "."))
 										}
 										if ext != "" {
 											log.Printf("[SCANNER] Updating extension metadata for %s: %s", j.name, ext)
