@@ -1343,7 +1343,9 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 										}
 										if ext != "" {
 											log.Printf("[SCANNER] Updating extension metadata for %s: %s", j.name, ext)
-											_ = s.volumeRepo.UpdateExtension(nil, existingVol.ID, ext)
+											if extErr := s.volumeRepo.UpdateExtension(nil, existingVol.ID, ext); extErr != nil {
+												log.Printf("[SCANNER] Failed to update extension for %s: %v", j.name, extErr)
+											}
 										}
 									}
 									// 오디오 파일이 존재하면 볼륨 및 챕터의 has_audio 업데이트
