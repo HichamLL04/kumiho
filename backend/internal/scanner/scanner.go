@@ -1942,6 +1942,22 @@ func (s *Scanner) hasChildVolumes(volumeID string) bool {
 // resolveVolumeExtension DB의 챕터/서브볼륨 정보를 기반으로 디렉터리 볼륨의 extension을 산출
 // DB 조회 실패 시 빈 문자열을 반환하여 호출부에서 업데이트를 스킵하도록 함
 func (s *Scanner) resolveVolumeExtension(volumeID string) string {
+	visited := make(map[string]bool)
+	return s.resolveVolumeExtensionRecursive(volumeID, visited)
+}
+
+// isKnownArchiveExt 알려진 아카이브 확장자인지 확인 (대문자)
+func isKnownArchiveExt(ext string) bool {
+	return archiveExtensions["."+strings.ToLower(ext)]
+}
+
+func (s *Scanner) resolveVolumeExtensionRecursive(volumeID string, visited map[string]bool) string {
+	// 순환 방지
+	if visited[volumeID] {
+		return ""
+	}
+	visited[volumeID] = true
+
 	extSet := make(map[string]bool)
 	var hasError bool
 
@@ -1953,8 +1969,9 @@ func (s *Scanner) resolveVolumeExtension(volumeID string) string {
 	} else {
 		for _, ch := range chapters {
 			ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(ch.Path), "."))
-			if ext == "" {
-				ext = "IMG" // 폴더 챕터 (이미지 포함)
+			// 알려진 아카이브 확장자만 사용, 아니면 폴더 챕터로 간주
+			if ext == "" || !isKnownArchiveExt(ext) {
+				ext = "IMG"
 			}
 			extSet[ext] = true
 		}
@@ -1971,11 +1988,11 @@ func (s *Scanner) resolveVolumeExtension(volumeID string) string {
 			if ext == "" {
 				// 서브볼륨의 extension도 비어있으면 (업그레이드 직후) 경로/챕터 기반으로 산출
 				pathExt := strings.ToUpper(strings.TrimPrefix(filepath.Ext(sv.Path), "."))
-				if pathExt != "" {
+				if isKnownArchiveExt(pathExt) {
 					ext = pathExt
 				} else {
-					// 디렉터리 서브볼륨: 재귀적으로 챕터 기반 확인
-					ext = s.resolveVolumeExtension(sv.ID)
+					// 디렉터리 서브볼륨 또는 점 포함 폴더명: 재귀적으로 확인
+					ext = s.resolveVolumeExtensionRecursive(sv.ID, visited)
 				}
 			}
 			if ext != "" {
