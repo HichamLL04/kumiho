@@ -200,7 +200,8 @@ export function VolumePage() {
     if (!activeMenuChapterId) return;
 
     const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
+      if (!(e.target instanceof Element)) return;
+      const target = e.target;
       if (!target.closest(`.${styles.chapterMenuWrapper}`)) {
         setActiveMenuChapterId(null);
       }
