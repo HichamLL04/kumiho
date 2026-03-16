@@ -509,17 +509,19 @@ export function VolumePage() {
                               <span>{t("series.action.incognito")}</span>
                             </button>
 
-                            <button
-                              className={styles.chapterMenuItem}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                initiateDownload(chapter.id);
-                                setActiveMenuChapterId(null);
-                              }}
-                            >
-                              <Download size={16} />
-                              <span>{t("series.action.download")}</span>
-                            </button>
+                            {canDownload && (
+                              <button
+                                className={styles.chapterMenuItem}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  initiateDownload(chapter.id);
+                                  setActiveMenuChapterId(null);
+                                }}
+                              >
+                                <Download size={16} />
+                                <span>{t("series.action.download")}</span>
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
