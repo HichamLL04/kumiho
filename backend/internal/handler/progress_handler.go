@@ -1435,10 +1435,40 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 	}
 
 	// 시리즈 존재 확인
-	if series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, userID); seriesErr != nil || series == nil {
+	series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, "")
+	if seriesErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query series",
+		})
+	}
+	if series == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "series not found",
 		})
+	}
+
+	// 라이브러리 접근 권한 확인 (MASTER 제외)
+	if middleware.GetUserRole(c) != model.RoleMaster {
+		allowedLibraryIDs, allowedErr := h.authService.GetAllowedLibraryIDs(userID)
+		if allowedErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to check permissions",
+			})
+		}
+
+		hasAccess := false
+		for _, libraryID := range allowedLibraryIDs {
+			if libraryID == series.LibraryID {
+				hasAccess = true
+				break
+			}
+		}
+
+		if !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "access denied to library",
+			})
+		}
 	}
 
 	// 기준 볼륨이 해당 시리즈 소속인지 확인
@@ -1562,10 +1592,40 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 	}
 
 	// 시리즈 존재 확인
-	if series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, userID); seriesErr != nil || series == nil {
+	series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, "")
+	if seriesErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query series",
+		})
+	}
+	if series == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "series not found",
 		})
+	}
+
+	// 라이브러리 접근 권한 확인 (MASTER 제외)
+	if middleware.GetUserRole(c) != model.RoleMaster {
+		allowedLibraryIDs, allowedErr := h.authService.GetAllowedLibraryIDs(userID)
+		if allowedErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to check permissions",
+			})
+		}
+
+		hasAccess := false
+		for _, libraryID := range allowedLibraryIDs {
+			if libraryID == series.LibraryID {
+				hasAccess = true
+				break
+			}
+		}
+
+		if !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "access denied to library",
+			})
+		}
 	}
 
 	// 기준 챕터(의 볼륨)가 해당 시리즈 소속인지 확인

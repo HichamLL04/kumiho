@@ -204,12 +204,20 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 
 	// 챕터가 속한 볼륨 및 시리즈 권한 확인
 	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
-	if err != nil || volume == nil {
+	if err != nil {
+		log.Printf("Volume query error for chapter %s: %v", chapterID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query volume info"})
+	}
+	if volume == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume not found for chapter"})
 	}
 
 	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, "")
-	if err != nil || series == nil {
+	if err != nil {
+		log.Printf("Series query error for chapter %s: %v", chapterID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query series info"})
+	}
+	if series == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found for chapter"})
 	}
 
