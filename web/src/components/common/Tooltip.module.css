@@ -45,7 +45,8 @@
   transform: translateY(-50%);
 }
 
-.tooltipContainer:hover .tooltipText {
+.tooltipContainer:hover .tooltipText,
+.tooltipContainer:focus-within .tooltipText {
   opacity: 1;
   visibility: visible;
 }

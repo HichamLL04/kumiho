@@ -155,10 +155,6 @@
   color: var(--text-primary);
 }
 
-.resetButton {
-  color: var(--text-primary);
-}
-
 .progressBadge {
   font-size: 0.75rem;
   padding: 0.25rem 0.5rem;

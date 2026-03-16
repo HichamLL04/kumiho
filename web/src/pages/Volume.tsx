@@ -438,6 +438,7 @@ export function VolumePage() {
                             }}
                             aria-label={t("series.action.mark_completed")}
                             title={t("series.action.mark_completed")}
+                            disabled={isUpdating}
                           >
                             <Check size={18} />
                           </button>
@@ -452,6 +453,7 @@ export function VolumePage() {
                             }}
                             aria-label={t("series.action.mark_unread")}
                             title={t("series.action.mark_unread")}
+                            disabled={isUpdating}
                           >
                             <CheckCircle size={18} />
                           </button>
@@ -468,6 +470,7 @@ export function VolumePage() {
                             }}
                             aria-label={t("series.action.more")}
                             title={t("series.action.more")}
+                            disabled={isUpdating}
                           >
                             <MoreVertical
                               size={18}
