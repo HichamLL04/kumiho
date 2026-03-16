@@ -291,13 +291,20 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 
 	filename := fmt.Sprintf("%s.zip", safeTitle)
 	encodedFilename := url.PathEscape(filename)
+	resolvedChapterDir, dirErr := resolvePathWithoutSymlink(chapter.Path)
+	if dirErr != nil {
+		log.Printf("Unsafe chapter directory path: %v", dirErr)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
+	}
 
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 	c.Set("Content-Type", "application/zip")
 	c.Set("X-Content-Type-Options", "nosniff")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		_ = h.streamDirectoryAsZip(c.Context(), w, chapter.Path)
+		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedChapterDir); err != nil {
+			log.Printf("Failed to stream chapter directory as zip: %v", err)
+		}
 	})
 
 	return nil
@@ -378,13 +385,20 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 	// 디렉토리인 경우 Zip 스트리밍
 	filename := fmt.Sprintf("%s.zip", safeTitle)
 	encodedFilename := url.PathEscape(filename)
+	resolvedVolumeDir, dirErr := resolvePathWithoutSymlink(volume.Path)
+	if dirErr != nil {
+		log.Printf("Unsafe volume directory path: %v", dirErr)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
+	}
 
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 	c.Set("Content-Type", "application/zip")
 	c.Set("X-Content-Type-Options", "nosniff")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		_ = h.streamDirectoryAsZip(c.Context(), w, volume.Path)
+		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedVolumeDir); err != nil {
+			log.Printf("Failed to stream volume directory as zip: %v", err)
+		}
 	})
 
 	return nil
