@@ -8,7 +8,7 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { HorizontalDragScroll } from "../components/common/HorizontalDragScroll";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
-import type { Series } from "../types/series";
+import type { Series, Volume } from "../types/series";
 import { parseSupportedExtension, type ExtensionBadge, type SupportedExtension } from "../utils/extension";
 import styles from "./Home.module.css";
 
@@ -247,16 +247,31 @@ export function HomePage() {
       ) : (
         <HorizontalDragScroll className={styles.seriesGrid}>
           {recentProgress.map((progress) => {
-            // RecentProgress를 Series 객체로 변환
-            const seriesData: Series = {
-              id: progress.series_id,
-              title: progress.series_title,
-              library_id: "", // 필수지만 카드에서 사용 안 함
-              path: progress.chapter_path || progress.volume_path || progress.path,
-              created_at: "", // 필수지만 카드에서 사용 안 함
-              updated_at: progress.updated_at,
-              thumbnail_url: progress.thumbnail_url,
-            };
+            // RecentProgress를 Series/Volume 객체로 변환
+            const isVolume = !!progress.volume_id;
+
+            // SeriesCardProps.item이 Series | Volume이므로 각각의 원본 형태에 맞게 구성
+            const item: Series | Volume = isVolume
+              ? {
+                  id: progress.volume_id!,
+                  series_id: progress.series_id,
+                  title: progress.volume_title || progress.series_title,
+                  thumbnail_url: progress.thumbnail_url,
+                  unit: progress.volume_unit,
+                  volume_number: progress.volume_number || 0,
+                  path: progress.volume_path || progress.path || "",
+                  chapter_count: progress.volume_chapter_count,
+                  created_at: progress.updated_at,
+                }
+              : {
+                  id: progress.series_id,
+                  title: progress.series_title,
+                  thumbnail_url: progress.thumbnail_url,
+                  path: progress.series_path || progress.path || "",
+                  updated_at: progress.updated_at,
+                  library_id: "",
+                  created_at: progress.updated_at,
+                };
 
             // 진행도 텍스트 생성
             // 1. volume_unit이 chapter면 "X화" 기준으로 표시
@@ -286,8 +301,8 @@ export function HomePage() {
             return (
               <SeriesCard
                 key={progress.id}
-                item={seriesData}
-                type="series"
+                item={item}
+                type={progress.volume_id ? "volume" : "series"}
                 customSubtitle={subtitle}
                 progress={progress.progress_percent}
                 chapterId={progress.chapter_id}
@@ -295,6 +310,7 @@ export function HomePage() {
                 onStatusChange={loadData}
                 showExtensionBadge
                 extensionBadgeText={recentProgressExtensionMap[progress.id]}
+                hideMarkPrevious
               />
             );
           })}

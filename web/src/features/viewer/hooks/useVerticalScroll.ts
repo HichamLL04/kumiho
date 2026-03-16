@@ -150,8 +150,7 @@ export function useVerticalScroll({
           Math.abs(targetPageEl.getBoundingClientRect().top - content.getBoundingClientRect().top) <= 20;
       const isFallbackAligned =
         isPageAligned || (effectiveRestorePosition.anchorPage === 1 && content.scrollTop <= RESTORE_TOLERANCE);
-      const isAnchorImageReady =
-        imageLoadingRef.current[effectiveRestorePosition.anchorPage] === false;
+      const isAnchorImageReady = imageLoadingRef.current[effectiveRestorePosition.anchorPage] === false;
 
       const isTargetPageVisible =
         getViewportAnchorPage(content, totalPages, effectiveRestorePosition.anchorPage) ===
@@ -194,7 +193,6 @@ export function useVerticalScroll({
       window.cancelAnimationFrame(frameId);
       window.clearTimeout(retryId);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- imageLoading은 Ref로 참조, currentPage는 restorePosition으로 대체
   }, [
     isInitialScrollingRef,
     isLoading,

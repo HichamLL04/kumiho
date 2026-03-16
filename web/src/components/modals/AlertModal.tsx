@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, CheckCircle, Info, XCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -13,7 +14,7 @@ interface AlertModalProps {
   confirmText?: string;
   cancelText?: string;
   showCancel?: boolean;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel?: () => void;
 }
 
@@ -43,6 +44,13 @@ export function AlertModal({
   onCancel,
 }: AlertModalProps) {
   const { t } = useTranslation();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsProcessing(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -52,12 +60,28 @@ export function AlertModal({
   const Icon = iconMap[type];
   const color = colorMap[type];
 
+  const handleConfirmClick = async () => {
+    if (isProcessing) return;
+
+    try {
+      setIsProcessing(true);
+      await onConfirm();
+    } catch (error) {
+      console.error("AlertModal onConfirm failed:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleBackdropClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isProcessing) return;
+
     if (e.target === e.currentTarget) {
       if (showCancel && onCancel) {
         onCancel();
       } else {
-        onConfirm();
+        void handleConfirmClick();
       }
     }
   };
@@ -83,6 +107,7 @@ export function AlertModal({
             <button
               className={`${styles.alertModalBtn} ${styles.btnCancel}`}
               onClick={onCancel}
+              disabled={isProcessing}
             >
               {effectiveCancelText}
             </button>
@@ -90,7 +115,10 @@ export function AlertModal({
           <button
             className={`${styles.alertModalBtn} ${styles.btnConfirm}`}
             style={{ backgroundColor: color }}
-            onClick={onConfirm}
+            onClick={() => {
+              void handleConfirmClick();
+            }}
+            disabled={isProcessing}
           >
             {effectiveConfirmText}
           </button>

@@ -91,7 +91,7 @@ func main() {
 	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
-	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo)
+	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가
 	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo, viewerSessionRepo)
 	sseHandler := handler.NewSSEHandler(hub)
@@ -193,6 +193,8 @@ func main() {
 	series.Post("/:seriesId/progress/compare", progressHandler.CompareProgress)
 	series.Get("/:seriesId/completions", progressHandler.GetSeriesCompletions)
 	series.Post("/:seriesId/complete", progressHandler.MarkSeriesComplete)
+	series.Post("/:seriesId/volumes/:volumeId/complete-previous", progressHandler.MarkPreviousVolumesComplete)
+	series.Post("/:seriesId/chapters/:chapterId/complete-previous", progressHandler.MarkPreviousChaptersComplete)
 	series.Delete("/:seriesId/progress", progressHandler.ResetSeriesProgress)
 	series.Post("/:id/thumbnail", seriesHandler.UploadThumbnail)
 	series.Post("/:id/thumbnail/url", seriesHandler.DownloadThumbnail)
@@ -270,6 +272,7 @@ func main() {
 	download := protected.Group("/download")
 	download.Get("/series/:id", downloadHandler.DownloadSeries)
 	download.Get("/volumes/:id", downloadHandler.DownloadVolume)
+	download.Get("/chapters/:id", downloadHandler.DownloadChapter)
 
 	// 시스템
 	system := protected.Group("/system")

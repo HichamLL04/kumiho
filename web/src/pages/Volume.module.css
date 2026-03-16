@@ -146,12 +146,9 @@
 .chapterStatus {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding-left: 1rem;
-}
-
-.completeIcon {
-  color: #10b981;
+  gap: 0.75rem;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .progressBadge {
@@ -183,10 +180,13 @@
   outline: none;
 }
 
-.resetButton:hover,
-.resetButton:focus-visible {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+.resetButton {
+  color: #10b981;
+}
+
+.resetButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #10b981;
 }
 
 .audioIcon {
@@ -196,15 +196,87 @@
   opacity: 0.8;
 }
 
-.playIcon {
-  color: var(--text-muted);
-  transition: color 0.2s;
-  opacity: 0; /* 기본적으로 숨김 */
+.chapterMenuWrapper {
+  position: relative;
 }
 
-.chapterItem:hover .playIcon {
-  opacity: 1;
-  color: #667eea;
+.chapterMenuButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  transition: all 0.2s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.chapterMenuButton svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.chapterItem:hover .chapterMenuButton {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chapterMenuButton:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+}
+
+.chapterMenuButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.chapterDropdownMenu {
+  position: absolute;
+  top: auto; /* Ensure top is not interfering */
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  background: var(--bg-card, #1a1a2e);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  min-width: 200px;
+  z-index: 100;
+}
+
+.chapterMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  text-align: left;
+  transition: background 0.2s;
+}
+
+.chapterMenuItem:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chapterMenuItem svg {
+  color: var(--text-muted);
 }
 
 .emptyState {
