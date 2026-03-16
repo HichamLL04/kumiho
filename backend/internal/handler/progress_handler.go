@@ -1427,19 +1427,6 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 	seriesID := c.Params("seriesId")
 	volumeID := c.Params("volumeId")
 
-	// 기준 볼륨 존재 확인
-	baseVolume, err := h.volumeRepo.FindByID(nil, volumeID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to query base volume",
-		})
-	}
-	if baseVolume == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "base volume not found",
-		})
-	}
-
 	// 시리즈 존재 확인
 	series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, "")
 	if seriesErr != nil {
@@ -1471,10 +1458,23 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 		}
 
 		if !hasAccess {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "access denied to library",
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "series not found",
 			})
 		}
+	}
+
+	// 기준 볼륨 존재 확인
+	baseVolume, err := h.volumeRepo.FindByID(nil, volumeID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query base volume",
+		})
+	}
+	if baseVolume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "base volume not found",
+		})
 	}
 
 	// 기준 볼륨이 해당 시리즈 소속인지 확인
@@ -1581,37 +1581,6 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 	seriesID := c.Params("seriesId")
 	chapterID := c.Params("chapterId")
 
-	// 기준 챕터 존재 확인
-	baseChapter, err := h.chapterRepo.FindByID(nil, chapterID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "base chapter not found",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to query base chapter",
-		})
-	}
-	if baseChapter == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "base chapter not found",
-		})
-	}
-
-	// 기준 볼륨 확인 (순서 비교용)
-	baseVolume, err := h.volumeRepo.FindByID(nil, baseChapter.VolumeID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to query base volume",
-		})
-	}
-	if baseVolume == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "base volume not found",
-		})
-	}
-
 	// 시리즈 존재 확인
 	series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, "")
 	if seriesErr != nil {
@@ -1643,10 +1612,41 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 		}
 
 		if !hasAccess {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "access denied to library",
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "series not found",
 			})
 		}
+	}
+
+	// 기준 챕터 존재 확인
+	baseChapter, err := h.chapterRepo.FindByID(nil, chapterID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "base chapter not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query base chapter",
+		})
+	}
+	if baseChapter == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "base chapter not found",
+		})
+	}
+
+	// 기준 볼륨 확인 (순서 비교용)
+	baseVolume, err := h.volumeRepo.FindByID(nil, baseChapter.VolumeID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query base volume",
+		})
+	}
+	if baseVolume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "base volume not found",
+		})
 	}
 
 	// 기준 챕터(의 볼륨)가 해당 시리즈 소속인지 확인

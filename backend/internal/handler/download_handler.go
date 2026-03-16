@@ -62,10 +62,15 @@ func (h *DownloadHandler) checkPermission(c *fiber.Ctx) error {
 
 // streamDirectoryAsZip 디렉토리를 Zip으로 스트리밍 (공통 함수)
 func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Writer, basePath string) error {
+	safeBasePath, err := resolvePathWithoutSymlink(basePath)
+	if err != nil {
+		return err
+	}
+
 	zipWriter := zip.NewWriter(w)
 	defer func() { _ = zipWriter.Close() }()
 
-	return filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(safeBasePath, func(path string, info os.FileInfo, err error) error {
 		// Context 취소 확인 (타임아웃/연결종료)
 		select {
 		case <-ctx.Done():
@@ -80,6 +85,20 @@ func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Wri
 		if info.IsDir() {
 			return nil
 		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			log.Printf("Skipping symlink during zip stream: %s", path)
+			return nil
+		}
+
+		realPath, err := resolvePathWithoutSymlink(path)
+		if err != nil {
+			log.Printf("Skipping unsafe path during zip stream: %s, err: %v", path, err)
+			return nil
+		}
+		if !isPathWithinBase(realPath, safeBasePath) {
+			log.Printf("Skipping path outside base during zip stream: %s", realPath)
+			return nil
+		}
 
 		// 썸네일 등 숨김 파일 제외 (선택 사항)
 		if strings.HasPrefix(info.Name(), ".") {
@@ -87,7 +106,7 @@ func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Wri
 		}
 
 		// 상대 경로 계산
-		relPath, err := filepath.Rel(basePath, path)
+		relPath, err := filepath.Rel(safeBasePath, path)
 		if err != nil {
 			log.Printf("Failed to get relative path for %s: %v", path, err)
 			return nil
@@ -104,9 +123,9 @@ func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Wri
 		}
 
 		// 파일 내용 복사
-		fsFile, err := os.Open(path)
+		fsFile, err := os.Open(realPath)
 		if err != nil {
-			log.Printf("Failed to open file %s: %v", path, err)
+			log.Printf("Failed to open file %s: %v", realPath, err)
 			return nil
 		}
 		// NOTE: 루프 내 defer 사용 시 리소스 누수 위험이 있어 명시적으로 Close 호출
@@ -256,13 +275,18 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 	safeTitle := sanitizeFilename(chapter.Title)
 
 	if !info.IsDir() {
+		resolvedChapterPath, pathErr := resolvePathWithoutSymlink(chapter.Path)
+		if pathErr != nil {
+			log.Printf("Unsafe chapter file path: %v", pathErr)
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
+		}
 		ext := filepath.Ext(chapter.Path)
 		filename := fmt.Sprintf("%s%s", safeTitle, ext)
 		encodedFilename := url.PathEscape(filename)
 
 		c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 		c.Set("X-Content-Type-Options", "nosniff")
-		return c.SendFile(chapter.Path)
+		return c.SendFile(resolvedChapterPath)
 	}
 
 	filename := fmt.Sprintf("%s.zip", safeTitle)
@@ -337,13 +361,18 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 
 	// 파일인 경우 (cbz, zip, rar 등)
 	if !info.IsDir() {
+		resolvedVolumePath, pathErr := resolvePathWithoutSymlink(volume.Path)
+		if pathErr != nil {
+			log.Printf("Unsafe volume file path: %v", pathErr)
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
+		}
 		ext := filepath.Ext(volume.Path)
 		filename := fmt.Sprintf("%s%s", safeTitle, ext) // 원본 확장자 유지
 		encodedFilename := url.PathEscape(filename)
 
 		c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 		c.Set("X-Content-Type-Options", "nosniff")
-		return c.SendFile(volume.Path)
+		return c.SendFile(resolvedVolumePath)
 	}
 
 	// 디렉토리인 경우 Zip 스트리밍
@@ -384,4 +413,34 @@ func sanitizeFilename(name string) string {
 	}
 
 	return name
+}
+
+func resolvePathWithoutSymlink(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", err
+	}
+	resolvedAbsPath, err := filepath.Abs(resolvedPath)
+	if err != nil {
+		return "", err
+	}
+
+	if resolvedAbsPath != absPath {
+		return "", fmt.Errorf("symlink path is not allowed: %s", path)
+	}
+
+	return resolvedAbsPath, nil
+}
+
+func isPathWithinBase(path, base string) bool {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
 }
