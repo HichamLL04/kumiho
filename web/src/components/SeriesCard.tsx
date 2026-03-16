@@ -297,7 +297,13 @@ export function SeriesCard({
         setIsUpdating(true);
         try {
           const volume = item as Volume;
-          await seriesAPI.markPreviousComplete(volume.series_id, volume.id);
+          const seriesId = volume.series_id || (item as Series).series_id;
+
+          if (!seriesId) {
+            throw new Error("Series ID is missing for this volume");
+          }
+
+          await seriesAPI.markPreviousComplete(seriesId, volume.id);
           await Promise.resolve(onStatusChange?.());
           closeAlert();
         } catch (error) {

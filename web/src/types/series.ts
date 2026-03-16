@@ -14,6 +14,7 @@ export interface EbookMetadata {
 
 export interface Series {
   id: string;
+  series_id?: string; // 볼륨 타입일 경우 부모 시리즈 ID 보존용
   library_id: string;
   title: string;
   path?: string;

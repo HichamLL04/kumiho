@@ -1434,6 +1434,13 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 		})
 	}
 
+	// 기준 볼륨이 해당 시리즈 소속인지 확인
+	if baseVolume.SeriesID != seriesID {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "volume does not belong to this series",
+		})
+	}
+
 	// 트랜잭션 시작
 	tx, err := database.DB.Begin()
 	if err != nil {
@@ -1477,6 +1484,9 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 	`, userID, seriesID, now, seriesID, baseVolume.VolumeNumber, userID)
 	if err != nil {
 		log.Printf("Failed to bulk insert progress for previous volumes of series %s: %v", seriesID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to insert progress records",
+		})
 	}
 
 	// 4. 챕터 완독 기록 추가
@@ -1489,6 +1499,9 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 	`, userID, now, seriesID, baseVolume.VolumeNumber)
 	if err != nil {
 		log.Printf("Failed to bulk mark chapter completions for previous volumes of series %s: %v", seriesID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to mark chapters as complete",
+		})
 	}
 
 	// 5. 볼륨 완독 기록 추가
@@ -1549,6 +1562,13 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 		})
 	}
 
+	// 기준 챕터(의 볼륨)가 해당 시리즈 소속인지 확인
+	if baseVolume.SeriesID != seriesID {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "chapter does not belong to this series",
+		})
+	}
+
 	// 트랜잭션 시작
 	tx, err := database.DB.Begin()
 	if err != nil {
@@ -1596,6 +1616,9 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 	`, userID, seriesID, now, seriesID, baseVolume.VolumeNumber, baseVolume.VolumeNumber, baseChapter.ChapterNumber, userID)
 	if err != nil {
 		log.Printf("Failed to bulk insert progress for previous chapters of series %s: %v", seriesID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to insert progress records",
+		})
 	}
 
 	// 3. 챕터 완독 기록 추가

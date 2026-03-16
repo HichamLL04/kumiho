@@ -251,6 +251,7 @@ export function HomePage() {
             const isVolume = !!progress.volume_id;
             const seriesData: Series = {
               id: isVolume ? progress.volume_id! : progress.series_id,
+              series_id: isVolume ? progress.series_id : undefined, // volume 타입일 경우 series_id 보존
               title: progress.series_title,
               library_id: "", // 필수지만 카드에서 사용 안 함
               path: progress.chapter_path || progress.volume_path || progress.path,
