@@ -514,7 +514,7 @@ export function VolumePage() {
                                 className={styles.chapterMenuItem}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  initiateDownload(chapter.id);
+                                  initiateDownload(downloadAPI.getChapterUrl(chapter.id));
                                   setActiveMenuChapterId(null);
                                 }}
                               >

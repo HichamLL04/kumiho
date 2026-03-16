@@ -350,6 +350,7 @@ export const settingAPI = {
 export const downloadAPI = {
   getSeriesUrl: (id: string) => `${API_BASE_URL}/download/series/${id}`,
   getVolumeUrl: (id: string) => `${API_BASE_URL}/download/volumes/${id}`,
+  getChapterUrl: (id: string) => `${API_BASE_URL}/download/chapters/${id}`,
 };
 
 // System API
