@@ -24,13 +24,15 @@ type DownloadHandler struct {
 	authService *service.AuthService
 	seriesRepo  *repository.SeriesRepository
 	volumeRepo  *repository.VolumeRepository
+	chapterRepo *repository.ChapterRepository
 }
 
-func NewDownloadHandler(authService *service.AuthService, seriesRepo *repository.SeriesRepository, volumeRepo *repository.VolumeRepository) *DownloadHandler {
+func NewDownloadHandler(authService *service.AuthService, seriesRepo *repository.SeriesRepository, volumeRepo *repository.VolumeRepository, chapterRepo *repository.ChapterRepository) *DownloadHandler {
 	return &DownloadHandler{
 		authService: authService,
 		seriesRepo:  seriesRepo,
 		volumeRepo:  volumeRepo,
+		chapterRepo: chapterRepo,
 	}
 }
 
@@ -180,8 +182,87 @@ func (h *DownloadHandler) DownloadSeries(c *fiber.Ctx) error {
 	return nil
 }
 
-// DownloadVolume 볼륨 다운로드 (파일이면 직접 전송, 폴더면 Zip 스트리밍)
-// GET /api/v1/download/volumes/:id
+// DownloadChapter 챕터 다운로드 (폴더면 Zip 스트리밍)
+// GET /api/v1/download/chapters/:id
+func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
+	chapterID := c.Params("id")
+	log.Printf("DownloadChapter requested for ID: %s", chapterID)
+
+	if err := h.checkPermission(c); err != nil {
+		return err
+	}
+
+	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
+	if err != nil {
+		log.Printf("Chapter query error: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query chapter"})
+	}
+	if chapter == nil {
+		log.Printf("Chapter not found: %s", chapterID)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter not found"})
+	}
+
+	// 챕터가 속한 볼륨 및 시리즈 권한 확인
+	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if err != nil || volume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume not found for chapter"})
+	}
+
+	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, "")
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found for chapter"})
+	}
+
+	// 라이브러리 접근 권한 검증 (MASTER 가 아닌 경우)
+	userID := middleware.GetUserID(c)
+	role := middleware.GetUserRole(c)
+	if role != model.RoleMaster {
+		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
+		if checkErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check permissions"})
+		}
+		allowed := false
+		for _, aid := range allowedIDs {
+			if aid == series.LibraryID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied to library"})
+		}
+	}
+
+	info, err := os.Stat(chapter.Path)
+	if err != nil {
+		log.Printf("Chapter path access error: %v", err)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
+	}
+
+	safeTitle := sanitizeFilename(chapter.Title)
+
+	if !info.IsDir() {
+		ext := filepath.Ext(chapter.Path)
+		filename := fmt.Sprintf("%s%s", safeTitle, ext)
+		encodedFilename := url.PathEscape(filename)
+
+		c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
+		return c.SendFile(chapter.Path)
+	}
+
+	filename := fmt.Sprintf("%s.zip", safeTitle)
+	encodedFilename := url.PathEscape(filename)
+
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
+	c.Set("Content-Type", "application/zip")
+
+	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		_ = h.streamDirectoryAsZip(c.Context(), w, chapter.Path)
+	})
+
+	return nil
+}
+
 func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 	volumeID := c.Params("id")
 	log.Printf("DownloadVolume requested for ID: %s", volumeID)
