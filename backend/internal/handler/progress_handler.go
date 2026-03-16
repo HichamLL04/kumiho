@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -1428,7 +1429,12 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 
 	// 기준 볼륨 존재 확인
 	baseVolume, err := h.volumeRepo.FindByID(nil, volumeID)
-	if err != nil || baseVolume == nil {
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query base volume",
+		})
+	}
+	if baseVolume == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "base volume not found",
 		})
@@ -1577,7 +1583,17 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 
 	// 기준 챕터 존재 확인
 	baseChapter, err := h.chapterRepo.FindByID(nil, chapterID)
-	if err != nil || baseChapter == nil {
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "base chapter not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query base chapter",
+		})
+	}
+	if baseChapter == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "base chapter not found",
 		})
@@ -1585,7 +1601,12 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 
 	// 기준 볼륨 확인 (순서 비교용)
 	baseVolume, err := h.volumeRepo.FindByID(nil, baseChapter.VolumeID)
-	if err != nil || baseVolume == nil {
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to query base volume",
+		})
+	}
+	if baseVolume == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "base volume not found",
 		})

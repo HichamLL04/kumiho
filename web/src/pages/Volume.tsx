@@ -197,12 +197,12 @@ export function VolumePage() {
   };
 
   useEffect(() => {
+    if (!activeMenuChapterId) return;
+
     const handleClickOutside = (e: MouseEvent) => {
-      if (activeMenuChapterId) {
-        const target = e.target as HTMLElement;
-        if (!target.closest(`.${styles.chapterMenuWrapper}`)) {
-          setActiveMenuChapterId(null);
-        }
+      const target = e.target as HTMLElement;
+      if (!target.closest(`.${styles.chapterMenuWrapper}`)) {
+        setActiveMenuChapterId(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);

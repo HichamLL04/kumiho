@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -194,6 +196,10 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 
 	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("Chapter not found: %s", chapterID)
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter not found"})
+		}
 		log.Printf("Chapter query error: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query chapter"})
 	}
