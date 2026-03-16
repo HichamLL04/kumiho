@@ -440,7 +440,6 @@ export function VolumePage() {
                               handleMarkChapterAsRead(chapter);
                             }}
                             aria-label={t("series.action.mark_completed")}
-                            title={t("series.action.mark_completed")}
                             disabled={isUpdating}
                           >
                             <Check size={18} />
@@ -455,7 +454,6 @@ export function VolumePage() {
                               handleReset(chapter);
                             }}
                             aria-label={t("series.action.mark_unread")}
-                            title={t("series.action.mark_unread")}
                             disabled={isUpdating}
                           >
                             <CheckCircle size={18} />
@@ -472,7 +470,6 @@ export function VolumePage() {
                               setActiveMenuChapterId(activeMenuChapterId === chapter.id ? null : chapter.id);
                             }}
                             aria-label={t("series.action.more")}
-                            title={t("series.action.more")}
                             disabled={isUpdating}
                           >
                             <MoreVertical

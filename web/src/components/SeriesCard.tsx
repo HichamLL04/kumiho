@@ -252,7 +252,11 @@ export function SeriesCard({
       isOpen: true,
       type: "warning",
       message:
-        type === "series" ? t("series.alert.mark_complete_series_msg") : t("series.alert.mark_complete_volume_msg"),
+        chapterId && type === "series"
+          ? t("series.alert.mark_complete_chapter_msg")
+          : type === "series"
+            ? t("series.alert.mark_complete_series_msg")
+            : t("series.alert.mark_complete_volume_msg"),
       onConfirm: async () => {
         setForceShowProgress(true);
         setOptimisticCompleted(true);
@@ -276,6 +280,7 @@ export function SeriesCard({
           setOptimisticProgress(null);
           setAlertModal({ isOpen: true, type: "error", message: t("series.alert.complete_failed") });
         } finally {
+          setForceShowProgress(false);
           setIsUpdating(false);
         }
       },
@@ -324,7 +329,11 @@ export function SeriesCard({
       isOpen: true,
       type: "warning",
       message:
-        type === "series" ? t("series.alert.reset_progress_series_msg") : t("series.alert.reset_progress_volume_msg"),
+        chapterId && type === "series"
+          ? t("series.alert.reset_chapter_msg")
+          : type === "series"
+            ? t("series.alert.reset_progress_series_msg")
+            : t("series.alert.reset_progress_volume_msg"),
       onConfirm: async () => {
         setForceShowProgress(true);
         setOptimisticCompleted(false);
