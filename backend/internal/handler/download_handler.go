@@ -260,7 +260,13 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 		}
 	}
 
-	info, err := os.Stat(chapter.Path)
+	resolvedChapterPath, pathErr := resolvePathWithinBase(chapter.Path, series.Path)
+	if pathErr != nil {
+		log.Printf("Unsafe chapter path: %v", pathErr)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
+	}
+
+	info, err := os.Stat(resolvedChapterPath)
 	if err != nil {
 		log.Printf("Chapter path access error: %v", err)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
@@ -269,11 +275,6 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 	safeTitle := sanitizeFilename(chapter.Title)
 
 	if !info.IsDir() {
-		resolvedChapterPath, pathErr := resolvePathWithinBase(chapter.Path, series.Path)
-		if pathErr != nil {
-			log.Printf("Unsafe chapter file path: %v", pathErr)
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
-		}
 		ext := filepath.Ext(chapter.Path)
 		filename := fmt.Sprintf("%s%s", safeTitle, ext)
 		encodedFilename := url.PathEscape(filename)
@@ -285,18 +286,13 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 
 	filename := fmt.Sprintf("%s.zip", safeTitle)
 	encodedFilename := url.PathEscape(filename)
-	resolvedChapterDir, dirErr := resolvePathWithinBase(chapter.Path, series.Path)
-	if dirErr != nil {
-		log.Printf("Unsafe chapter directory path: %v", dirErr)
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
-	}
 
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 	c.Set("Content-Type", "application/zip")
 	c.Set("X-Content-Type-Options", "nosniff")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedChapterDir, series.Path); err != nil {
+		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedChapterPath, series.Path); err != nil {
 			log.Printf("Failed to stream chapter directory as zip: %v", err)
 		}
 	})

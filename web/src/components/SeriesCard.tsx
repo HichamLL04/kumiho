@@ -618,19 +618,14 @@ export function SeriesCard({
           </div>
         )}
       </div>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <AlertModal
-          isOpen={alertModal.isOpen}
-          type={alertModal.type}
-          message={alertModal.message}
-          onConfirm={alertModal.onConfirm || closeAlert}
-          onCancel={alertModal.onConfirm ? closeAlert : undefined}
-          showCancel={!!alertModal.onConfirm}
-        />
-      </div>
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        type={alertModal.type}
+        message={alertModal.message}
+        onConfirm={alertModal.onConfirm || closeAlert}
+        onCancel={alertModal.onConfirm ? closeAlert : undefined}
+        showCancel={!!alertModal.onConfirm}
+      />
     </div>
   );
 }
