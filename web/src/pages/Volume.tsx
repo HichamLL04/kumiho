@@ -471,6 +471,8 @@ export function VolumePage() {
                               setActiveMenuChapterId(activeMenuChapterId === chapter.id ? null : chapter.id);
                             }}
                             aria-label={t("series.action.more")}
+                            aria-expanded={activeMenuChapterId === chapter.id}
+                            aria-controls={`chapter-dropdown-${chapter.id}`}
                             disabled={isUpdating}
                           >
                             <MoreVertical
@@ -481,7 +483,10 @@ export function VolumePage() {
                         </Tooltip>
 
                         {activeMenuChapterId === chapter.id && (
-                          <div className={styles.chapterDropdownMenu}>
+                          <div
+                            id={`chapter-dropdown-${chapter.id}`}
+                            className={styles.chapterDropdownMenu}
+                          >
                             <button
                               className={styles.chapterMenuItem}
                               onClick={(e) => {
