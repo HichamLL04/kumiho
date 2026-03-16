@@ -324,7 +324,7 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 	}
 
 	// 시리즈 존재 확인
-	if series, err := h.seriesRepo.FindByID(nil, seriesID, userID); err != nil || series == nil {
+	if series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, userID); seriesErr != nil || series == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "series not found",
 		})
@@ -1435,7 +1435,7 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 	}
 
 	// 시리즈 존재 확인
-	if series, err := h.seriesRepo.FindByID(nil, seriesID, userID); err != nil || series == nil {
+	if series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, userID); seriesErr != nil || series == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "series not found",
 		})
