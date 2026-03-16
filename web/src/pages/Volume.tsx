@@ -42,7 +42,7 @@ export function VolumePage() {
     isOpen: boolean;
     type: AlertType;
     message: string;
-    onConfirm?: () => void;
+    onConfirm?: () => void | Promise<void>;
   }>({
     isOpen: false,
     type: "info",
