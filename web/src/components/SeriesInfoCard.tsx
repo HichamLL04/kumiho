@@ -10,6 +10,7 @@ import { getAuthenticatedImageUrl } from "../utils/image";
 import { calculateProgressDisplay } from "../utils/progressUtils";
 import { useViewerStore } from "../stores/viewerStore";
 import { useAuthStore } from "../stores/authStore";
+import { Tooltip } from "./common/Tooltip";
 import styles from "./SeriesInfoCard.module.css";
 
 interface SeriesInfoCardProps {
@@ -189,8 +190,8 @@ export function SeriesInfoCard({
   // 진행도 텍스트 생성
   const getProgressLabel = () => progressLabel;
 
-  // 즐겨찾기 (좋아요) 토글
-  const handleToggleBookmark = async () => {
+  // 좋아요 (Like) 토글
+  const handleToggleLike = async () => {
     if (!onUpdate) return;
 
     const newValue = !series.is_bookmarked;
@@ -200,8 +201,8 @@ export function SeriesInfoCard({
     try {
       await seriesAPI.update(series.id, { is_bookmarked: newValue });
     } catch (error) {
-      console.error("Failed to toggle bookmark:", error);
-      onAlert?.(t("series.alert.bookmark_failed"), "error");
+      console.error("Failed to toggle like:", error);
+      onAlert?.(t("series.alert.like_failed"), "error");
       // Revert on error
       onUpdate({ ...series, is_bookmarked: !newValue });
     }
@@ -307,9 +308,7 @@ export function SeriesInfoCard({
               </div>
               {series.metadata?.original_title && (
                 <div className={styles.seriesExtraMeta}>
-                  <span className={styles.seriesExtraMetaLabel}>
-                    {t("series.metainfo.original_title")}
-                  </span>
+                  <span className={styles.seriesExtraMetaLabel}>{t("series.metainfo.original_title")}</span>
                   <span>{series.metadata.original_title}</span>
                 </div>
               )}
@@ -415,7 +414,6 @@ export function SeriesInfoCard({
             className={`${styles.btnAction} ${styles.btnSecondary}`}
             onClick={handleMarkComplete}
             disabled={isProcessing}
-            title={isVolumeType ? t("series.alert.mark_complete_title") : t("series.alert.mark_complete_title")}
           >
             <BookCheck size={18} /> {t("series.action.mark_completed")}
           </button>
@@ -423,40 +421,46 @@ export function SeriesInfoCard({
             className={`${styles.btnAction} ${styles.btnSecondary}`}
             onClick={handleResetProgress}
             disabled={isProcessing}
-            title={isVolumeType ? t("series.alert.reset_progress_title") : t("series.alert.reset_progress_title")}
           >
             <BookX size={18} /> {t("series.action.mark_unread")}
           </button>
 
           {!isVolumeType && (
-            <button
-              className={`${styles.btnIcon} ${series.is_bookmarked ? styles.active : ""}`}
-              onClick={handleToggleBookmark}
-            >
-              <Heart
-                size={20}
-                fill={series.is_bookmarked ? "currentColor" : "none"}
-              />
-            </button>
+            <Tooltip content={t("series.action.like")}>
+              <button
+                className={`${styles.btnIcon} ${series.is_bookmarked ? styles.active : ""}`}
+                onClick={handleToggleLike}
+                aria-label={t("series.action.like")}
+              >
+                <Heart
+                  size={20}
+                  fill={series.is_bookmarked ? "currentColor" : "none"}
+                />
+              </button>
+            </Tooltip>
           )}
-
           {onDownload && (
-            <button
-              className={styles.btnIcon}
-              onClick={onDownload}
-              title={t("series.action.download")}
-            >
-              <Download size={20} />
-            </button>
+            <Tooltip content={t("series.action.download")}>
+              <button
+                className={styles.btnIcon}
+                onClick={onDownload}
+                aria-label={t("series.action.download")}
+              >
+                <Download size={20} />
+              </button>
+            </Tooltip>
           )}
 
           {onUpdate && isAdmin && (
-            <button
-              className={styles.btnIcon}
-              onClick={() => setIsEditModalOpen(true)}
-            >
-              <Edit2 size={20} />
-            </button>
+            <Tooltip content={t("common.edit")}>
+              <button
+                className={styles.btnIcon}
+                onClick={() => setIsEditModalOpen(true)}
+                aria-label={t("common.edit")}
+              >
+                <Edit2 size={20} />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>

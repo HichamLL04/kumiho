@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -24,13 +26,15 @@ type DownloadHandler struct {
 	authService *service.AuthService
 	seriesRepo  *repository.SeriesRepository
 	volumeRepo  *repository.VolumeRepository
+	chapterRepo *repository.ChapterRepository
 }
 
-func NewDownloadHandler(authService *service.AuthService, seriesRepo *repository.SeriesRepository, volumeRepo *repository.VolumeRepository) *DownloadHandler {
+func NewDownloadHandler(authService *service.AuthService, seriesRepo *repository.SeriesRepository, volumeRepo *repository.VolumeRepository, chapterRepo *repository.ChapterRepository) *DownloadHandler {
 	return &DownloadHandler{
 		authService: authService,
 		seriesRepo:  seriesRepo,
 		volumeRepo:  volumeRepo,
+		chapterRepo: chapterRepo,
 	}
 }
 
@@ -57,11 +61,16 @@ func (h *DownloadHandler) checkPermission(c *fiber.Ctx) error {
 }
 
 // streamDirectoryAsZip 디렉토리를 Zip으로 스트리밍 (공통 함수)
-func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Writer, basePath string) error {
+func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Writer, targetPath string, baseRoot string) error {
+	safeBasePath, err := resolvePathWithinBase(targetPath, baseRoot)
+	if err != nil {
+		return err
+	}
+
 	zipWriter := zip.NewWriter(w)
 	defer func() { _ = zipWriter.Close() }()
 
-	return filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(safeBasePath, func(path string, info os.FileInfo, err error) error {
 		// Context 취소 확인 (타임아웃/연결종료)
 		select {
 		case <-ctx.Done():
@@ -76,6 +85,10 @@ func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Wri
 		if info.IsDir() {
 			return nil
 		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			log.Printf("Skipping symlink during zip stream: %s", path)
+			return nil
+		}
 
 		// 썸네일 등 숨김 파일 제외 (선택 사항)
 		if strings.HasPrefix(info.Name(), ".") {
@@ -83,7 +96,7 @@ func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Wri
 		}
 
 		// 상대 경로 계산
-		relPath, err := filepath.Rel(basePath, path)
+		relPath, err := filepath.Rel(safeBasePath, path)
 		if err != nil {
 			log.Printf("Failed to get relative path for %s: %v", path, err)
 			return nil
@@ -173,15 +186,120 @@ func (h *DownloadHandler) DownloadSeries(c *fiber.Ctx) error {
 	c.Set("X-Content-Type-Options", "nosniff")
 
 	// 스트리밍 응답
+	resolvedSeriesDir, dirErr := resolvePathWithinBase(series.Path, series.Path)
+	if dirErr != nil {
+		log.Printf("Unsafe series directory path: %v", dirErr)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series file/directory not found"})
+	}
+
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		_ = h.streamDirectoryAsZip(c.Context(), w, series.Path)
+		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedSeriesDir, series.Path); err != nil {
+			log.Printf("Failed to stream series directory as zip: %v", err)
+		}
 	})
 
 	return nil
 }
 
-// DownloadVolume 볼륨 다운로드 (파일이면 직접 전송, 폴더면 Zip 스트리밍)
-// GET /api/v1/download/volumes/:id
+// DownloadChapter 챕터 다운로드 (폴더면 Zip 스트리밍)
+// GET /api/v1/download/chapters/:id
+func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
+	chapterID := c.Params("id")
+	log.Printf("DownloadChapter requested for ID: %s", chapterID)
+
+	if err := h.checkPermission(c); err != nil {
+		return err
+	}
+
+	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("Chapter not found: %s", chapterID)
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter not found"})
+		}
+		log.Printf("Chapter query error: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query chapter"})
+	}
+
+	// 챕터가 속한 볼륨 및 시리즈 권한 확인
+	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if err != nil {
+		log.Printf("Volume query error for chapter %s: %v", chapterID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query volume info"})
+	}
+	if volume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume not found for chapter"})
+	}
+
+	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, "")
+	if err != nil {
+		log.Printf("Series query error for chapter %s: %v", chapterID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query series info"})
+	}
+	if series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found for chapter"})
+	}
+
+	// 라이브러리 접근 권한 검증 (MASTER 가 아닌 경우)
+	userID := middleware.GetUserID(c)
+	role := middleware.GetUserRole(c)
+	if role != model.RoleMaster {
+		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
+		if checkErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check permissions"})
+		}
+		allowed := false
+		for _, aid := range allowedIDs {
+			if aid == series.LibraryID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied to library"})
+		}
+	}
+
+	resolvedChapterPath, pathErr := resolvePathWithinBase(chapter.Path, series.Path)
+	if pathErr != nil {
+		log.Printf("Unsafe chapter path: %v", pathErr)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
+	}
+
+	info, err := os.Stat(resolvedChapterPath)
+	if err != nil {
+		log.Printf("Chapter path access error: %v", err)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
+	}
+
+	safeTitle := sanitizeFilename(chapter.Title)
+
+	if !info.IsDir() {
+		ext := filepath.Ext(chapter.Path)
+		filename := fmt.Sprintf("%s%s", safeTitle, ext)
+		encodedFilename := url.PathEscape(filename)
+
+		c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
+		c.Set("X-Content-Type-Options", "nosniff")
+		return c.SendFile(resolvedChapterPath)
+	}
+
+	filename := fmt.Sprintf("%s.zip", safeTitle)
+	encodedFilename := url.PathEscape(filename)
+
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
+	c.Set("Content-Type", "application/zip")
+	c.Set("X-Content-Type-Options", "nosniff")
+
+	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedChapterPath, series.Path); err != nil {
+			log.Printf("Failed to stream chapter directory as zip: %v", err)
+		}
+	})
+
+	return nil
+}
+
 func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 	volumeID := c.Params("id")
 	log.Printf("DownloadVolume requested for ID: %s", volumeID)
@@ -230,7 +348,13 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 		}
 	}
 
-	info, err := os.Stat(volume.Path)
+	resolvedVolumePath, pathErr := resolvePathWithinBase(volume.Path, series.Path)
+	if pathErr != nil {
+		log.Printf("Unsafe volume path: %v", pathErr)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
+	}
+
+	info, err := os.Stat(resolvedVolumePath)
 	if err != nil {
 		log.Printf("Volume path access error: %v", err)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
@@ -245,7 +369,8 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 		encodedFilename := url.PathEscape(filename)
 
 		c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
-		return c.SendFile(volume.Path)
+		c.Set("X-Content-Type-Options", "nosniff")
+		return c.SendFile(resolvedVolumePath)
 	}
 
 	// 디렉토리인 경우 Zip 스트리밍
@@ -254,19 +379,72 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 	c.Set("Content-Type", "application/zip")
+	c.Set("X-Content-Type-Options", "nosniff")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		_ = h.streamDirectoryAsZip(c.Context(), w, volume.Path)
+		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedVolumePath, series.Path); err != nil {
+			log.Printf("Failed to stream volume directory as zip: %v", err)
+		}
 	})
 
 	return nil
 }
 
 func sanitizeFilename(name string) string {
+	// HTTP header 인젝션 방지를 위해 제어 문자 제거 (CR/LF 포함)
+	name = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, name)
+
 	// 윈도우/리눅스 파일명 금지 문자 제거
 	invalid := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
 	for _, char := range invalid {
 		name = strings.ReplaceAll(name, char, "_")
 	}
+
+	// 공백/점만 남는 케이스 방지
+	name = strings.TrimSpace(name)
+	name = strings.Trim(name, ".")
+	if name == "" {
+		return "download"
+	}
+
 	return name
+}
+
+func resolvePathWithinBase(rawPath string, basePath string) (string, error) {
+	fullPath := filepath.Clean(rawPath)
+	baseDir := filepath.Clean(basePath)
+
+	absBaseDir, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	baseDir = absBaseDir
+
+	if filepath.IsAbs(fullPath) {
+		fullPath = filepath.Clean(fullPath)
+	} else {
+		fullPath = filepath.Join(baseDir, fullPath)
+	}
+
+	realBaseDir, err := filepath.EvalSymlinks(baseDir)
+	if err != nil {
+		return "", err
+	}
+
+	realFullPath, err := filepath.EvalSymlinks(fullPath)
+	if err != nil {
+		return "", err
+	}
+
+	rel, err := filepath.Rel(realBaseDir, realFullPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid path outside base: %s", rawPath)
+	}
+
+	return realFullPath, nil
 }

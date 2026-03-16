@@ -91,7 +91,7 @@ func main() {
 	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
-	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo)
+	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가
 	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo, viewerSessionRepo)
 	sseHandler := handler.NewSSEHandler(hub)
@@ -101,7 +101,7 @@ func main() {
 
 	// Fiber 앱 생성
 	app := fiber.New(fiber.Config{
-		AppName:   "Kumiho API v0.11.2",
+		AppName:   "Kumiho API v0.11.3",
 		BodyLimit: 50 * 1024 * 1024, // 50MB
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -173,6 +173,7 @@ func main() {
 	//       그렇지 않으면 "order"가 ID 파라미터로 매칭될 수 있습니다.
 	libraries.Post("", libraryHandler.Create)
 	libraries.Put("/order", libraryHandler.UpdateOrder)
+	libraries.Post("/scan", libraryHandler.ScanAll)
 	libraries.Get("/:id", libraryHandler.Get)
 	libraries.Put("/:id", libraryHandler.Update)
 	libraries.Post("/:id/scan", libraryHandler.Scan)
@@ -192,6 +193,8 @@ func main() {
 	series.Post("/:seriesId/progress/compare", progressHandler.CompareProgress)
 	series.Get("/:seriesId/completions", progressHandler.GetSeriesCompletions)
 	series.Post("/:seriesId/complete", progressHandler.MarkSeriesComplete)
+	series.Post("/:seriesId/volumes/:volumeId/complete-previous", progressHandler.MarkPreviousVolumesComplete)
+	series.Post("/:seriesId/chapters/:chapterId/complete-previous", progressHandler.MarkPreviousChaptersComplete)
 	series.Delete("/:seriesId/progress", progressHandler.ResetSeriesProgress)
 	series.Post("/:id/thumbnail", seriesHandler.UploadThumbnail)
 	series.Post("/:id/thumbnail/url", seriesHandler.DownloadThumbnail)
@@ -269,6 +272,7 @@ func main() {
 	download := protected.Group("/download")
 	download.Get("/series/:id", downloadHandler.DownloadSeries)
 	download.Get("/volumes/:id", downloadHandler.DownloadVolume)
+	download.Get("/chapters/:id", downloadHandler.DownloadChapter)
 
 	// 시스템
 	system := protected.Group("/system")

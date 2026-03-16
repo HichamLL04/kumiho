@@ -89,23 +89,11 @@ function SortableLibraryItem({
             <GripVertical size={20} />
           </div>
           <div className={commonStyles.itemInfo}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div className={styles.flexAlignCenter}>
               <label className={styles.libraryName}>
                 {isSystem && lib.name === "좋아요한 시리즈" ? t("sidebar.system.liked") : lib.name}
               </label>
-              {isSystem && (
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    background: "#4299e1",
-                    color: "white",
-                    padding: "0.1rem 0.4rem",
-                    borderRadius: "4px",
-                  }}
-                >
-                  {t("settings.libraries.item.system_badge")}
-                </span>
-              )}
+              {isSystem && <span className={styles.systemBadge}>{t("settings.libraries.item.system_badge")}</span>}
             </div>
             <p className={styles.libraryPath}>{lib.path}</p>
             <div className={styles.libraryMeta}>
@@ -122,7 +110,9 @@ function SortableLibraryItem({
                   <span>
                     {lib.default_read_direction === "ltr"
                       ? t("settings.viewer.direction.ltr")
-                      : t("settings.viewer.direction.rtl")}
+                      : lib.default_read_direction === "rtl"
+                        ? t("settings.viewer.direction.rtl")
+                        : t("settings.viewer.direction.ltr")}
                   </span>
                   <span>•</span>
                   <span>
@@ -142,11 +132,7 @@ function SortableLibraryItem({
           {isSystem ? (
             <button
               onClick={() => onToggleVisibility(lib)}
-              className={`${commonStyles.settingsSelect} ${styles.iconButton}`}
-              style={{
-                color: lib.is_visible !== false ? "#63b3ed" : "#a0aec0",
-                borderColor: lib.is_visible !== false ? "rgba(99, 179, 237, 0.3)" : "rgba(160, 174, 192, 0.3)",
-              }}
+              className={`${commonStyles.settingsSelect} ${styles.iconButton} ${lib.is_visible !== false ? styles.btnBlue : styles.btnGray}`}
               title={lib.is_visible !== false ? t("common.hide") : t("common.show")}
             >
               {lib.is_visible !== false ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -155,11 +141,7 @@ function SortableLibraryItem({
             <>
               <button
                 onClick={() => onEdit(lib)}
-                className={`${commonStyles.settingsSelect} ${styles.iconButton}`}
-                style={{
-                  color: "#63b3ed",
-                  borderColor: "rgba(99, 179, 237, 0.3)",
-                }}
+                className={`${commonStyles.settingsSelect} ${styles.iconButton} ${styles.btnBlue}`}
                 title="설정 수정"
               >
                 <Settings size={16} />
@@ -167,12 +149,7 @@ function SortableLibraryItem({
 
               <button
                 onClick={() => onScan(lib.id)}
-                className={`${commonStyles.settingsSelect} ${styles.iconButton}`}
-                style={{
-                  color: lib.scan_status === "SCANNING" ? "#fc8181" : "#68d391",
-                  borderColor: lib.scan_status === "SCANNING" ? "rgba(252, 129, 129, 0.3)" : "rgba(104, 211, 145, 0.3)",
-                  cursor: "pointer",
-                }}
+                className={`${commonStyles.settingsSelect} ${styles.iconButton} ${lib.scan_status === "SCANNING" ? styles.btnRed : styles.btnGreen}`}
                 title={lib.scan_status === "SCANNING" ? t("sidebar.scan_cancel_tooltip") : t("sidebar.scan_tooltip")}
               >
                 {lib.scan_status === "SCANNING" ? (
@@ -187,11 +164,7 @@ function SortableLibraryItem({
 
               <button
                 onClick={() => onDelete(lib)}
-                className={`${commonStyles.settingsSelect} ${styles.iconButton}`}
-                style={{
-                  color: "#fc8181",
-                  borderColor: "rgba(252, 129, 129, 0.3)",
-                }}
+                className={`${commonStyles.settingsSelect} ${styles.iconButton} ${styles.btnRed}`}
                 title="삭제"
               >
                 <Trash2 size={16} />
@@ -265,10 +238,7 @@ function SortableLibraryItem({
             )}
             {isSystem && (
               <div className={styles.flexOne}>
-                <p
-                  className={styles.fieldLabel}
-                  style={{ color: "#fc8181" }}
-                >
+                <p className={`${styles.fieldLabel} ${styles.dangerText}`}>
                   {t("settings.libraries.item.edit.system_warning")}
                 </p>
               </div>
@@ -278,8 +248,7 @@ function SortableLibraryItem({
               <div className={styles.editActions}>
                 <button
                   onClick={() => setEditingLibrary(null)}
-                  className={commonStyles.settingsSelect}
-                  style={{ width: "auto", background: "transparent" }}
+                  className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
                 >
                   {t("common.confirm")}
                 </button>
@@ -288,15 +257,13 @@ function SortableLibraryItem({
               <div className={styles.editActions}>
                 <button
                   onClick={() => handleUpdateLibrary(lib.id, editingLibrary)}
-                  className={commonStyles.settingsSelect}
-                  style={{ width: "auto", background: "#4a5568" }}
+                  className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnPrimary}`}
                 >
                   {t("common.save")}
                 </button>
                 <button
                   onClick={() => setEditingLibrary(null)}
-                  className={commonStyles.settingsSelect}
-                  style={{ width: "auto", background: "transparent" }}
+                  className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
                 >
                   {t("common.cancel")}
                 </button>
@@ -491,14 +458,14 @@ export function LibrariesTab() {
     try {
       if (isCurrentlyScanning) {
         await libraryAPI.cancelScan(id);
-        stopPolling(); // 스캔 취소 시 진행률 폴링 중단
+        stopPolling();
         setStatus({ type: "info", message: t("settings.libraries.toast.scan_canceled") });
         fetchLibraries();
         return;
       }
 
       setStatus({ type: "info", message: t("settings.libraries.toast.scan_started") });
-      startPolling(); // 스캔 진행바 폴링 시작
+      startPolling();
       await libraryAPI.scan(id);
       setStatus({ type: "success", message: t("settings.libraries.toast.scan_completed") });
       fetchLibraries();
@@ -510,6 +477,18 @@ export function LibrariesTab() {
       } else {
         setStatus({ type: "error", message: t("settings.libraries.toast.scan_failed") });
       }
+    }
+  };
+
+  const handleScanAll = async () => {
+    try {
+      setStatus({ type: "info", message: t("settings.libraries.toast.scan_started") });
+      startPolling();
+      await libraryAPI.scanAll();
+      fetchLibraries();
+    } catch (error: unknown) {
+      console.error("Failed to scan all libraries:", error);
+      setStatus({ type: "error", message: t("settings.libraries.toast.scan_failed") });
     }
   };
 
@@ -526,7 +505,6 @@ export function LibrariesTab() {
 
         try {
           await libraryAPI.updateOrder(newLibraries.map((l) => l.id));
-          // Optional: setStatus({ type: "success", message: "순서가 저장되었습니다." });
         } catch (error) {
           console.error("Failed to update library order:", error);
           setStatus({ type: "error", message: t("settings.libraries.toast.order_failed") });
@@ -540,12 +518,10 @@ export function LibrariesTab() {
   const handleToggleVisibility = async (lib: Library) => {
     try {
       const newIsVisible = lib.is_visible === false ? true : false;
-      // Optimistic update
       const updatedLibraries = libraries.map((l) => (l.id === lib.id ? { ...l, is_visible: newIsVisible } : l));
       setLibraries(updatedLibraries);
 
       await libraryAPI.update(lib.id, { is_visible: newIsVisible });
-      // No need for success toast for toggle to avoid spam
     } catch (error: unknown) {
       console.error("Failed to toggle visibility:", error);
       setStatus({ type: "error", message: t("settings.libraries.toast.visibility_failed") });
@@ -563,23 +539,20 @@ export function LibrariesTab() {
         />
       )}
 
-      <div className={commonStyles.tabHeader}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ flex: 1 }}>
-            <h2>{t("settings.libraries.title")}</h2>
-            <p className={commonStyles.tabDescription}>{t("settings.libraries.desc")}</p>
-          </div>
-          {!isCreating && (
-            <button
-              onClick={() => setIsCreating(true)}
-              className={commonStyles.settingsSelect}
-              style={{ width: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}
-            >
-              <Plus size={16} />
-              {t("settings.libraries.add_button")}
-            </button>
-          )}
+      <div className={styles.tabHeaderFlex}>
+        <div className={styles.flexOne}>
+          <h2>{t("settings.libraries.title")}</h2>
+          <p className={commonStyles.tabDescription}>{t("settings.libraries.desc")}</p>
         </div>
+        {!isCreating && (
+          <button
+            onClick={() => setIsCreating(true)}
+            className={`${commonStyles.settingsSelect} ${styles.addLibraryButton}`}
+          >
+            <Plus size={14} />
+            {t("settings.libraries.add_button")}
+          </button>
+        )}
       </div>
 
       {isCreating && (
@@ -663,15 +636,13 @@ export function LibrariesTab() {
             <div className={styles.formActions}>
               <button
                 onClick={() => setIsCreating(false)}
-                className={commonStyles.settingsSelect}
-                style={{ width: "auto", background: "transparent", border: "1px solid rgba(255,255,255,0.1)" }}
+                className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
               >
                 {t("common.cancel")}
               </button>
               <button
                 onClick={handleCreateLibrary}
-                className={commonStyles.settingsSelect}
-                style={{ width: "auto", background: "#4a5568" }}
+                className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnPrimary}`}
               >
                 {t("common.create")}
               </button>
@@ -760,9 +731,18 @@ export function LibrariesTab() {
       </div>
 
       <div className={commonStyles.settingsSection}>
-        <div className={commonStyles.sectionTitle}>
-          <Folder size={18} />
-          <h3>{t("settings.libraries.list_title")}</h3>
+        <div className={styles.listHeader}>
+          <div className={styles.listHeaderTitle}>
+            <Folder size={18} />
+            <h3>{t("settings.libraries.list_title")}</h3>
+          </div>
+          <button
+            onClick={handleScanAll}
+            className={`${commonStyles.settingsSelect} ${styles.scanAllButton}`}
+          >
+            <RefreshCw size={14} />
+            {t("settings.libraries.scan_all_button")}
+          </button>
         </div>
         {isLoading ? (
           <div className={commonStyles.placeholderContent}>Loading...</div>

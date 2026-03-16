@@ -197,3 +197,85 @@
     justify-content: flex-end;
   }
 }
+
+/* 추가된 레이아웃 스타일 */
+.tabHeaderFlex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.addLibraryButton,
+.scanAllButton {
+  width: auto !important;
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  /* padding과 font-size는 commonStyles.settingsSelect를 따르도록 명시적으로 오버라이드하지 않음 */
+}
+
+.listHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.listHeaderTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 유틸리티 스타일 */
+.flexAlignCenter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btnAuto {
+  width: auto !important;
+}
+
+.btnTransparent {
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.btnPrimary {
+  background: #4a5568 !important;
+}
+
+.dangerText {
+  color: #fc8181;
+}
+
+.systemBadge {
+  font-size: 0.7rem;
+  background: #4299e1;
+  color: white;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.btnBlue {
+  color: #63b3ed !important;
+  border-color: rgba(99, 179, 237, 0.3) !important;
+}
+
+.btnGray {
+  color: #a0aec0 !important;
+  border-color: rgba(160, 174, 192, 0.3) !important;
+}
+
+.btnRed {
+  color: #fc8181 !important;
+  border-color: rgba(252, 129, 129, 0.3) !important;
+}
+
+.btnGreen {
+  color: #68d391 !important;
+  border-color: rgba(104, 211, 145, 0.3) !important;
+}

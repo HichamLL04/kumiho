@@ -1,15 +1,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
-import { Play, CheckCircle, Folder, Check, RotateCcw, FileText, Music } from "lucide-react";
+import { Check, CheckCircle, Folder, FileText, Music, MoreVertical, EyeOff, Download } from "lucide-react";
 import { Header } from "../components/headers/Header";
 import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
-import { api, volumeAPI, downloadAPI } from "../api/client";
+import { api, volumeAPI, downloadAPI, chapterAPI } from "../api/client";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
+import { Tooltip } from "../components/common/Tooltip";
 import styles from "./Volume.module.css";
 
 import type { Volume, Chapter, Series, ReadingProgress } from "../types/series";
@@ -29,6 +30,8 @@ export function VolumePage() {
   const [lastProgress, setLastProgress] = useState<ReadingProgress | null>(null);
   const [progressList, setProgressList] = useState<ReadingProgress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [activeMenuChapterId, setActiveMenuChapterId] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   // 사이드바 상태
@@ -39,7 +42,7 @@ export function VolumePage() {
     isOpen: boolean;
     type: AlertType;
     message: string;
-    onConfirm?: () => void;
+    onConfirm?: () => void | Promise<void>;
   }>({
     isOpen: false,
     type: "info",
@@ -128,22 +131,84 @@ export function VolumePage() {
   }, [volumeId]);
 
   const handleReset = (chapter: Chapter) => {
+    setActiveMenuChapterId(null);
     setAlertModal({
       isOpen: true,
       type: "warning",
       message: chapter.is_read ? t("series.alert.reset_chapter_complete_msg") : t("series.alert.reset_chapter_msg"),
       onConfirm: async () => {
         try {
-          await api.delete(`/chapters/${chapter.id}/progress`);
+          setIsUpdating(true);
+          await chapterAPI.deleteProgress(chapter.id);
           await loadData();
           closeAlert();
         } catch (err) {
           console.error(err);
           setAlertModal({ isOpen: true, type: "error", message: t("series.alert.reset_failed") });
+        } finally {
+          setIsUpdating(false);
         }
       },
     });
   };
+
+  const handleMarkChapterAsRead = (chapter: Chapter) => {
+    setActiveMenuChapterId(null);
+    setAlertModal({
+      isOpen: true,
+      type: "warning",
+      message: t("series.alert.mark_complete_chapter_msg"),
+      onConfirm: async () => {
+        try {
+          setIsUpdating(true);
+          await chapterAPI.markComplete(chapter.id);
+          await loadData();
+          closeAlert();
+        } catch (err) {
+          console.error(err);
+          setAlertModal({ isOpen: true, type: "error", message: t("series.alert.complete_failed") });
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
+  };
+
+  const handleMarkPreviousChaptersAsRead = (chapter: Chapter) => {
+    setActiveMenuChapterId(null);
+    setAlertModal({
+      isOpen: true,
+      type: "warning",
+      message: t("series.alert.mark_previous_completed_msg"),
+      onConfirm: async () => {
+        try {
+          setIsUpdating(true);
+          await chapterAPI.markPreviousComplete(series!.id, chapter.id);
+          await loadData();
+          closeAlert();
+        } catch (err) {
+          console.error("Failed to mark previous chapters as read:", err);
+          setAlertModal({ isOpen: true, type: "error", message: t("series.alert.complete_failed") });
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (!activeMenuChapterId) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target instanceof Element)) return;
+      const target = e.target;
+      if (!target.closest(`.${styles.chapterMenuWrapper}`)) {
+        setActiveMenuChapterId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [activeMenuChapterId]);
 
   useEffect(() => {
     if (volumeId) loadData();
@@ -309,13 +374,17 @@ export function VolumePage() {
             <div className={styles.chapterList}>
               {chapters.map((chapter) => {
                 const chapterProgress = progressList.find((p) => p.chapter_id === chapter.id);
-                const hasProgress = chapterProgress && chapterProgress.current_page > 0;
+                const hasPartialProgress =
+                  !!chapterProgress && chapterProgress.current_page > 0 && !chapter.is_read;
+                const shouldShowResetAction = chapter.is_read || hasPartialProgress;
 
                 return (
                   <div
                     key={chapter.id}
-                    className={`${styles.chapterItem} ${lastProgress?.chapter_id === chapter.id ? styles.current : ""}`}
-                    onClick={() => navigate(`/viewer/${chapter.id}`, { state: { from: viewerFrom } })}
+                    className={`${styles.chapterItem} ${lastProgress?.chapter_id === chapter.id ? styles.current : ""} ${
+                      isUpdating ? styles.loading : ""
+                    }`}
+                    onClick={() => !isUpdating && navigate(`/viewer/${chapter.id}`, { state: { from: viewerFrom } })}
                   >
                     <div className={styles.chapterThumbnailWrapper}>
                       {chapter.thumbnail_url && !imageErrors[chapter.id] ? (
@@ -347,7 +416,10 @@ export function VolumePage() {
                       <span className={styles.chapterNumber}>
                         Chapter {chapter.chapter_number}
                         {chapter.has_audio && (
-                          <Music size={12} className={styles.audioIcon} />
+                          <Music
+                            size={12}
+                            className={styles.audioIcon}
+                          />
                         )}
                       </span>
                       <span className={styles.chapterTitle}>{chapter.title}</span>
@@ -359,66 +431,106 @@ export function VolumePage() {
                     </div>
 
                     <div className={styles.chapterStatus}>
-                      {/* 완독 마크 (클릭 시 초기화) */}
-                      {chapter.is_read && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReset(chapter);
-                          }}
-                          title="완독 해제 (초기화)"
-                          style={{
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            padding: "0 8px 0 0",
-                            display: "flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <CheckCircle
-                            size={18}
-                            className={styles.completeIcon}
-                          />
-                        </button>
+                      {/* 완독 표시 / 독서 초기화 버튼 (원상복구) */}
+                      {!shouldShowResetAction ? (
+                        <Tooltip content={t("series.action.mark_completed")}>
+                          <button
+                            className={styles.chapterActionButton}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkChapterAsRead(chapter);
+                            }}
+                            aria-label={t("series.action.mark_completed")}
+                            disabled={isUpdating}
+                          >
+                            <Check size={18} />
+                          </button>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip content={t("series.action.mark_unread")}>
+                          <button
+                            className={`${styles.chapterActionButton} ${styles.resetButton}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReset(chapter);
+                            }}
+                            aria-label={t("series.action.mark_unread")}
+                            disabled={isUpdating}
+                          >
+                            <CheckCircle size={18} />
+                          </button>
+                        </Tooltip>
                       )}
 
-                      {!chapter.is_read && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            api
-                              .post(`/chapters/${chapter.id}/complete`)
-                              .then(() => loadData())
-                              .catch((err) => console.error(err));
-                          }}
-                          aria-label={t("series.action.mark_as_read")}
-                          data-tooltip={t("series.action.mark_as_read")}
-                          className={`${styles.chapterActionButton} ${styles.tooltip}`}
-                        >
-                          <Check size={18} />
-                        </button>
-                      )}
+                      <div className={styles.chapterMenuWrapper}>
+                        <Tooltip content={t("series.action.more")}>
+                          <button
+                            className={styles.chapterMenuButton}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuChapterId(activeMenuChapterId === chapter.id ? null : chapter.id);
+                            }}
+                            aria-label={t("series.action.more")}
+                            aria-expanded={activeMenuChapterId === chapter.id}
+                            aria-controls={`chapter-dropdown-${chapter.id}`}
+                            disabled={isUpdating}
+                          >
+                            <MoreVertical
+                              size={18}
+                              strokeWidth={2}
+                            />
+                          </button>
+                        </Tooltip>
 
-                      {/* 초기화 버튼 (읽지 않았지만 진행도가 있을 때만 표시) */}
-                      {!chapter.is_read && hasProgress && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReset(chapter);
-                          }}
-                          aria-label={t("series.action.reset_progress")}
-                          data-tooltip={t("series.action.reset_progress")}
-                          className={`${styles.chapterActionButton} ${styles.resetButton} ${styles.tooltip}`}
-                        >
-                          <RotateCcw size={18} />
-                        </button>
-                      )}
+                        {activeMenuChapterId === chapter.id && (
+                          <div
+                            id={`chapter-dropdown-${chapter.id}`}
+                            className={styles.chapterDropdownMenu}
+                          >
+                            <button
+                              className={styles.chapterMenuItem}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkPreviousChaptersAsRead(chapter);
+                              }}
+                            >
+                              <CheckCircle
+                                size={16}
+                                strokeWidth={2}
+                              />
+                              <span>{t("series.action.mark_previous_completed")}</span>
+                            </button>
 
-                      <Play
-                        size={18}
-                        className={styles.playIcon}
-                      />
+                            <button
+                              className={styles.chapterMenuItem}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuChapterId(null);
+                                navigate(`/viewer/${chapter.id}`, {
+                                  state: { from: viewerFrom, isIncognito: true },
+                                });
+                              }}
+                            >
+                              <EyeOff size={16} />
+                              <span>{t("series.action.incognito")}</span>
+                            </button>
+
+                            {canDownload && (
+                              <button
+                                className={styles.chapterMenuItem}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  initiateDownload(downloadAPI.getChapterUrl(chapter.id));
+                                  setActiveMenuChapterId(null);
+                                }}
+                              >
+                                <Download size={16} />
+                                <span>{t("series.action.download")}</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
