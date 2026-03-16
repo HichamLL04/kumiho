@@ -220,10 +220,6 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 		log.Printf("Chapter query error: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to query chapter"})
 	}
-	if chapter == nil {
-		log.Printf("Chapter not found: %s", chapterID)
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter not found"})
-	}
 
 	// 챕터가 속한 볼륨 및 시리즈 권한 확인
 	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)

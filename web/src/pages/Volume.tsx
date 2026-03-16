@@ -152,7 +152,7 @@ export function VolumePage() {
     });
   };
 
-  const handleMarkChapterAsRead = async (chapter: Chapter) => {
+  const handleMarkChapterAsRead = (chapter: Chapter) => {
     setActiveMenuChapterId(null);
     setAlertModal({
       isOpen: true,
@@ -174,7 +174,7 @@ export function VolumePage() {
     });
   };
 
-  const handleMarkPreviousChaptersAsRead = async (chapter: Chapter) => {
+  const handleMarkPreviousChaptersAsRead = (chapter: Chapter) => {
     setActiveMenuChapterId(null);
     setAlertModal({
       isOpen: true,

@@ -1630,11 +1630,6 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 			"error": "failed to query base chapter",
 		})
 	}
-	if baseChapter == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "base chapter not found",
-		})
-	}
 
 	// 기준 볼륨 확인 (순서 비교용)
 	baseVolume, err := h.volumeRepo.FindByID(nil, baseChapter.VolumeID)
