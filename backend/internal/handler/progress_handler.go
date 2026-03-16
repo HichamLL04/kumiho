@@ -1237,7 +1237,7 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 			SELECT v.id FROM volumes v
 			JOIN descendant_volumes dv ON v.parent_id = dv.id
 		)
-		INSERT INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
+		INSERT OR IGNORE INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
 		SELECT Lower(Hex(RandomBlob(16))), ?, ?, c.volume_id, c.id, c.page_count, c.page_count, 100.0, ?
 		FROM chapters c
 		WHERE c.volume_id IN (SELECT id FROM descendant_volumes) 
@@ -1482,7 +1482,7 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 
 	// 3. 누락된 진행도 생성
 	_, err = tx.Exec(`
-		INSERT INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
+		INSERT OR IGNORE INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
 		SELECT Lower(Hex(RandomBlob(16))), ?, ?, c.volume_id, c.id, c.page_count, c.page_count, 100.0, ?
 		FROM chapters c
 		JOIN volumes v ON c.volume_id = v.id
@@ -1562,8 +1562,7 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 	}
 
 	// 시리즈 존재 확인
-	series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
-	if err != nil || series == nil {
+	if series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, userID); seriesErr != nil || series == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "series not found",
 		})
@@ -1612,7 +1611,7 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 
 	// 2. 누락된 진행도 생성
 	_, err = tx.Exec(`
-		INSERT INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
+		INSERT OR IGNORE INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
 		SELECT Lower(Hex(RandomBlob(16))), ?, ?, c.volume_id, c.id, c.page_count, c.page_count, 100.0, ?
 		FROM chapters c
 		JOIN volumes v ON c.volume_id = v.id

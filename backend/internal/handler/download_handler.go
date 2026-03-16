@@ -247,6 +247,7 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 		encodedFilename := url.PathEscape(filename)
 
 		c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
+		c.Set("X-Content-Type-Options", "nosniff")
 		return c.SendFile(chapter.Path)
 	}
 
@@ -255,6 +256,7 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 	c.Set("Content-Type", "application/zip")
+	c.Set("X-Content-Type-Options", "nosniff")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		_ = h.streamDirectoryAsZip(c.Context(), w, chapter.Path)
@@ -326,6 +328,7 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 		encodedFilename := url.PathEscape(filename)
 
 		c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
+		c.Set("X-Content-Type-Options", "nosniff")
 		return c.SendFile(volume.Path)
 	}
 
@@ -335,6 +338,7 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 	c.Set("Content-Type", "application/zip")
+	c.Set("X-Content-Type-Options", "nosniff")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		_ = h.streamDirectoryAsZip(c.Context(), w, volume.Path)

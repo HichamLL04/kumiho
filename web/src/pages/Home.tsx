@@ -267,6 +267,7 @@ export function HomePage() {
                   id: progress.series_id,
                   title: progress.series_title,
                   thumbnail_url: progress.thumbnail_url,
+                  path: progress.series_path || progress.path || "",
                   updated_at: progress.updated_at,
                   library_id: "",
                   created_at: progress.updated_at,

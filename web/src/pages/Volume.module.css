@@ -240,6 +240,13 @@
   color: var(--text-primary);
 }
 
+.chapterMenuButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .chapterDropdownMenu {
   position: absolute;
   top: auto; /* Ensure top is not interfering */
