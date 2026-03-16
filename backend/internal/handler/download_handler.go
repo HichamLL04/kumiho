@@ -348,7 +348,13 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 		}
 	}
 
-	info, err := os.Stat(volume.Path)
+	resolvedVolumePath, pathErr := resolvePathWithinBase(volume.Path, series.Path)
+	if pathErr != nil {
+		log.Printf("Unsafe volume path: %v", pathErr)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
+	}
+
+	info, err := os.Stat(resolvedVolumePath)
 	if err != nil {
 		log.Printf("Volume path access error: %v", err)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
@@ -358,11 +364,6 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 
 	// 파일인 경우 (cbz, zip, rar 등)
 	if !info.IsDir() {
-		resolvedVolumePath, pathErr := resolvePathWithinBase(volume.Path, series.Path)
-		if pathErr != nil {
-			log.Printf("Unsafe volume file path: %v", pathErr)
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
-		}
 		ext := filepath.Ext(volume.Path)
 		filename := fmt.Sprintf("%s%s", safeTitle, ext) // 원본 확장자 유지
 		encodedFilename := url.PathEscape(filename)
@@ -375,18 +376,13 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 	// 디렉토리인 경우 Zip 스트리밍
 	filename := fmt.Sprintf("%s.zip", safeTitle)
 	encodedFilename := url.PathEscape(filename)
-	resolvedVolumeDir, dirErr := resolvePathWithinBase(volume.Path, series.Path)
-	if dirErr != nil {
-		log.Printf("Unsafe volume directory path: %v", dirErr)
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
-	}
 
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, encodedFilename))
 	c.Set("Content-Type", "application/zip")
 	c.Set("X-Content-Type-Options", "nosniff")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedVolumeDir, series.Path); err != nil {
+		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedVolumePath, series.Path); err != nil {
 			log.Printf("Failed to stream volume directory as zip: %v", err)
 		}
 	})
