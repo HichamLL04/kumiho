@@ -1642,6 +1642,9 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 	`, userID, now, seriesID, baseVolume.VolumeNumber, baseVolume.VolumeNumber, baseChapter.ChapterNumber)
 	if err != nil {
 		log.Printf("Failed to bulk mark chapter completions for previous chapters of series %s: %v", seriesID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to mark chapters as complete",
+		})
 	}
 
 	// 4. 볼륨 완독 기록 추가 (이전 권들은 확실히 완독, 현재 권은 다른 챕터 상태에 따라 다름)
@@ -1654,6 +1657,9 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 	`, userID, now, seriesID, baseVolume.VolumeNumber)
 	if err != nil {
 		log.Printf("Failed to bulk mark volume completions for previous chapters of series %s: %v", seriesID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to mark volumes as complete",
+		})
 	}
 
 	// 트랜잭션 커밋
