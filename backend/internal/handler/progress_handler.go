@@ -1246,6 +1246,9 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 	`, volumeID, userID, volume.SeriesID, now, userID)
 	if err != nil {
 		log.Printf("Failed to bulk insert progress for descendants of volume %s: %v", volumeID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to insert progress records",
+		})
 	}
 
 	// 4. 챕터 완독 기록 추가 (벌크)
@@ -1263,6 +1266,9 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 	`, volumeID, userID, now)
 	if err != nil {
 		log.Printf("Failed to bulk mark chapter completions for descendants of volume %s: %v", volumeID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to mark chapters as complete",
+		})
 	}
 
 	// 5. 볼륨 완독 기록 추가 (모든 하위 볼륨 포함)
@@ -1396,6 +1402,9 @@ func (h *ProgressHandler) DeleteVolumeCompletion(c *fiber.Ctx) error {
 	`, volumeID, userID)
 	if err != nil {
 		log.Printf("Failed to bulk delete chapter completions for descendants of volume %s: %v", volumeID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to reset chapter completions",
+		})
 	}
 
 	// 트랜잭션 커밋
