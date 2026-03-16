@@ -362,10 +362,26 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 }
 
 func sanitizeFilename(name string) string {
+	// HTTP header 인젝션 방지를 위해 제어 문자 제거 (CR/LF 포함)
+	name = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, name)
+
 	// 윈도우/리눅스 파일명 금지 문자 제거
 	invalid := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
 	for _, char := range invalid {
 		name = strings.ReplaceAll(name, char, "_")
 	}
+
+	// 공백/점만 남는 케이스 방지
+	name = strings.TrimSpace(name)
+	name = strings.Trim(name, ".")
+	if name == "" {
+		return "download"
+	}
+
 	return name
 }

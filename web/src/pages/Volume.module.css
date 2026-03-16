@@ -180,19 +180,13 @@
   outline: none;
 }
 
-/* Explicitly target the Lucide icon for completion state */
-.chapterActionButton.resetButton svg {
-  color: #10b981 !important;
-  stroke: #10b981 !important;
-}
-
 .resetButton {
-  color: var(--text-primary);
+  color: #10b981;
 }
 
 .resetButton:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
+  color: #10b981;
 }
 
 .audioIcon {
