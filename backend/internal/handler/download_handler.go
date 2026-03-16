@@ -62,7 +62,7 @@ func (h *DownloadHandler) checkPermission(c *fiber.Ctx) error {
 
 // streamDirectoryAsZip 디렉토리를 Zip으로 스트리밍 (공통 함수)
 func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Writer, basePath string) error {
-	safeBasePath, err := resolvePathWithoutSymlink(basePath)
+	safeBasePath, err := resolvePathWithinBase(basePath, filepath.Dir(basePath))
 	if err != nil {
 		return err
 	}
@@ -90,16 +90,6 @@ func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Wri
 			return nil
 		}
 
-		realPath, err := resolvePathWithoutSymlink(path)
-		if err != nil {
-			log.Printf("Skipping unsafe path during zip stream: %s, err: %v", path, err)
-			return nil
-		}
-		if !isPathWithinBase(realPath, safeBasePath) {
-			log.Printf("Skipping path outside base during zip stream: %s", realPath)
-			return nil
-		}
-
 		// 썸네일 등 숨김 파일 제외 (선택 사항)
 		if strings.HasPrefix(info.Name(), ".") {
 			return nil
@@ -123,9 +113,9 @@ func (h *DownloadHandler) streamDirectoryAsZip(ctx context.Context, w *bufio.Wri
 		}
 
 		// 파일 내용 복사
-		fsFile, err := os.Open(realPath)
+		fsFile, err := os.Open(path)
 		if err != nil {
-			log.Printf("Failed to open file %s: %v", realPath, err)
+			log.Printf("Failed to open file %s: %v", path, err)
 			return nil
 		}
 		// NOTE: 루프 내 defer 사용 시 리소스 누수 위험이 있어 명시적으로 Close 호출
@@ -196,8 +186,16 @@ func (h *DownloadHandler) DownloadSeries(c *fiber.Ctx) error {
 	c.Set("X-Content-Type-Options", "nosniff")
 
 	// 스트리밍 응답
+	resolvedSeriesDir, dirErr := resolvePathWithinBase(series.Path, filepath.Dir(series.Path))
+	if dirErr != nil {
+		log.Printf("Unsafe series directory path: %v", dirErr)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series file/directory not found"})
+	}
+
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		_ = h.streamDirectoryAsZip(c.Context(), w, series.Path)
+		if err := h.streamDirectoryAsZip(c.Context(), w, resolvedSeriesDir); err != nil {
+			log.Printf("Failed to stream series directory as zip: %v", err)
+		}
 	})
 
 	return nil
@@ -275,7 +273,7 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 	safeTitle := sanitizeFilename(chapter.Title)
 
 	if !info.IsDir() {
-		resolvedChapterPath, pathErr := resolvePathWithoutSymlink(chapter.Path)
+		resolvedChapterPath, pathErr := resolvePathWithinBase(chapter.Path, filepath.Dir(chapter.Path))
 		if pathErr != nil {
 			log.Printf("Unsafe chapter file path: %v", pathErr)
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
@@ -291,7 +289,7 @@ func (h *DownloadHandler) DownloadChapter(c *fiber.Ctx) error {
 
 	filename := fmt.Sprintf("%s.zip", safeTitle)
 	encodedFilename := url.PathEscape(filename)
-	resolvedChapterDir, dirErr := resolvePathWithoutSymlink(chapter.Path)
+	resolvedChapterDir, dirErr := resolvePathWithinBase(chapter.Path, filepath.Dir(chapter.Path))
 	if dirErr != nil {
 		log.Printf("Unsafe chapter directory path: %v", dirErr)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter file/directory not found"})
@@ -368,7 +366,7 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 
 	// 파일인 경우 (cbz, zip, rar 등)
 	if !info.IsDir() {
-		resolvedVolumePath, pathErr := resolvePathWithoutSymlink(volume.Path)
+		resolvedVolumePath, pathErr := resolvePathWithinBase(volume.Path, filepath.Dir(volume.Path))
 		if pathErr != nil {
 			log.Printf("Unsafe volume file path: %v", pathErr)
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
@@ -385,7 +383,7 @@ func (h *DownloadHandler) DownloadVolume(c *fiber.Ctx) error {
 	// 디렉토리인 경우 Zip 스트리밍
 	filename := fmt.Sprintf("%s.zip", safeTitle)
 	encodedFilename := url.PathEscape(filename)
-	resolvedVolumeDir, dirErr := resolvePathWithoutSymlink(volume.Path)
+	resolvedVolumeDir, dirErr := resolvePathWithinBase(volume.Path, filepath.Dir(volume.Path))
 	if dirErr != nil {
 		log.Printf("Unsafe volume directory path: %v", dirErr)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume file/directory not found"})
@@ -429,32 +427,36 @@ func sanitizeFilename(name string) string {
 	return name
 }
 
-func resolvePathWithoutSymlink(path string) (string, error) {
-	absPath, err := filepath.Abs(path)
+func resolvePathWithinBase(rawPath string, basePath string) (string, error) {
+	fullPath := filepath.Clean(rawPath)
+	baseDir := filepath.Clean(basePath)
+
+	absBaseDir, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	baseDir = absBaseDir
+
+	if filepath.IsAbs(fullPath) {
+		fullPath = filepath.Clean(fullPath)
+	} else {
+		fullPath = filepath.Join(baseDir, fullPath)
+	}
+
+	realBaseDir, err := filepath.EvalSymlinks(baseDir)
 	if err != nil {
 		return "", err
 	}
 
-	resolvedPath, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", err
-	}
-	resolvedAbsPath, err := filepath.Abs(resolvedPath)
+	realFullPath, err := filepath.EvalSymlinks(fullPath)
 	if err != nil {
 		return "", err
 	}
 
-	if resolvedAbsPath != absPath {
-		return "", fmt.Errorf("symlink path is not allowed: %s", path)
+	rel, err := filepath.Rel(realBaseDir, realFullPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid path outside base: %s", rawPath)
 	}
 
-	return resolvedAbsPath, nil
-}
-
-func isPathWithinBase(path, base string) bool {
-	rel, err := filepath.Rel(base, path)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+	return realFullPath, nil
 }

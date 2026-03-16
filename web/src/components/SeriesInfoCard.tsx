@@ -452,11 +452,11 @@ export function SeriesInfoCard({
           )}
 
           {onUpdate && isAdmin && (
-            <Tooltip content={t("series.action.edit")}>
+            <Tooltip content={t("common.edit")}>
               <button
                 className={styles.btnIcon}
                 onClick={() => setIsEditModalOpen(true)}
-                aria-label={t("series.action.edit")}
+                aria-label={t("common.edit")}
               >
                 <Edit2 size={20} />
               </button>
