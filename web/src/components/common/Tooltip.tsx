@@ -18,7 +18,12 @@ export const Tooltip: React.FC<TooltipProps> = ({ children, content, className =
       data-position={position}
     >
       {children}
-      <span className={styles.tooltipText}>{content}</span>
+      <span
+        className={styles.tooltipText}
+        aria-hidden="true"
+      >
+        {content}
+      </span>
     </div>
   );
 };

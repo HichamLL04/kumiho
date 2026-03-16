@@ -373,6 +373,9 @@ export function VolumePage() {
             <div className={styles.chapterList}>
               {chapters.map((chapter) => {
                 const chapterProgress = progressList.find((p) => p.chapter_id === chapter.id);
+                const hasPartialProgress =
+                  !!chapterProgress && chapterProgress.current_page > 0 && !chapter.is_read;
+                const shouldShowResetAction = chapter.is_read || hasPartialProgress;
 
                 return (
                   <div
@@ -428,7 +431,7 @@ export function VolumePage() {
 
                     <div className={styles.chapterStatus}>
                       {/* 완독 표시 / 독서 초기화 버튼 (원상복구) */}
-                      {!chapter.is_read ? (
+                      {!shouldShowResetAction ? (
                         <Tooltip content={t("series.action.mark_completed")}>
                           <button
                             className={styles.chapterActionButton}
