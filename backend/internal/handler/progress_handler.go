@@ -1238,8 +1238,8 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 			SELECT v.id FROM volumes v
 			JOIN descendant_volumes dv ON v.parent_id = dv.id
 		)
-		INSERT INTO reading_progress (id, user_id, series_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
-		SELECT Lower(Hex(RandomBlob(16))), ?, ?, c.id, c.page_count, c.page_count, 100.0, ?
+		INSERT INTO reading_progress (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, updated_at)
+		SELECT Lower(Hex(RandomBlob(16))), ?, ?, c.volume_id, c.id, c.page_count, c.page_count, 100.0, ?
 		FROM chapters c
 		WHERE c.volume_id IN (SELECT id FROM descendant_volumes) 
 		  AND c.id NOT IN (SELECT chapter_id FROM reading_progress WHERE user_id = ?)

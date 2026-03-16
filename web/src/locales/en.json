@@ -535,6 +535,7 @@
       "no_readable_volume": "No readable volumes available.",
       "mark_complete_title": "Mark as Read",
       "mark_complete_unit_msg": "Mark this volume as read. Continue?",
+      "mark_complete_chapter_msg": "Mark this chapter as read. Continue?",
       "mark_complete_volume_msg": "Are you sure you want to mark this volume as read?",
       "mark_complete_series_msg": "Mark all volumes/chapters in series as read. Continue?",
       "mark_previous_completed_msg": "Would you like to mark all items before the selected one as completed?",

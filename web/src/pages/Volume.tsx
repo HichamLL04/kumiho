@@ -157,7 +157,7 @@ export function VolumePage() {
     setAlertModal({
       isOpen: true,
       type: "warning",
-      message: t("series.alert.mark_complete_unit_msg"),
+      message: t("series.alert.mark_complete_chapter_msg"),
       onConfirm: async () => {
         try {
           setIsUpdating(true);

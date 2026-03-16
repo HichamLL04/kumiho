@@ -251,26 +251,26 @@ export function HomePage() {
             const isVolume = !!progress.volume_id;
 
             // SeriesCardProps.item이 Series | Volume이므로 각각의 원본 형태에 맞게 구성
-            const item = isVolume
-              ? ({
+            const item: Series | Volume = isVolume
+              ? {
                   id: progress.volume_id!,
                   series_id: progress.series_id,
-                  title: progress.series_title,
+                  title: progress.volume_title || progress.series_title,
                   thumbnail_url: progress.thumbnail_url,
-                  updated_at: progress.updated_at,
-                  unit: "volume",
+                  unit: progress.volume_unit,
                   volume_number: progress.volume_number || 0,
                   path: progress.volume_path || progress.path || "",
+                  chapter_count: progress.volume_chapter_count,
                   created_at: progress.updated_at,
-                } as unknown as Volume)
-              : ({
+                }
+              : {
                   id: progress.series_id,
                   title: progress.series_title,
                   thumbnail_url: progress.thumbnail_url,
                   updated_at: progress.updated_at,
                   library_id: "",
                   created_at: progress.updated_at,
-                } as unknown as Series);
+                };
 
             // 진행도 텍스트 생성
             // 1. volume_unit이 chapter면 "X화" 기준으로 표시

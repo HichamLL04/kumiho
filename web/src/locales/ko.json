@@ -535,6 +535,7 @@
       "no_readable_volume": "읽을 수 있는 권이 없습니다.",
       "mark_complete_title": "완독 처리",
       "mark_complete_unit_msg": "이 볼륨을 완독 상태로 표시합니다. 계속하시겠습니까?",
+      "mark_complete_chapter_msg": "이 챕터를 완독 상태로 표시합니다. 계속하시겠습니까?",
       "mark_complete_volume_msg": "이 볼륨을 완독 상태로 표시하시겠습니까?",
       "mark_complete_series_msg": "시리즈의 모든 권/화를 완독 상태로 표시합니다. 계속하시겠습니까?",
       "mark_previous_completed_msg": "선택한 항목 그 이전의 모든 항목을 완독 상태로 표시하시겠습니까?",
