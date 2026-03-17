@@ -252,6 +252,7 @@ type scannedVolume struct {
 	PublicationYear string
 	Chapters        []scannedChapter
 	SubVolumes      []*scannedVolume // Added for recursion
+	ThumbnailPath   *string          // Added for folder-based thumbnails (e.g., cover.jpg)
 }
 
 // ScanLibrary 라이브러리 스캔
@@ -1631,6 +1632,23 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 		}
 	}
 
+	// 썸네일로 사용할 이미지 찾기 (cover, folder, albumart 등 우선순위)
+	if len(imageFiles) > 0 {
+		natsort.Sort(imageFiles)
+		var bestThumb string
+		for _, img := range imageFiles {
+			lower := strings.ToLower(img)
+			if strings.Contains(lower, "cover") || strings.Contains(lower, "folder") || strings.Contains(lower, "front") {
+				bestThumb = filepath.Join(volumePath, img)
+				break
+			}
+		}
+		if bestThumb == "" {
+			bestThumb = filepath.Join(volumePath, imageFiles[0])
+		}
+		result.ThumbnailPath = &bestThumb
+	}
+
 	// 1. 이미지 또는 오디오가 직접 포함된 경우 (Terminal folder) -> 챕터로 취급
 	// 오디오북 타입인 경우 오디오 파일만 있어도 챕터로 인정
 	isAudiobook := libraryType == "audiobook"
@@ -2219,6 +2237,11 @@ func (s *Scanner) saveVolumeRecursive(tx database.Queryer, seriesID string, pare
 		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
 		volume.ThumbnailURL = &url
 		log.Printf("[SCANNER] Linked existing thumbnail for volume %s: %s", volData.Title, foundThumbnailPath)
+	} else if volData.ThumbnailPath != nil && *volData.ThumbnailPath != "" {
+		volume.ThumbnailPath = volData.ThumbnailPath
+		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+		volume.ThumbnailURL = &url
+		log.Printf("[SCANNER] Linked folder cover for volume %s: %s", volData.Title, *volData.ThumbnailPath)
 	} else if strings.ToLower(filepath.Ext(volData.Path)) == ".pdf" {
 		if newThumbPath, err := s.ensurePdfThumbnail(volData.Path, thumbnailsDir); err == nil {
 			volume.ThumbnailPath = &newThumbPath
@@ -2228,6 +2251,10 @@ func (s *Scanner) saveVolumeRecursive(tx database.Queryer, seriesID string, pare
 		} else {
 			log.Printf("[SCANNER] Failed to extract PDF thumbnail for volume %s: %v", volData.Title, err)
 		}
+	} else {
+		// 실제 썸네일이 없으면 nil로 두어 프론트엔드에서 기본 아이콘/이미지를 보여주게 함
+		volume.ThumbnailURL = nil
+		log.Printf("[SCANNER] No thumbnail found for volume %s, using frontend default", volData.Title)
 	}
 
 	if err := s.volumeRepo.Create(tx, volume); err != nil {

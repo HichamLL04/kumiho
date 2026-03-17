@@ -9,6 +9,7 @@ import { PdfViewerRoute } from "./PdfViewerRoute";
 import { EpubViewerRoute } from "./EpubViewerRoute";
 import { TextViewerRoute } from "./TextViewerRoute";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
+import type { Chapter } from "../types/series";
 import styles from "./Viewer.module.css";
 
 const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".m4b", ".aac", ".wma"];
@@ -42,17 +43,10 @@ export function ViewerPage() {
     void (async () => {
       try {
         // Fetch series and chapters in parallel
-        const [seriesRes, volumesRes] = await Promise.all([
-          seriesAPI.get(seriesId),
-          volumeId ? volumeAPI.getChapters(volumeId) : Promise.resolve(null),
-        ]);
+        const [seriesRes, chaptersRes] = await Promise.all([seriesAPI.get(seriesId), seriesAPI.getChapters(seriesId)]);
 
         const series = seriesRes.data;
-        const chapters = volumesRes
-          ? Array.isArray(volumesRes.data)
-            ? volumesRes.data
-            : volumesRes.data.chapters || []
-          : [];
+        const chapters = chaptersRes.data.chapters || [];
 
         let volume = null;
         if (volumeId) {
@@ -64,9 +58,7 @@ export function ViewerPage() {
           }
         }
 
-        useAudioPlayerStore
-          .getState()
-          .loadAndPlay(series, { ...chapter, path: chapter.path || "" } as any, chapters, volume);
+        useAudioPlayerStore.getState().loadAndPlay(series, chapter as Chapter, chapters, volume);
       } catch (err) {
         console.error("Failed to load audio player data:", err);
       }

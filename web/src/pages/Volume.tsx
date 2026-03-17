@@ -7,7 +7,7 @@ import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
-import { api, volumeAPI, downloadAPI, chapterAPI } from "../api/client";
+import { api, volumeAPI, downloadAPI, chapterAPI, seriesAPI } from "../api/client";
 import { formatDuration } from "../utils/progressUtils";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
@@ -87,11 +87,11 @@ export function VolumePage() {
         setSeries(seriesRes.data);
       }
 
-      // 챕터 목록
-      const chapRes = await volumeAPI.getChapters(volumeId!);
-      const chapterList = Array.isArray(chapRes.data) ? chapRes.data : chapRes.data.chapters || [];
+      // 챕터 목록 (시리즈 전체를 가져와서 해당 볼륨 챕터만 필터링)
+      const chaptersRes = await seriesAPI.getChapters(volData.series_id);
+      const allChapters = chaptersRes.data.chapters || [];
+      const chapterList = allChapters.filter((c: Chapter) => c.volume_id === volumeId);
       setChapters(chapterList.sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number));
-
       // 최근 읽기 진행도 가져오기 (볼륨 단위)
       try {
         const progressRes = await api.get(`/volumes/${volumeId}/progress`);
@@ -252,13 +252,17 @@ export function VolumePage() {
 
       // 진행도의 챕터 찾기, 없으면 첫 챕터
       let startChapter = sorted[0];
+      let startTime = 0;
       if (lastProgress?.chapter_id) {
         const found = sorted.find((c) => c.id === lastProgress.chapter_id);
-        if (found) startChapter = found;
+        if (found) {
+          startChapter = found;
+          startTime = lastProgress.current_time ?? lastProgress.current_page ?? 0;
+        }
       }
 
       if (startChapter) {
-        loadAndPlay(series, startChapter, sorted, volume);
+        loadAndPlay(series, startChapter, sorted, volume, startTime);
       }
       return;
     }

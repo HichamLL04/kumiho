@@ -159,18 +159,27 @@ export function SeriesCard({
     try {
       if (type === "volume") {
         const vol = item as Volume;
-        const [seriesRes, chaptersRes] = await Promise.all([
+        const [seriesRes, chaptersRes, progressRes] = await Promise.all([
           seriesAPI.get(vol.series_id),
           seriesAPI.getChapters(vol.series_id),
+          volumeAPI.getProgress(vol.id), // 볼륨 단위 진행도 조회
         ]);
         const series = seriesRes.data;
         const allChapters: Chapter[] = chaptersRes.data.chapters || [];
         const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+        const progressList = Array.isArray(progressRes.data) ? progressRes.data : progressRes.data?.progress_list || [];
+        const lastProg = progressList[0];
 
         if (sorted.length > 0) {
-          // Find the first chapter of this specific volume in the full list
-          const startChapter = sorted.find((c) => c.volume_id === vol.id) || sorted[0];
-          loadAndPlay(series, startChapter, sorted, vol);
+          const startChapter = lastProg?.chapter_id
+            ? sorted.find((c) => c.id === lastProg.chapter_id) ||
+              sorted.find((c) => c.volume_id === vol.id) ||
+              sorted[0]
+            : sorted.find((c) => c.volume_id === vol.id) || sorted[0];
+
+          const startTime =
+            lastProg?.chapter_id === startChapter.id ? (lastProg.current_time ?? lastProg.current_page) : 0;
+          loadAndPlay(series, startChapter, sorted, vol, startTime);
         }
       } else {
         const series = item as Series;
@@ -186,7 +195,10 @@ export function SeriesCard({
           const resumeChapter = progress?.chapter_id
             ? sorted.find((c) => c.id === progress.chapter_id) || sorted[0]
             : sorted[0];
-          loadAndPlay(series, resumeChapter, sorted, null);
+
+          const startTime =
+            progress?.chapter_id === resumeChapter.id ? (progress.current_time ?? progress.current_page) : 0;
+          loadAndPlay(series, resumeChapter, sorted, null, startTime);
         }
       }
     } catch (err) {
@@ -244,11 +256,9 @@ export function SeriesCard({
         return;
       }
 
-      const sortedVolumes = [...volumes].sort((a: Volume, b: Volume) => a.volume_number - b.volume_number);
-      const firstVolume = sortedVolumes[0];
-
-      const chaptersRes = await volumeAPI.getChapters(firstVolume.id);
-      const chapters = Array.isArray(chaptersRes.data) ? chaptersRes.data : chaptersRes.data.chapters || [];
+      // 시리즈 전체 챕터를 가져와서 첫 번째 챕터 탐색
+      const chaptersRes = await seriesAPI.getChapters(item.id);
+      const chapters = chaptersRes.data.chapters || [];
 
       if (chapters.length > 0) {
         const sortedChapters = [...chapters].sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);

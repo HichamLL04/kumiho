@@ -41,7 +41,13 @@ interface AudioPlayerState {
   sleepTimerEndTime: number | null;
 
   // Actions - Content
-  loadAndPlay: (series: Series, chapter: Chapter, chapters?: Chapter[], volume?: Volume | null) => void;
+  loadAndPlay: (
+    series: Series,
+    chapter: Chapter,
+    chapters?: Chapter[],
+    volume?: Volume | null,
+    startTime?: number,
+  ) => void;
   playChapter: (chapter: Chapter) => void;
   setChapters: (chapters: Chapter[]) => void;
 
@@ -106,14 +112,14 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
       sleepTimerEndTime: null,
 
       // Content actions
-      loadAndPlay: (series, chapter, chapters, volume) => {
+      loadAndPlay: (series, chapter, chapters, volume, startTime = 0) => {
         set({
           currentSeries: series,
           currentVolume: volume ?? null,
           currentChapter: chapter,
           chapters: chapters ?? [],
           status: "loading",
-          currentTime: 0,
+          currentTime: startTime,
           duration: 0,
           playerMode: "fullscreen",
         });
@@ -183,16 +189,11 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
       },
 
       // Settings actions
-      setPlaybackRate: (playbackRate) =>
-        set((state) => ({ settings: { ...state.settings, playbackRate } })),
-      setVolume: (volume) =>
-        set((state) => ({ settings: { ...state.settings, volume, isMuted: false } })),
-      toggleMute: () =>
-        set((state) => ({ settings: { ...state.settings, isMuted: !state.settings.isMuted } })),
-      setSkipBackwardSec: (skipBackwardSec) =>
-        set((state) => ({ settings: { ...state.settings, skipBackwardSec } })),
-      setSkipForwardSec: (skipForwardSec) =>
-        set((state) => ({ settings: { ...state.settings, skipForwardSec } })),
+      setPlaybackRate: (playbackRate) => set((state) => ({ settings: { ...state.settings, playbackRate } })),
+      setVolume: (volume) => set((state) => ({ settings: { ...state.settings, volume, isMuted: false } })),
+      toggleMute: () => set((state) => ({ settings: { ...state.settings, isMuted: !state.settings.isMuted } })),
+      setSkipBackwardSec: (skipBackwardSec) => set((state) => ({ settings: { ...state.settings, skipBackwardSec } })),
+      setSkipForwardSec: (skipForwardSec) => set((state) => ({ settings: { ...state.settings, skipForwardSec } })),
 
       // UI actions
       setPlayerMode: (playerMode) => set({ playerMode }),

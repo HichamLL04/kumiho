@@ -1,7 +1,7 @@
 // 인접 챕터 탐색 훅
 
 import { useEffect, useState, useCallback } from "react";
-import { volumeAPI, seriesAPI } from "../../../api/client";
+import { seriesAPI } from "../../../api/client";
 import type { Chapter, Volume, AdjacentChapterInfo } from "../types";
 
 interface UseAdjacentChaptersParams {
@@ -35,11 +35,12 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
         if (direction === "prev") {
           if (currentVolIndex > 0) {
             const prevVol = volumes[currentVolIndex - 1];
-            // 이전 볼륨의 마지막 챕터 가져오기
-            const chaptersRes = await volumeAPI.getChapters(prevVol.id);
-            const chapters = chaptersRes.data.chapters.sort(
-              (a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number,
-            );
+            // 이전 볼륨의 마지막 챕터 가져오기 (시리즈 전체 챕터에서 필터링)
+            const chaptersRes = await seriesAPI.getChapters(targetSeriesId);
+            const chapters = (chaptersRes.data.chapters || [])
+              .filter((c: Chapter) => c.volume_id === prevVol.id)
+              .sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
+
             if (chapters.length > 0) {
               const lastChapter = chapters[chapters.length - 1];
               setPrevChapterId(lastChapter.id);
@@ -52,11 +53,12 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
         } else {
           if (currentVolIndex < volumes.length - 1) {
             const nextVol = volumes[currentVolIndex + 1];
-            // 다음 볼륨의 첫 챕터 가져오기
-            const chaptersRes = await volumeAPI.getChapters(nextVol.id);
-            const chapters = chaptersRes.data.chapters.sort(
-              (a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number,
-            );
+            // 다음 볼륨의 첫 챕터 가져오기 (시리즈 전체 챕터에서 필터링)
+            const chaptersRes = await seriesAPI.getChapters(targetSeriesId);
+            const chapters = (chaptersRes.data.chapters || [])
+              .filter((c: Chapter) => c.volume_id === nextVol.id)
+              .sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
+
             if (chapters.length > 0) {
               const firstChapter = chapters[0];
               setNextChapterId(firstChapter.id);
@@ -80,11 +82,11 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
   const loadAdjacentChapters = useCallback(
     async (targetVolumeId: string, currentChapterId: string, targetSeriesId: string) => {
       try {
-        // 1. 현재 볼륨의 챕터 목록 조회
-        const chaptersRes = await volumeAPI.getChapters(targetVolumeId);
-        const chapters = chaptersRes.data.chapters.sort(
-          (a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number,
-        );
+        // 1. 시리즈 전체 챕터 목록 조회 및 현재 볼륨 필터링
+        const chaptersRes = await seriesAPI.getChapters(targetSeriesId);
+        const chapters = (chaptersRes.data.chapters || [])
+          .filter((c: Chapter) => c.volume_id === targetVolumeId)
+          .sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
         const currentIndex = chapters.findIndex((c: Chapter) => c.id === currentChapterId);
 
         // 같은 볼륨 내 이전/다음 챕터 확인
