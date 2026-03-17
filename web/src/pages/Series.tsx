@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { Folder } from "lucide-react";
@@ -9,6 +9,7 @@ import { SeriesCard } from "../components/SeriesCard";
 import { api, volumeAPI, downloadAPI } from "../api/client";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
+import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import styles from "./Series.module.css";
 
 import type { Series, Volume, Library, ReadingProgress, SeriesProgressSummary, Chapter } from "../types/series";
@@ -158,6 +159,82 @@ export function SeriesPage() {
     if (id) loadData();
   }, [id, loadData]);
 
+  // 오디오 재생 중이면 스토어의 currentTime을 구독하여 summary를 실시간 갱신
+  const baseListenedRef = useRef<number | null>(null);
+  const baseChapterTimeRef = useRef<number>(0);
+  const wasPlayingRef = useRef(false);
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+  useEffect(() => {
+    if (!id || !series) return;
+    const isAudioSeries = series.library_type === "audiobook" || series.has_audio;
+    if (!isAudioSeries) return;
+
+    let lastUpdate = 0;
+    const unsub = useAudioPlayerStore.subscribe((state) => {
+      const isThisSeries = state.currentSeries?.id === id;
+      const isActive = isThisSeries && (state.status === "playing" || state.status === "paused") && state.playerMode !== "hidden";
+
+      // 플레이어가 닫히거나 다른 시리즈로 전환 시 서버에서 최신 진행도 가져오기
+      if (wasPlayingRef.current && !isActive) {
+        wasPlayingRef.current = false;
+        baseListenedRef.current = null;
+        baseChapterTimeRef.current = 0;
+        // 서버에 저장이 완료된 후 fetch (saveProgress 네트워크 요청 대기)
+        setTimeout(() => loadData(), 800);
+        return;
+      }
+
+      if (!isActive) return;
+      wasPlayingRef.current = true;
+
+      const now = Date.now();
+      if (now - lastUpdate < 5000) return;
+      lastUpdate = now;
+
+      setSummary((prev) => {
+        if (!prev) return prev;
+        // total_duration이 없으면 현재 재생 중인 챕터의 duration으로 초기화
+        const totalDur = prev.total_duration || state.duration;
+        if (!totalDur || totalDur <= 0) return prev;
+
+        // 첫 호출 시 서버에서 온 listened_duration을 기준값으로 저장
+        // baseChapterTime은 서버에 저장된 current_time 사용 (live state.currentTime 대신)
+        // → 서버의 listened_duration과 동일 기준점을 사용하여 delta 오차 방지
+        if (baseListenedRef.current === null) {
+          baseListenedRef.current = prev.listened_duration ?? 0;
+          const serverProgress = progressRef.current;
+          const sameChapter = serverProgress?.chapter_id === state.currentChapter?.id;
+          baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
+        }
+        const delta = state.currentTime - baseChapterTimeRef.current;
+        const newListened = Math.max(0, (baseListenedRef.current ?? 0) + delta);
+        return {
+          ...prev,
+          total_duration: totalDur,
+          listened_duration: Math.min(newListened, totalDur),
+        };
+      });
+
+      // 현재 재생 중인 볼륨 카드의 progress_percent도 실시간 갱신
+      const currentVolumeId = state.currentVolume?.id;
+      if (currentVolumeId && state.duration > 0) {
+        const volumePercent = Math.min(100, (state.currentTime / state.duration) * 100);
+        setVolumes((prev) =>
+          prev.map((v) =>
+            v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v,
+          ),
+        );
+      }
+    });
+    return () => {
+      unsub();
+      baseListenedRef.current = null;
+      baseChapterTimeRef.current = 0;
+      wasPlayingRef.current = false;
+    };
+  }, [id, series, loadData]);
+
   if (isLoading) {
     return (
       <div className={styles.pageContainer}>
@@ -224,6 +301,39 @@ export function SeriesPage() {
               onRefresh={loadData}
               onAlert={showAlert}
               onPlay={async () => {
+                const isAudio = series.library_type === "audiobook" || series.has_audio;
+
+                if (isAudio && volumes.length > 0) {
+                  // 오디오북: 오디오 플레이어로 재생
+                  const { loadAndPlay } = useAudioPlayerStore.getState();
+                  const sortedVolumes = [...volumes].sort((a, b) => a.volume_number - b.volume_number);
+
+                  // 진행도가 있으면 해당 볼륨/챕터에서 이어 듣기
+                  let targetVol = sortedVolumes[0];
+                  if (progress?.volume_id) {
+                    const found = sortedVolumes.find((v) => v.id === progress.volume_id);
+                    if (found) targetVol = found;
+                  }
+
+                  const chaptersRes = await volumeAPI.getChapters(targetVol.id);
+                  const allChapters: Chapter[] = Array.isArray(chaptersRes.data)
+                    ? chaptersRes.data
+                    : chaptersRes.data.chapters || [];
+                  const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+
+                  // 진행도의 챕터 찾기, 없으면 첫 챕터
+                  let startChapter = sorted[0];
+                  if (progress?.chapter_id) {
+                    const found = sorted.find((c) => c.id === progress.chapter_id);
+                    if (found) startChapter = found;
+                  }
+
+                  if (startChapter) {
+                    loadAndPlay(series, startChapter, sorted, targetVol);
+                  }
+                  return;
+                }
+
                 if (progress && progress.chapter_id) {
                   navigate(`/viewer/${progress.chapter_id}`, { state: { from: viewerFrom } });
                 } else if (volumes.length > 0) {

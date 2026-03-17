@@ -6,6 +6,19 @@ export interface ProgressDisplayData {
 }
 
 /**
+ * 초 단위 시간을 "H:MM:SS" 또는 "M:SS" 형태로 포맷합니다.
+ */
+export function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  }
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
  * 시리즈 또는 볼륨의 진행 상태를 기반으로 퍼센트와 라벨을 계산함
  */
 export function calculateProgressDisplay(params: {
@@ -19,6 +32,27 @@ export function calculateProgressDisplay(params: {
 }): ProgressDisplayData {
   const { type, series, volume, progress, summary, preferPercentLabel = false, t } = params;
   const isVolumeType = type === "volume";
+  const isAudiobook = series.library_type === "audiobook" || series.has_audio;
+
+  // 오디오북 시리즈: 시간 기반 진행도
+  if (!isVolumeType && isAudiobook && summary?.total_duration && summary.total_duration > 0) {
+    const listened = summary.listened_duration || 0;
+    const total = summary.total_duration;
+    const percent = Math.min(100, Math.max(0, (listened / total) * 100));
+    const p = Math.floor(percent);
+    const label = `${p}% (${formatDuration(listened)} / ${formatDuration(total)})`;
+    return { percent, label };
+  }
+
+  // 오디오북 볼륨: current_time / duration 기반 진행도
+  if (isVolumeType && isAudiobook && progress?.duration && progress.duration > 0) {
+    const currentTime = progress.current_time || 0;
+    const duration = progress.duration;
+    const percent = Math.min(100, Math.max(0, (currentTime / duration) * 100));
+    const p = Math.floor(percent);
+    const label = `${p}% (${formatDuration(currentTime)} / ${formatDuration(duration)})`;
+    return { percent, label };
+  }
 
   // 1. 퍼센트 계산 로직
   let percent = 0;

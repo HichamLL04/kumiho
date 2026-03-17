@@ -45,6 +45,7 @@ type CreateLibraryRequest struct {
 	DefaultEpubWheelDirection    string `json:"default_epub_wheel_direction"`
 	DefaultEpubKeyboardDirection string `json:"default_epub_keyboard_direction"`
 	DefaultEpubClickDirection    string `json:"default_epub_click_direction"`
+	LibraryType                  string `json:"library_type"`
 	ScanExcludes                 string `json:"scan_excludes"`
 }
 
@@ -254,6 +255,7 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		DefaultEpubKeyboardDir: req.DefaultEpubKeyboardDirection,
 		DefaultEpubClickDir:    req.DefaultEpubClickDirection,
 		Type:                   "LOCAL",
+		LibraryType:            req.LibraryType,
 		ScanExcludes:           req.ScanExcludes,
 	}
 

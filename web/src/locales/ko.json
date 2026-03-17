@@ -318,6 +318,10 @@
       "path_desc": "서버 내의 실제 폴더 경로를 입력하세요.",
       "name_placeholder": "라이브러리 이름 (예: 만화책)",
       "path_placeholder": "폴더 경로 (예: /data/comics)",
+      "type_label": "라이브러리 타입",
+      "type_desc": "이 라이브러리에 포함된 미디어의 종류를 선택합니다.",
+      "type_book": "도서 (ZIP/PDF/EPUB/TXT)",
+      "type_audiobook": "오디오북",
       "view_mode_label": "기본 뷰어 설정",
       "view_mode_desc": "이 라이브러리의 기본 보기 방식을 설정합니다.",
       "excludes_label": "스캔 제외 설정",
@@ -362,6 +366,7 @@
         "system_notice": "모든 설정은 원본 라이브러리를 따릅니다",
         "edit": {
           "name_label": "라이브러리 이름",
+          "type_label": "라이브러리 타입",
           "view_mode_label": "보기 모드",
           "read_direction_label": "읽기 방향",
           "excludes_label": "스캔 제외 (쉼표 구분)",
@@ -455,6 +460,9 @@
         "empty": "아직 읽은 책이 없어요",
         "empty_hint": "라이브러리에서 책을 선택해서 읽어보세요!"
       },
+      "continue_listening": {
+        "title": "이어 듣기"
+      },
       "liked": {
         "title": "좋아요한 시리즈",
         "desc": "좋아요(즐겨찾기) 표시한 시리즈를 모아봅니다.",
@@ -502,9 +510,12 @@
     "action": {
       "like": "좋아요",
       "read_now": "바로 읽기",
+      "listen_now": "바로 듣기",
       "continue": "이어보기",
       "read_first_volume": "첫 권 읽기",
+      "listen_first_volume": "첫 권 듣기",
       "read_first_chapter": "첫 챕터 읽기",
+      "listen_first_chapter": "첫 챕터 듣기",
       "incognito": "시크릿 모드",
       "mark_completed": "완독",
       "mark_previous_completed": "이전 회차 전부 완독",
@@ -822,5 +833,22 @@
     "progress_marker": {
       "navigate": "목차 이동: {{label}}"
     }
+  },
+  "audio_player": {
+    "now_playing": "재생 중",
+    "chapters": "챕터",
+    "total": "전체",
+    "sleep": "수면",
+    "bookmark": "북마크",
+    "bookmarks": "북마크",
+    "bookmark_add": "추가",
+    "bookmark_empty": "북마크가 없습니다",
+    "personal_library": "개인 라이브러리 서버",
+    "synced": "KUMIHO와 동기화됨",
+    "sleep_timer": "수면 타이머",
+    "sleep_timer_minutes": "{{count}}분",
+    "sleep_timer_remaining": "남은 시간: {{time}}",
+    "sleep_timer_off": "타이머 끄기",
+    "playback_speed": "재생 속도"
   }
 }

@@ -213,6 +213,7 @@ export function LibraryPage() {
                   type="series"
                   progressStyle="overlay"
                   showExtensionBadge
+                  onStatusChange={loadData}
                 />
               ))}
             </div>

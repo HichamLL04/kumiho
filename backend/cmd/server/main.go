@@ -94,6 +94,9 @@ func main() {
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가
 	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo, viewerSessionRepo)
+	audioHandler := handler.NewAudioHandler(chapterRepo, volumeRepo, seriesRepo, authService)
+	bookmarkRepo := repository.NewBookmarkRepository()
+	bookmarkHandler := handler.NewBookmarkHandler(bookmarkRepo, seriesRepo, authService)
 	sseHandler := handler.NewSSEHandler(hub)
 
 	// 미들웨어 초기화
@@ -245,6 +248,7 @@ func main() {
 	})
 	chapters.Get("/:id/bgm", seriesHandler.GetChapterBGM)
 	chapters.Get("/:id/bgm/stream", seriesHandler.ServeChapterBGM)
+	chapters.Get("/:chapterId/audio", audioHandler.GetAudioStream)
 
 	// 페이지
 	pages := protected.Group("/pages")
@@ -262,6 +266,13 @@ func main() {
 	viewer.Get("/init/:chapterId", seriesHandler.GetViewerInitData)
 	viewer.Post("/start", progressHandler.StartViewing)
 	viewer.Post("/resume-check", progressHandler.ResumeCheck)
+
+	// 북마크
+	bookmarks := protected.Group("/bookmarks")
+	bookmarks.Post("", bookmarkHandler.CreateBookmark)
+	bookmarks.Get("/series/:seriesId", bookmarkHandler.ListBySeries)
+	bookmarks.Put("/:id", bookmarkHandler.UpdateBookmark)
+	bookmarks.Delete("/:id", bookmarkHandler.DeleteBookmark)
 
 	// 설정
 	settingsApi := protected.Group("/settings")

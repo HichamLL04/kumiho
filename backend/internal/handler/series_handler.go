@@ -1228,6 +1228,9 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 	} else if strings.HasSuffix(chapterPath, ".txt") {
 		renderMode := "text"
 		chapter.RenderMode = &renderMode
+	} else if isAudioFile(chapterPath) {
+		renderMode := "audio"
+		chapter.RenderMode = &renderMode
 	}
 
 	return c.JSON(chapter)
@@ -1255,6 +1258,9 @@ func (h *SeriesHandler) GetViewerInitData(c *fiber.Ctx) error {
 		chapter.RenderMode = &renderMode
 	} else if strings.HasSuffix(chapterPath, ".txt") {
 		renderMode := "text"
+		chapter.RenderMode = &renderMode
+	} else if isAudioFile(chapterPath) {
+		renderMode := "audio"
 		chapter.RenderMode = &renderMode
 	}
 
@@ -1719,4 +1725,14 @@ func (h *SeriesHandler) BatchGetExtensions(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"extensions": extensions,
 	})
+}
+
+// isAudioFile checks if the given path has an audio file extension
+func isAudioFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".mp3", ".wav", ".ogg", ".flac", ".m4a":
+		return true
+	}
+	return false
 }

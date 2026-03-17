@@ -8,8 +8,10 @@ import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
 import { api, volumeAPI, downloadAPI, chapterAPI } from "../api/client";
+import { formatDuration } from "../utils/progressUtils";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
+import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import { Tooltip } from "../components/common/Tooltip";
 import styles from "./Volume.module.css";
 
@@ -242,6 +244,25 @@ export function VolumePage() {
 
   // 이어보기 또는 첫 챕터 읽기
   const handlePlay = async () => {
+    const isAudio = series.library_type === "audiobook" || series.has_audio;
+
+    if (isAudio && chapters.length > 0) {
+      const { loadAndPlay } = useAudioPlayerStore.getState();
+      const sorted = [...chapters].sort((a, b) => a.chapter_number - b.chapter_number);
+
+      // 진행도의 챕터 찾기, 없으면 첫 챕터
+      let startChapter = sorted[0];
+      if (lastProgress?.chapter_id) {
+        const found = sorted.find((c) => c.id === lastProgress.chapter_id);
+        if (found) startChapter = found;
+      }
+
+      if (startChapter) {
+        loadAndPlay(series, startChapter, sorted, volume);
+      }
+      return;
+    }
+
     if (lastProgress && lastProgress.chapter_id) {
       navigate(`/viewer/${lastProgress.chapter_id}`, { state: { from: viewerFrom } });
       return;
@@ -375,7 +396,9 @@ export function VolumePage() {
               {chapters.map((chapter) => {
                 const chapterProgress = progressList.find((p) => p.chapter_id === chapter.id);
                 const hasPartialProgress =
-                  !!chapterProgress && chapterProgress.current_page > 0 && !chapter.is_read;
+                  !!chapterProgress &&
+                  (chapterProgress.current_page > 0 || (chapterProgress.current_time ?? 0) > 0) &&
+                  !chapter.is_read;
                 const shouldShowResetAction = chapter.is_read || hasPartialProgress;
 
                 return (
@@ -424,9 +447,13 @@ export function VolumePage() {
                       </span>
                       <span className={styles.chapterTitle}>{chapter.title}</span>
                       <span className={styles.chapterPages}>
-                        {chapterProgress
-                          ? `${chapterProgress.current_page} / ${chapter.page_count} P`
-                          : `${chapter.page_count} Pages`}
+                        {chapter.has_audio && chapter.duration
+                          ? chapterProgress?.current_time
+                            ? `${formatDuration(chapterProgress.current_time)} / ${formatDuration(chapter.duration)}`
+                            : formatDuration(chapter.duration)
+                          : chapterProgress
+                            ? `${chapterProgress.current_page} / ${chapter.page_count} P`
+                            : `${chapter.page_count} Pages`}
                       </span>
                     </div>
 

@@ -63,11 +63,9 @@ export function AlertModal({
   const handleConfirmClick = async () => {
     if (isProcessing) return;
 
+    setIsProcessing(true);
     try {
-      setIsProcessing(true);
       await onConfirm();
-    } catch (error) {
-      console.error("AlertModal onConfirm failed:", error);
     } finally {
       setIsProcessing(false);
     }

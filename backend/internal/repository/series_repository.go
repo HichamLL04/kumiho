@@ -62,8 +62,10 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 	rows, err := db.Query(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
 		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
-				sm.original_title, sm.publisher, sm.published_at, sm.isbn
+				sm.original_title, sm.publisher, sm.published_at, sm.isbn,
+				l.library_type
 		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
 		 LEFT JOIN series_metadata sm ON s.id = sm.series_id
 		 LEFT JOIN user_bookmarks ub ON s.id = ub.series_id AND ub.user_id = ?
 		 WHERE s.library_id = ? ORDER BY s.title`,
@@ -81,10 +83,12 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 		var thumbnail, ext sql.NullString
 		var desc, status, authors, tags, pubYear, originalTitle, publisher, publishedAt, isbn sql.NullString
 		var isBookmarked sql.NullBool
+		var libraryType sql.NullString
 
 		err := rows.Scan(
 			&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
 			&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &publisher, &publishedAt, &isbn,
+			&libraryType,
 		)
 		if err != nil {
 			return nil, err
@@ -95,6 +99,9 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 		}
 		if ext.Valid {
 			s.Extension = ext.String
+		}
+		if libraryType.Valid {
+			s.LibraryType = libraryType.String
 		}
 
 		m.SeriesID = s.ID
@@ -143,8 +150,10 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 	rows, err := db.Query(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
 		        sm.description, 1 AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
-				sm.original_title, sm.publisher, sm.published_at, sm.isbn
+				sm.original_title, sm.publisher, sm.published_at, sm.isbn,
+				l.library_type
 		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
 		 JOIN user_bookmarks ub ON s.id = ub.series_id
 		 LEFT JOIN series_metadata sm ON s.id = sm.series_id
 		 WHERE ub.user_id = ? ORDER BY s.title`,
@@ -162,10 +171,12 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 		var thumbnail, ext sql.NullString
 		var desc, status, authors, tags, pubYear, originalTitle, publisher, publishedAt, isbn sql.NullString
 		var isBookmarked sql.NullBool
+		var libraryType sql.NullString
 
 		err := rows.Scan(
 			&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
 			&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &publisher, &publishedAt, &isbn,
+			&libraryType,
 		)
 		if err != nil {
 			return nil, err
@@ -176,6 +187,9 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 		}
 		if ext.Valid {
 			s.Extension = ext.String
+		}
+		if libraryType.Valid {
+			s.LibraryType = libraryType.String
 		}
 
 		m.SeriesID = s.ID
@@ -227,11 +241,14 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	var desc, status, authors, tags, pubYear, originalTitle, publisher, publishedAt, isbn sql.NullString
 	var isBookmarked sql.NullBool
 
+	var libraryType sql.NullString
 	err := db.QueryRow(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
 		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
-				sm.original_title, sm.publisher, sm.published_at, sm.isbn
+				sm.original_title, sm.publisher, sm.published_at, sm.isbn,
+				l.library_type
 		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
 		 LEFT JOIN series_metadata sm ON s.id = sm.series_id
 		 LEFT JOIN user_bookmarks ub ON s.id = ub.series_id AND ub.user_id = ?
 		 WHERE s.id = ?`,
@@ -239,6 +256,7 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	).Scan(
 		&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
 		&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &publisher, &publishedAt, &isbn,
+		&libraryType,
 	)
 
 	if err == sql.ErrNoRows {
@@ -253,6 +271,9 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	}
 	if ext.Valid {
 		s.Extension = ext.String
+	}
+	if libraryType.Valid {
+		s.LibraryType = libraryType.String
 	}
 
 	m.SeriesID = s.ID
@@ -301,12 +322,15 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	var thumbnail, ext sql.NullString
 	var desc, status, authors, tags, pubYear, originalTitle, publisher, publishedAt, isbn sql.NullString
 	var isBookmarked sql.NullBool
+	var libraryType sql.NullString
 
 	err := db.QueryRow(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
 		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
-				sm.original_title, sm.publisher, sm.published_at, sm.isbn
+				sm.original_title, sm.publisher, sm.published_at, sm.isbn,
+				l.library_type
 		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
 		 LEFT JOIN series_metadata sm ON s.id = sm.series_id
 		 LEFT JOIN user_bookmarks ub ON s.id = ub.series_id AND ub.user_id = ?
 		 WHERE s.path = ?`,
@@ -314,6 +338,7 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	).Scan(
 		&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
 		&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &publisher, &publishedAt, &isbn,
+		&libraryType,
 	)
 
 	if err == sql.ErrNoRows {
@@ -328,6 +353,9 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	}
 	if ext.Valid {
 		s.Extension = ext.String
+	}
+	if libraryType.Valid {
+		s.LibraryType = libraryType.String
 	}
 
 	m.SeriesID = s.ID

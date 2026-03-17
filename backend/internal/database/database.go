@@ -91,6 +91,7 @@ func Migrate() error {
 		name TEXT NOT NULL,
 		path TEXT UNIQUE NOT NULL,
 		type TEXT DEFAULT 'LOCAL',
+		library_type TEXT DEFAULT 'book', -- "book", "audiobook"
 		is_visible BOOLEAN DEFAULT 1,
 		default_view_mode TEXT DEFAULT 'single',
 		default_read_direction TEXT DEFAULT 'ltr',
@@ -167,6 +168,7 @@ func Migrate() error {
 		page_count INTEGER DEFAULT 0,
 		total_bytes INTEGER DEFAULT 0,
 		total_positions INTEGER DEFAULT 0,
+		duration REAL, -- 오디오 길이 (초)
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -192,6 +194,8 @@ func Migrate() error {
 		total_pages INTEGER NOT NULL DEFAULT 0,
 		current_position INTEGER DEFAULT 0,
 		total_positions INTEGER DEFAULT 0,
+		current_time REAL DEFAULT 0.0, -- 오디오 재생 위치 (초)
+		duration REAL DEFAULT 0.0,     -- 오디오 전체 길이 (초)
 		progress_percent REAL DEFAULT 0.0,
 		device_id TEXT,
 		device_name TEXT,
@@ -263,6 +267,22 @@ func Migrate() error {
 		PRIMARY KEY (user_id, series_id)
 	);
 
+	-- 북마크 (특정 위치 저장용, 범용)
+	CREATE TABLE IF NOT EXISTS bookmarks (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+		volume_id TEXT REFERENCES volumes(id) ON DELETE CASCADE,
+		chapter_id TEXT REFERENCES chapters(id) ON DELETE CASCADE,
+		title TEXT DEFAULT '',
+		description TEXT DEFAULT '',
+		page_number INTEGER DEFAULT 0,
+		current_position INTEGER DEFAULT 0,
+		current_cfi TEXT,
+		current_time REAL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	-- 사용자별 일일 활동 로그 (정확한 잔디 통계용)
 	CREATE TABLE IF NOT EXISTS daily_activity (
 		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -300,6 +320,9 @@ func Migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
 	CREATE INDEX IF NOT EXISTS idx_user_series_settings_user ON user_series_settings(user_id);
 	CREATE INDEX IF NOT EXISTS idx_user_series_settings_series ON user_series_settings(series_id);
+	CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id);
+	CREATE INDEX IF NOT EXISTS idx_bookmarks_series ON bookmarks(series_id);
+	CREATE INDEX IF NOT EXISTS idx_bookmarks_chapter ON bookmarks(chapter_id);
 	`
 
 	if _, err := DB.Exec(schema); err != nil {
@@ -402,7 +425,51 @@ func Migrate() error {
 	// 29. 챕터별 has_audio 컬럼 추가
 	migrateChaptersHasAudio()
 
+	// 30. 오디오북 관련 컬럼 추가 (library_type, duration, current_time)
+	migrateAudiobookColumns()
+
 	return nil
+}
+
+// migrateAudiobookColumns 오디오북 관련 컬럼들을 각 테이블에 추가
+func migrateAudiobookColumns() {
+	// 1. libraries 테이블에 library_type 추가
+	if !columnExists("libraries", "library_type") {
+		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN library_type TEXT DEFAULT 'book'`)
+		if err != nil {
+			fmt.Printf("Migration error (libraries.library_type): %v\n", err)
+		} else {
+			fmt.Println("Migrated libraries table: added library_type column.")
+		}
+	}
+
+	// 2. chapters 테이블에 duration 추가
+	if !columnExists("chapters", "duration") {
+		_, err := DB.Exec(`ALTER TABLE chapters ADD COLUMN duration REAL`)
+		if err != nil {
+			fmt.Printf("Migration error (chapters.duration): %v\n", err)
+		} else {
+			fmt.Println("Migrated chapters table: added duration column.")
+		}
+	}
+
+	// 3. reading_progress 테이블에 current_time, duration 추가
+	if !columnExists("reading_progress", "current_time") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN current_time REAL DEFAULT 0.0`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.current_time): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added current_time column.")
+		}
+	}
+	if !columnExists("reading_progress", "duration") {
+		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN duration REAL DEFAULT 0.0`)
+		if err != nil {
+			fmt.Printf("Migration error (reading_progress.duration): %v\n", err)
+		} else {
+			fmt.Println("Migrated reading_progress table: added duration column.")
+		}
+	}
 }
 
 // migrateVolumesParentID volumes 테이블에 parent_id 컬럼 추가

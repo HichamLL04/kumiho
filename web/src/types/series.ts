@@ -28,6 +28,8 @@ export interface Series {
   created_at: string;
   updated_at: string;
   extension?: ExtensionBadge | "";
+  library_type?: string;
+  has_audio?: boolean;
 }
 
 export interface Volume {
@@ -51,6 +53,7 @@ export interface Volume {
   parent_id?: string;
   extension?: ExtensionBadge | "";
   created_at: string;
+  library_type?: string;
 }
 
 export interface Chapter {
@@ -59,10 +62,11 @@ export interface Chapter {
   title: string;
   chapter_number: number;
   path: string;
-  render_mode?: "pdf" | "image" | "text";
+  render_mode?: "pdf" | "image" | "text" | "audio";
   page_count: number;
   total_bytes?: number;
   total_positions?: number;
+  duration?: number;
   has_audio?: boolean;
   thumbnail_url?: string;
   is_read?: boolean;
@@ -91,6 +95,8 @@ export interface ReadingProgress {
   total_pages: number;
   current_position?: number;
   total_positions?: number;
+  current_time?: number;
+  duration?: number;
   progress_percent: number;
   current_cfi?: string;
   updated_at: string;
@@ -113,6 +119,10 @@ export interface SeriesProgressSummary {
   total_pages?: number;
   /** 시리즈에서 읽은 전체 페이지 수 */
   read_pages?: number;
+  /** 오디오북 전체 재생 시간 (초) */
+  total_duration?: number;
+  /** 오디오북 들은 시간 (초) */
+  listened_duration?: number;
 }
 
 export interface UserSeriesSetting {
@@ -142,4 +152,5 @@ export interface Library {
   default_view_mode?: string;
   default_read_direction?: string;
   default_page_transition?: string;
+  library_type?: string;
 }

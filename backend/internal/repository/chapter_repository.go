@@ -27,9 +27,9 @@ func (r *ChapterRepository) Create(db database.Queryer, chapter *model.Chapter) 
 	chapter.UpdatedAt = now
 
 	_, err := db.Exec(
-		`INSERT INTO chapters (id, volume_id, title, chapter_number, path, page_count, total_bytes, total_positions, has_audio, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		chapter.ID, chapter.VolumeID, chapter.Title, chapter.ChapterNumber, chapter.Path, chapter.PageCount, chapter.TotalBytes, chapter.TotalPositions, chapter.HasAudio, chapter.CreatedAt, chapter.UpdatedAt,
+		`INSERT INTO chapters (id, volume_id, title, chapter_number, path, page_count, total_bytes, total_positions, has_audio, duration, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		chapter.ID, chapter.VolumeID, chapter.Title, chapter.ChapterNumber, chapter.Path, chapter.PageCount, chapter.TotalBytes, chapter.TotalPositions, chapter.HasAudio, chapter.Duration, chapter.CreatedAt, chapter.UpdatedAt,
 	)
 	return err
 }
@@ -38,7 +38,7 @@ func (r *ChapterRepository) Create(db database.Queryer, chapter *model.Chapter) 
 func (r *ChapterRepository) FindByVolumeID(db database.Queryer, volumeID string) ([]model.Chapter, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT id, volume_id, title, chapter_number, path, page_count, total_bytes, total_positions, has_audio, created_at, updated_at
+		`SELECT id, volume_id, title, chapter_number, path, page_count, total_bytes, total_positions, has_audio, duration, created_at, updated_at
 		 FROM chapters WHERE volume_id = ? ORDER BY chapter_number`,
 		volumeID,
 	)
@@ -50,7 +50,7 @@ func (r *ChapterRepository) FindByVolumeID(db database.Queryer, volumeID string)
 	var chapters []model.Chapter
 	for rows.Next() {
 		var c model.Chapter
-		if err := rows.Scan(&c.ID, &c.VolumeID, &c.Title, &c.ChapterNumber, &c.Path, &c.PageCount, &c.TotalBytes, &c.TotalPositions, &c.HasAudio, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.VolumeID, &c.Title, &c.ChapterNumber, &c.Path, &c.PageCount, &c.TotalBytes, &c.TotalPositions, &c.HasAudio, &c.Duration, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, err
 		}
 		chapters = append(chapters, c)
@@ -89,9 +89,9 @@ func (r *ChapterRepository) FindByID(db database.Queryer, id string) (*model.Cha
 	db = database.GetQueryer(db)
 	var c model.Chapter
 	err := db.QueryRow(
-		`SELECT id, volume_id, title, chapter_number, path, page_count, total_bytes, total_positions, has_audio, created_at, updated_at FROM chapters WHERE id = ?`,
+		`SELECT id, volume_id, title, chapter_number, path, page_count, total_bytes, total_positions, has_audio, duration, created_at, updated_at FROM chapters WHERE id = ?`,
 		id,
-	).Scan(&c.ID, &c.VolumeID, &c.Title, &c.ChapterNumber, &c.Path, &c.PageCount, &c.TotalBytes, &c.TotalPositions, &c.HasAudio, &c.CreatedAt, &c.UpdatedAt)
+	).Scan(&c.ID, &c.VolumeID, &c.Title, &c.ChapterNumber, &c.Path, &c.PageCount, &c.TotalBytes, &c.TotalPositions, &c.HasAudio, &c.Duration, &c.CreatedAt, &c.UpdatedAt)
 
 	if err != nil {
 		return nil, err
@@ -180,6 +180,43 @@ func (r *ChapterRepository) CountByVolumeID(db database.Queryer, volumeID string
 		return 0, err
 	}
 	return count, nil
+}
+
+// GetTotalDurationBySeriesID 시리즈 전체 오디오 챕터의 총 재생 시간(초)을 합산합니다.
+func (r *ChapterRepository) GetTotalDurationBySeriesID(db database.Queryer, seriesID string) (float64, error) {
+	db = database.GetQueryer(db)
+	var total float64
+	err := db.QueryRow(
+		`SELECT COALESCE(SUM(c.duration), 0)
+		 FROM chapters c
+		 JOIN volumes v ON c.volume_id = v.id
+		 WHERE v.series_id = ? AND c.duration IS NOT NULL`,
+		seriesID,
+	).Scan(&total)
+	return total, err
+}
+
+// GetListenedDurationBySeriesID 시리즈에서 사용자가 들은 총 시간(초)을 계산합니다.
+// 완독 챕터는 해당 챕터의 전체 duration을, 미완독 챕터는 current_time을 합산합니다.
+func (r *ChapterRepository) GetListenedDurationBySeriesID(db database.Queryer, userID, seriesID string) (float64, error) {
+	db = database.GetQueryer(db)
+	var listened float64
+	err := db.QueryRow(
+		`SELECT COALESCE(SUM(
+			CASE
+				WHEN cc.id IS NOT NULL THEN COALESCE(c.duration, 0)
+				WHEN rp.current_time IS NOT NULL THEN rp.current_time
+				ELSE 0
+			END
+		), 0)
+		FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		LEFT JOIN chapter_completions cc ON c.id = cc.chapter_id AND cc.user_id = ?
+		LEFT JOIN reading_progress rp ON c.id = rp.chapter_id AND rp.user_id = ?
+		WHERE v.series_id = ? AND c.duration IS NOT NULL`,
+		userID, userID, seriesID,
+	).Scan(&listened)
+	return listened, err
 }
 
 // IsLastChapter 해당 챕터가 볼륨의 마지막 챕터인지 확인

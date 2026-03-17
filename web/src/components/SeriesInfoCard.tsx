@@ -66,7 +66,8 @@ export function SeriesInfoCard({
   const isVolumeType = type === "volume";
   const displayPath = (isVolumeType ? volume?.path : series.path) || "";
   const lowerDisplayPath = displayPath.toLowerCase();
-  const isTextFile = lowerDisplayPath.endsWith(".txt");
+  const isTextFile = lowerDisplayPath.endsWith(".txt") || (!isVolumeType && (series.extension === "TXT" || series.extension === "EPUB"));
+  const isAudiobook = series.library_type === "audiobook" || series.has_audio;
 
   // 시리즈 완독 처리 실행
   const executeMarkComplete = async () => {
@@ -224,12 +225,38 @@ export function SeriesInfoCard({
       {/* 썸네일 */}
       <div className={styles.seriesThumbnailContainer}>
         {thumbnailUrl && !imageError ? (
-          <img
-            src={thumbnailUrl}
-            alt={isVolumeType ? volume?.title : series.title}
-            className={styles.seriesThumbnail}
-            onError={() => setImageError(true)}
-          />
+          isAudiobook ? (
+            <>
+              <img
+                src={thumbnailUrl}
+                alt=""
+                className={styles.seriesThumbnailBlur}
+                aria-hidden="true"
+              />
+              <img
+                src={thumbnailUrl}
+                alt={isVolumeType ? volume?.title : series.title}
+                className={styles.seriesThumbnailContain}
+                onError={() => setImageError(true)}
+              />
+            </>
+          ) : (
+            <img
+              src={thumbnailUrl}
+              alt={isVolumeType ? volume?.title : series.title}
+              className={styles.seriesThumbnail}
+              onError={() => setImageError(true)}
+            />
+          )
+        ) : isAudiobook ? (
+          <div className={styles.seriesThumbnailPlaceholder}>
+            <img
+              src="/audio-kumiho.png"
+              alt=""
+              className={styles.seriesPlaceholderImage}
+              draggable={false}
+            />
+          </div>
         ) : isTextFile ? (
           <div className={styles.seriesThumbnailPlaceholder}>
             <img
@@ -379,13 +406,21 @@ export function SeriesInfoCard({
                 size={20}
                 fill="currentColor"
               />
-              {isVolumeType
-                ? progress
+              {(() => {
+                const isAudio = series.library_type === "audiobook" || series.has_audio;
+                if (isVolumeType) {
+                  return progress
+                    ? t("series.action.continue")
+                    : isAudio
+                      ? t("series.action.listen_first_chapter")
+                      : t("series.action.read_first_chapter");
+                }
+                return progress
                   ? t("series.action.continue")
-                  : t("series.action.read_first_chapter")
-                : progress
-                  ? t("series.action.continue")
-                  : t("series.action.read_first_volume")}
+                  : isAudio
+                    ? t("series.action.listen_first_volume")
+                    : t("series.action.read_first_volume");
+              })()}
             </button>
             <button
               className={styles.btnSplitArrow}

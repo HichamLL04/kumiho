@@ -317,7 +317,11 @@
       "path_label": "Set Path",
       "path_desc": "Enter the actual folder path on the server.",
       "name_placeholder": "Library Name (e.g. Comics)",
-      "path_placeholder": "Folder Path (e.g. /data/comics)",
+      "path_placeholder": "Folder Path (e.g., /data/comics)",
+      "type_label": "Library Type",
+      "type_desc": "Select the type of media contained in this library.",
+      "type_book": "Book (ZIP/PDF/EPUB/TXT)",
+      "type_audiobook": "Audiobook",
       "view_mode_label": "Default View Settings",
       "view_mode_desc": "Set the default viewing mode for this library.",
       "excludes_label": "Scan Exclusions",
@@ -362,6 +366,7 @@
         "system_notice": "All settings follow the original library",
         "edit": {
           "name_label": "Library Name",
+          "type_label": "Library Type",
           "view_mode_label": "View Mode",
           "read_direction_label": "Read Direction",
           "excludes_label": "Scan Excludes (comma separated)",
@@ -455,6 +460,9 @@
         "empty": "No recent readings yet",
         "empty_hint": "Select a book from the library to start reading!"
       },
+      "continue_listening": {
+        "title": "Continue Listening"
+      },
       "liked": {
         "title": "Liked Series",
         "desc": "Your favorite series.",
@@ -502,9 +510,12 @@
     "action": {
       "like": "Like",
       "read_now": "Read Now",
+      "listen_now": "Listen Now",
       "continue": "Continue",
       "read_first_volume": "Read First Vol.",
+      "listen_first_volume": "Listen First Vol.",
       "read_first_chapter": "Read First Ch.",
+      "listen_first_chapter": "Listen First Ch.",
       "incognito": "Incognito Mode",
       "mark_completed": "Mark as Read",
       "mark_previous_completed": "Mark all previous as read",
@@ -821,5 +832,22 @@
     "progress_marker": {
       "navigate": "Navigate TOC: {{label}}"
     }
+  },
+  "audio_player": {
+    "now_playing": "NOW PLAYING",
+    "chapters": "Chapters",
+    "total": "TOTAL",
+    "sleep": "Sleep",
+    "bookmark": "Mark",
+    "bookmarks": "Bookmarks",
+    "bookmark_add": "Add",
+    "bookmark_empty": "No bookmarks yet",
+    "personal_library": "Personal Library Server",
+    "synced": "SYNCED WITH KUMIHO",
+    "sleep_timer": "Sleep Timer",
+    "sleep_timer_minutes": "{{count}} minutes",
+    "sleep_timer_remaining": "Remaining: {{time}}",
+    "sleep_timer_off": "Turn Off Timer",
+    "playback_speed": "Playback Speed"
   }
 }

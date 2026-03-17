@@ -1,0 +1,93 @@
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.controlBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  color: var(--text-secondary);
+  border-radius: 50%;
+  transition: color 0.15s, background 0.15s;
+  position: relative;
+}
+
+.controlBtn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.controlBtn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.controlBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.controlBtn:disabled:hover {
+  background: none;
+  color: var(--text-secondary);
+}
+
+.playBtn {
+  width: 72px;
+  height: 72px;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border-radius: 50%;
+  padding: 0;
+}
+
+.playBtn:hover {
+  background: #5cc8e8;
+  color: var(--bg-primary);
+}
+
+.playBtn:active {
+  background: #3fa8c4;
+}
+
+.skipLabel {
+  position: absolute;
+  bottom: -2px;
+  font-size: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Mini variant */
+.mini {
+  gap: 12px;
+}
+
+.mini .controlBtn {
+  padding: 4px;
+}
+
+.mini .playBtn {
+  width: 44px;
+  height: 44px;
+}
+
+.mini .skipLabel {
+  display: none;
+}
+
+/* Sidebar variant */
+.sidebar {
+  gap: 20px;
+}
+
+.sidebar .playBtn {
+  width: 60px;
+  height: 60px;
+}

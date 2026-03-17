@@ -139,6 +139,7 @@ export const libraryAPI = {
     default_epub_wheel_direction?: string;
     default_epub_keyboard_direction?: string;
     default_epub_click_direction?: string;
+    library_type?: string;
   }) => api.post("/libraries", data),
   update: (
     id: string,
@@ -153,6 +154,7 @@ export const libraryAPI = {
       default_epub_wheel_direction?: string;
       default_epub_keyboard_direction?: string;
       default_epub_click_direction?: string;
+      library_type?: string;
       is_visible?: boolean;
     },
   ) => api.put(`/libraries/${id}`, data),
@@ -182,6 +184,8 @@ export const seriesAPI = {
       total_pages?: number;
       current_position?: number;
       total_positions?: number;
+      current_time?: number;
+      duration?: number;
       progress_percent?: number;
       page?: number;
       current_cfi?: string;
@@ -294,6 +298,24 @@ export const chapterAPI = {
     api.post(`/series/${seriesId}/chapters/${chapterId}/complete-previous`),
   deleteProgress: (chapterId: string) => api.delete(`/chapters/${chapterId}/progress`),
   getBGM: (chapterId: string) => api.get<{ exists: boolean; url?: string }>(`/chapters/${chapterId}/bgm`),
+  getAudioUrl: (chapterId: string) => `${API_BASE_URL}/chapters/${chapterId}/audio`,
+};
+
+// Bookmark API
+export const bookmarkAPI = {
+  getAll: (seriesId?: string) => api.get(`/bookmarks${seriesId ? `?series_id=${seriesId}` : ""}`),
+  create: (data: {
+    series_id: string;
+    volume_id?: string;
+    chapter_id?: string;
+    title: string;
+    description?: string;
+    page_number?: number;
+    current_position?: number;
+    current_cfi?: string;
+    current_time?: number;
+  }) => api.post("/bookmarks", data),
+  delete: (id: string) => api.delete(`/bookmarks/${id}`),
 };
 
 // EPUB Progress API (EPUB 전용)

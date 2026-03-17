@@ -10,6 +10,10 @@ import { ViewerPage } from "./pages/Viewer";
 import { SettingsPage } from "./pages/Settings";
 import { SearchPage } from "./pages/Search";
 import { useScrollToTop } from "./hooks/useScrollToTop";
+import { AudioProvider } from "./features/audio-player/AudioProvider";
+import { AudioFullscreenPlayer } from "./features/audio-player/components/AudioFullscreenPlayer/AudioFullscreenPlayer";
+import { AudioMiniPlayer } from "./features/audio-player/components/AudioMiniPlayer/AudioMiniPlayer";
+import { AudioSidebarPlayer } from "./features/audio-player/components/AudioSidebarPlayer/AudioSidebarPlayer";
 import { api } from "./api/client";
 import "./App.css";
 
@@ -157,6 +161,11 @@ function App() {
   }, [checkAuth]);
 
   return (
+    <>
+    <AudioProvider />
+    <AudioFullscreenPlayer />
+    <AudioMiniPlayer />
+    <AudioSidebarPlayer />
     <Routes>
       {/* 초기 설정 (사용자가 없을 때) */}
       <Route
@@ -258,6 +267,7 @@ function App() {
         }
       />
     </Routes>
+    </>
   );
 }
 
