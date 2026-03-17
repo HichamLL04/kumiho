@@ -374,6 +374,16 @@ func Migrate() error {
 
 	// 현재 마이그레이션 버전 확인
 	currentVersion := getMigrationVersion()
+
+	// 기존 DB 감지: migration_version이 아직 없지만 이미 마이그레이션이 완료된 DB
+	// (버전 관리 도입 이전 코드에서 업그레이드할 때)
+	// 마지막 마이그레이션(#33)의 결과물인 libraries.library_type이 존재하면
+	// 모든 마이그레이션이 완료된 것으로 간주하고 버전만 기록
+	if currentVersion == 0 && columnExists("libraries", "library_type") {
+		setMigrationVersion(latestMigrationVersion)
+		return nil
+	}
+
 	if currentVersion >= latestMigrationVersion {
 		return nil
 	}
