@@ -17,6 +17,7 @@ export interface Series {
   library_id: string;
   title: string;
   path?: string;
+  author?: string;
   thumbnail_url?: string;
   description?: string;
   is_bookmarked?: boolean;

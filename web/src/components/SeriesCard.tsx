@@ -153,9 +153,7 @@ export function SeriesCard({
   };
 
   const isAudioItem =
-    ("has_audio" in item && item.has_audio) ||
-    ("library_type" in item && item.library_type === "audiobook");
-
+    ("has_audio" in item && item.has_audio) || ("library_type" in item && item.library_type === "audiobook");
   const playAudio = async () => {
     const { loadAndPlay } = useAudioPlayerStore.getState();
     try {
@@ -163,29 +161,32 @@ export function SeriesCard({
         const vol = item as Volume;
         const [seriesRes, chaptersRes] = await Promise.all([
           seriesAPI.get(vol.series_id),
-          volumeAPI.getChapters(item.id),
+          seriesAPI.getChapters(vol.series_id),
         ]);
         const series = seriesRes.data;
-        const allChapters: Chapter[] = Array.isArray(chaptersRes.data)
-          ? chaptersRes.data
-          : chaptersRes.data.chapters || [];
+        const allChapters: Chapter[] = chaptersRes.data.chapters || [];
         const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+
         if (sorted.length > 0) {
-          loadAndPlay(series, sorted[0], sorted, vol);
+          // Find the first chapter of this specific volume in the full list
+          const startChapter = sorted.find((c) => c.volume_id === vol.id) || sorted[0];
+          loadAndPlay(series, startChapter, sorted, vol);
         }
       } else {
         const series = item as Series;
-        const volumesRes = await seriesAPI.getVolumes(series.id);
-        const volumes = volumesRes.data.volumes || [];
-        if (volumes.length === 0) return;
-        const firstVol = [...volumes].sort((a: Volume, b: Volume) => a.volume_number - b.volume_number)[0];
-        const chaptersRes = await volumeAPI.getChapters(firstVol.id);
-        const allChapters: Chapter[] = Array.isArray(chaptersRes.data)
-          ? chaptersRes.data
-          : chaptersRes.data.chapters || [];
+        const [chaptersRes, progressRes] = await Promise.all([
+          seriesAPI.getChapters(series.id),
+          seriesAPI.getProgress(series.id),
+        ]);
+        const allChapters: Chapter[] = chaptersRes.data.chapters || [];
         const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+        const progress = progressRes.data?.progress;
+
         if (sorted.length > 0) {
-          loadAndPlay(series, sorted[0], sorted, firstVol);
+          const resumeChapter = progress?.chapter_id
+            ? sorted.find((c) => c.id === progress.chapter_id) || sorted[0]
+            : sorted[0];
+          loadAndPlay(series, resumeChapter, sorted, null);
         }
       }
     } catch (err) {

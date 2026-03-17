@@ -191,6 +191,7 @@ func main() {
 	series.Get("/:id", seriesHandler.GetSeries)
 	series.Patch("/:id", seriesHandler.UpdateSeries)
 	series.Get("/:seriesId/volumes", seriesHandler.ListVolumes)
+	series.Get("/:seriesId/chapters", seriesHandler.ListChaptersBySeries)
 	series.Get("/:seriesId/progress", progressHandler.GetProgress)
 	series.Patch("/:seriesId/progress", progressHandler.UpdateProgress)
 	series.Post("/:seriesId/progress/compare", progressHandler.CompareProgress)

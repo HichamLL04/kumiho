@@ -1736,3 +1736,24 @@ func isAudioFile(path string) bool {
 	}
 	return false
 }
+
+// ListChaptersBySeries 시리즈의 모든 챕터 목록 조회
+// GET /api/v1/series/:seriesId/chapters
+func (h *SeriesHandler) ListChaptersBySeries(c *fiber.Ctx) error {
+	seriesID := c.Params("seriesId")
+
+	chapters, err := h.chapterRepo.FindBySeriesID(nil, seriesID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch chapters",
+		})
+	}
+
+	if chapters == nil {
+		chapters = []model.Chapter{}
+	}
+
+	return c.JSON(fiber.Map{
+		"chapters": chapters,
+	})
+}

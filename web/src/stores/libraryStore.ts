@@ -19,6 +19,7 @@ export interface Library {
   last_scan_result: string;
   type?: "LOCAL" | "SYSTEM";
   is_visible?: boolean;
+  library_type?: string;
   scan_excludes?: string;
 }
 

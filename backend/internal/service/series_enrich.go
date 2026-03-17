@@ -81,7 +81,9 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 		if err == nil && len(chapters) > 0 {
 			total := 0
 			for _, c := range chapters {
-				if c.TotalPositions > 0 {
+				if c.Duration != nil && *c.Duration > 0 {
+					total += int(*c.Duration)
+				} else if c.TotalPositions > 0 {
 					total += c.TotalPositions
 				} else if c.PageCount > 0 {
 					total += c.PageCount

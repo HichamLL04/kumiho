@@ -55,13 +55,21 @@ export function AudioFullscreenPlayer() {
     <div className={styles.overlay}>
       {/* Header */}
       <div className={styles.header}>
-        <button className={styles.headerBtn} onClick={handleMinimize} aria-label="Minimize">
+        <button
+          className={styles.headerBtn}
+          onClick={handleMinimize}
+          aria-label="Minimize"
+        >
           <ChevronDown size={24} />
         </button>
         <div className={styles.headerCenter}>
           <span className={styles.headerLabel}>{t("audio_player.now_playing", "NOW PLAYING")}</span>
         </div>
-        <button className={styles.headerBtn} onClick={toggleChapterList} aria-label="Chapters">
+        <button
+          className={styles.headerBtn}
+          onClick={toggleChapterList}
+          aria-label="Chapters"
+        >
           <ListMusic size={22} />
         </button>
       </div>
@@ -71,7 +79,11 @@ export function AudioFullscreenPlayer() {
         {/* Cover */}
         <div className={styles.coverWrapper}>
           {thumbnailUrl ? (
-            <img src={thumbnailUrl} alt={seriesTitle} className={styles.cover} />
+            <img
+              src={thumbnailUrl}
+              alt={seriesTitle}
+              className={styles.cover}
+            />
           ) : (
             <div className={styles.coverPlaceholder}>
               <Music size={64} />
@@ -82,9 +94,7 @@ export function AudioFullscreenPlayer() {
         {/* Info */}
         <div className={styles.info}>
           <div className={styles.title}>{seriesTitle}</div>
-          {currentSeries?.author && (
-            <div className={styles.subtitle}>{currentSeries.author}</div>
-          )}
+          {currentSeries?.author && <div className={styles.subtitle}>{currentSeries.author}</div>}
           <div className={styles.chapterInfo}>{chapterTitle}</div>
         </div>
 
@@ -100,7 +110,10 @@ export function AudioFullscreenPlayer() {
 
         {/* Bottom Actions */}
         <div className={styles.bottomActions}>
-          <button className={styles.actionBtn} onClick={() => setSpeedOpen(true)}>
+          <button
+            className={styles.actionBtn}
+            onClick={() => setSpeedOpen(true)}
+          >
             <Gauge size={16} />
             {playbackRate}x
           </button>
@@ -113,7 +126,10 @@ export function AudioFullscreenPlayer() {
               ? t("audio_player.sleep_timer_minutes", "{{count}} min", { count: sleepTimerMinutes })
               : t("audio_player.sleep", "Sleep")}
           </button>
-          <button className={styles.actionBtn} onClick={() => setBookmarkOpen(true)}>
+          <button
+            className={styles.actionBtn}
+            onClick={() => setBookmarkOpen(true)}
+          >
             <Bookmark size={16} />
             {t("audio_player.bookmark", "Mark")}
           </button>
@@ -137,7 +153,7 @@ export function AudioFullscreenPlayer() {
             </span>
           </div>
           <div className={styles.chapterList}>
-            {chapters.map((chapter) => {
+            {chapters.map((chapter, index) => {
               const isActive = chapter.id === currentChapter?.id;
               return (
                 <button
@@ -152,11 +168,9 @@ export function AudioFullscreenPlayer() {
                       <div className={styles.playingBar} />
                     </div>
                   ) : (
-                    <span className={styles.chapterNumber}>{chapter.chapter_number}</span>
+                    <span className={styles.chapterNumber}>{index + 1}</span>
                   )}
-                  <span className={styles.chapterTitle}>
-                    {chapter.title || `Chapter ${chapter.chapter_number}`}
-                  </span>
+                  <span className={styles.chapterTitle}>{chapter.title || `Chapter ${index + 1}`}</span>
                   {chapter.duration != null && (
                     <span className={styles.chapterDuration}>{formatDuration(chapter.duration)}</span>
                   )}
@@ -168,9 +182,18 @@ export function AudioFullscreenPlayer() {
       )}
 
       {/* Modals */}
-      <AudioSleepTimer isOpen={sleepTimerOpen} onClose={() => setSleepTimerOpen(false)} />
-      <AudioBookmarkList isOpen={bookmarkOpen} onClose={() => setBookmarkOpen(false)} />
-      <AudioSpeedSelector isOpen={speedOpen} onClose={() => setSpeedOpen(false)} />
+      <AudioSleepTimer
+        isOpen={sleepTimerOpen}
+        onClose={() => setSleepTimerOpen(false)}
+      />
+      <AudioBookmarkList
+        isOpen={bookmarkOpen}
+        onClose={() => setBookmarkOpen(false)}
+      />
+      <AudioSpeedSelector
+        isOpen={speedOpen}
+        onClose={() => setSpeedOpen(false)}
+      />
     </div>
   );
 }

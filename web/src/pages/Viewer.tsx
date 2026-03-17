@@ -28,8 +28,7 @@ export function ViewerPage() {
   const loaderData = useChapterLoader({ chapterId });
 
   const isAudio =
-    loaderData.chapter?.render_mode === "audio" ||
-    (loaderData.chapter?.path && isAudioPath(loaderData.chapter.path));
+    loaderData.chapter?.render_mode === "audio" || (loaderData.chapter?.path && isAudioPath(loaderData.chapter.path));
 
   // Audio redirect: fetch series/chapters, open audio player, navigate back
   useEffect(() => {
@@ -50,7 +49,9 @@ export function ViewerPage() {
 
         const series = seriesRes.data;
         const chapters = volumesRes
-          ? (Array.isArray(volumesRes.data) ? volumesRes.data : volumesRes.data.chapters || [])
+          ? Array.isArray(volumesRes.data)
+            ? volumesRes.data
+            : volumesRes.data.chapters || []
           : [];
 
         let volume = null;
@@ -58,10 +59,14 @@ export function ViewerPage() {
           try {
             const volRes = await volumeAPI.get(volumeId);
             volume = volRes.data;
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
         }
 
-        useAudioPlayerStore.getState().loadAndPlay(series, chapter, chapters, volume);
+        useAudioPlayerStore
+          .getState()
+          .loadAndPlay(series, { ...chapter, path: chapter.path || "" } as any, chapters, volume);
       } catch (err) {
         console.error("Failed to load audio player data:", err);
       }
@@ -71,7 +76,12 @@ export function ViewerPage() {
   }, [isAudio, loaderData.chapter, loaderData.seriesId, loaderData.volumeId, navigate]);
 
   if (isAudio) {
-    return <LoadingSpinner fullScreen text={undefined} />;
+    return (
+      <LoadingSpinner
+        fullScreen
+        text={undefined}
+      />
+    );
   }
 
   if (loaderData.error) {
@@ -90,7 +100,12 @@ export function ViewerPage() {
     (loaderData.viewStatus !== undefined && loaderData.viewStatus !== "ready");
 
   if (!loaderData.chapter) {
-    return showLoading ? <LoadingSpinner fullScreen text={undefined} /> : null;
+    return showLoading ? (
+      <LoadingSpinner
+        fullScreen
+        text={undefined}
+      />
+    ) : null;
   }
 
   const chapterPath = loaderData.chapter.path?.toLowerCase() ?? "";
@@ -111,7 +126,13 @@ export function ViewerPage() {
 
   return (
     <>
-      {showLoading && <LoadingSpinner fullScreen text={undefined} className={styles.viewerLoadingOverlay} />}
+      {showLoading && (
+        <LoadingSpinner
+          fullScreen
+          text={undefined}
+          className={styles.viewerLoadingOverlay}
+        />
+      )}
       {route}
     </>
   );

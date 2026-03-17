@@ -273,7 +273,7 @@ func (r *VolumeRepository) HasZeroPageChapters(db database.Queryer, volumeID str
 // GetTotalPages 볼륨의 전체 페이지 수 조회 (하위 볼륨 포함)
 func (r *VolumeRepository) GetTotalPages(db database.Queryer, volumeID string) (int, error) {
 	db = database.GetQueryer(db)
-	var totalPages int
+	var totalPages float64
 	err := db.QueryRow(
 		`WITH RECURSIVE descendant_volumes(id) AS (
 			SELECT id FROM volumes WHERE id = ?
@@ -282,6 +282,7 @@ func (r *VolumeRepository) GetTotalPages(db database.Queryer, volumeID string) (
 		)
 		 SELECT COALESCE(SUM(
 			CASE 
+				WHEN c.duration > 0 THEN c.duration
 				WHEN c.page_count > 0 THEN c.page_count 
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
@@ -290,7 +291,7 @@ func (r *VolumeRepository) GetTotalPages(db database.Queryer, volumeID string) (
 		 WHERE c.volume_id IN (SELECT id FROM descendant_volumes)`,
 		volumeID,
 	).Scan(&totalPages)
-	return totalPages, err
+	return int(totalPages), err
 }
 
 // GetReadPages 사용자가 볼륨에서 읽은 총 페이지 수 조회 (하위 볼륨 포함)
@@ -298,7 +299,7 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 	db = database.GetQueryer(db)
 
 	// 하위 볼륨 포함 재귀 집계
-	var completedPages int
+	var completedPages float64
 	err := db.QueryRow(
 		`WITH RECURSIVE descendant_volumes(id) AS (
 			SELECT id FROM volumes WHERE id = ?
@@ -307,6 +308,7 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		)
 		 SELECT COALESCE(SUM(
 			CASE 
+				WHEN c.duration > 0 THEN c.duration
 				WHEN c.page_count > 0 THEN c.page_count 
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
@@ -320,7 +322,7 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		return 0, err
 	}
 
-	var progressPages int
+	var progressPages float64
 	err = db.QueryRow(
 		`WITH RECURSIVE descendant_volumes(id) AS (
 			SELECT id FROM volumes WHERE id = ?
@@ -329,9 +331,10 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		)
 		 SELECT COALESCE(SUM(
 			CASE 
+				WHEN c.duration > 0 THEN (c.duration * rp.progress_percent / 100.0)
 				WHEN c.page_count > 0 THEN rp.current_page
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
-				ELSE CAST(rp.progress_percent AS INTEGER)
+				ELSE rp.progress_percent
 			END
 			 ), 0)
 		 FROM reading_progress rp
@@ -346,7 +349,7 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		return 0, err
 	}
 
-	return completedPages + progressPages, nil
+	return int(completedPages) + int(progressPages), nil
 }
 
 // GetProgressPercent 사용자의 볼륨 실제 진행 퍼센트 조회 (하위 볼륨 포함)
@@ -627,11 +630,11 @@ func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []s
 	result := make(map[string]int)
 	for rows.Next() {
 		var id string
-		var total int
+		var total float64
 		if err := rows.Scan(&id, &total); err != nil {
 			return nil, err
 		}
-		result[id] = total
+		result[id] = int(total)
 	}
 	return result, nil
 }

@@ -532,7 +532,7 @@ func getWAVDuration(filePath string) *float64 {
 	defer f.Close()
 
 	var buf [44]byte
-	if _, err := io.ReadFull(f, buf[:]); err != nil {
+	if _, err = io.ReadFull(f, buf[:]); err != nil {
 		return nil
 	}
 

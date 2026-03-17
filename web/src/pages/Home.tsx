@@ -29,6 +29,8 @@ interface RecentProgress {
   chapter_id?: string;
   chapter_number?: number;
   chapter_title?: string;
+  has_audio?: boolean;
+  library_type?: string;
   path?: string;
   chapter_path?: string;
   volume_path?: string;
@@ -262,6 +264,8 @@ export function HomePage() {
                   path: progress.volume_path || progress.path || "",
                   chapter_count: progress.volume_chapter_count,
                   created_at: progress.updated_at,
+                  has_audio: progress.has_audio,
+                  library_type: progress.library_type,
                 }
               : {
                   id: progress.series_id,
@@ -271,6 +275,8 @@ export function HomePage() {
                   updated_at: progress.updated_at,
                   library_id: "",
                   created_at: progress.updated_at,
+                  has_audio: progress.has_audio,
+                  library_type: progress.library_type,
                 };
 
             // 진행도 텍스트 생성

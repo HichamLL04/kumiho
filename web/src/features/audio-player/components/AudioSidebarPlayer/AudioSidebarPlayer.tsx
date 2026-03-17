@@ -55,11 +55,13 @@ export function AudioSidebarPlayer() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <span className={styles.appTitle}>KUMIHO</span>
-          <span className={styles.libraryName}>
-            {t("audio_player.personal_library", "Personal Library Server")}
-          </span>
+          <span className={styles.libraryName}>{t("audio_player.personal_library", "Personal Library Server")}</span>
         </div>
-        <button className={styles.closeBtn} onClick={handleClose} aria-label="Close">
+        <button
+          className={styles.closeBtn}
+          onClick={handleClose}
+          aria-label="Close"
+        >
           <X size={22} />
         </button>
       </div>
@@ -68,7 +70,11 @@ export function AudioSidebarPlayer() {
       <div className={styles.playerSection}>
         <div className={styles.coverWrapper}>
           {thumbnailUrl ? (
-            <img src={thumbnailUrl} alt={seriesTitle} className={styles.cover} />
+            <img
+              src={thumbnailUrl}
+              alt={seriesTitle}
+              className={styles.cover}
+            />
           ) : (
             <div className={styles.coverPlaceholder}>
               <Music size={48} />
@@ -91,7 +97,10 @@ export function AudioSidebarPlayer() {
 
         {/* Quick Actions */}
         <div className={styles.quickActions}>
-          <button className={styles.quickBtn} onClick={() => setSpeedOpen(true)}>
+          <button
+            className={styles.quickBtn}
+            onClick={() => setSpeedOpen(true)}
+          >
             {playbackRate}x
           </button>
           <button
@@ -101,7 +110,10 @@ export function AudioSidebarPlayer() {
             <Moon size={14} />
             {sleepTimerMinutes ? `${sleepTimerMinutes}m` : t("audio_player.sleep", "Sleep")}
           </button>
-          <button className={styles.quickBtn} onClick={() => setBookmarkOpen(true)}>
+          <button
+            className={styles.quickBtn}
+            onClick={() => setBookmarkOpen(true)}
+          >
             <Bookmark size={14} />
             {t("audio_player.bookmark", "Mark")}
           </button>
@@ -117,7 +129,7 @@ export function AudioSidebarPlayer() {
           </span>
         </div>
         <div className={styles.chapterList}>
-          {chapters.map((chapter) => {
+          {chapters.map((chapter, index) => {
             const isActive = chapter.id === currentChapter?.id;
             return (
               <button
@@ -132,11 +144,9 @@ export function AudioSidebarPlayer() {
                     <div className={styles.playingBar} />
                   </div>
                 ) : (
-                  <span className={styles.chapterNumber}>{chapter.chapter_number}</span>
+                  <span className={styles.chapterNumber}>{index + 1}</span>
                 )}
-                <span className={styles.chapterName}>
-                  {chapter.title || `Chapter ${chapter.chapter_number}`}
-                </span>
+                <span className={styles.chapterName}>{chapter.title || `Chapter ${index + 1}`}</span>
                 {chapter.duration != null && (
                   <span className={styles.chapterDuration}>{formatDuration(chapter.duration)}</span>
                 )}
@@ -149,15 +159,22 @@ export function AudioSidebarPlayer() {
       {/* Footer */}
       <div className={styles.footer}>
         <div className={styles.syncDot} />
-        <span className={styles.syncText}>
-          {t("audio_player.synced", "SYNCED WITH KUMIHO")}
-        </span>
+        <span className={styles.syncText}>{t("audio_player.synced", "SYNCED WITH KUMIHO")}</span>
       </div>
 
       {/* Modals */}
-      <AudioSleepTimer isOpen={sleepTimerOpen} onClose={() => setSleepTimerOpen(false)} />
-      <AudioBookmarkList isOpen={bookmarkOpen} onClose={() => setBookmarkOpen(false)} />
-      <AudioSpeedSelector isOpen={speedOpen} onClose={() => setSpeedOpen(false)} />
+      <AudioSleepTimer
+        isOpen={sleepTimerOpen}
+        onClose={() => setSleepTimerOpen(false)}
+      />
+      <AudioBookmarkList
+        isOpen={bookmarkOpen}
+        onClose={() => setBookmarkOpen(false)}
+      />
+      <AudioSpeedSelector
+        isOpen={speedOpen}
+        onClose={() => setSpeedOpen(false)}
+      />
     </div>
   );
 }

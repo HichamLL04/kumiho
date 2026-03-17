@@ -484,10 +484,11 @@ func (r *SeriesRepository) GetFirstPageID(db database.Queryer, seriesID string) 
 // page_count <= 0 이면서 total_positions > 0인 챕터(예: EPUB): total_positions 반영
 func (r *SeriesRepository) GetTotalPages(db database.Queryer, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
-	var totalPages int
+	var totalPages float64
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
+				WHEN c.duration > 0 THEN c.duration
 				WHEN c.page_count > 0 THEN c.page_count 
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
@@ -497,7 +498,7 @@ func (r *SeriesRepository) GetTotalPages(db database.Queryer, seriesID string) (
 		 WHERE v.series_id = ?`,
 		seriesID,
 	).Scan(&totalPages)
-	return totalPages, err
+	return int(totalPages), err
 }
 
 // GetReadPages 사용자가 시리즈에서 읽은 총 페이지 수 조회
@@ -510,10 +511,11 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 	// 1. 완독된 챕터들의 페이지 수 합계
 	// page_count > 0인 챕터: 실제 page_count 사용
 	// page_count <= 0인 챕터(EPUB 등): total_positions 사용
-	var completedPages int
+	var completedPages float64
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
+				WHEN c.duration > 0 THEN c.duration
 				WHEN c.page_count > 0 THEN c.page_count 
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
@@ -531,13 +533,14 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 	// 2. 진행 중인(완독되지 않은) 챕터들의 현재 페이지 합계
 	// page_count > 0인 챕터: current_page 사용
 	// page_count <= 0인 챕터(EPUB 등): progress_percent를 100 스케일로 변환 (예: 50% → 50)
-	var progressPages int
+	var progressPages float64
 	err = db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
+				WHEN c.duration > 0 THEN (c.duration * rp.progress_percent / 100.0)
 				WHEN c.page_count > 0 THEN rp.current_page
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
-				ELSE CAST(rp.progress_percent AS INTEGER)
+				ELSE rp.progress_percent
 			END
 		), 0)
 		 FROM reading_progress rp
@@ -552,7 +555,7 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 		return 0, err
 	}
 
-	return completedPages + progressPages, nil
+	return int(completedPages) + int(progressPages), nil
 }
 
 // GetTotalProgressUnits 시리즈 진행률 표시용 총량(용량 기반 단위) 조회
@@ -560,10 +563,11 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 // - 그 외 page_count > 0: page_count 사용 (이미지/PDF 등)
 func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
-	var total int
+	var total float64
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE
+				WHEN c.duration > 0 THEN c.duration
 				WHEN c.total_positions > 0 THEN c.total_positions
 				WHEN c.page_count > 0 THEN c.page_count
 				ELSE 0
@@ -574,7 +578,7 @@ func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID s
 		WHERE v.series_id = ?`,
 		seriesID,
 	).Scan(&total)
-	return total, err
+	return int(total), err
 }
 
 // GetReadProgressUnits 시리즈 진행률 표시용 완료량 조회
@@ -582,12 +586,13 @@ func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID s
 // - 미완독 챕터: 뷰어 진행(current_page/total_pages, fallback: progress_percent) 비율만큼 반영
 func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
-	var read int
+	var read float64
 	err := db.QueryRow(
 		`WITH chapter_units AS (
 			SELECT
 				c.id AS chapter_id,
 				CASE
+					WHEN c.duration > 0 THEN c.duration
 					WHEN c.total_positions > 0 THEN c.total_positions
 					WHEN c.page_count > 0 THEN c.page_count
 					ELSE 0
@@ -604,14 +609,12 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 		),
 		inprogress_units AS (
 			SELECT COALESCE(SUM(
-				CAST(ROUND(
-					cu.unit_total * (
-						CASE
-							WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
-							ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
-						END
-					)
-				) AS INTEGER)
+				cu.unit_total * (
+					CASE
+						WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
+						ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
+					END
+				)
 			), 0) AS value
 			FROM chapter_units cu
 			JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id
@@ -624,7 +627,7 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 		FROM completed_units, inprogress_units`,
 		seriesID, userID, userID, seriesID,
 	).Scan(&read)
-	return read, err
+	return int(read), err
 }
 
 // Search 검색어로 시리즈 조회

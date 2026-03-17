@@ -6,7 +6,7 @@ import { Header } from "../components/headers/Header";
 import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
-import { api, volumeAPI, downloadAPI } from "../api/client";
+import { api, seriesAPI, volumeAPI, downloadAPI } from "../api/client";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
@@ -173,7 +173,8 @@ export function SeriesPage() {
     let lastUpdate = 0;
     const unsub = useAudioPlayerStore.subscribe((state) => {
       const isThisSeries = state.currentSeries?.id === id;
-      const isActive = isThisSeries && (state.status === "playing" || state.status === "paused") && state.playerMode !== "hidden";
+      const isActive =
+        isThisSeries && (state.status === "playing" || state.status === "paused") && state.playerMode !== "hidden";
 
       // 플레이어가 닫히거나 다른 시리즈로 전환 시 서버에서 최신 진행도 가져오기
       if (wasPlayingRef.current && !isActive) {
@@ -221,9 +222,7 @@ export function SeriesPage() {
       if (currentVolumeId && state.duration > 0) {
         const volumePercent = Math.min(100, (state.currentTime / state.duration) * 100);
         setVolumes((prev) =>
-          prev.map((v) =>
-            v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v,
-          ),
+          prev.map((v) => (v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v)),
         );
       }
     });
@@ -306,19 +305,10 @@ export function SeriesPage() {
                 if (isAudio && volumes.length > 0) {
                   // 오디오북: 오디오 플레이어로 재생
                   const { loadAndPlay } = useAudioPlayerStore.getState();
-                  const sortedVolumes = [...volumes].sort((a, b) => a.volume_number - b.volume_number);
 
-                  // 진행도가 있으면 해당 볼륨/챕터에서 이어 듣기
-                  let targetVol = sortedVolumes[0];
-                  if (progress?.volume_id) {
-                    const found = sortedVolumes.find((v) => v.id === progress.volume_id);
-                    if (found) targetVol = found;
-                  }
-
-                  const chaptersRes = await volumeAPI.getChapters(targetVol.id);
-                  const allChapters: Chapter[] = Array.isArray(chaptersRes.data)
-                    ? chaptersRes.data
-                    : chaptersRes.data.chapters || [];
+                  // 시리즈 전체 챕터 로드 (볼륨 간 매끄러운 이동을 위함)
+                  const chaptersRes = await seriesAPI.getChapters(series.id);
+                  const allChapters: Chapter[] = chaptersRes.data.chapters || [];
                   const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
 
                   // 진행도의 챕터 찾기, 없으면 첫 챕터
@@ -329,7 +319,8 @@ export function SeriesPage() {
                   }
 
                   if (startChapter) {
-                    loadAndPlay(series, startChapter, sorted, targetVol);
+                    // volume 파라미터는 null로 전달 (현재 챕터에 맞춰 자동 감지)
+                    loadAndPlay(series, startChapter, sorted, null);
                   }
                   return;
                 }

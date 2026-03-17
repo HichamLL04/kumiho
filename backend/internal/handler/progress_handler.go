@@ -946,6 +946,8 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 		VolumeChapterCount int     `json:"volume_chapter_count"`
 		ChapterNumber      int     `json:"chapter_number"`
 		ChapterTitle       string  `json:"chapter_title"`
+		HasAudio           bool    `json:"has_audio"`
+		LibraryType        string  `json:"library_type"`
 	}
 
 	result := make([]ProgressWithSeries, len(progressList))
@@ -960,6 +962,8 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 			h.enrichSingleSeries(series, userID)
 
 			result[i].SeriesTitle = series.Title
+			result[i].HasAudio = series.LibraryType == "audiobook"
+			result[i].LibraryType = series.LibraryType
 
 			// 챕터 정보 보급
 			if p.ChapterID != nil {
