@@ -1,16 +1,22 @@
 .miniPlayer {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 640px;
   z-index: 1000;
-  background: var(--bg-card);
+  background: rgba(20, 30, 50, 0.95);
   backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .main {
@@ -84,7 +90,9 @@
   cursor: pointer;
   padding: 6px;
   border-radius: 50%;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .actionBtn:hover {
@@ -163,5 +171,13 @@
 @media (max-width: 768px) {
   .volumeGroup {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .miniPlayer {
+    bottom: 8px;
+    border-radius: 12px;
+    padding: 8px 12px;
   }
 }

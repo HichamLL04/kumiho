@@ -835,7 +835,9 @@
   },
   "audio_player": {
     "now_playing": "再生中",
-    "chapters": "チャプター",
+    "paused": "一時停止",
+    "chapters": "List",
+    "list": "List",
     "total": "全体",
     "sleep": "スリープ",
     "bookmark": "ブックマーク",

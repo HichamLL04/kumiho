@@ -12,8 +12,49 @@ export function AudioProvider() {
   const lastSavedTimeRef = useRef(0);
   const sleepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fadeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   const store = useAudioPlayerStore;
+
+  // 볼륨 부스트 설정 (AudioContext + GainNode로 2x 증폭)
+  const setupVolumeBoost = useCallback((audio: HTMLAudioElement, enabled: boolean) => {
+    if (enabled) {
+      // AudioContext가 없으면 생성
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      const ctx = audioContextRef.current;
+
+      // 이미 소스가 연결되어 있으면 gain만 조정
+      if (sourceNodeRef.current && gainNodeRef.current) {
+        gainNodeRef.current.gain.value = 2.0;
+        return;
+      }
+
+      // MediaElementSource는 한 번만 생성 가능
+      try {
+        const source = ctx.createMediaElementSource(audio);
+        const gain = ctx.createGain();
+        gain.gain.value = 2.0;
+        source.connect(gain);
+        gain.connect(ctx.destination);
+        sourceNodeRef.current = source;
+        gainNodeRef.current = gain;
+      } catch {
+        // 이미 연결된 경우 gain만 조정
+        if (gainNodeRef.current) {
+          gainNodeRef.current.gain.value = 2.0;
+        }
+      }
+    } else {
+      // 부스트 해제: gain을 1.0으로 복원
+      if (gainNodeRef.current) {
+        gainNodeRef.current.gain.value = 1.0;
+      }
+    }
+  }, []);
 
   // Audio element 초기화 (최초 1회)
   useEffect(() => {
@@ -65,7 +106,7 @@ export function AudioProvider() {
       .catch((err) => {
         console.warn("Failed to save audio progress:", err);
       });
-  }, []);
+  }, [store]);
 
   // 챕터 변경 감지 → 오디오 소스 교체
   useEffect(() => {
@@ -127,7 +168,7 @@ export function AudioProvider() {
       }
     });
     return unsub;
-  }, [saveProgress]);
+  }, [store, saveProgress]);
 
   // 이전 진행률 복원
   const restoreProgress = async (chapterId: string, seriesId?: string | null) => {
@@ -193,7 +234,7 @@ export function AudioProvider() {
       }
     });
     return unsub;
-  }, []);
+  }, [store]);
 
   // Seek 요청 감지 (seekVersion 변경)
   useEffect(() => {
@@ -209,7 +250,7 @@ export function AudioProvider() {
       }
     });
     return unsub;
-  }, []);
+  }, [store]);
 
   // 설정 동기화 (playbackRate, volume, mute)
   useEffect(() => {
@@ -226,9 +267,14 @@ export function AudioProvider() {
       if (state.settings.isMuted !== prevState.settings.isMuted) {
         audio.muted = state.settings.isMuted;
       }
+
+      // 볼륨 부스트 (AudioContext GainNode)
+      if (state.settings.volumeBoost !== prevState.settings.volumeBoost) {
+        setupVolumeBoost(audio, state.settings.volumeBoost);
+      }
     });
     return unsub;
-  }, []);
+  }, [store, setupVolumeBoost]);
 
   // Audio element 이벤트 핸들러
   useEffect(() => {
@@ -275,9 +321,9 @@ export function AudioProvider() {
       store.getState().setStatus("ended");
       saveProgress(true);
 
-      // 다음 챕터 자동 재생
-      const { chapters, currentChapter } = store.getState();
-      if (!currentChapter || chapters.length === 0) return;
+      // 다음 챕터 자동 재생 (설정에 따라)
+      const { chapters, currentChapter, settings } = store.getState();
+      if (!settings.autoPlayNext || !currentChapter || chapters.length === 0) return;
       const currentIndex = chapters.findIndex((c) => c.id === currentChapter.id);
       if (currentIndex >= 0 && currentIndex < chapters.length - 1) {
         store.getState().playChapter(chapters[currentIndex + 1]);
@@ -319,7 +365,7 @@ export function AudioProvider() {
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
     };
-  }, [saveProgress]);
+  }, [store, saveProgress]);
 
   // 30초 간격 자동 저장
   useEffect(() => {
@@ -348,7 +394,32 @@ export function AudioProvider() {
         clearInterval(progressTimerRef.current);
       }
     };
-  }, [saveProgress]);
+  }, [store, saveProgress]);
+
+  // 페이드아웃 (2초간 볼륨 점점 줄임)
+  const fadeOutAndPause = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const originalVolume = audio.volume;
+    const steps = 20;
+    const stepDuration = 2000 / steps;
+    let currentStep = 0;
+
+    if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+
+    fadeIntervalRef.current = setInterval(() => {
+      currentStep++;
+      audio.volume = Math.max(0, originalVolume * (1 - currentStep / steps));
+
+      if (currentStep >= steps) {
+        if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+        store.getState().pause();
+        // 볼륨 복원
+        audio.volume = originalVolume;
+      }
+    }, stepDuration);
+  }, [store]);
 
   // 수면 타이머
   useEffect(() => {
@@ -383,32 +454,7 @@ export function AudioProvider() {
       unsub();
       if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
     };
-  }, []);
-
-  // 페이드아웃 (2초간 볼륨 점점 줄임)
-  const fadeOutAndPause = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const originalVolume = audio.volume;
-    const steps = 20;
-    const stepDuration = 2000 / steps;
-    let currentStep = 0;
-
-    if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-
-    fadeIntervalRef.current = setInterval(() => {
-      currentStep++;
-      audio.volume = Math.max(0, originalVolume * (1 - currentStep / steps));
-
-      if (currentStep >= steps) {
-        if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-        store.getState().pause();
-        // 볼륨 복원
-        audio.volume = originalVolume;
-      }
-    }, stepDuration);
-  }, []);
+  }, [store, fadeOutAndPause]);
 
   // beforeunload 시 즉시 저장
   useEffect(() => {
@@ -452,7 +498,7 @@ export function AudioProvider() {
     navigator.mediaSession.setActionHandler("seekforward", () => store.getState().skipForward());
 
     return unsub;
-  }, []);
+  }, [store]);
 
   // 렌더링 없음 (headless component)
   return null;

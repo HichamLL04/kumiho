@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Play, Pause, X, Rewind, FastForward, Volume2, VolumeX, Music } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
@@ -32,8 +33,33 @@ export function AudioMiniPlayer() {
   const setVolume = useAudioPlayerStore((s) => s.setVolume);
   const toggleMute = useAudioPlayerStore((s) => s.toggleMute);
   const close = useAudioPlayerStore((s) => s.close);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  if (playerMode !== "mini" || status === "idle") return null;
+  const isVisible = playerMode === "mini" && status !== "idle";
+
+  // 미니 플레이어 높이를 CSS 변수로 설정하여 body padding-bottom에 반영
+  useEffect(() => {
+    if (!isVisible) {
+      document.documentElement.style.setProperty("--mini-player-height", "0px");
+      return;
+    }
+
+    const updateHeight = () => {
+      if (containerRef.current) {
+        const height = containerRef.current.offsetHeight;
+        document.documentElement.style.setProperty("--mini-player-height", `${height}px`);
+      }
+    };
+
+    // 렌더링 후 높이 측정
+    requestAnimationFrame(updateHeight);
+
+    return () => {
+      document.documentElement.style.setProperty("--mini-player-height", "0px");
+    };
+  }, [isVisible]);
+
+  if (!isVisible) return null;
 
   const isPlaying = status === "playing";
   const thumbnailUrl = currentSeries?.thumbnail_url;
@@ -49,12 +75,22 @@ export function AudioMiniPlayer() {
   };
 
   return (
-    <div className={styles.miniPlayer}>
+    <div
+      className={styles.miniPlayer}
+      ref={containerRef}
+    >
       <div className={styles.main}>
         {/* Cover + Info (clickable to expand) */}
-        <div className={styles.coverArea} onClick={handleExpand}>
+        <div
+          className={styles.coverArea}
+          onClick={handleExpand}
+        >
           {thumbnailUrl ? (
-            <img src={thumbnailUrl} alt={title} className={styles.cover} />
+            <img
+              src={thumbnailUrl}
+              alt={title}
+              className={styles.cover}
+            />
           ) : (
             <div className={styles.coverPlaceholder}>
               <Music size={20} />
@@ -62,7 +98,10 @@ export function AudioMiniPlayer() {
           )}
         </div>
 
-        <div className={styles.info} onClick={handleExpand}>
+        <div
+          className={styles.info}
+          onClick={handleExpand}
+        >
           <div className={styles.title}>{title}</div>
           <div className={styles.subtitle}>{chapterTitle}</div>
         </div>
@@ -81,7 +120,17 @@ export function AudioMiniPlayer() {
             onClick={togglePlay}
             aria-label={isPlaying ? "Pause" : "Play"}
           >
-            {isPlaying ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}
+            {isPlaying ? (
+              <Pause
+                size={22}
+                fill="currentColor"
+              />
+            ) : (
+              <Play
+                size={22}
+                fill="currentColor"
+              />
+            )}
           </button>
           <button
             className={styles.actionBtn}
@@ -93,7 +142,11 @@ export function AudioMiniPlayer() {
 
           {/* Volume (desktop only) */}
           <div className={styles.volumeGroup}>
-            <button className={styles.actionBtn} onClick={toggleMute} aria-label="Toggle mute">
+            <button
+              className={styles.actionBtn}
+              onClick={toggleMute}
+              aria-label="Toggle mute"
+            >
               {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
             </button>
             <input
@@ -120,9 +173,14 @@ export function AudioMiniPlayer() {
       {/* Progress */}
       <div className={styles.progressRow}>
         <div className={styles.progressBarWrapper}>
-          <AudioProgressBar variant="mini" showTime={false} />
+          <AudioProgressBar
+            variant="mini"
+            showTime={false}
+          />
         </div>
-        <span className={styles.timeLabel}>{formatTime(currentTime)} / {formatTime(duration)}</span>
+        <span className={styles.timeLabel}>
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </span>
       </div>
     </div>
   );

@@ -25,6 +25,7 @@
   --border-color: rgba(100, 180, 220, 0.3);
   --glow-color: rgba(77, 184, 217, 0.4);
   --header-height: 56px;
+  --mini-player-height: 0px;
 }
 
 a {
@@ -42,6 +43,8 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  padding-bottom: var(--mini-player-height);
+  transition: padding-bottom 0.2s ease;
 }
 
 h1 {

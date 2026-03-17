@@ -11,6 +11,8 @@ export interface AudioPlayerSettings {
   skipForwardSec: number;
   volume: number;
   isMuted: boolean;
+  autoPlayNext: boolean;
+  volumeBoost: boolean;
 }
 
 interface AudioPlayerState {
@@ -70,6 +72,8 @@ interface AudioPlayerState {
   toggleMute: () => void;
   setSkipBackwardSec: (sec: number) => void;
   setSkipForwardSec: (sec: number) => void;
+  toggleAutoPlayNext: () => void;
+  toggleVolumeBoost: () => void;
 
   // Actions - UI
   setPlayerMode: (mode: PlayerMode) => void;
@@ -90,6 +94,8 @@ const DEFAULT_SETTINGS: AudioPlayerSettings = {
   skipForwardSec: 30,
   volume: 1.0,
   isMuted: false,
+  autoPlayNext: true,
+  volumeBoost: false,
 };
 
 export const useAudioPlayerStore = create<AudioPlayerState>()(
@@ -194,6 +200,10 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
       toggleMute: () => set((state) => ({ settings: { ...state.settings, isMuted: !state.settings.isMuted } })),
       setSkipBackwardSec: (skipBackwardSec) => set((state) => ({ settings: { ...state.settings, skipBackwardSec } })),
       setSkipForwardSec: (skipForwardSec) => set((state) => ({ settings: { ...state.settings, skipForwardSec } })),
+      toggleAutoPlayNext: () =>
+        set((state) => ({ settings: { ...state.settings, autoPlayNext: !state.settings.autoPlayNext } })),
+      toggleVolumeBoost: () =>
+        set((state) => ({ settings: { ...state.settings, volumeBoost: !state.settings.volumeBoost } })),
 
       // UI actions
       setPlayerMode: (playerMode) => set({ playerMode }),

@@ -52,10 +52,20 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
   }, [currentSeries]);
 
   useEffect(() => {
-    if (isOpen) {
-      loadBookmarks();
-    }
-  }, [isOpen, loadBookmarks]);
+    if (!isOpen || !currentSeries) return;
+    const controller = new AbortController();
+    bookmarkAPI
+      .getAll(currentSeries.id)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        const list = res.data.bookmarks || res.data || [];
+        setBookmarks(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setBookmarks([]);
+      });
+    return () => controller.abort();
+  }, [isOpen, currentSeries]);
 
   if (!isOpen) return null;
 

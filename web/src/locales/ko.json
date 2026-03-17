@@ -836,7 +836,9 @@
   },
   "audio_player": {
     "now_playing": "재생 중",
-    "chapters": "챕터",
+    "paused": "일시정지",
+    "chapters": "리스트",
+    "list": "리스트",
     "total": "전체",
     "sleep": "수면",
     "bookmark": "북마크",
