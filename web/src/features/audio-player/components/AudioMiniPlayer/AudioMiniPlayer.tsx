@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Play, Pause, X, Rewind, FastForward, Volume2, VolumeX, Music } from "lucide-react";
+import { X, Volume2, VolumeX, Music } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
 import { AudioVisualizer } from "../AudioVisualizer/AudioVisualizer";
+import { AudioControls } from "../AudioControls/AudioControls";
 import styles from "./AudioMiniPlayer.module.css";
 
 function formatTime(seconds: number): string {
@@ -25,11 +26,6 @@ export function AudioMiniPlayer() {
   const duration = useAudioPlayerStore((s) => s.duration);
   const volume = useAudioPlayerStore((s) => s.settings.volume);
   const isMuted = useAudioPlayerStore((s) => s.settings.isMuted);
-  const skipBackwardSec = useAudioPlayerStore((s) => s.settings.skipBackwardSec);
-  const skipForwardSec = useAudioPlayerStore((s) => s.settings.skipForwardSec);
-  const togglePlay = useAudioPlayerStore((s) => s.togglePlay);
-  const skipBackward = useAudioPlayerStore((s) => s.skipBackward);
-  const skipForward = useAudioPlayerStore((s) => s.skipForward);
   const setPlayerMode = useAudioPlayerStore((s) => s.setPlayerMode);
   const setVolume = useAudioPlayerStore((s) => s.setVolume);
   const toggleMute = useAudioPlayerStore((s) => s.toggleMute);
@@ -115,37 +111,10 @@ export function AudioMiniPlayer() {
 
         {/* Actions */}
         <div className={styles.actions}>
-          <button
-            className={styles.actionBtn}
-            onClick={skipBackward}
-            aria-label={`Skip backward ${skipBackwardSec}s`}
-          >
-            <Rewind size={18} />
-          </button>
-          <button
-            className={`${styles.actionBtn} ${styles.playBtn}`}
-            onClick={togglePlay}
-            aria-label={isPlaying ? "Pause" : "Play"}
-          >
-            {isPlaying ? (
-              <Pause
-                size={22}
-                fill="currentColor"
-              />
-            ) : (
-              <Play
-                size={22}
-                fill="currentColor"
-              />
-            )}
-          </button>
-          <button
-            className={styles.actionBtn}
-            onClick={skipForward}
-            aria-label={`Skip forward ${skipForwardSec}s`}
-          >
-            <FastForward size={18} />
-          </button>
+          <AudioControls
+            variant="mini"
+            showChapterNav={false}
+          />
 
           {/* Volume (desktop only) */}
           <div className={styles.volumeGroup}>

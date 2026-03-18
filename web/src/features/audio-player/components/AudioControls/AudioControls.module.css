@@ -74,10 +74,21 @@
 
 .skipLabel {
   position: absolute;
-  bottom: -2px;
-  font-size: 9px;
-  color: var(--text-muted);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-secondary);
   pointer-events: none;
+  line-height: 1;
+  letter-spacing: -0.8px;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+/* Hover effects for the label as well */
+.controlBtn:hover .skipLabel {
+  color: var(--text-primary);
 }
 
 /* Mini variant */
@@ -95,7 +106,9 @@
 }
 
 .mini .skipLabel {
-  display: none;
+  font-size: 9px;
+  letter-spacing: -0.5px;
+  transform: translate(-50%, -55%);
 }
 
 /* Sidebar variant */
@@ -106,4 +119,8 @@
 .sidebar .playBtn {
   width: 60px;
   height: 60px;
+}
+
+.sidebar .skipLabel {
+  transform: translate(-50%, -55%);
 }

@@ -1,4 +1,4 @@
-import { Play, Pause, SkipBack, SkipForward, Rewind, FastForward } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, RotateCcw, RotateCw } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import styles from "./AudioControls.module.css";
 
@@ -27,9 +27,9 @@ export function AudioControls({ variant = "fullscreen", showChapterNav = true }:
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex >= 0 && currentIndex < chapters.length - 1;
 
-  const playIconSize = variant === "fullscreen" ? 32 : variant === "sidebar" ? 28 : 22;
-  const iconSize = variant === "fullscreen" ? 24 : variant === "sidebar" ? 22 : 18;
-  const navIconSize = variant === "fullscreen" ? 22 : variant === "sidebar" ? 20 : 16;
+  const playIconSize = variant === "fullscreen" ? 36 : variant === "sidebar" ? 30 : 24;
+  const iconSize = variant === "fullscreen" ? 30 : variant === "sidebar" ? 26 : 20;
+  const navIconSize = variant === "fullscreen" ? 24 : variant === "sidebar" ? 22 : 18;
 
   const containerClass = `${styles.controls} ${variant === "mini" ? styles.mini : variant === "sidebar" ? styles.sidebar : ""}`;
 
@@ -42,7 +42,7 @@ export function AudioControls({ variant = "fullscreen", showChapterNav = true }:
         disabled={isLoading}
         aria-label={`Skip backward ${skipBackwardSec}s`}
       >
-        <Rewind size={iconSize} />
+        <RotateCcw size={iconSize} />
         <span className={styles.skipLabel}>{skipBackwardSec}</span>
       </button>
 
@@ -65,7 +65,17 @@ export function AudioControls({ variant = "fullscreen", showChapterNav = true }:
         disabled={isLoading}
         aria-label={isPlaying ? "Pause" : "Play"}
       >
-        {isPlaying ? <Pause size={playIconSize} fill="currentColor" /> : <Play size={playIconSize} fill="currentColor" />}
+        {isPlaying ? (
+          <Pause
+            size={playIconSize}
+            fill="currentColor"
+          />
+        ) : (
+          <Play
+            size={playIconSize}
+            fill="currentColor"
+          />
+        )}
       </button>
 
       {/* Next Chapter */}
@@ -87,7 +97,7 @@ export function AudioControls({ variant = "fullscreen", showChapterNav = true }:
         disabled={isLoading}
         aria-label={`Skip forward ${skipForwardSec}s`}
       >
-        <FastForward size={iconSize} />
+        <RotateCw size={iconSize} />
         <span className={styles.skipLabel}>{skipForwardSec}</span>
       </button>
     </div>
