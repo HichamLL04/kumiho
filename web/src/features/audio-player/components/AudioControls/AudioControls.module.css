@@ -23,13 +23,14 @@
 }
 
 .controlBtn:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: 2px solid rgba(92, 200, 232, 0.7);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(92, 200, 232, 0.2);
 }
 
 .controlBtn:focus {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 
 .controlBtn:hover {

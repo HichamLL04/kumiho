@@ -54,7 +54,7 @@ export interface Volume {
   parent_id?: string;
   extension?: ExtensionBadge | "";
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
   library_type?: string;
 }
 

@@ -249,7 +249,7 @@ export function AudioProvider() {
       const res = await seriesAPI.getProgress(seriesId);
       const prog = res.data?.progress;
       if (prog && prog.chapter_id === chapterId) {
-        const seekTime = prog.current_time ?? prog.current_page;
+        const seekTime = prog.current_time ?? 0;
         if (seekTime > 0) {
           const audio = audioRef.current;
           if (audio) {

@@ -97,13 +97,14 @@
 }
 
 .actionBtn:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: 2px solid rgba(92, 200, 232, 0.7);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(92, 200, 232, 0.2);
 }
 
 .actionBtn:focus {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 
 .actionBtn:hover {
@@ -164,13 +165,14 @@
 }
 
 .volumeSlider:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: 2px solid rgba(92, 200, 232, 0.7);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(92, 200, 232, 0.18);
 }
 
 .volumeSlider:focus {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 
 .volumeSlider::-webkit-slider-thumb {

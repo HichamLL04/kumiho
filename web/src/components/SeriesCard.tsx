@@ -178,8 +178,7 @@ export function SeriesCard({
               sorted[0]
             : sorted.find((c) => c.volume_id === vol.id) || sorted[0];
 
-          const startTime =
-            lastProg?.chapter_id === startChapter.id ? (lastProg.current_time ?? lastProg.current_page) : 0;
+          const startTime = lastProg?.chapter_id === startChapter.id ? (lastProg.current_time ?? 0) : 0;
           store.loadAndPlay(series, startChapter, sorted, vol, startTime);
           if (seriesProgressListRes?.data?.progress_list) {
             store.setChapterProgressList(seriesProgressListRes.data.progress_list);
@@ -201,8 +200,7 @@ export function SeriesCard({
             ? sorted.find((c) => c.id === progress.chapter_id) || sorted[0]
             : sorted[0];
 
-          const startTime =
-            progress?.chapter_id === resumeChapter.id ? (progress.current_time ?? progress.current_page) : 0;
+          const startTime = progress?.chapter_id === resumeChapter.id ? (progress.current_time ?? 0) : 0;
           store.loadAndPlay(series, resumeChapter, sorted, null, startTime);
           if (seriesProgressListRes?.data?.progress_list) {
             store.setChapterProgressList(seriesProgressListRes.data.progress_list);
