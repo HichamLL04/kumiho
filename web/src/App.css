@@ -30,18 +30,11 @@ a {
 
 button {
   font-family: inherit;
-  outline: none !important;
-  box-shadow: none !important;
 }
 
-:focus {
-  outline: none !important;
-}
-
-/* Remove focus-visible outline for mouse users but keep it for keyboard if needed? 
-   Actually, the user wants it GONE. */
 :focus-visible {
-  outline: none !important;
+  outline: 2px solid #4db8d9;
+  outline-offset: 2px;
 }
 
 .loading-container {

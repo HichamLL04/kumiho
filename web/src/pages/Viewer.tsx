@@ -31,6 +31,10 @@ export function ViewerPage() {
   const isAudio =
     loaderData.chapter?.render_mode === "audio" || (loaderData.chapter?.path && isAudioPath(loaderData.chapter.path));
 
+  useEffect(() => {
+    audioRedirectDone.current = false;
+  }, [loaderData.chapter?.id]);
+
   // Audio redirect: fetch series/chapters, open audio player, navigate back
   useEffect(() => {
     if (!isAudio || !loaderData.chapter || !loaderData.seriesId || audioRedirectDone.current) return;

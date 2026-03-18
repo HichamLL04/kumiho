@@ -162,6 +162,8 @@ export function SeriesPage() {
   // 오디오 재생 중이면 스토어의 currentTime을 구독하여 summary를 실시간 갱신
   const baseListenedRef = useRef<number | null>(null);
   const baseChapterTimeRef = useRef<number>(0);
+  const currentChapterIdRef = useRef<string | null>(null);
+  const lastChapterTimeRef = useRef<number>(0);
   const wasPlayingRef = useRef(false);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressRef = useRef(progress);
@@ -182,6 +184,8 @@ export function SeriesPage() {
         wasPlayingRef.current = false;
         baseListenedRef.current = null;
         baseChapterTimeRef.current = 0;
+        currentChapterIdRef.current = null;
+        lastChapterTimeRef.current = 0;
         // 서버에 저장이 완료된 후 fetch (saveProgress 네트워크 요청 대기)
         if (refreshTimeoutRef.current) {
           clearTimeout(refreshTimeoutRef.current);
@@ -195,6 +199,22 @@ export function SeriesPage() {
 
       if (!isActive) return;
       wasPlayingRef.current = true;
+
+      const currentChapterId = state.currentChapter?.id ?? null;
+      if (currentChapterIdRef.current !== currentChapterId) {
+        if (currentChapterIdRef.current !== null) {
+          const completedDelta = Math.max(0, lastChapterTimeRef.current - baseChapterTimeRef.current);
+          baseListenedRef.current = Math.max(0, (baseListenedRef.current ?? 0) + completedDelta);
+        }
+        currentChapterIdRef.current = currentChapterId;
+
+        const serverProgress = progressRef.current;
+        const sameChapter = serverProgress?.chapter_id === currentChapterId;
+        baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
+        lastChapterTimeRef.current = state.currentTime;
+      } else {
+        lastChapterTimeRef.current = state.currentTime;
+      }
 
       const now = Date.now();
       if (now - lastUpdate < 5000) return;
@@ -215,7 +235,7 @@ export function SeriesPage() {
           const sameChapter = serverProgress?.chapter_id === state.currentChapter?.id;
           baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
         }
-        const delta = state.currentTime - baseChapterTimeRef.current;
+        const delta = Math.max(0, state.currentTime - baseChapterTimeRef.current);
         const newListened = Math.max(0, (baseListenedRef.current ?? 0) + delta);
         return {
           ...prev,
@@ -237,6 +257,8 @@ export function SeriesPage() {
       unsub();
       baseListenedRef.current = null;
       baseChapterTimeRef.current = 0;
+      currentChapterIdRef.current = null;
+      lastChapterTimeRef.current = 0;
       wasPlayingRef.current = false;
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
