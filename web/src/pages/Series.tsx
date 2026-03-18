@@ -174,6 +174,8 @@ export function SeriesPage() {
     if (!isAudioSeries) return;
 
     let lastUpdate = 0;
+    let lastVolumeUpdate = 0;
+    let lastVolumeId: string | null = null;
     const unsub = useAudioPlayerStore.subscribe((state) => {
       const isThisSeries = state.currentSeries?.id === id;
       const isActive =
@@ -186,6 +188,8 @@ export function SeriesPage() {
         baseChapterTimeRef.current = 0;
         currentChapterIdRef.current = null;
         lastChapterTimeRef.current = 0;
+        lastVolumeUpdate = 0;
+        lastVolumeId = null;
         // 서버에 저장이 완료된 후 fetch (saveProgress 네트워크 요청 대기)
         if (refreshTimeoutRef.current) {
           clearTimeout(refreshTimeoutRef.current);
@@ -247,6 +251,13 @@ export function SeriesPage() {
       // 현재 재생 중인 볼륨 카드의 progress_percent도 실시간 갱신
       const currentVolumeId = state.currentVolume?.id;
       if (currentVolumeId && state.duration > 0) {
+        const nowForVolume = Date.now();
+        if (lastVolumeId === currentVolumeId && nowForVolume - lastVolumeUpdate < 1000) {
+          return;
+        }
+        lastVolumeUpdate = nowForVolume;
+        lastVolumeId = currentVolumeId;
+
         const volumePercent = Math.min(100, (state.currentTime / state.duration) * 100);
         setVolumes((prev) =>
           prev.map((v) => (v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v)),
@@ -343,7 +354,7 @@ export function SeriesPage() {
                     seriesAPI.getProgressList(series.id).catch(() => null),
                   ]);
                   const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-                  const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+                  const sorted = allChapters;
 
                   // 진행도의 챕터 찾기, 없으면 첫 챕터
                   let startChapter = sorted[0];

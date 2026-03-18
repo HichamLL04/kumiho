@@ -53,19 +53,11 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
 
   useEffect(() => {
     if (!isOpen || !currentSeries) return;
-    const controller = new AbortController();
-    bookmarkAPI
-      .getAll(currentSeries.id)
-      .then((res) => {
-        if (controller.signal.aborted) return;
-        const list = res.data.bookmarks || res.data || [];
-        setBookmarks(Array.isArray(list) ? list : []);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setBookmarks([]);
-      });
-    return () => controller.abort();
-  }, [isOpen, currentSeries]);
+    const timer = window.setTimeout(() => {
+      void loadBookmarks();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, currentSeries, loadBookmarks]);
 
   if (!isOpen) return null;
 

@@ -252,7 +252,7 @@ export function VolumePage() {
         seriesAPI.getProgressList(series.id).catch(() => null),
       ]);
       const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-      const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+      const sorted = allChapters;
       if (sorted.length === 0) {
         showAlert(t("series.alert.no_readable_chapter"), "warning");
         return;

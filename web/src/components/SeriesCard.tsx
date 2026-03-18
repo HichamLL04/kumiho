@@ -167,7 +167,7 @@ export function SeriesCard({
         ]);
         const series = seriesRes.data;
         const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-        const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+        const sorted = allChapters;
         const progressList = Array.isArray(progressRes.data) ? progressRes.data : progressRes.data?.progress_list || [];
         const lastProg = progressList[0];
 
@@ -192,7 +192,7 @@ export function SeriesCard({
           seriesAPI.getProgressList(series.id).catch(() => null),
         ]);
         const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-        const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+        const sorted = allChapters;
         const progress = progressRes.data?.progress;
 
         if (sorted.length > 0) {
@@ -267,8 +267,7 @@ export function SeriesCard({
       const chapters = chaptersRes.data.chapters || [];
 
       if (chapters.length > 0) {
-        const sortedChapters = [...chapters].sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
-        navigate(`/viewer/${sortedChapters[0].id}`, { state: { from: viewerFrom } });
+        navigate(`/viewer/${chapters[0].id}`, { state: { from: viewerFrom } });
       } else {
         navigate(`/series/${item.id}`);
       }

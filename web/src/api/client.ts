@@ -275,12 +275,10 @@ export const volumeAPI = {
       };
       collectIds(volumeId);
 
-      // 대상 볼륨들에 속한 챕터들 중 번호가 가장 낮은 것 반환
-      const volumeChapters = allChapters
-        .filter((c) => targetVolumeIds.has(c.volume_id))
-        .sort((a, b) => a.chapter_number - b.chapter_number);
-
-      return volumeChapters.length > 0 ? volumeChapters[0] : null;
+      // 백엔드의 시리즈 챕터 정렬(volume_number, chapter_number)을 그대로 사용
+      // 대상 볼륨(및 하위 볼륨)에 속하는 첫 챕터를 순서 보존 상태에서 찾는다.
+      const firstChapter = allChapters.find((c) => targetVolumeIds.has(c.volume_id));
+      return firstChapter ?? null;
     } catch (error) {
       console.error("Failed to find first chapter recursively:", error);
       return null;

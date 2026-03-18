@@ -54,7 +54,7 @@ export function ViewerPage() {
         ]);
 
         const series = seriesRes.data;
-        const chapters = (chaptersRes.data.chapters || []).sort((a, b) => a.chapter_number - b.chapter_number);
+        const chapters = chaptersRes.data.chapters || [];
 
         let volume = null;
         if (volumeId) {
