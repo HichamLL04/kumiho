@@ -50,7 +50,7 @@ interface AudioPlayerState {
     volume?: Volume | null,
     startTime?: number,
   ) => void;
-  playChapter: (chapter: Chapter) => void;
+  playChapter: (chapter: Chapter, startTime?: number) => void;
   setChapters: (chapters: Chapter[]) => void;
 
   // Actions - Playback
@@ -131,11 +131,11 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
         });
       },
 
-      playChapter: (chapter) => {
+      playChapter: (chapter, startTime = 0) => {
         set({
           currentChapter: chapter,
           status: "loading",
-          currentTime: 0,
+          currentTime: startTime,
           duration: 0,
         });
       },

@@ -850,6 +850,13 @@
     "sleep_timer_minutes": "{{count}} minutes",
     "sleep_timer_remaining": "Remaining: {{time}}",
     "sleep_timer_off": "Turn Off Timer",
-    "playback_speed": "Playback Speed"
+    "playback_speed": "Playback Speed",
+    "settings": "Settings",
+    "skip_backward_time": "Skip Backward",
+    "skip_forward_time": "Skip Forward",
+    "auto_play_next": "Auto Play Next",
+    "auto_play_next_desc": "Automatically plays the next chapter when the current one ends",
+    "volume_boost": "Volume Boost",
+    "volume_boost_desc": "Amplifies quiet audiobooks up to 2x volume"
   }
 }

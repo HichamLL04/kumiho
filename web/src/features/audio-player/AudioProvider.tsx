@@ -12,6 +12,7 @@ export function AudioProvider() {
   const lastSavedTimeRef = useRef(0);
   const sleepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fadeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -79,6 +80,21 @@ export function AudioProvider() {
       if (fadeIntervalRef.current) {
         clearInterval(fadeIntervalRef.current);
       }
+      if (restoreTimerRef.current) {
+        clearTimeout(restoreTimerRef.current);
+      }
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.disconnect();
+        sourceNodeRef.current = null;
+      }
+      if (gainNodeRef.current) {
+        gainNodeRef.current.disconnect();
+        gainNodeRef.current = null;
+      }
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
     };
   }, []);
 
@@ -127,9 +143,7 @@ export function AudioProvider() {
           saveProgress();
         }
 
-        const audioUrl = chapterAPI.getAudioUrl(state.currentChapter.id);
-        const token = localStorage.getItem("access_token");
-        const fullSrc = token ? `${audioUrl}?token=${token}` : audioUrl;
+        const fullSrc = chapterAPI.getAudioUrl(state.currentChapter.id);
 
         // 소스가 다른 경우에만 새로 로드하여 불필요한 중단 방지
         if (audio.src !== fullSrc || audio.error) {
@@ -161,10 +175,16 @@ export function AudioProvider() {
           }
         }
 
-        // 서버의 최신 진행률로 다시 한번 복원 시도 (지연 실행하여 로드 시점과 맞춤)
-        setTimeout(() => {
-          void restoreProgress(state.currentChapter!.id, state.currentSeries?.id);
-        }, 100);
+        // startTime이 없을 때만 서버 진행률 복원 (명시적 seek 값 덮어쓰기 방지)
+        if (state.currentTime <= 0) {
+          if (restoreTimerRef.current) {
+            clearTimeout(restoreTimerRef.current);
+          }
+          restoreTimerRef.current = setTimeout(() => {
+            void restoreProgress(state.currentChapter!.id, state.currentSeries?.id);
+            restoreTimerRef.current = null;
+          }, 100);
+        }
       }
     });
     return unsub;

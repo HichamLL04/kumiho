@@ -850,6 +850,13 @@
     "sleep_timer_minutes": "{{count}}分",
     "sleep_timer_remaining": "残り: {{time}}",
     "sleep_timer_off": "タイマーオフ",
-    "playback_speed": "再生速度"
+    "playback_speed": "再生速度",
+    "settings": "設定",
+    "skip_backward_time": "巻き戻し時間",
+    "skip_forward_time": "早送り時間",
+    "auto_play_next": "次のチャプターを自動再生",
+    "auto_play_next_desc": "チャプター終了時に次のチャプターを自動で再生します",
+    "volume_boost": "音量ブースト",
+    "volume_boost_desc": "音の小さいオーディオブック向けに音量を最大2倍まで増幅します"
   }
 }

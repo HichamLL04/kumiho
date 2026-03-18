@@ -15,7 +15,7 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
 
   const isDraggingRef = useRef(false);

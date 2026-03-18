@@ -306,7 +306,7 @@ export const chapterAPI = {
 
 // Bookmark API
 export const bookmarkAPI = {
-  getAll: (seriesId?: string) => api.get(`/bookmarks${seriesId ? `?series_id=${seriesId}` : ""}`),
+  getAll: (seriesId?: string) => api.get(`/bookmarks${seriesId ? `/series/${seriesId}` : ""}`),
   create: (data: {
     series_id: string;
     volume_id?: string;

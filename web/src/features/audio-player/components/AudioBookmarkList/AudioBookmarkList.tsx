@@ -103,8 +103,7 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
     if (bookmark.chapter_id && bookmark.chapter_id !== currentChapter?.id) {
       const chapter = chapters.find((c) => c.id === bookmark.chapter_id);
       if (chapter) {
-        playChapter(chapter);
-        // 챕터 로드 후 seek은 AudioProvider에서 처리
+        playChapter(chapter, bookmark.current_time ?? 0);
       }
     } else if (bookmark.current_time != null) {
       seekTo(bookmark.current_time);

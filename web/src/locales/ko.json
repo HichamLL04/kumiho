@@ -851,6 +851,13 @@
     "sleep_timer_minutes": "{{count}}분",
     "sleep_timer_remaining": "남은 시간: {{time}}",
     "sleep_timer_off": "타이머 끄기",
-    "playback_speed": "재생 속도"
+    "playback_speed": "재생 속도",
+    "settings": "설정",
+    "skip_backward_time": "되감기 시간",
+    "skip_forward_time": "빨리감기 시간",
+    "auto_play_next": "자동 다음 챕터",
+    "auto_play_next_desc": "챕터 종료 시 다음 챕터를 자동으로 재생합니다",
+    "volume_boost": "볼륨 부스트",
+    "volume_boost_desc": "소리가 작은 오디오북을 위해 볼륨을 2배로 증폭합니다"
   }
 }

@@ -163,6 +163,7 @@ export function SeriesPage() {
   const baseListenedRef = useRef<number | null>(null);
   const baseChapterTimeRef = useRef<number>(0);
   const wasPlayingRef = useRef(false);
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressRef = useRef(progress);
   progressRef.current = progress;
   useEffect(() => {
@@ -182,7 +183,13 @@ export function SeriesPage() {
         baseListenedRef.current = null;
         baseChapterTimeRef.current = 0;
         // 서버에 저장이 완료된 후 fetch (saveProgress 네트워크 요청 대기)
-        setTimeout(() => loadData(), 800);
+        if (refreshTimeoutRef.current) {
+          clearTimeout(refreshTimeoutRef.current);
+        }
+        refreshTimeoutRef.current = setTimeout(() => {
+          void loadData();
+          refreshTimeoutRef.current = null;
+        }, 800);
         return;
       }
 
@@ -231,6 +238,10 @@ export function SeriesPage() {
       baseListenedRef.current = null;
       baseChapterTimeRef.current = 0;
       wasPlayingRef.current = false;
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
     };
   }, [id, series, loadData]);
 

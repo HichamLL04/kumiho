@@ -712,13 +712,6 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 			// 볼륨의 첫 번째 챕터 → 첫 번째 페이지 (재귀적 탐색 지원)
 			targetChapter, targetPage, targetArchive, found := h.findFirstAvailableChapterRecursively(resourceID)
 			if !found {
-				// The provided snippet has `if hasAudio` and `seriesID` which are not defined here.
-				// Assuming the intent is to remove the redirect and return 404.
-				// The original code had redirects here:
-				// if volume.HasAudio {
-				// 	return c.Redirect("/audio-kumiho", fiber.StatusSeeOther)
-				// }
-				// return c.Redirect("/reading-kumiho", fiber.StatusSeeOther)
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 					"error": "thumbnail not found on disk",
 				})

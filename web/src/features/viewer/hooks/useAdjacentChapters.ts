@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { seriesAPI } from "../../../api/client";
-import type { Chapter, Volume, AdjacentChapterInfo } from "../types";
+import type { Chapter, AdjacentChapterInfo } from "../types";
 
 interface UseAdjacentChaptersParams {
   volumeId: string | null;
@@ -24,70 +24,36 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
   const [resolvedKey, setResolvedKey] = useState<string | null>(null);
   const currentKey = volumeId && chapterId && seriesId ? `${volumeId}:${chapterId}:${seriesId}` : null;
 
-  // 다른 볼륨의 챕터 가져오기
-  const fetchAdjacentVolumeChapter = useCallback(
-    async (targetSeriesId: string, currentVolumeId: string, direction: "next" | "prev"): Promise<boolean> => {
-      try {
-        const volumesRes = await seriesAPI.getVolumes(targetSeriesId);
-        const volumes = volumesRes.data.volumes.sort((a: Volume, b: Volume) => a.volume_number - b.volume_number);
-        const currentVolIndex = volumes.findIndex((v: Volume) => v.id === currentVolumeId);
-
-        if (direction === "prev") {
-          if (currentVolIndex > 0) {
-            const prevVol = volumes[currentVolIndex - 1];
-            // 이전 볼륨의 마지막 챕터 가져오기 (시리즈 전체 챕터에서 필터링)
-            const chaptersRes = await seriesAPI.getChapters(targetSeriesId);
-            const chapters = (chaptersRes.data.chapters || [])
-              .filter((c: Chapter) => c.volume_id === prevVol.id)
-              .sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
-
-            if (chapters.length > 0) {
-              const lastChapter = chapters[chapters.length - 1];
-              setPrevChapterId(lastChapter.id);
-              // 볼륨 제목과 챕터 제목이 같으면 챕터 제목만 표시
-              const title =
-                prevVol.title !== lastChapter.title ? `${prevVol.title} - ${lastChapter.title}` : lastChapter.title;
-              setPrevChapterTitle(title);
-            }
-          }
-        } else {
-          if (currentVolIndex < volumes.length - 1) {
-            const nextVol = volumes[currentVolIndex + 1];
-            // 다음 볼륨의 첫 챕터 가져오기 (시리즈 전체 챕터에서 필터링)
-            const chaptersRes = await seriesAPI.getChapters(targetSeriesId);
-            const chapters = (chaptersRes.data.chapters || [])
-              .filter((c: Chapter) => c.volume_id === nextVol.id)
-              .sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
-
-            if (chapters.length > 0) {
-              const firstChapter = chapters[0];
-              setNextChapterId(firstChapter.id);
-              // 볼륨 제목과 챕터 제목이 같으면 챕터 제목만 표시
-              const title =
-                nextVol.title !== firstChapter.title ? `${nextVol.title} - ${firstChapter.title}` : firstChapter.title;
-              setNextChapterTitle(title);
-            }
-          }
-        }
-        return true;
-      } catch (err: unknown) {
-        console.warn(`인접 볼륨(${direction}) 로드 실패:`, err);
-        return false;
-      }
-    },
-    [],
-  );
-
   // 인접 챕터 로드
   const loadAdjacentChapters = useCallback(
     async (targetVolumeId: string, currentChapterId: string, targetSeriesId: string) => {
       try {
-        // 1. 시리즈 전체 챕터 목록 조회 및 현재 볼륨 필터링
-        const chaptersRes = await seriesAPI.getChapters(targetSeriesId);
-        const chapters = (chaptersRes.data.chapters || [])
-          .filter((c: Chapter) => c.volume_id === targetVolumeId)
-          .sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
-        const currentIndex = chapters.findIndex((c: Chapter) => c.id === currentChapterId);
+        const [volumesRes, chaptersRes] = await Promise.all([
+          seriesAPI.getVolumes(targetSeriesId),
+          seriesAPI.getChapters(targetSeriesId),
+        ]);
+        const volumes = (volumesRes.data.volumes || []).sort(
+          (a: { volume_number: number }, b: { volume_number: number }) => a.volume_number - b.volume_number,
+        );
+        const allChapters = chaptersRes.data.chapters || [];
+        const chaptersByVolume = new Map<string, Chapter[]>();
+
+        for (const chapter of allChapters) {
+          if (!chaptersByVolume.has(chapter.volume_id)) {
+            chaptersByVolume.set(chapter.volume_id, []);
+          }
+          chaptersByVolume.get(chapter.volume_id)!.push(chapter);
+        }
+        for (const chapterList of chaptersByVolume.values()) {
+          chapterList.sort((a, b) => a.chapter_number - b.chapter_number);
+        }
+
+        const chapters = chaptersByVolume.get(targetVolumeId) || [];
+        const currentIndex = chapters.findIndex((c) => c.id === currentChapterId);
+        const currentVolIndex = volumes.findIndex((v: { id: string }) => v.id === targetVolumeId);
+        if (currentVolIndex < 0 || currentIndex < 0) {
+          return false;
+        }
 
         // 같은 볼륨 내 이전/다음 챕터 확인
         if (currentIndex > 0) {
@@ -95,11 +61,20 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
           setPrevChapterId(prev.id);
           setPrevChapterTitle(prev.title);
         } else {
-          // 볼륨의 첫 챕터 -> 이전 볼륨 확인
+          // 볼륨의 첫 챕터 -> 이전 볼륨의 마지막 챕터 확인
           setPrevChapterId(null);
           setPrevChapterTitle(null);
-          const loaded = await fetchAdjacentVolumeChapter(targetSeriesId, targetVolumeId, "prev");
-          if (!loaded) return false;
+          for (let i = currentVolIndex - 1; i >= 0; i--) {
+            const prevVol = volumes[i];
+            const prevVolumeChapters = chaptersByVolume.get(prevVol.id) || [];
+            if (prevVolumeChapters.length === 0) continue;
+            const lastChapter = prevVolumeChapters[prevVolumeChapters.length - 1];
+            setPrevChapterId(lastChapter.id);
+            const title =
+              prevVol.title !== lastChapter.title ? `${prevVol.title} - ${lastChapter.title}` : lastChapter.title;
+            setPrevChapterTitle(title);
+            break;
+          }
         }
 
         if (currentIndex < chapters.length - 1) {
@@ -108,12 +83,21 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
           setNextChapterTitle(next.title);
           setIsLastChapterOfVolume(false);
         } else {
-          // 볼륨의 마지막 챕터 -> 다음 볼륨 확인
+          // 볼륨의 마지막 챕터 -> 다음 볼륨의 첫 챕터 확인
           setNextChapterId(null);
           setNextChapterTitle(null);
           setIsLastChapterOfVolume(true); // 마지막 챕터임을 표시
-          const loaded = await fetchAdjacentVolumeChapter(targetSeriesId, targetVolumeId, "next");
-          if (!loaded) return false;
+          for (let i = currentVolIndex + 1; i < volumes.length; i++) {
+            const nextVol = volumes[i];
+            const nextVolumeChapters = chaptersByVolume.get(nextVol.id) || [];
+            if (nextVolumeChapters.length === 0) continue;
+            const firstChapter = nextVolumeChapters[0];
+            setNextChapterId(firstChapter.id);
+            const title =
+              nextVol.title !== firstChapter.title ? `${nextVol.title} - ${firstChapter.title}` : firstChapter.title;
+            setNextChapterTitle(title);
+            break;
+          }
         }
         return true;
       } catch (err) {
@@ -121,7 +105,7 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
         return false;
       }
     },
-    [fetchAdjacentVolumeChapter],
+    [],
   );
 
   // volumeId, chapterId, seriesId가 변경되면 인접 챕터 로드
