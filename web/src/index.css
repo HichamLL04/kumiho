@@ -43,8 +43,6 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
-  padding-bottom: var(--mini-player-height);
-  transition: padding-bottom 0.2s ease;
 }
 
 h1 {
