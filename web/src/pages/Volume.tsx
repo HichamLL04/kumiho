@@ -7,7 +7,7 @@ import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
-import { api, volumeAPI, downloadAPI, chapterAPI, seriesAPI } from "../api/client";
+import { api, volumeAPI, downloadAPI, chapterAPI } from "../api/client";
 import { formatDuration } from "../utils/progressUtils";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
@@ -87,10 +87,9 @@ export function VolumePage() {
         setSeries(seriesRes.data);
       }
 
-      // 챕터 목록 (시리즈 전체를 가져와서 해당 볼륨 챕터만 필터링)
-      const chaptersRes = await seriesAPI.getChapters(volData.series_id);
-      const allChapters = chaptersRes.data.chapters || [];
-      const chapterList = allChapters.filter((c: Chapter) => c.volume_id === volumeId);
+      // 챕터 목록 (볼륨 단위 API 사용)
+      const chaptersRes = await volumeAPI.getChapters(volumeId!);
+      const chapterList = chaptersRes.data.chapters || [];
       setChapters(chapterList.sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number));
       // 최근 읽기 진행도 가져오기 (볼륨 단위)
       try {

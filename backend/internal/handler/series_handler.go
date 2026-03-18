@@ -1736,6 +1736,37 @@ func isAudioFile(path string) bool {
 // GET /api/v1/series/:seriesId/chapters
 func (h *SeriesHandler) ListChaptersBySeries(c *fiber.Ctx) error {
 	seriesID := c.Params("seriesId")
+	userID := middleware.GetUserID(c)
+
+	series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	role := middleware.GetUserRole(c)
+	if role != model.RoleMaster {
+		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
+		if checkErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to check permissions",
+			})
+		}
+
+		allowed := false
+		for _, aid := range allowedIDs {
+			if aid == series.LibraryID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "access denied",
+			})
+		}
+	}
 
 	chapters, err := h.chapterRepo.FindBySeriesID(nil, seriesID)
 	if err != nil {

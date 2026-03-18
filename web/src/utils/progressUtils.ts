@@ -9,6 +9,9 @@ export interface ProgressDisplayData {
  * 초 단위 시간을 "H:MM:SS" 또는 "M:SS" 형태로 포맷합니다.
  */
 export function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "0:00";
+  }
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);

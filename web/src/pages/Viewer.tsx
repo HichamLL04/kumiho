@@ -63,7 +63,13 @@ export function ViewerPage() {
         console.error("Failed to load audio player data:", err);
       }
 
-      navigate(-1);
+      if (window.history.length > 1) {
+        navigate(-1);
+      } else if (volumeId) {
+        navigate(`/volumes/${volumeId}`, { replace: true });
+      } else {
+        navigate(`/series/${seriesId}`, { replace: true });
+      }
     })();
   }, [isAudio, loaderData.chapter, loaderData.seriesId, loaderData.volumeId, navigate]);
 
