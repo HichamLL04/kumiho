@@ -337,10 +337,11 @@ export function SeriesPage() {
 
                 if (isAudio && volumes.length > 0) {
                   // 오디오북: 오디오 플레이어로 재생
-                  const { loadAndPlay } = useAudioPlayerStore.getState();
-
                   // 시리즈 전체 챕터 로드 (볼륨 간 매끄러운 이동을 위함)
-                  const chaptersRes = await seriesAPI.getChapters(series.id);
+                  const [chaptersRes, progressListRes] = await Promise.all([
+                    seriesAPI.getChapters(series.id),
+                    seriesAPI.getProgressList(series.id).catch(() => null),
+                  ]);
                   const allChapters: Chapter[] = chaptersRes.data.chapters || [];
                   const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
 
@@ -353,7 +354,11 @@ export function SeriesPage() {
 
                   if (startChapter) {
                     // volume 파라미터는 null로 전달 (현재 챕터에 맞춰 자동 감지)
-                    loadAndPlay(series, startChapter, sorted, null);
+                    const store = useAudioPlayerStore.getState();
+                    store.loadAndPlay(series, startChapter, sorted, null);
+                    if (progressListRes?.data?.progress_list) {
+                      store.setChapterProgressList(progressListRes.data.progress_list);
+                    }
                   }
                   return;
                 }

@@ -172,6 +172,7 @@ export const seriesAPI = {
   getVolumes: (seriesId: string) => api.get(`/series/${seriesId}/volumes`),
   getChapters: (seriesId: string) => api.get<{ chapters: Chapter[] }>(`/series/${seriesId}/chapters`),
   getProgress: (seriesId: string) => api.get(`/series/${seriesId}/progress`),
+  getProgressList: (seriesId: string) => api.get<{ progress_list: ReadingProgress[] }>(`/series/${seriesId}/progress-list`),
   update: (seriesId: string, data: Partial<Series>) => api.patch(`/series/${seriesId}`, data),
   updateProgress: (
     seriesId: string,

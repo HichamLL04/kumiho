@@ -19,6 +19,13 @@ export function AudioProvider() {
 
   const store = useAudioPlayerStore;
 
+  type SaveProgressSnapshot = {
+    seriesId: string;
+    chapterId: string;
+    currentTime: number;
+    duration: number;
+  };
+
   // 볼륨 부스트 설정 (AudioContext + GainNode로 2x 증폭)
   const setupVolumeBoost = useCallback((audio: HTMLAudioElement, enabled: boolean) => {
     if (enabled) {
@@ -96,12 +103,12 @@ export function AudioProvider() {
         audioContextRef.current = null;
       }
     };
-  }, []);
+  }, [store]);
 
   // 진행률 저장
-  const saveProgress = useCallback((isFinished: boolean = false) => {
-    const { currentChapter, currentTime, duration, currentSeries } = store.getState();
-    if (!currentChapter || !currentSeries || currentTime <= 0) return;
+  const saveProgressSnapshot = useCallback((snapshot: SaveProgressSnapshot, isFinished: boolean = false) => {
+    const { chapterId, currentTime, duration, seriesId } = snapshot;
+    if (currentTime <= 0) return;
     // 마지막 저장 시점과 동일하면 스킵 (단, 완료 시점은 무조건 저장)
     if (!isFinished && Math.abs(currentTime - lastSavedTimeRef.current) < 1) return;
 
@@ -110,9 +117,27 @@ export function AudioProvider() {
     const progressValue = isFinished ? 100 : duration > 0 ? (currentTime / duration) * 100 : 0;
     const timeValue = isFinished && duration > 0 ? duration : currentTime;
 
+    // 서버 반영 전 로컬 맵을 먼저 업데이트해서
+    // 챕터 이동 직후 즉시 복귀해도 최신 진행시간으로 이어재생되도록 보장
+    const state = store.getState();
+    const prevProgress = state.chapterProgressMap[chapterId];
+    if (prevProgress) {
+      store.setState({
+        chapterProgressMap: {
+          ...state.chapterProgressMap,
+          [chapterId]: {
+            ...prevProgress,
+            current_time: timeValue,
+            duration,
+            progress_percent: Math.min(100, progressValue),
+          },
+        },
+      });
+    }
+
     seriesAPI
-      .updateProgress(currentSeries.id, {
-        chapter_id: currentChapter.id,
+      .updateProgress(seriesId, {
+        chapter_id: chapterId,
         current_page: 0,
         total_pages: 0,
         current_time: timeValue,
@@ -123,6 +148,21 @@ export function AudioProvider() {
         console.warn("Failed to save audio progress:", err);
       });
   }, [store]);
+
+  const saveProgress = useCallback((isFinished: boolean = false) => {
+    const { currentChapter, currentTime, duration, currentSeries } = store.getState();
+    if (!currentChapter || !currentSeries) return;
+
+    saveProgressSnapshot(
+      {
+        seriesId: currentSeries.id,
+        chapterId: currentChapter.id,
+        currentTime,
+        duration,
+      },
+      isFinished,
+    );
+  }, [store, saveProgressSnapshot]);
 
   // 챕터 변경 감지 → 오디오 소스 교체
   useEffect(() => {
@@ -138,9 +178,21 @@ export function AudioProvider() {
         state.currentChapter &&
         (chapterChanged || (isSameChapter && state.status === "loading" && prevState.status !== "loading"))
       ) {
-        // 이전 챕터 진행률 저장
-        if (prevState.currentChapter && prevState.status === "playing") {
-          saveProgress();
+        // 이전 챕터 진행률 저장 (클릭 이동 직전 스냅샷 기준 즉시 저장)
+        if (
+          prevState.currentChapter &&
+          prevState.currentSeries &&
+          (prevState.status === "playing" || prevState.status === "paused")
+        ) {
+          saveProgressSnapshot(
+            {
+              seriesId: prevState.currentSeries.id,
+              chapterId: prevState.currentChapter.id,
+              currentTime: prevState.currentTime,
+              duration: prevState.duration,
+            },
+            false,
+          );
         }
 
         const fullSrc = chapterAPI.getAudioUrl(state.currentChapter.id);
@@ -188,7 +240,7 @@ export function AudioProvider() {
       }
     });
     return unsub;
-  }, [store, saveProgress]);
+  }, [store, saveProgressSnapshot]);
 
   // 이전 진행률 복원
   const restoreProgress = async (chapterId: string, seriesId?: string | null) => {

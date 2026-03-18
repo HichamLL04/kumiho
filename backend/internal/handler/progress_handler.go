@@ -250,6 +250,58 @@ func (h *ProgressHandler) GetVolumeProgress(c *fiber.Ctx) error {
 	})
 }
 
+// GetSeriesProgressList 시리즈 내 모든 챕터 읽기 진행도 조회
+// GET /api/v1/series/:seriesId/progress-list
+func (h *ProgressHandler) GetSeriesProgressList(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	seriesID := c.Params("seriesId")
+
+	series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	role := middleware.GetUserRole(c)
+	if role != model.RoleMaster {
+		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
+		if checkErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to check permissions",
+			})
+		}
+
+		allowed := false
+		for _, aid := range allowedIDs {
+			if aid == series.LibraryID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "access denied",
+			})
+		}
+	}
+
+	progressList, err := h.progressRepo.FindByUserAndSeriesAll(nil, userID, seriesID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch progress",
+		})
+	}
+
+	if progressList == nil {
+		progressList = []model.ReadingProgress{}
+	}
+
+	return c.JSON(fiber.Map{
+		"progress_list": progressList,
+	})
+}
+
 // GetChapterProgress 챕터별 읽기 진행도 조회
 // GET /api/v1/chapters/:chapterId/progress
 func (h *ProgressHandler) GetChapterProgress(c *fiber.Ctx) error {
@@ -1055,8 +1107,8 @@ func (h *ProgressHandler) SyncProgress(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
 	type SyncItem struct {
-		SeriesID        string  `json:"series_id"`
-		VolumeID        *string `json:"volume_id"`
+		SeriesID        string   `json:"series_id"`
+		VolumeID        *string  `json:"volume_id"`
 		ChapterID       *string  `json:"chapter_id"`
 		CurrentPage     int      `json:"current_page"`
 		TotalPages      int      `json:"total_pages"`

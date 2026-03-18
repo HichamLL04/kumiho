@@ -193,6 +193,7 @@ func main() {
 	series.Get("/:seriesId/volumes", seriesHandler.ListVolumes)
 	series.Get("/:seriesId/chapters", seriesHandler.ListChaptersBySeries)
 	series.Get("/:seriesId/progress", progressHandler.GetProgress)
+	series.Get("/:seriesId/progress-list", progressHandler.GetSeriesProgressList)
 	series.Patch("/:seriesId/progress", progressHandler.UpdateProgress)
 	series.Post("/:seriesId/progress/compare", progressHandler.CompareProgress)
 	series.Get("/:seriesId/completions", progressHandler.GetSeriesCompletions)

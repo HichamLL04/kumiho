@@ -485,6 +485,73 @@ func (r *ReadingProgressRepository) FindByUserAndVolume(db database.Queryer, use
 	return progressList, nil
 }
 
+// FindByUserAndSeriesAll 사용자와 시리즈의 모든 챕터 진행도 조회
+func (r *ReadingProgressRepository) FindByUserAndSeriesAll(db database.Queryer, userID, seriesID string) ([]model.ReadingProgress, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(
+		`SELECT rp.id, rp.user_id, rp.series_id, rp.volume_id, rp.chapter_id, rp.current_page, rp.anchor_page, rp.offset_ratio,
+		 rp.total_pages, rp.current_position, rp.total_positions, rp.current_time, rp.duration, rp.progress_percent, rp.device_id, rp.device_name, rp.current_cfi, rp.updated_at
+		 FROM reading_progress rp
+		 JOIN chapters c ON rp.chapter_id = c.id
+		 JOIN volumes v ON c.volume_id = v.id
+		 WHERE rp.user_id = ? AND v.series_id = ?
+		 ORDER BY rp.updated_at DESC, c.chapter_number DESC`,
+		userID, seriesID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var progressList []model.ReadingProgress
+	for rows.Next() {
+		var p model.ReadingProgress
+		var volID, chapID, devID, devName, cfi sql.NullString
+		var anchorPage sql.NullInt64
+		var offsetRatio sql.NullFloat64
+		var currentTime, dur sql.NullFloat64
+
+		if err := rows.Scan(&p.ID, &p.UserID, &p.SeriesID, &volID, &chapID,
+			&p.CurrentPage, &anchorPage, &offsetRatio, &p.TotalPages, &p.CurrentPosition, &p.TotalPositions, &currentTime, &dur, &p.ProgressPercent, &devID, &devName, &cfi, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+
+		if volID.Valid {
+			p.VolumeID = &volID.String
+		}
+		if chapID.Valid {
+			p.ChapterID = &chapID.String
+		}
+		if anchorPage.Valid {
+			p.AnchorPage = int(anchorPage.Int64)
+		} else {
+			p.AnchorPage = p.CurrentPage
+		}
+		if offsetRatio.Valid {
+			p.OffsetRatio = offsetRatio.Float64
+		}
+		if currentTime.Valid {
+			p.CurrentTime = &currentTime.Float64
+		}
+		if dur.Valid {
+			p.Duration = &dur.Float64
+		}
+		if devID.Valid {
+			p.DeviceID = &devID.String
+		}
+		if devName.Valid {
+			p.DeviceName = &devName.String
+		}
+		if cfi.Valid {
+			p.CurrentCFI = &cfi.String
+		}
+
+		progressList = append(progressList, p)
+	}
+
+	return progressList, nil
+}
+
 // DeleteByUserAndSeries 사용자와 시리즈 ID로 진행도 삭제
 func (r *ReadingProgressRepository) DeleteByUserAndSeries(db database.Queryer, userID, seriesID string) error {
 	db = database.GetQueryer(db)
@@ -889,7 +956,7 @@ func (r *ReadingProgressRepository) FindRecentEnrichedByUser(db database.Queryer
 		var anchorPage, currentPosition, totalPositions sql.NullInt64
 		var offsetRatio sql.NullFloat64
 		var currentTime, duration sql.NullFloat64 // *float64를 위해 NullFloat64 사용
-		var readTimeSeconds sql.NullInt64       // Add for read_time_seconds
+		var readTimeSeconds sql.NullInt64         // Add for read_time_seconds
 		var seriesTitle, volumeTitle, chapterTitle sql.NullString
 		var seriesThumbnail, volumeThumbnail sql.NullString
 		var libraryType sql.NullString

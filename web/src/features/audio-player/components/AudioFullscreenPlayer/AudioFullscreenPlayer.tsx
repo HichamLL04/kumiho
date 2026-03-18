@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ListMusic, Music, Moon, Bookmark, Gauge, MoreVertical } from "lucide-react";
+import { ChevronDown, ListMusic, Music, Moon, Bookmark, Gauge, MoreVertical, CheckCircle2 } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import { AudioControls } from "../AudioControls/AudioControls";
 import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
@@ -27,6 +27,9 @@ export function AudioFullscreenPlayer() {
   const currentSeries = useAudioPlayerStore((s) => s.currentSeries);
   const currentChapter = useAudioPlayerStore((s) => s.currentChapter);
   const chapters = useAudioPlayerStore((s) => s.chapters);
+  const chapterProgressMap = useAudioPlayerStore((s) => s.chapterProgressMap);
+  const currentTime = useAudioPlayerStore((s) => s.currentTime);
+  const currentDuration = useAudioPlayerStore((s) => s.duration);
   const isChapterListOpen = useAudioPlayerStore((s) => s.isChapterListOpen);
   const playbackRate = useAudioPlayerStore((s) => s.settings.playbackRate);
   const sleepTimerEndTime = useAudioPlayerStore((s) => s.sleepTimerEndTime);
@@ -75,9 +78,12 @@ export function AudioFullscreenPlayer() {
   };
 
   const handleChapterClick = (chapterId: string) => {
+    if (chapterId === currentChapter?.id) return;
+
     const chapter = chapters.find((c) => c.id === chapterId);
     if (chapter) {
-      playChapter(chapter);
+      const resumeTime = chapterProgressMap[chapterId]?.current_time ?? 0;
+      playChapter(chapter, resumeTime);
     }
   };
 
@@ -193,6 +199,23 @@ export function AudioFullscreenPlayer() {
             <div className={styles.chapterList}>
               {chapters.map((chapter, index) => {
                 const isActive = chapter.id === currentChapter?.id;
+                const chapterProgress = chapterProgressMap[chapter.id];
+                const progressPercent = chapterProgress?.progress_percent ?? 0;
+                const displayCurrentTime = isActive ? currentTime : (chapterProgress?.current_time ?? null);
+                const duration = chapter.duration ?? (isActive ? currentDuration : null);
+                const isCompletedByProgress =
+                  progressPercent >= 99.9 ||
+                  (duration != null && displayCurrentTime != null && displayCurrentTime >= duration - 1);
+                const isCompleted = chapter.is_read === true || isCompletedByProgress;
+                const hasAudioProgress = !isCompleted && displayCurrentTime != null && duration != null;
+
+                const durationLabel =
+                  duration != null
+                    ? hasAudioProgress
+                      ? `${formatDuration(displayCurrentTime)} / ${formatDuration(duration)}`
+                      : formatDuration(duration)
+                    : "";
+
                 return (
                   <button
                     key={chapter.id}
@@ -205,12 +228,29 @@ export function AudioFullscreenPlayer() {
                         <div className={styles.playingBar} />
                         <div className={styles.playingBar} />
                       </div>
+                    ) : isCompleted ? (
+                      <span className={styles.completedIndicator}>
+                        <CheckCircle2
+                          size={16}
+                          className={styles.completedIcon}
+                        />
+                      </span>
                     ) : (
                       <span className={styles.chapterNumber}>{index + 1}</span>
                     )}
-                    <span className={styles.chapterTitle}>{chapter.title || `Chapter ${index + 1}`}</span>
-                    {chapter.duration != null && (
-                      <span className={styles.chapterDuration}>{formatDuration(chapter.duration)}</span>
+                    <span
+                      className={`${styles.chapterTitle} ${isCompleted && !isActive ? styles.chapterTitleCompleted : ""}`}
+                    >
+                      {chapter.title || `Chapter ${index + 1}`}
+                    </span>
+                    {durationLabel && (
+                      <span
+                        className={`${styles.chapterDuration} ${
+                          isCompleted && !isActive ? styles.chapterDurationCompleted : ""
+                        }`}
+                      >
+                        {durationLabel}
+                      </span>
                     )}
                   </button>
                 );

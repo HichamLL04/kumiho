@@ -47,7 +47,11 @@ export function ViewerPage() {
     void (async () => {
       try {
         // Fetch series and chapters in parallel
-        const [seriesRes, chaptersRes] = await Promise.all([seriesAPI.get(seriesId), seriesAPI.getChapters(seriesId)]);
+        const [seriesRes, chaptersRes, progressListRes] = await Promise.all([
+          seriesAPI.get(seriesId),
+          seriesAPI.getChapters(seriesId),
+          seriesAPI.getProgressList(seriesId).catch(() => null),
+        ]);
 
         const series = seriesRes.data;
         const chapters = chaptersRes.data.chapters || [];
@@ -62,7 +66,11 @@ export function ViewerPage() {
           }
         }
 
-        useAudioPlayerStore.getState().loadAndPlay(series, chapter as Chapter, chapters, volume);
+        const store = useAudioPlayerStore.getState();
+        store.loadAndPlay(series, chapter as Chapter, chapters, volume);
+        if (progressListRes?.data?.progress_list) {
+          store.setChapterProgressList(progressListRes.data.progress_list);
+        }
       } catch (err) {
         console.error("Failed to load audio player data:", err);
       }

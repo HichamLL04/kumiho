@@ -155,14 +155,15 @@ export function SeriesCard({
   const isAudioItem =
     ("has_audio" in item && item.has_audio) || ("library_type" in item && item.library_type === "audiobook");
   const playAudio = async () => {
-    const { loadAndPlay } = useAudioPlayerStore.getState();
+    const store = useAudioPlayerStore.getState();
     try {
       if (type === "volume") {
         const vol = item as Volume;
-        const [seriesRes, chaptersRes, progressRes] = await Promise.all([
+        const [seriesRes, chaptersRes, progressRes, seriesProgressListRes] = await Promise.all([
           seriesAPI.get(vol.series_id),
           seriesAPI.getChapters(vol.series_id),
           volumeAPI.getProgress(vol.id), // 볼륨 단위 진행도 조회
+          seriesAPI.getProgressList(vol.series_id).catch(() => null),
         ]);
         const series = seriesRes.data;
         const allChapters: Chapter[] = chaptersRes.data.chapters || [];
@@ -179,13 +180,17 @@ export function SeriesCard({
 
           const startTime =
             lastProg?.chapter_id === startChapter.id ? (lastProg.current_time ?? lastProg.current_page) : 0;
-          loadAndPlay(series, startChapter, sorted, vol, startTime);
+          store.loadAndPlay(series, startChapter, sorted, vol, startTime);
+          if (seriesProgressListRes?.data?.progress_list) {
+            store.setChapterProgressList(seriesProgressListRes.data.progress_list);
+          }
         }
       } else {
         const series = item as Series;
-        const [chaptersRes, progressRes] = await Promise.all([
+        const [chaptersRes, progressRes, seriesProgressListRes] = await Promise.all([
           seriesAPI.getChapters(series.id),
           seriesAPI.getProgress(series.id),
+          seriesAPI.getProgressList(series.id).catch(() => null),
         ]);
         const allChapters: Chapter[] = chaptersRes.data.chapters || [];
         const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
@@ -198,7 +203,10 @@ export function SeriesCard({
 
           const startTime =
             progress?.chapter_id === resumeChapter.id ? (progress.current_time ?? progress.current_page) : 0;
-          loadAndPlay(series, resumeChapter, sorted, null, startTime);
+          store.loadAndPlay(series, resumeChapter, sorted, null, startTime);
+          if (seriesProgressListRes?.data?.progress_list) {
+            store.setChapterProgressList(seriesProgressListRes.data.progress_list);
+          }
         }
       }
     } catch (err) {

@@ -7,7 +7,7 @@ import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
-import { api, volumeAPI, downloadAPI, chapterAPI } from "../api/client";
+import { api, volumeAPI, downloadAPI, chapterAPI, seriesAPI } from "../api/client";
 import { formatDuration } from "../utils/progressUtils";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
@@ -246,8 +246,9 @@ export function VolumePage() {
     const isAudio = series.library_type === "audiobook" || series.has_audio;
 
     if (isAudio && chapters.length > 0) {
-      const { loadAndPlay } = useAudioPlayerStore.getState();
+      const store = useAudioPlayerStore.getState();
       const sorted = [...chapters].sort((a, b) => a.chapter_number - b.chapter_number);
+      const progressListRes = await seriesAPI.getProgressList(series.id).catch(() => null);
 
       // 진행도의 챕터 찾기, 없으면 첫 챕터
       let startChapter = sorted[0];
@@ -261,7 +262,10 @@ export function VolumePage() {
       }
 
       if (startChapter) {
-        loadAndPlay(series, startChapter, sorted, volume, startTime);
+        store.loadAndPlay(series, startChapter, sorted, volume, startTime);
+        if (progressListRes?.data?.progress_list) {
+          store.setChapterProgressList(progressListRes.data.progress_list);
+        }
       }
       return;
     }

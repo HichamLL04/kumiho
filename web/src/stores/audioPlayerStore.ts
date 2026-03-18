@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
-import type { Series, Volume, Chapter } from "../types/series";
+import type { Series, Volume, Chapter, ReadingProgress } from "../types/series";
 
 export type PlaybackStatus = "idle" | "loading" | "playing" | "paused" | "ended" | "error";
 export type PlayerMode = "fullscreen" | "sidebar" | "mini" | "hidden";
@@ -21,6 +21,7 @@ interface AudioPlayerState {
   currentVolume: Volume | null;
   currentChapter: Chapter | null;
   chapters: Chapter[];
+  chapterProgressMap: Record<string, ReadingProgress>;
 
   // Playback
   status: PlaybackStatus;
@@ -52,6 +53,7 @@ interface AudioPlayerState {
   ) => void;
   playChapter: (chapter: Chapter, startTime?: number) => void;
   setChapters: (chapters: Chapter[]) => void;
+  setChapterProgressList: (progressList: ReadingProgress[]) => void;
 
   // Actions - Playback
   play: () => void;
@@ -106,6 +108,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
       currentVolume: null,
       currentChapter: null,
       chapters: [],
+      chapterProgressMap: {},
       status: "idle",
       currentTime: 0,
       duration: 0,
@@ -124,6 +127,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
           currentVolume: volume ?? null,
           currentChapter: chapter,
           chapters: chapters ?? [],
+          chapterProgressMap: {},
           status: "loading",
           currentTime: startTime,
           duration: 0,
@@ -141,6 +145,16 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
       },
 
       setChapters: (chapters) => set({ chapters }),
+      setChapterProgressList: (progressList) => {
+        const chapterProgressMap: Record<string, ReadingProgress> = {};
+        for (const progress of progressList) {
+          const chapterID = progress.chapter_id;
+          if (chapterID) {
+            chapterProgressMap[chapterID] = progress;
+          }
+        }
+        set({ chapterProgressMap });
+      },
 
       // Playback actions
       play: () => set({ status: "playing" }),
@@ -230,6 +244,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
           currentVolume: null,
           currentChapter: null,
           chapters: [],
+          chapterProgressMap: {},
           status: "idle",
           currentTime: 0,
           duration: 0,
