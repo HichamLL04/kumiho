@@ -257,7 +257,7 @@ export function VolumePage() {
         const found = sorted.find((c) => c.id === lastProgress.chapter_id);
         if (found) {
           startChapter = found;
-          startTime = lastProgress.current_time ?? lastProgress.current_page ?? 0;
+          startTime = lastProgress.current_time ?? 0;
         }
       }
 

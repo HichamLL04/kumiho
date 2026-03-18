@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,9 +77,9 @@ func (h *AudioHandler) GetAudioStream(c *fiber.Ctx) error {
 	}
 
 	// 3. 파일 경로 확인
-	audioPath := chapter.Path
-	if !filepath.IsAbs(audioPath) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid audio path"})
+	audioPath, pathErr := resolveAudioPathWithinBase(chapter.Path, series.Path)
+	if pathErr != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "audio file not found"})
 	}
 	if !chapter.HasAudio && !isSupportedAudioPath(audioPath) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "chapter is not an audio resource"})
@@ -125,4 +126,38 @@ func (h *AudioHandler) GetAudioStream(c *fiber.Ctx) error {
 
 	// 6. Fiber의 SendFile은 내부적으로 HTTP Range를 처리함
 	return c.SendFile(audioPath)
+}
+
+func resolveAudioPathWithinBase(rawPath string, basePath string) (string, error) {
+	fullPath := filepath.Clean(rawPath)
+	baseDir := filepath.Clean(basePath)
+
+	absBaseDir, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	baseDir = absBaseDir
+
+	if filepath.IsAbs(fullPath) {
+		fullPath = filepath.Clean(fullPath)
+	} else {
+		fullPath = filepath.Join(baseDir, fullPath)
+	}
+
+	realBaseDir, err := filepath.EvalSymlinks(baseDir)
+	if err != nil {
+		return "", err
+	}
+
+	realFullPath, err := filepath.EvalSymlinks(fullPath)
+	if err != nil {
+		return "", err
+	}
+
+	rel, err := filepath.Rel(realBaseDir, realFullPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid path outside base: %s", rawPath)
+	}
+
+	return realFullPath, nil
 }

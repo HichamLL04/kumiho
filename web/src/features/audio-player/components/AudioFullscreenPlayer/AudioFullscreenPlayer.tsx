@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ListMusic, Music, Moon, Bookmark, Gauge, MoreVertical, CheckCircle2 } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
+import { formatDuration } from "../../../../utils/progressUtils";
 import { AudioControls } from "../AudioControls/AudioControls";
 import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
 import { AudioSleepTimer } from "../AudioSleepTimer/AudioSleepTimer";
@@ -11,13 +12,6 @@ import { AudioVisualizer } from "../AudioVisualizer/AudioVisualizer";
 import styles from "./AudioFullscreenPlayer.module.css";
 
 const SPEED_CYCLE = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-
-function formatDuration(seconds?: number | null): string {
-  if (!seconds || !Number.isFinite(seconds)) return "";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 export function AudioFullscreenPlayer() {
   const { t } = useTranslation();
@@ -212,7 +206,7 @@ export function AudioFullscreenPlayer() {
                 const durationLabel =
                   duration != null
                     ? hasAudioProgress
-                      ? `${formatDuration(displayCurrentTime)} / ${formatDuration(duration)}`
+                      ? `${formatDuration(displayCurrentTime ?? 0)} / ${formatDuration(duration)}`
                       : formatDuration(duration)
                     : "";
 

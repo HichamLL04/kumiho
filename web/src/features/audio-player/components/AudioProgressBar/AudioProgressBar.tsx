@@ -43,7 +43,7 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
       const pct = getPercentFromEvent(e.clientX);
       setIsDragging(true);
       setDragPercent(pct);
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      e.currentTarget.setPointerCapture(e.pointerId);
     },
     [getPercentFromEvent],
   );
@@ -64,7 +64,9 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
       const pct = getPercentFromEvent(e.clientX);
       const time = (pct / 100) * duration;
       seekTo(time);
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
     },
     [isDragging, getPercentFromEvent, duration, seekTo],
   );

@@ -11,6 +11,7 @@ export function AudioControls({ variant = "fullscreen", showChapterNav = true }:
   const status = useAudioPlayerStore((s) => s.status);
   const chapters = useAudioPlayerStore((s) => s.chapters);
   const currentChapter = useAudioPlayerStore((s) => s.currentChapter);
+  const currentTime = useAudioPlayerStore((s) => s.currentTime);
   const skipBackwardSec = useAudioPlayerStore((s) => s.settings.skipBackwardSec);
   const skipForwardSec = useAudioPlayerStore((s) => s.settings.skipForwardSec);
   const togglePlay = useAudioPlayerStore((s) => s.togglePlay);
@@ -50,7 +51,7 @@ export function AudioControls({ variant = "fullscreen", showChapterNav = true }:
         <button
           className={styles.controlBtn}
           onClick={prevChapter}
-          disabled={!hasPrev && status !== "playing"}
+          disabled={isLoading || (!hasPrev && currentTime <= 3)}
           aria-label="Previous chapter"
         >
           <SkipBack size={navIconSize} />
