@@ -22,6 +22,16 @@
   outline: none;
 }
 
+.controlBtn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.controlBtn:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .controlBtn:hover {
   color: var(--text-primary);
   filter: drop-shadow(0 0 6px var(--accent-primary));

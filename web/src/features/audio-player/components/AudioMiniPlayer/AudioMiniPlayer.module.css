@@ -96,6 +96,16 @@
   outline: none;
 }
 
+.actionBtn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.actionBtn:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .actionBtn:hover {
   color: var(--text-primary);
   filter: drop-shadow(0 0 4px var(--accent-primary));
@@ -151,6 +161,16 @@
   border-radius: 2px;
   outline: none;
   cursor: pointer;
+}
+
+.volumeSlider:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.volumeSlider:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .volumeSlider::-webkit-slider-thumb {

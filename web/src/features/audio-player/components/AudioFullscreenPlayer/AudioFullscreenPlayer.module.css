@@ -60,6 +60,16 @@
   outline: none;
 }
 
+.headerBtn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.headerBtn:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .headerBtn:hover {
   color: var(--text-primary);
   filter: drop-shadow(0 0 4px var(--accent-primary));
@@ -175,6 +185,16 @@
   outline: none;
 }
 
+.actionBtn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.actionBtn:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .actionBtn:hover {
   color: var(--text-primary);
   filter: drop-shadow(0 0 6px var(--accent-primary));
@@ -232,6 +252,16 @@
   font-size: 14px;
   transition: background 0.15s;
   outline: none;
+}
+
+.chapterItem:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.chapterItem:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .chapterItem:hover {
