@@ -66,6 +66,8 @@ export function AlertModal({
     setIsProcessing(true);
     try {
       await onConfirm();
+    } catch (error) {
+      console.error("AlertModal confirm action failed:", error);
     } finally {
       setIsProcessing(false);
     }

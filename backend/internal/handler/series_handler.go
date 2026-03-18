@@ -1729,12 +1729,7 @@ func (h *SeriesHandler) BatchGetExtensions(c *fiber.Ctx) error {
 
 // isAudioFile checks if the given path has an audio file extension
 func isAudioFile(path string) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".mp3", ".wav", ".ogg", ".flac", ".m4a":
-		return true
-	}
-	return false
+	return isSupportedAudioPath(path)
 }
 
 // ListChaptersBySeries 시리즈의 모든 챕터 목록 조회

@@ -50,7 +50,8 @@ var archiveExtensions = map[string]bool{
 
 // 지원하는 오디오 확장자
 var audioExtensions = map[string]bool{
-	".mp3": true, ".wav": true, ".ogg": true, ".flac": true, ".m4a": true,
+	".mp3": true, ".wav": true, ".ogg": true, ".oga": true, ".flac": true,
+	".m4a": true, ".m4b": true, ".aac": true, ".wma": true, ".opus": true, ".mp4": true,
 }
 
 // 완결 여부 확인을 위한 정규식
@@ -231,9 +232,9 @@ type scannedChapter struct {
 	ChapterNumber  int
 	Path           string
 	Pages          []scannedPage
-	PageCount      int      // Added for PDFs or single-file chapters
-	TotalBytes     int64    // EPUB 가상 포지션용
-	TotalPositions int      // EPUB 가상 포지션용
+	PageCount      int   // Added for PDFs or single-file chapters
+	TotalBytes     int64 // EPUB 가상 포지션용
+	TotalPositions int   // EPUB 가상 포지션용
 	HasAudio       bool
 	Duration       *float64 // 오디오 재생 시간 (초)
 }

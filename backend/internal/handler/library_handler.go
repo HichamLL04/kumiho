@@ -49,6 +49,19 @@ type CreateLibraryRequest struct {
 	ScanExcludes                 string `json:"scan_excludes"`
 }
 
+func normalizeLibraryType(value string) (string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return "book", true
+	}
+	switch normalized {
+	case "book", "audiobook":
+		return normalized, true
+	default:
+		return "", false
+	}
+}
+
 // List 모든 라이브러리 목록
 // GET /api/v1/libraries
 func (h *LibraryHandler) List(c *fiber.Ctx) error {
@@ -115,6 +128,12 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 	if req.Name == "" || req.Path == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "name and path are required",
+		})
+	}
+	libraryType, ok := normalizeLibraryType(req.LibraryType)
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid library_type",
 		})
 	}
 
@@ -255,7 +274,7 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		DefaultEpubKeyboardDir: req.DefaultEpubKeyboardDirection,
 		DefaultEpubClickDir:    req.DefaultEpubClickDirection,
 		Type:                   "LOCAL",
-		LibraryType:            req.LibraryType,
+		LibraryType:            libraryType,
 		ScanExcludes:           req.ScanExcludes,
 	}
 
@@ -497,6 +516,7 @@ type UpdateLibraryRequest struct {
 	DefaultEpubWheelDirection    string  `json:"default_epub_wheel_direction"`
 	DefaultEpubKeyboardDirection string  `json:"default_epub_keyboard_direction"`
 	DefaultEpubClickDirection    string  `json:"default_epub_click_direction"`
+	LibraryType                  string  `json:"library_type"`
 	IsVisible                    *bool   `json:"is_visible"` // Optional, pointer to distinguish false vs missing
 	ScanExcludes                 *string `json:"scan_excludes"`
 }
@@ -641,6 +661,15 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 					"error": "invalid default_epub_click_direction",
 				})
 			}
+		}
+		if req.LibraryType != "" {
+			libraryType, ok := normalizeLibraryType(req.LibraryType)
+			if !ok {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "invalid library_type",
+				})
+			}
+			library.LibraryType = libraryType
 		}
 		if req.IsVisible != nil {
 			library.IsVisible = *req.IsVisible

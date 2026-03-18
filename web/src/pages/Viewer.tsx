@@ -12,7 +12,7 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import type { Chapter } from "../types/series";
 import styles from "./Viewer.module.css";
 
-const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".m4b", ".aac", ".wma"];
+const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".oga", ".flac", ".m4a", ".m4b", ".aac", ".wma", ".opus", ".mp4"];
 
 function isAudioPath(path: string): boolean {
   const lower = path.toLowerCase();

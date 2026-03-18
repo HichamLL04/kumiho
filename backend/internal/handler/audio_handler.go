@@ -80,6 +80,12 @@ func (h *AudioHandler) GetAudioStream(c *fiber.Ctx) error {
 	if !filepath.IsAbs(audioPath) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid audio path"})
 	}
+	if !chapter.HasAudio && !isSupportedAudioPath(audioPath) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "chapter is not an audio resource"})
+	}
+	if !isSupportedAudioPath(audioPath) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "unsupported audio format"})
+	}
 
 	// 4. 파일 존재 여부 및 타입 확인
 	info, err := os.Stat(audioPath)
@@ -99,14 +105,18 @@ func (h *AudioHandler) GetAudioStream(c *fiber.Ctx) error {
 	switch ext {
 	case ".mp3":
 		c.Type("mp3")
-	case ".m4a":
+	case ".m4a", ".m4b", ".mp4":
 		c.Set("Content-Type", "audio/mp4")
+	case ".aac":
+		c.Set("Content-Type", "audio/aac")
 	case ".wav":
 		c.Type("wav")
 	case ".flac":
 		c.Set("Content-Type", "audio/flac")
 	case ".ogg", ".oga":
 		c.Type("ogg")
+	case ".wma":
+		c.Set("Content-Type", "audio/x-ms-wma")
 	case ".opus":
 		c.Set("Content-Type", "audio/opus")
 	default:
