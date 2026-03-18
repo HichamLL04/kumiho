@@ -93,11 +93,12 @@
   transition:
     background 0.15s,
     color 0.15s;
+  outline: none;
 }
 
 .actionBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
+  filter: drop-shadow(0 0 4px var(--accent-primary));
 }
 
 .playBtn {
@@ -180,4 +181,12 @@
     border-radius: 12px;
     padding: 8px 12px;
   }
+}
+
+/* Visualizer */
+.titleWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
 }

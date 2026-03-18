@@ -15,17 +15,20 @@
   padding: 8px;
   color: var(--text-secondary);
   border-radius: 50%;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
   position: relative;
+  outline: none;
 }
 
 .controlBtn:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
+  filter: drop-shadow(0 0 6px var(--accent-primary));
 }
 
 .controlBtn:active {
-  background: rgba(255, 255, 255, 0.12);
+  filter: drop-shadow(0 0 8px var(--accent-primary));
 }
 
 .controlBtn:disabled {
@@ -50,10 +53,12 @@
 .playBtn:hover {
   background: #5cc8e8;
   color: var(--bg-primary);
+  box-shadow: 0 0 15px rgba(77, 184, 217, 0.6);
 }
 
 .playBtn:active {
   background: #3fa8c4;
+  box-shadow: 0 0 10px rgba(77, 184, 217, 0.4);
 }
 
 .skipLabel {

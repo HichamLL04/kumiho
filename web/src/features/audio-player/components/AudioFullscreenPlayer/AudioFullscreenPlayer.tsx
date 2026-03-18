@@ -7,6 +7,7 @@ import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
 import { AudioSleepTimer } from "../AudioSleepTimer/AudioSleepTimer";
 import { AudioBookmarkList } from "../AudioBookmarkList/AudioBookmarkList";
 import { AudioSettingsPanel } from "../AudioSettingsPanel/AudioSettingsPanel";
+import { AudioVisualizer } from "../AudioVisualizer/AudioVisualizer";
 import styles from "./AudioFullscreenPlayer.module.css";
 
 const SPEED_CYCLE = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
@@ -102,13 +103,10 @@ export function AudioFullscreenPlayer() {
             <span className={styles.headerLabel}>
               {isPlaying ? t("audio_player.now_playing", "NOW PLAYING") : t("audio_player.paused", "PAUSED")}
             </span>
-            <div className={`${styles.visualizer} ${isPlaying ? styles.animate : ""}`}>
-              <div className={styles.visBar}></div>
-              <div className={styles.visBar}></div>
-              <div className={styles.visBar}></div>
-              <div className={styles.visBar}></div>
-              <div className={styles.visBar}></div>
-            </div>
+            <AudioVisualizer
+              variant="fullscreen"
+              isPlaying={isPlaying}
+            />
           </div>
         </div>
         <button

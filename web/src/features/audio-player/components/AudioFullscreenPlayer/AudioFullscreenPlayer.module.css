@@ -46,54 +46,6 @@
   gap: 10px;
 }
 
-.visualizer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  width: 32px;
-  height: 20px;
-}
-
-.visBar {
-  width: 4px;
-  height: 12px;
-  background: linear-gradient(180deg, #6dd5f0 0%, #a855f7 100%);
-  border-radius: 2px;
-  transform: scaleY(0.4);
-  transition: transform 0.2s ease;
-}
-
-.animate .visBar:nth-child(1) {
-  animation: equalize 0.8s infinite ease-in-out;
-}
-.animate .visBar:nth-child(2) {
-  animation: equalize 1.2s infinite ease-in-out;
-  animation-delay: -0.2s;
-}
-.animate .visBar:nth-child(3) {
-  animation: equalize 0.9s infinite ease-in-out;
-  animation-delay: -0.4s;
-}
-.animate .visBar:nth-child(4) {
-  animation: equalize 1.1s infinite ease-in-out;
-  animation-delay: -0.1s;
-}
-.animate .visBar:nth-child(5) {
-  animation: equalize 1.3s infinite ease-in-out;
-  animation-delay: -0.3s;
-}
-
-@keyframes equalize {
-  0%,
-  100% {
-    transform: scaleY(0.3);
-  }
-  50% {
-    transform: scaleY(1);
-  }
-}
-
 .headerBtn {
   display: flex;
   align-items: center;
@@ -105,10 +57,12 @@
   padding: 8px;
   border-radius: 8px;
   transition: background 0.15s;
+  outline: none;
 }
 
 .headerBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  filter: drop-shadow(0 0 4px var(--accent-primary));
 }
 
 .mainLayout {
@@ -218,10 +172,12 @@
   border-radius: 20px;
   font-size: 13px;
   transition: background 0.15s;
+  outline: none;
 }
 
 .actionBtn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-primary);
+  filter: drop-shadow(0 0 6px var(--accent-primary));
 }
 
 .actionBtnActive {
@@ -275,10 +231,12 @@
   color: var(--text-secondary);
   font-size: 14px;
   transition: background 0.15s;
+  outline: none;
 }
 
 .chapterItem:hover {
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  filter: drop-shadow(0 0 4px var(--accent-primary));
 }
 
 .chapterItemActive {

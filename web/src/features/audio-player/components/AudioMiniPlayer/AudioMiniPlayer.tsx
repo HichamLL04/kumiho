@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Play, Pause, X, Rewind, FastForward, Volume2, VolumeX, Music } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
+import { AudioVisualizer } from "../AudioVisualizer/AudioVisualizer";
 import styles from "./AudioMiniPlayer.module.css";
 
 function formatTime(seconds: number): string {
@@ -102,7 +103,13 @@ export function AudioMiniPlayer() {
           className={styles.info}
           onClick={handleExpand}
         >
-          <div className={styles.title}>{title}</div>
+          <div className={styles.titleWrapper}>
+            <div className={styles.title}>{title}</div>
+            <AudioVisualizer
+              variant="mini"
+              isPlaying={isPlaying}
+            />
+          </div>
           <div className={styles.subtitle}>{chapterTitle}</div>
         </div>
 
