@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -445,6 +445,14 @@ export function SeriesCard({
     ("has_audio" in item && item.has_audio) || ("library_type" in item && item.library_type === "audiobook");
   const showOverlayProgress =
     progressStyle === "overlay" && displayProgress !== null && (displayProgress > 0 || forceShowProgress);
+  const thumbnailSrc = useMemo(() => {
+    if (!item.thumbnail_url) return "";
+
+    const versionSource = item.updated_at || item.created_at;
+    const separator = item.thumbnail_url.includes("?") ? "&" : "?";
+    const withCacheBuster = `${item.thumbnail_url}${separator}_cb=${new Date(versionSource).getTime()}`;
+    return getAuthenticatedImageUrl(withCacheBuster);
+  }, [item.thumbnail_url, item.updated_at, item.created_at]);
   const lowerItemPath = String(item.path || "").toLowerCase();
   const isTextFile = extensionBadge === "TXT" || lowerItemPath.endsWith(".txt");
 
@@ -490,7 +498,7 @@ export function SeriesCard({
             hasAudio ? (
               <>
                 <img
-                  src={getAuthenticatedImageUrl(item.thumbnail_url)}
+                  src={thumbnailSrc}
                   alt=""
                   className={styles.seriesThumbnailBlur}
                   loading="lazy"
@@ -498,7 +506,7 @@ export function SeriesCard({
                   aria-hidden="true"
                 />
                 <img
-                  src={getAuthenticatedImageUrl(item.thumbnail_url)}
+                  src={thumbnailSrc}
                   alt={item.title}
                   className={styles.seriesThumbnailContain}
                   loading="lazy"
@@ -508,7 +516,7 @@ export function SeriesCard({
               </>
             ) : (
               <img
-                src={getAuthenticatedImageUrl(item.thumbnail_url)}
+                src={thumbnailSrc}
                 alt={item.title}
                 className={styles.seriesThumbnail}
                 loading="lazy"

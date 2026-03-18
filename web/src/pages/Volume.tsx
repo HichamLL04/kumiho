@@ -245,10 +245,18 @@ export function VolumePage() {
   const handlePlay = async () => {
     const isAudio = series.library_type === "audiobook" || series.has_audio;
 
-    if (isAudio && chapters.length > 0) {
+    if (isAudio) {
       const store = useAudioPlayerStore.getState();
-      const sorted = [...chapters].sort((a, b) => a.chapter_number - b.chapter_number);
-      const progressListRes = await seriesAPI.getProgressList(series.id).catch(() => null);
+      const [chaptersRes, progressListRes] = await Promise.all([
+        seriesAPI.getChapters(series.id),
+        seriesAPI.getProgressList(series.id).catch(() => null),
+      ]);
+      const allChapters: Chapter[] = chaptersRes.data.chapters || [];
+      const sorted = [...allChapters].sort((a, b) => a.chapter_number - b.chapter_number);
+      if (sorted.length === 0) {
+        showAlert(t("series.alert.no_readable_chapter"), "warning");
+        return;
+      }
 
       // 진행도의 챕터 찾기, 없으면 첫 챕터
       let startChapter = sorted[0];
@@ -258,6 +266,12 @@ export function VolumePage() {
         if (found) {
           startChapter = found;
           startTime = lastProgress.current_time ?? 0;
+        }
+      } else {
+        // 볼륨 페이지에서 진입 시, 해당 볼륨의 첫 챕터를 우선
+        const firstInCurrentVolume = sorted.find((c) => c.volume_id === volume.id);
+        if (firstInCurrentVolume) {
+          startChapter = firstInCurrentVolume;
         }
       }
 

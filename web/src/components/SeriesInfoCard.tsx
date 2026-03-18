@@ -183,7 +183,8 @@ export function SeriesInfoCard({
     const rawUrl = isVolumeType ? volume?.thumbnail_url || series.thumbnail_url : series.thumbnail_url;
     if (!rawUrl) return null;
 
-    const cacheBuster = `_cb=${new Date((isVolumeType ? volume?.created_at : series.updated_at) || Date.now()).getTime()}`;
+    const versionSource = isVolumeType ? volume?.updated_at || volume?.created_at : series.updated_at;
+    const cacheBuster = `_cb=${new Date(versionSource || Date.now()).getTime()}`;
     const separator = rawUrl.includes("?") ? "&" : "?";
     return getAuthenticatedImageUrl(`${rawUrl}${separator}${cacheBuster}`);
   }, [series, volume, isVolumeType]);

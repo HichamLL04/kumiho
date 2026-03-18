@@ -127,6 +127,7 @@
   background: rgba(0, 0, 0, 0.4);
   opacity: 0;
   transition: opacity 0.2s ease;
+  z-index: 2;
 }
 
 .seriesCard:hover .seriesHoverOverlay {
