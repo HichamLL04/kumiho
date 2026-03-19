@@ -284,7 +284,10 @@ export function VolumePage() {
         }
       } catch (error) {
         console.error("Failed to start audiobook playback:", error);
-        showAlert(t("series.alert.load_failed", "오디오 정보를 불러오는데 실패했습니다."), "error");
+        showAlert(
+          t("series.alert.load_failed", { defaultValue: "오디오 정보를 불러오는데 실패했습니다." }),
+          "error",
+        );
       }
       return;
     }

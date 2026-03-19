@@ -206,94 +206,94 @@ export function SeriesPage() {
         duration: state.duration,
       }),
       (audioState) => {
-      const isThisSeries = audioState.currentSeriesId === id;
-      const isActive =
-        isThisSeries &&
-        (audioState.status === "playing" || audioState.status === "paused") &&
-        audioState.playerMode !== "hidden";
+        const isThisSeries = audioState.currentSeriesId === id;
+        const isActive =
+          isThisSeries &&
+          (audioState.status === "playing" || audioState.status === "paused") &&
+          audioState.playerMode !== "hidden";
 
-      // 플레이어가 닫히거나 다른 시리즈로 전환 시 서버에서 최신 진행도 가져오기
-      if (wasPlayingRef.current && !isActive) {
-        wasPlayingRef.current = false;
-        baseListenedRef.current = null;
-        baseChapterTimeRef.current = 0;
-        currentChapterIdRef.current = null;
-        lastChapterTimeRef.current = 0;
-        lastVolumeUpdate = 0;
-        lastVolumeId = null;
-        // 서버에 저장이 완료된 후 fetch (saveProgress 네트워크 요청 대기)
-        if (refreshTimeoutRef.current) {
-          clearTimeout(refreshTimeoutRef.current);
-        }
-        refreshTimeoutRef.current = setTimeout(() => {
-          void loadData();
-          refreshTimeoutRef.current = null;
-        }, 800);
-        return;
-      }
-
-      if (!isActive) return;
-      wasPlayingRef.current = true;
-
-      const currentChapterId = audioState.currentChapterId;
-      if (currentChapterIdRef.current !== currentChapterId) {
-        if (currentChapterIdRef.current !== null) {
-          const completedDelta = Math.max(0, lastChapterTimeRef.current - baseChapterTimeRef.current);
-          baseListenedRef.current = Math.max(0, (baseListenedRef.current ?? 0) + completedDelta);
-        }
-        currentChapterIdRef.current = currentChapterId;
-
-        const serverProgress = progressRef.current;
-        const sameChapter = serverProgress?.chapter_id === currentChapterId;
-        baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
-        lastChapterTimeRef.current = audioState.currentTime;
-      } else {
-        lastChapterTimeRef.current = audioState.currentTime;
-      }
-
-      const now = Date.now();
-      if (now - lastUpdate < 5000) return;
-      lastUpdate = now;
-
-      setSummary((prev) => {
-        if (!prev) return prev;
-        // total_duration이 없으면 현재 재생 중인 챕터의 duration으로 초기화
-        const totalDur = prev.total_duration || audioState.duration;
-        if (!totalDur || totalDur <= 0) return prev;
-
-        // 첫 호출 시 서버에서 온 listened_duration을 기준값으로 저장
-        // baseChapterTime은 서버에 저장된 current_time 사용 (live state.currentTime 대신)
-        // → 서버의 listened_duration과 동일 기준점을 사용하여 delta 오차 방지
-        if (baseListenedRef.current === null) {
-          baseListenedRef.current = prev.listened_duration ?? 0;
-          const serverProgress = progressRef.current;
-          const sameChapter = serverProgress?.chapter_id === audioState.currentChapterId;
-          baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
-        }
-        const delta = Math.max(0, audioState.currentTime - baseChapterTimeRef.current);
-        const newListened = Math.max(0, (baseListenedRef.current ?? 0) + delta);
-        return {
-          ...prev,
-          total_duration: totalDur,
-          listened_duration: Math.min(newListened, totalDur),
-        };
-      });
-
-      // 현재 재생 중인 볼륨 카드의 progress_percent도 실시간 갱신
-      const currentVolumeId = audioState.currentVolumeId;
-      if (currentVolumeId && audioState.duration > 0) {
-        const nowForVolume = Date.now();
-        if (lastVolumeId === currentVolumeId && nowForVolume - lastVolumeUpdate < 1000) {
+        // 플레이어가 닫히거나 다른 시리즈로 전환 시 서버에서 최신 진행도 가져오기
+        if (wasPlayingRef.current && !isActive) {
+          wasPlayingRef.current = false;
+          baseListenedRef.current = null;
+          baseChapterTimeRef.current = 0;
+          currentChapterIdRef.current = null;
+          lastChapterTimeRef.current = 0;
+          lastVolumeUpdate = 0;
+          lastVolumeId = null;
+          // 서버에 저장이 완료된 후 fetch (saveProgress 네트워크 요청 대기)
+          if (refreshTimeoutRef.current) {
+            clearTimeout(refreshTimeoutRef.current);
+          }
+          refreshTimeoutRef.current = setTimeout(() => {
+            void loadData();
+            refreshTimeoutRef.current = null;
+          }, 800);
           return;
         }
-        lastVolumeUpdate = nowForVolume;
-        lastVolumeId = currentVolumeId;
 
-        const volumePercent = Math.min(100, (audioState.currentTime / audioState.duration) * 100);
-        setVolumes((prev) =>
-          prev.map((v) => (v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v)),
-        );
-      }
+        if (!isActive) return;
+        wasPlayingRef.current = true;
+
+        const currentChapterId = audioState.currentChapterId;
+        if (currentChapterIdRef.current !== currentChapterId) {
+          if (currentChapterIdRef.current !== null) {
+            const completedDelta = Math.max(0, lastChapterTimeRef.current - baseChapterTimeRef.current);
+            baseListenedRef.current = Math.max(0, (baseListenedRef.current ?? 0) + completedDelta);
+          }
+          currentChapterIdRef.current = currentChapterId;
+
+          const serverProgress = progressRef.current;
+          const sameChapter = serverProgress?.chapter_id === currentChapterId;
+          baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
+          lastChapterTimeRef.current = audioState.currentTime;
+        } else {
+          lastChapterTimeRef.current = audioState.currentTime;
+        }
+
+        const now = Date.now();
+        if (now - lastUpdate < 5000) return;
+        lastUpdate = now;
+
+        setSummary((prev) => {
+          if (!prev) return prev;
+          // total_duration이 없으면 현재 재생 중인 챕터의 duration으로 초기화
+          const totalDur = prev.total_duration || audioState.duration;
+          if (!totalDur || totalDur <= 0) return prev;
+
+          // 첫 호출 시 서버에서 온 listened_duration을 기준값으로 저장
+          // baseChapterTime은 서버에 저장된 current_time 사용 (live state.currentTime 대신)
+          // → 서버의 listened_duration과 동일 기준점을 사용하여 delta 오차 방지
+          if (baseListenedRef.current === null) {
+            baseListenedRef.current = prev.listened_duration ?? 0;
+            const serverProgress = progressRef.current;
+            const sameChapter = serverProgress?.chapter_id === audioState.currentChapterId;
+            baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
+          }
+          const delta = Math.max(0, audioState.currentTime - baseChapterTimeRef.current);
+          const newListened = Math.max(0, (baseListenedRef.current ?? 0) + delta);
+          return {
+            ...prev,
+            total_duration: totalDur,
+            listened_duration: Math.min(newListened, totalDur),
+          };
+        });
+
+        // 현재 재생 중인 볼륨 카드의 progress_percent도 실시간 갱신
+        const currentVolumeId = audioState.currentVolumeId;
+        if (currentVolumeId && audioState.duration > 0) {
+          const nowForVolume = Date.now();
+          if (lastVolumeId === currentVolumeId && nowForVolume - lastVolumeUpdate < 1000) {
+            return;
+          }
+          lastVolumeUpdate = nowForVolume;
+          lastVolumeId = currentVolumeId;
+
+          const volumePercent = Math.min(100, (audioState.currentTime / audioState.duration) * 100);
+          setVolumes((prev) =>
+            prev.map((v) => (v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v)),
+          );
+        }
       },
       { equalityFn: shallow },
     );
