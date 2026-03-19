@@ -18,6 +18,13 @@ func NewSeriesRepository() *SeriesRepository {
 	return &SeriesRepository{}
 }
 
+func normalizeLibraryType(libraryType sql.NullString) string {
+	if libraryType.Valid && strings.TrimSpace(libraryType.String) != "" {
+		return libraryType.String
+	}
+	return "book"
+}
+
 // Create 새 시리즈 생성
 func (r *SeriesRepository) Create(db database.Queryer, series *model.Series) error {
 	db = database.GetQueryer(db)
@@ -101,9 +108,7 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 		if ext.Valid {
 			s.Extension = ext.String
 		}
-		if libraryType.Valid {
-			s.LibraryType = libraryType.String
-		}
+		s.LibraryType = normalizeLibraryType(libraryType)
 
 		m.SeriesID = s.ID
 		if desc.Valid {
@@ -189,9 +194,7 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 		if ext.Valid {
 			s.Extension = ext.String
 		}
-		if libraryType.Valid {
-			s.LibraryType = libraryType.String
-		}
+		s.LibraryType = normalizeLibraryType(libraryType)
 
 		m.SeriesID = s.ID
 		if desc.Valid {
@@ -273,9 +276,7 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	if ext.Valid {
 		s.Extension = ext.String
 	}
-	if libraryType.Valid {
-		s.LibraryType = libraryType.String
-	}
+	s.LibraryType = normalizeLibraryType(libraryType)
 
 	m.SeriesID = s.ID
 	if desc.Valid {
@@ -355,9 +356,7 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	if ext.Valid {
 		s.Extension = ext.String
 	}
-	if libraryType.Valid {
-		s.LibraryType = libraryType.String
-	}
+	s.LibraryType = normalizeLibraryType(libraryType)
 
 	m.SeriesID = s.ID
 	if desc.Valid {

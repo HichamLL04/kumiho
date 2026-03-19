@@ -246,40 +246,45 @@ export function VolumePage() {
     const isAudio = series.library_type === "audiobook" || series.has_audio;
 
     if (isAudio) {
-      const store = useAudioPlayerStore.getState();
-      const [chaptersRes, progressListRes] = await Promise.all([
-        seriesAPI.getChapters(series.id),
-        seriesAPI.getProgressList(series.id).catch(() => null),
-      ]);
-      const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-      const sorted = allChapters;
-      if (sorted.length === 0) {
-        showAlert(t("series.alert.no_readable_chapter"), "warning");
-        return;
-      }
+      try {
+        const store = useAudioPlayerStore.getState();
+        const [chaptersRes, progressListRes] = await Promise.all([
+          seriesAPI.getChapters(series.id),
+          seriesAPI.getProgressList(series.id).catch(() => null),
+        ]);
+        const allChapters: Chapter[] = chaptersRes.data.chapters || [];
+        const sorted = allChapters;
+        if (sorted.length === 0) {
+          showAlert(t("series.alert.no_readable_chapter"), "warning");
+          return;
+        }
 
-      // 진행도의 챕터 찾기, 없으면 첫 챕터
-      let startChapter = sorted[0];
-      let startTime = 0;
-      if (lastProgress?.chapter_id) {
-        const found = sorted.find((c) => c.id === lastProgress.chapter_id);
-        if (found) {
-          startChapter = found;
-          startTime = lastProgress.current_time ?? 0;
+        // 진행도의 챕터 찾기, 없으면 첫 챕터
+        let startChapter = sorted[0];
+        let startTime = 0;
+        if (lastProgress?.chapter_id) {
+          const found = sorted.find((c) => c.id === lastProgress.chapter_id);
+          if (found) {
+            startChapter = found;
+            startTime = lastProgress.current_time ?? 0;
+          }
+        } else {
+          // 볼륨 페이지에서 진입 시, 해당 볼륨의 첫 챕터를 우선
+          const firstInCurrentVolume = sorted.find((c) => c.volume_id === volume.id);
+          if (firstInCurrentVolume) {
+            startChapter = firstInCurrentVolume;
+          }
         }
-      } else {
-        // 볼륨 페이지에서 진입 시, 해당 볼륨의 첫 챕터를 우선
-        const firstInCurrentVolume = sorted.find((c) => c.volume_id === volume.id);
-        if (firstInCurrentVolume) {
-          startChapter = firstInCurrentVolume;
-        }
-      }
 
-      if (startChapter) {
-        store.loadAndPlay(series, startChapter, sorted, volume, startTime);
-        if (progressListRes?.data?.progress_list) {
-          store.setChapterProgressList(progressListRes.data.progress_list);
+        if (startChapter) {
+          store.loadAndPlay(series, startChapter, sorted, volume, startTime);
+          if (progressListRes?.data?.progress_list) {
+            store.setChapterProgressList(progressListRes.data.progress_list);
+          }
         }
+      } catch (error) {
+        console.error("Failed to start audiobook playback:", error);
+        showAlert(t("series.alert.load_failed", "오디오 정보를 불러오는데 실패했습니다."), "error");
       }
       return;
     }
