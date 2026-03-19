@@ -27,6 +27,14 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
   );
   const currentKey = volumeId && chapterId && seriesId ? `${volumeId}:${chapterId}:${seriesId}` : null;
 
+  const resetAdjacentState = useCallback(() => {
+    setPrevChapterId(null);
+    setPrevChapterTitle(null);
+    setNextChapterId(null);
+    setNextChapterTitle(null);
+    setIsLastChapterOfVolume(false);
+  }, []);
+
   // 인접 챕터 로드
   const loadAdjacentChapters = useCallback(
     async (targetVolumeId: string, currentChapterId: string, targetSeriesId: string) => {
@@ -63,6 +71,7 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
         const currentIndex = chapters.findIndex((c) => c.id === currentChapterId);
         const currentVolIndex = volumes.findIndex((v: { id: string }) => v.id === targetVolumeId);
         if (currentVolIndex < 0 || currentIndex < 0) {
+          resetAdjacentState();
           return false;
         }
 
@@ -112,11 +121,12 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
         }
         return true;
       } catch (err) {
+        resetAdjacentState();
         console.error("인접 챕터 로드 실패:", err);
         return false;
       }
     },
-    [],
+    [resetAdjacentState],
   );
 
   // volumeId, chapterId, seriesId가 변경되면 인접 챕터 로드
@@ -127,6 +137,7 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
     const load = async () => {
       if (!requestKey || !volumeId || !chapterId || !seriesId) {
         if (!cancelled) {
+          resetAdjacentState();
           setResolvedKey(null);
         }
         return;
@@ -143,7 +154,7 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
     return () => {
       cancelled = true;
     };
-  }, [volumeId, chapterId, seriesId, loadAdjacentChapters, currentKey]);
+  }, [volumeId, chapterId, seriesId, loadAdjacentChapters, currentKey, resetAdjacentState]);
 
   return {
     nextChapterId,

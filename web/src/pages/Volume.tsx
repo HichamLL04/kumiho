@@ -253,31 +253,31 @@ export function VolumePage() {
           seriesAPI.getProgressList(series.id).catch(() => null),
         ]);
         const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-        const sorted = allChapters;
-        if (sorted.length === 0) {
+        const orderedChapters = allChapters;
+        if (orderedChapters.length === 0) {
           showAlert(t("series.alert.no_readable_chapter"), "warning");
           return;
         }
 
         // 진행도의 챕터 찾기, 없으면 첫 챕터
-        let startChapter = sorted[0];
+        let startChapter = orderedChapters[0];
         let startTime = 0;
         if (lastProgress?.chapter_id) {
-          const found = sorted.find((c) => c.id === lastProgress.chapter_id);
+          const found = orderedChapters.find((c) => c.id === lastProgress.chapter_id);
           if (found) {
             startChapter = found;
             startTime = lastProgress.current_time ?? 0;
           }
         } else {
           // 볼륨 페이지에서 진입 시, 해당 볼륨의 첫 챕터를 우선
-          const firstInCurrentVolume = sorted.find((c) => c.volume_id === volume.id);
+          const firstInCurrentVolume = orderedChapters.find((c) => c.volume_id === volume.id);
           if (firstInCurrentVolume) {
             startChapter = firstInCurrentVolume;
           }
         }
 
         if (startChapter) {
-          store.loadAndPlay(series, startChapter, sorted, volume, startTime);
+          store.loadAndPlay(series, startChapter, orderedChapters, volume, startTime);
           if (progressListRes?.data?.progress_list) {
             store.setChapterProgressList(progressListRes.data.progress_list);
           }

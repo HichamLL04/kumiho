@@ -130,6 +130,10 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
       el.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
     };
   }, [isOpen]);
 

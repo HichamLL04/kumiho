@@ -167,19 +167,19 @@ export function SeriesCard({
         ]);
         const series = seriesRes.data;
         const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-        const sorted = allChapters;
+        const orderedChapters = allChapters;
         const progressList = Array.isArray(progressRes.data) ? progressRes.data : progressRes.data?.progress_list || [];
         const lastProg = progressList[0];
 
-        if (sorted.length > 0) {
+        if (orderedChapters.length > 0) {
           const startChapter = lastProg?.chapter_id
-            ? sorted.find((c) => c.id === lastProg.chapter_id) ||
-              sorted.find((c) => c.volume_id === vol.id) ||
-              sorted[0]
-            : sorted.find((c) => c.volume_id === vol.id) || sorted[0];
+            ? orderedChapters.find((c) => c.id === lastProg.chapter_id) ||
+              orderedChapters.find((c) => c.volume_id === vol.id) ||
+              orderedChapters[0]
+            : orderedChapters.find((c) => c.volume_id === vol.id) || orderedChapters[0];
 
           const startTime = lastProg?.chapter_id === startChapter.id ? (lastProg.current_time ?? 0) : 0;
-          store.loadAndPlay(series, startChapter, sorted, vol, startTime);
+          store.loadAndPlay(series, startChapter, orderedChapters, vol, startTime);
           if (seriesProgressListRes?.data?.progress_list) {
             store.setChapterProgressList(seriesProgressListRes.data.progress_list);
           }
@@ -192,16 +192,16 @@ export function SeriesCard({
           seriesAPI.getProgressList(series.id).catch(() => null),
         ]);
         const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-        const sorted = allChapters;
+        const orderedChapters = allChapters;
         const progress = progressRes.data?.progress;
 
-        if (sorted.length > 0) {
+        if (orderedChapters.length > 0) {
           const resumeChapter = progress?.chapter_id
-            ? sorted.find((c) => c.id === progress.chapter_id) || sorted[0]
-            : sorted[0];
+            ? orderedChapters.find((c) => c.id === progress.chapter_id) || orderedChapters[0]
+            : orderedChapters[0];
 
           const startTime = progress?.chapter_id === resumeChapter.id ? (progress.current_time ?? 0) : 0;
-          store.loadAndPlay(series, resumeChapter, sorted, null, startTime);
+          store.loadAndPlay(series, resumeChapter, orderedChapters, null, startTime);
           if (seriesProgressListRes?.data?.progress_list) {
             store.setChapterProgressList(seriesProgressListRes.data.progress_list);
           }
