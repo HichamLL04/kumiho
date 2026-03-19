@@ -32,6 +32,9 @@
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
 }
 
 .cover {
@@ -54,6 +57,16 @@
   flex: 1;
   min-width: 0;
   cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.coverArea:focus-visible,
+.info:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .title {

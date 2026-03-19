@@ -103,9 +103,11 @@ export function AudioMiniPlayer() {
     >
       <div className={styles.main}>
         {/* Cover + Info (clickable to expand) */}
-        <div
+        <button
+          type="button"
           className={styles.coverArea}
           onClick={handleExpand}
+          aria-label="Expand player"
         >
           {thumbnailUrl ? (
             <img
@@ -118,11 +120,13 @@ export function AudioMiniPlayer() {
               <Music size={20} />
             </div>
           )}
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
           className={styles.info}
           onClick={handleExpand}
+          aria-label="Expand player details"
         >
           <div className={styles.titleWrapper}>
             <div className={styles.title}>{title}</div>
@@ -132,7 +136,7 @@ export function AudioMiniPlayer() {
             />
           </div>
           <div className={styles.subtitle}>{chapterTitle}</div>
-        </div>
+        </button>
 
         {/* Actions */}
         <div className={styles.actions}>
