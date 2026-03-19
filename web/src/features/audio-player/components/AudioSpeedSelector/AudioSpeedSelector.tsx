@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useId, useEffect } from "react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import styles from "./AudioSpeedSelector.module.css";
 
@@ -13,6 +14,18 @@ export function AudioSpeedSelector({ isOpen, onClose }: AudioSpeedSelectorProps)
   const { t } = useTranslation();
   const playbackRate = useAudioPlayerStore((s) => s.settings.playbackRate);
   const setPlaybackRate = useAudioPlayerStore((s) => s.setPlaybackRate);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -27,8 +40,16 @@ export function AudioSpeedSelector({ isOpen, onClose }: AudioSpeedSelectorProps)
 
   return (
     <div className={styles.overlay} onClick={handleOverlayClick}>
-      <div className={styles.modal}>
-        <div className={styles.title}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <div
+          className={styles.title}
+          id={titleId}
+        >
           {t("audio_player.playback_speed", "Playback Speed")}
         </div>
 

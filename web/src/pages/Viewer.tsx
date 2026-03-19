@@ -71,17 +71,16 @@ export function ViewerPage() {
         if (chapterProgressList) {
           store.setChapterProgressList(chapterProgressList);
         }
+        if (cancelled) return;
+        if (window.history.length > 1) {
+          navigate(-1);
+        } else if (volumeId) {
+          navigate(`/volumes/${volumeId}`, { replace: true });
+        } else {
+          navigate(`/series/${seriesId}`, { replace: true });
+        }
       } catch (err) {
         console.error("Failed to load audio player data:", err);
-      }
-
-      if (cancelled) return;
-      if (window.history.length > 1) {
-        navigate(-1);
-      } else if (volumeId) {
-        navigate(`/volumes/${volumeId}`, { replace: true });
-      } else {
-        navigate(`/series/${seriesId}`, { replace: true });
       }
     })();
 

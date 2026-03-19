@@ -94,6 +94,8 @@ export function AudioSettingsPanel({ isOpen, onClose }: AudioSettingsPanelProps)
           <button
             className={`${styles.toggle} ${autoPlayNext ? styles.toggleActive : ""}`}
             onClick={toggleAutoPlayNext}
+            role="switch"
+            aria-checked={autoPlayNext}
             aria-label="Toggle auto play next"
           />
         </div>
@@ -111,6 +113,8 @@ export function AudioSettingsPanel({ isOpen, onClose }: AudioSettingsPanelProps)
           <button
             className={`${styles.toggle} ${volumeBoost ? styles.toggleActive : ""}`}
             onClick={toggleVolumeBoost}
+            role="switch"
+            aria-checked={volumeBoost}
             aria-label="Toggle volume boost"
           />
         </div>
