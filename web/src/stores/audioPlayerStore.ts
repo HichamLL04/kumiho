@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { Series, Volume, Chapter, ReadingProgress } from "../types/series";
 
 export type PlaybackStatus = "idle" | "loading" | "playing" | "paused" | "ended" | "error";
@@ -109,7 +109,7 @@ const DEFAULT_SETTINGS: AudioPlayerSettings = {
 
 export const useAudioPlayerStore = create<AudioPlayerState>()(
   devtools(
-    (set, get) => ({
+    subscribeWithSelector((set, get) => ({
       // Initial state
       currentSeries: null,
       currentVolume: null,
@@ -269,7 +269,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
           sleepTimerMinutes: null,
           sleepTimerEndTime: null,
         }),
-    }),
+    })),
     { name: "kumiho-audio-player" },
   ),
 );

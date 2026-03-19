@@ -589,7 +589,13 @@ func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID s
 		WHERE v.series_id = ?`,
 		seriesID,
 	).Scan(&total)
-	return int(total), err
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(total) || math.IsInf(total, 0) || total < 0 {
+		return 0, nil
+	}
+	return int(math.Round(total)), nil
 }
 
 // GetReadProgressUnits 시리즈 진행률 표시용 완료량 조회

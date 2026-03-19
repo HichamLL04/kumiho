@@ -194,10 +194,22 @@ export function SeriesPage() {
     let lastUpdate = 0;
     let lastVolumeUpdate = 0;
     let lastVolumeId: string | null = null;
-    const unsub = useAudioPlayerStore.subscribe((state) => {
-      const isThisSeries = state.currentSeries?.id === id;
+    const unsub = useAudioPlayerStore.subscribe(
+      (state) => ({
+        currentSeriesId: state.currentSeries?.id ?? null,
+        status: state.status,
+        playerMode: state.playerMode,
+        currentChapterId: state.currentChapter?.id ?? null,
+        currentVolumeId: state.currentVolume?.id ?? null,
+        currentTime: state.currentTime,
+        duration: state.duration,
+      }),
+      (audioState) => {
+      const isThisSeries = audioState.currentSeriesId === id;
       const isActive =
-        isThisSeries && (state.status === "playing" || state.status === "paused") && state.playerMode !== "hidden";
+        isThisSeries &&
+        (audioState.status === "playing" || audioState.status === "paused") &&
+        audioState.playerMode !== "hidden";
 
       // 플레이어가 닫히거나 다른 시리즈로 전환 시 서버에서 최신 진행도 가져오기
       if (wasPlayingRef.current && !isActive) {
@@ -222,7 +234,7 @@ export function SeriesPage() {
       if (!isActive) return;
       wasPlayingRef.current = true;
 
-      const currentChapterId = state.currentChapter?.id ?? null;
+      const currentChapterId = audioState.currentChapterId;
       if (currentChapterIdRef.current !== currentChapterId) {
         if (currentChapterIdRef.current !== null) {
           const completedDelta = Math.max(0, lastChapterTimeRef.current - baseChapterTimeRef.current);
@@ -233,9 +245,9 @@ export function SeriesPage() {
         const serverProgress = progressRef.current;
         const sameChapter = serverProgress?.chapter_id === currentChapterId;
         baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
-        lastChapterTimeRef.current = state.currentTime;
+        lastChapterTimeRef.current = audioState.currentTime;
       } else {
-        lastChapterTimeRef.current = state.currentTime;
+        lastChapterTimeRef.current = audioState.currentTime;
       }
 
       const now = Date.now();
@@ -245,7 +257,7 @@ export function SeriesPage() {
       setSummary((prev) => {
         if (!prev) return prev;
         // total_duration이 없으면 현재 재생 중인 챕터의 duration으로 초기화
-        const totalDur = prev.total_duration || state.duration;
+        const totalDur = prev.total_duration || audioState.duration;
         if (!totalDur || totalDur <= 0) return prev;
 
         // 첫 호출 시 서버에서 온 listened_duration을 기준값으로 저장
@@ -254,10 +266,10 @@ export function SeriesPage() {
         if (baseListenedRef.current === null) {
           baseListenedRef.current = prev.listened_duration ?? 0;
           const serverProgress = progressRef.current;
-          const sameChapter = serverProgress?.chapter_id === state.currentChapter?.id;
+          const sameChapter = serverProgress?.chapter_id === audioState.currentChapterId;
           baseChapterTimeRef.current = sameChapter ? (serverProgress?.current_time ?? 0) : 0;
         }
-        const delta = Math.max(0, state.currentTime - baseChapterTimeRef.current);
+        const delta = Math.max(0, audioState.currentTime - baseChapterTimeRef.current);
         const newListened = Math.max(0, (baseListenedRef.current ?? 0) + delta);
         return {
           ...prev,
@@ -267,8 +279,8 @@ export function SeriesPage() {
       });
 
       // 현재 재생 중인 볼륨 카드의 progress_percent도 실시간 갱신
-      const currentVolumeId = state.currentVolume?.id;
-      if (currentVolumeId && state.duration > 0) {
+      const currentVolumeId = audioState.currentVolumeId;
+      if (currentVolumeId && audioState.duration > 0) {
         const nowForVolume = Date.now();
         if (lastVolumeId === currentVolumeId && nowForVolume - lastVolumeUpdate < 1000) {
           return;
@@ -276,12 +288,13 @@ export function SeriesPage() {
         lastVolumeUpdate = nowForVolume;
         lastVolumeId = currentVolumeId;
 
-        const volumePercent = Math.min(100, (state.currentTime / state.duration) * 100);
+        const volumePercent = Math.min(100, (audioState.currentTime / audioState.duration) * 100);
         setVolumes((prev) =>
           prev.map((v) => (v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v)),
         );
       }
-    });
+    },
+    );
     return () => {
       unsub();
       baseListenedRef.current = null;
