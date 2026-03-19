@@ -12,13 +12,6 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import type { Chapter, ReadingProgress } from "../types/series";
 import styles from "./Viewer.module.css";
 
-const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".oga", ".flac", ".m4a", ".m4b", ".aac", ".wma", ".opus", ".mp4"];
-
-function isAudioPath(path: string): boolean {
-  const lower = path.toLowerCase();
-  return AUDIO_EXTENSIONS.some((ext) => lower.endsWith(ext));
-}
-
 export function ViewerPage() {
   const { chapterId } = useParams<{ chapterId: string }>();
   const { t } = useTranslation();
@@ -28,8 +21,7 @@ export function ViewerPage() {
   // Fetch minimal data to route
   const loaderData = useChapterLoader({ chapterId });
 
-  const isAudio =
-    loaderData.chapter?.render_mode === "audio" || (loaderData.chapter?.path && isAudioPath(loaderData.chapter.path));
+  const isAudio = loaderData.chapter?.render_mode === "audio";
 
   useEffect(() => {
     audioRedirectDone.current = false;
@@ -39,6 +31,7 @@ export function ViewerPage() {
   useEffect(() => {
     if (!isAudio || !loaderData.chapter || !loaderData.seriesId || audioRedirectDone.current) return;
     audioRedirectDone.current = true;
+    let cancelled = false;
 
     const chapter = loaderData.chapter;
     const seriesId = loaderData.seriesId;
@@ -65,12 +58,14 @@ export function ViewerPage() {
         if (volumeId) {
           try {
             const volRes = await volumeAPI.get(volumeId);
+            if (cancelled) return;
             volume = volRes.data;
           } catch {
             /* ignore */
           }
         }
 
+        if (cancelled) return;
         const store = useAudioPlayerStore.getState();
         store.loadAndPlay(series, chapter as Chapter, chapters, volume, startTime);
         if (chapterProgressList) {
@@ -80,6 +75,7 @@ export function ViewerPage() {
         console.error("Failed to load audio player data:", err);
       }
 
+      if (cancelled) return;
       if (window.history.length > 1) {
         navigate(-1);
       } else if (volumeId) {
@@ -88,6 +84,10 @@ export function ViewerPage() {
         navigate(`/series/${seriesId}`, { replace: true });
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isAudio, loaderData.chapter, loaderData.seriesId, loaderData.volumeId, navigate]);
 
   if (isAudio) {
