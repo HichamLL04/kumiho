@@ -32,6 +32,11 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
     const idx = TIMER_OPTIONS.indexOf(sleepTimerMinutes || 30);
     return idx === -1 ? 1 : idx;
   });
+  const selectedIndexRef = useRef(selectedIndex);
+
+  useEffect(() => {
+    selectedIndexRef.current = selectedIndex;
+  }, [selectedIndex]);
 
   useEffect(() => {
     if (!sleepTimerEndTime) {
@@ -56,76 +61,76 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
 
   // Initial scroll and event listeners
   useEffect(() => {
-    if (isOpen) {
-      const el = containerRef.current;
-      if (el) {
-        el.scrollTop = selectedIndex * ITEM_HEIGHT;
-        setScrollTop(el.scrollTop);
+    if (!isOpen) return;
+    const el = containerRef.current;
+    if (!el) return;
 
-        const handleWheel = (e: WheelEvent) => {
-          e.preventDefault();
-          if (isScrollingRef.current || isDraggingRef.current) return;
+    el.scrollTop = selectedIndexRef.current * ITEM_HEIGHT;
+    setScrollTop(el.scrollTop);
 
-          const direction = e.deltaY > 0 ? 1 : -1;
-          const nextIndex = Math.min(Math.max(0, selectedIndex + direction), TIMER_OPTIONS.length - 1);
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (isScrollingRef.current || isDraggingRef.current) return;
 
-          if (nextIndex !== selectedIndex) {
-            isScrollingRef.current = true;
-            setSelectedIndex(nextIndex);
-            el.scrollTo({ top: nextIndex * ITEM_HEIGHT, behavior: "smooth" });
+      const currentIndex = selectedIndexRef.current;
+      const direction = e.deltaY > 0 ? 1 : -1;
+      const nextIndex = Math.min(Math.max(0, currentIndex + direction), TIMER_OPTIONS.length - 1);
 
-            if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-            scrollTimeoutRef.current = setTimeout(() => {
-              isScrollingRef.current = false;
-            }, 250);
-          }
-        };
+      if (nextIndex !== currentIndex) {
+        isScrollingRef.current = true;
+        setSelectedIndex(nextIndex);
+        el.scrollTo({ top: nextIndex * ITEM_HEIGHT, behavior: "smooth" });
 
-        const handleMouseMove = (e: MouseEvent) => {
-          if (!isDraggingRef.current) return;
-          const diff = startYRef.current - e.pageY;
-          el.scrollTop = startScrollTopRef.current + diff;
-        };
-
-        const handleMouseUp = () => {
-          if (!isDraggingRef.current) return;
-          isDraggingRef.current = false;
-          el.style.scrollSnapType = "y mandatory";
-          el.style.cursor = "grab";
-
-          const index = Math.round(el.scrollTop / ITEM_HEIGHT);
-          const finalIndex = Math.min(Math.max(0, index), TIMER_OPTIONS.length - 1);
-          setSelectedIndex(finalIndex);
-          el.scrollTo({ top: finalIndex * ITEM_HEIGHT, behavior: "smooth" });
-
-          window.removeEventListener("mousemove", handleMouseMove);
-          window.removeEventListener("mouseup", handleMouseUp);
-        };
-
-        const handleMouseDown = (e: MouseEvent) => {
-          isDraggingRef.current = true;
-          startYRef.current = e.pageY;
-          startScrollTopRef.current = el.scrollTop;
-          el.style.scrollSnapType = "none";
-          el.style.cursor = "grabbing";
-
-          window.addEventListener("mousemove", handleMouseMove);
-          window.addEventListener("mouseup", handleMouseUp);
-        };
-
-        el.addEventListener("wheel", handleWheel, { passive: false });
-        el.addEventListener("mousedown", handleMouseDown);
-        el.style.cursor = "grab";
-
-        return () => {
-          el.removeEventListener("wheel", handleWheel);
-          el.removeEventListener("mousedown", handleMouseDown);
-          window.removeEventListener("mousemove", handleMouseMove);
-          window.removeEventListener("mouseup", handleMouseUp);
-        };
+        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = setTimeout(() => {
+          isScrollingRef.current = false;
+        }, 250);
       }
-    }
-  }, [isOpen, selectedIndex]);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const diff = startYRef.current - e.pageY;
+      el.scrollTop = startScrollTopRef.current + diff;
+    };
+
+    const handleMouseUp = () => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      el.style.scrollSnapType = "y mandatory";
+      el.style.cursor = "grab";
+
+      const index = Math.round(el.scrollTop / ITEM_HEIGHT);
+      const finalIndex = Math.min(Math.max(0, index), TIMER_OPTIONS.length - 1);
+      setSelectedIndex(finalIndex);
+      el.scrollTo({ top: finalIndex * ITEM_HEIGHT, behavior: "smooth" });
+
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      isDraggingRef.current = true;
+      startYRef.current = e.pageY;
+      startScrollTopRef.current = el.scrollTop;
+      el.style.scrollSnapType = "none";
+      el.style.cursor = "grabbing";
+
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    el.addEventListener("mousedown", handleMouseDown);
+    el.style.cursor = "grab";
+
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+      el.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

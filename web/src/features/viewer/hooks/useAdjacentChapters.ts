@@ -1,6 +1,6 @@
 // 인접 챕터 탐색 훅
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { seriesAPI } from "../../../api/client";
 import type { Chapter, AdjacentChapterInfo } from "../types";
 
@@ -22,20 +22,31 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
   const [prevChapterTitle, setPrevChapterTitle] = useState<string | null>(null);
   const [isLastChapterOfVolume, setIsLastChapterOfVolume] = useState(false);
   const [resolvedKey, setResolvedKey] = useState<string | null>(null);
+  const seriesCacheRef = useRef<Map<string, { volumes: { id: string; volume_number: number; title: string }[]; chapters: Chapter[] }>>(
+    new Map(),
+  );
   const currentKey = volumeId && chapterId && seriesId ? `${volumeId}:${chapterId}:${seriesId}` : null;
 
   // 인접 챕터 로드
   const loadAdjacentChapters = useCallback(
     async (targetVolumeId: string, currentChapterId: string, targetSeriesId: string) => {
       try {
-        const [volumesRes, chaptersRes] = await Promise.all([
-          seriesAPI.getVolumes(targetSeriesId),
-          seriesAPI.getChapters(targetSeriesId),
-        ]);
-        const volumes = (volumesRes.data.volumes || []).sort(
-          (a: { volume_number: number }, b: { volume_number: number }) => a.volume_number - b.volume_number,
-        );
-        const allChapters = chaptersRes.data.chapters || [];
+        let cached = seriesCacheRef.current.get(targetSeriesId);
+        if (!cached) {
+          const [volumesRes, chaptersRes] = await Promise.all([
+            seriesAPI.getVolumes(targetSeriesId),
+            seriesAPI.getChapters(targetSeriesId),
+          ]);
+          cached = {
+            volumes: (volumesRes.data.volumes || []).sort(
+              (a: { volume_number: number }, b: { volume_number: number }) => a.volume_number - b.volume_number,
+            ),
+            chapters: chaptersRes.data.chapters || [],
+          };
+          seriesCacheRef.current.set(targetSeriesId, cached);
+        }
+        const volumes = cached.volumes;
+        const allChapters = cached.chapters;
         const chaptersByVolume = new Map<string, Chapter[]>();
 
         for (const chapter of allChapters) {

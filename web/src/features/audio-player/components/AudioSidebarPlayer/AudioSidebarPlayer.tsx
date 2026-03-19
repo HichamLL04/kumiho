@@ -7,14 +7,8 @@ import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
 import { AudioSleepTimer } from "../AudioSleepTimer/AudioSleepTimer";
 import { AudioBookmarkList } from "../AudioBookmarkList/AudioBookmarkList";
 import { AudioSpeedSelector } from "../AudioSpeedSelector/AudioSpeedSelector";
+import { formatDuration } from "../../../../utils/progressUtils";
 import styles from "./AudioSidebarPlayer.module.css";
-
-function formatDuration(seconds?: number | null): string {
-  if (!seconds || !Number.isFinite(seconds)) return "";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 export function AudioSidebarPlayer() {
   const { t } = useTranslation();
