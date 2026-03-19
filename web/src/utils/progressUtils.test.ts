@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateProgressDisplay } from "./progressUtils";
+import { calculateProgressDisplay, formatDuration } from "./progressUtils";
 import type { Series, Volume, ReadingProgress } from "../types/series";
 
 describe("Progress Utilities", () => {
@@ -16,6 +16,21 @@ describe("Progress Utilities", () => {
   };
 
   const mockT = (key: string) => key;
+
+  describe("formatDuration", () => {
+    it("should return 0:00 for negative and NaN input", () => {
+      expect(formatDuration(-1)).toBe("0:00");
+      expect(formatDuration(Number.NaN)).toBe("0:00");
+    });
+
+    it("should format under 1 hour as M:SS", () => {
+      expect(formatDuration(65)).toBe("1:05");
+    });
+
+    it("should format over 1 hour as H:MM:SS", () => {
+      expect(formatDuration(3661)).toBe("1:01:01");
+    });
+  });
 
   describe("calculateProgressDisplay - Volume", () => {
     it("should return 100% if volume is completed", () => {
@@ -138,6 +153,54 @@ describe("Progress Utilities", () => {
       const result = calculateProgressDisplay({ type: "series", series: mockSeries, t: mockT });
       expect(result.percent).toBe(0);
       expect(result.label).toBe("series.info.not_read");
+    });
+
+    it("should calculate audiobook series progress with duration summary", () => {
+      const audioSeries: Series = { ...mockSeries, library_type: "audiobook" };
+      const result = calculateProgressDisplay({
+        type: "series",
+        series: audioSeries,
+        summary: {
+          current_volume_number: 1,
+          total_volumes: 3,
+          current_chapter_number: 2,
+          total_chapters: 10,
+          total_duration: 120,
+          listened_duration: 30,
+        },
+        t: mockT,
+      });
+      expect(result.percent).toBe(25);
+      expect(result.label).toBe("25% (0:30 / 2:00)");
+    });
+  });
+
+  describe("calculateProgressDisplay - Audiobook Volume", () => {
+    it("should calculate volume progress by current_time and duration", () => {
+      const audioSeries: Series = { ...mockSeries, library_type: "audiobook" };
+      const volume: Volume = {
+        id: "v1",
+        series_id: "s1",
+        title: "Vol 1",
+        volume_number: 1,
+        path: "",
+        created_at: "",
+      };
+      const progress: ReadingProgress = {
+        id: "p1",
+        user_id: "u1",
+        series_id: "s1",
+        chapter_id: "c1",
+        current_page: 0,
+        total_pages: 0,
+        progress_percent: 0,
+        updated_at: "",
+        current_time: 45,
+        duration: 180,
+      };
+      const result = calculateProgressDisplay({ type: "volume", series: audioSeries, volume, progress, t: mockT });
+      expect(result.percent).toBe(25);
+      expect(result.label).toBe("25% (0:45 / 3:00)");
     });
   });
 });

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import { bookmarkAPI } from "../../../../api/client";
+import { formatDuration } from "../../../../utils/progressUtils";
 import styles from "./AudioBookmarkList.module.css";
 
 interface Bookmark {
@@ -16,17 +17,6 @@ interface Bookmark {
 interface AudioBookmarkListProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-function formatTime(seconds?: number): string {
-  if (!seconds || !Number.isFinite(seconds)) return "0:00";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) {
-    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  }
-  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
@@ -65,7 +55,7 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
     if (!currentSeries || !currentChapter) return;
 
     const chapterTitle = currentChapter.title || `Chapter ${currentChapter.chapter_number}`;
-    const timeStr = formatTime(currentTime);
+    const timeStr = formatDuration(currentTime);
 
     try {
       await bookmarkAPI.create({
@@ -131,9 +121,17 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
                 key={bookmark.id}
                 className={styles.item}
                 onClick={() => handleSeek(bookmark)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleSeek(bookmark);
+                  }
+                }}
               >
                 <span className={styles.itemTime}>
-                  {formatTime(bookmark.current_time)}
+                  {formatDuration(bookmark.current_time ?? 0)}
                 </span>
                 <div className={styles.itemInfo}>
                   <div className={styles.itemTitle}>{bookmark.title}</div>

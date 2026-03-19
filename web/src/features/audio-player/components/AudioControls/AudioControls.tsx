@@ -83,7 +83,7 @@ export function AudioControls({ variant = "fullscreen", showChapterNav = true }:
         <button
           className={styles.controlBtn}
           onClick={nextChapter}
-          disabled={!hasNext}
+          disabled={isLoading || !hasNext}
           aria-label="Next chapter"
         >
           <SkipForward size={navIconSize} />

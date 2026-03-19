@@ -17,8 +17,9 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
   const [isDragging, setIsDragging] = useState(false);
   const [dragPercent, setDragPercent] = useState(0);
 
-  const percent = isDragging ? dragPercent : duration > 0 ? (currentTime / duration) * 100 : 0;
-  const remaining = duration - currentTime;
+  const clampedCurrentTime = Math.max(0, Math.min(currentTime, duration > 0 ? duration : currentTime));
+  const percent = isDragging ? dragPercent : duration > 0 ? Math.max(0, Math.min(100, (clampedCurrentTime / duration) * 100)) : 0;
+  const remaining = Math.max(0, duration - clampedCurrentTime);
 
   const getPercentFromEvent = useCallback((clientX: number): number => {
     const track = trackRef.current;
@@ -79,7 +80,7 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
       </div>
       {showTime && (
         <div className={styles.timeRow}>
-          <span className={styles.time}>{formatDuration(currentTime)}</span>
+          <span className={styles.time}>{formatDuration(clampedCurrentTime)}</span>
           <span className={styles.time}>-{formatDuration(remaining)}</span>
         </div>
       )}

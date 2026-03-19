@@ -5,18 +5,8 @@ import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
 import { AudioVisualizer } from "../AudioVisualizer/AudioVisualizer";
 import { AudioControls } from "../AudioControls/AudioControls";
 import { getAuthenticatedImageUrl } from "../../../../utils/image";
+import { formatDuration } from "../../../../utils/progressUtils";
 import styles from "./AudioMiniPlayer.module.css";
-
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) {
-    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  }
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 export function AudioMiniPlayer() {
   const playerMode = useAudioPlayerStore((s) => s.playerMode);
@@ -167,7 +157,7 @@ export function AudioMiniPlayer() {
           />
         </div>
         <span className={styles.timeLabel}>
-          {formatTime(currentTime)} / {formatTime(duration)}
+          {formatDuration(currentTime)} / {formatDuration(duration)}
         </span>
       </div>
     </div>
