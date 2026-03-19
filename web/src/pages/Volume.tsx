@@ -469,7 +469,7 @@ export function VolumePage() {
                       <span className={styles.chapterTitle}>{chapter.title}</span>
                       <span className={styles.chapterPages}>
                         {chapter.has_audio && chapter.duration
-                          ? chapterProgress?.current_time
+                          ? typeof chapterProgress?.current_time === "number"
                             ? `${formatDuration(chapterProgress.current_time)} / ${formatDuration(chapter.duration)}`
                             : formatDuration(chapter.duration)
                           : chapterProgress

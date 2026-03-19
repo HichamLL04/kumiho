@@ -20,6 +20,7 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
 
   const trackRef = useRef<HTMLDivElement>(null);
   const volumeRef = useRef<HTMLDivElement>(null);
+  const volumeValueRef = useRef(volume);
   const [isDragging, setIsDragging] = useState(false);
   const [dragPercent, setDragPercent] = useState(0);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
@@ -85,6 +86,10 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
   }, []);
 
   useEffect(() => {
+    volumeValueRef.current = volume;
+  }, [volume]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (volumeRef.current && !volumeRef.current.contains(event.target as Node)) {
         setShowVolumeSlider(false);
@@ -102,12 +107,14 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      setVolume(Math.min(1, Math.max(0, volume + delta)));
+      const nextVolume = Math.min(1, Math.max(0, volumeValueRef.current + delta));
+      volumeValueRef.current = nextVolume;
+      setVolume(nextVolume);
     };
 
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
-  }, [volume, setVolume, variant]);
+  }, [setVolume, variant]);
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setVolume(parseFloat(e.target.value));

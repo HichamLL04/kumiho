@@ -199,10 +199,12 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
           >
             <div className={styles.spacer} />
             {TIMER_OPTIONS.map((mins, idx) => (
-              <div
+              <button
                 key={mins}
+                type="button"
                 className={`${styles.option} ${selectedIndex === idx ? styles.optionActive : ""}`}
                 style={getOptionStyle(idx)}
+                aria-pressed={selectedIndex === idx}
                 onClick={() => {
                   setSelectedIndex(idx);
                   containerRef.current?.scrollTo({
@@ -212,7 +214,7 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
                 }}
               >
                 {t("audio_player.sleep_timer_minutes", "{{count}}분", { count: mins })}
-              </div>
+              </button>
             ))}
             <div className={styles.spacer} />
           </div>

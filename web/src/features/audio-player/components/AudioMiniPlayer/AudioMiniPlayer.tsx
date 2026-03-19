@@ -23,6 +23,7 @@ export function AudioMiniPlayer() {
   const close = useAudioPlayerStore((s) => s.close);
   const containerRef = useRef<HTMLDivElement>(null);
   const volumeGroupRef = useRef<HTMLDivElement>(null);
+  const volumeValueRef = useRef(volume);
 
   // 썸네일 URL (캐시 버스팅 포함)
   const thumbnailUrl = useMemo(() => {
@@ -60,6 +61,10 @@ export function AudioMiniPlayer() {
     };
   }, [isVisible]);
 
+  useEffect(() => {
+    volumeValueRef.current = volume;
+  }, [volume]);
+
   // Handle wheel events with non-passive listener to block page scroll
   useEffect(() => {
     const el = volumeGroupRef.current;
@@ -68,12 +73,14 @@ export function AudioMiniPlayer() {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      setVolume(Math.min(1, Math.max(0, volume + delta)));
+      const nextVolume = Math.min(1, Math.max(0, volumeValueRef.current + delta));
+      volumeValueRef.current = nextVolume;
+      setVolume(nextVolume);
     };
 
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
-  }, [volume, setVolume, isVisible]);
+  }, [setVolume, isVisible]);
 
   if (!isVisible) return null;
 
