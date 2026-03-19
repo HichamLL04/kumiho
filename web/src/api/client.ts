@@ -334,13 +334,7 @@ export const chapterAPI = {
     api.post(`/series/${seriesId}/chapters/${chapterId}/complete-previous`),
   deleteProgress: (chapterId: string) => api.delete(`/chapters/${chapterId}/progress`),
   getBGM: (chapterId: string) => api.get<{ exists: boolean; url?: string }>(`/chapters/${chapterId}/bgm`),
-  getAudioUrl: (chapterId: string) => {
-    const baseUrl = `${API_BASE_URL}/chapters/${chapterId}/audio`;
-    const token = localStorage.getItem("access_token");
-    if (!token) return baseUrl;
-    const separator = baseUrl.includes("?") ? "&" : "?";
-    return `${baseUrl}${separator}token=${token}`;
-  },
+  getAudioUrl: (chapterId: string) => `${API_BASE_URL}/chapters/${chapterId}/audio`,
 };
 
 // Bookmark API

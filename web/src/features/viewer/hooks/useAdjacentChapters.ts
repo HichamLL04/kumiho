@@ -22,9 +22,15 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
   const [prevChapterTitle, setPrevChapterTitle] = useState<string | null>(null);
   const [isLastChapterOfVolume, setIsLastChapterOfVolume] = useState(false);
   const [resolvedKey, setResolvedKey] = useState<string | null>(null);
-  const seriesCacheRef = useRef<Map<string, { volumes: { id: string; volume_number: number; title: string }[]; chapters: Chapter[] }>>(
-    new Map(),
-  );
+  const seriesCacheRef = useRef<
+    Map<
+      string,
+      {
+        volumes: { id: string; volume_number: number; title: string }[];
+        chaptersByVolume: Map<string, Chapter[]>;
+      }
+    >
+  >(new Map());
   const currentKey = volumeId && chapterId && seriesId ? `${volumeId}:${chapterId}:${seriesId}` : null;
 
   const resetAdjacentState = useCallback(() => {
@@ -45,27 +51,29 @@ export function useAdjacentChapters({ volumeId, chapterId, seriesId }: UseAdjace
             seriesAPI.getVolumes(targetSeriesId),
             seriesAPI.getChapters(targetSeriesId),
           ]);
+          const chaptersByVolume = new Map<string, Chapter[]>();
+          const allChapters = chaptersRes.data.chapters || [];
+          for (const chapter of allChapters) {
+            const chapterList = chaptersByVolume.get(chapter.volume_id);
+            if (chapterList) {
+              chapterList.push(chapter);
+            } else {
+              chaptersByVolume.set(chapter.volume_id, [chapter]);
+            }
+          }
+          for (const chapterList of chaptersByVolume.values()) {
+            chapterList.sort((a, b) => a.chapter_number - b.chapter_number);
+          }
           cached = {
             volumes: (volumesRes.data.volumes || []).sort(
               (a: { volume_number: number }, b: { volume_number: number }) => a.volume_number - b.volume_number,
             ),
-            chapters: chaptersRes.data.chapters || [],
+            chaptersByVolume,
           };
           seriesCacheRef.current.set(targetSeriesId, cached);
         }
         const volumes = cached.volumes;
-        const allChapters = cached.chapters;
-        const chaptersByVolume = new Map<string, Chapter[]>();
-
-        for (const chapter of allChapters) {
-          if (!chaptersByVolume.has(chapter.volume_id)) {
-            chaptersByVolume.set(chapter.volume_id, []);
-          }
-          chaptersByVolume.get(chapter.volume_id)!.push(chapter);
-        }
-        for (const chapterList of chaptersByVolume.values()) {
-          chapterList.sort((a, b) => a.chapter_number - b.chapter_number);
-        }
+        const chaptersByVolume = cached.chaptersByVolume;
 
         const chapters = chaptersByVolume.get(targetVolumeId) || [];
         const currentIndex = chapters.findIndex((c) => c.id === currentChapterId);
