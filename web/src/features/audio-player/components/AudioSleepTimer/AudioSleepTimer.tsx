@@ -42,7 +42,9 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
     if (!isOpen) return;
     const syncedIndex = TIMER_OPTIONS.indexOf(sleepTimerMinutes || 30);
     const nextIndex = syncedIndex === -1 ? 1 : syncedIndex;
-    setSelectedIndex(nextIndex);
+    const syncTimer = window.setTimeout(() => {
+      setSelectedIndex(nextIndex);
+    }, 0);
     selectedIndexRef.current = nextIndex;
 
     const el = containerRef.current;
@@ -50,6 +52,9 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
       el.scrollTop = nextIndex * ITEM_HEIGHT;
       setScrollTop(el.scrollTop);
     }
+    return () => {
+      window.clearTimeout(syncTimer);
+    };
   }, [isOpen, sleepTimerMinutes]);
 
   useEffect(() => {
