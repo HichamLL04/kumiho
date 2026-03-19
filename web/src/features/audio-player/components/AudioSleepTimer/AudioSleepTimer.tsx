@@ -39,6 +39,20 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
   }, [selectedIndex]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const syncedIndex = TIMER_OPTIONS.indexOf(sleepTimerMinutes || 30);
+    const nextIndex = syncedIndex === -1 ? 1 : syncedIndex;
+    setSelectedIndex(nextIndex);
+    selectedIndexRef.current = nextIndex;
+
+    const el = containerRef.current;
+    if (el) {
+      el.scrollTop = nextIndex * ITEM_HEIGHT;
+      setScrollTop(el.scrollTop);
+    }
+  }, [isOpen, sleepTimerMinutes]);
+
+  useEffect(() => {
     if (!sleepTimerEndTime) {
       const t = setTimeout(() => setRemainingText(""), 0);
       return () => clearTimeout(t);
