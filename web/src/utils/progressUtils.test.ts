@@ -173,6 +173,25 @@ describe("Progress Utilities", () => {
       expect(result.percent).toBe(25);
       expect(result.label).toBe("25% (0:30 / 2:00)");
     });
+
+    it("should clamp listened duration to total duration in audiobook series label", () => {
+      const audioSeries: Series = { ...mockSeries, library_type: "audiobook" };
+      const result = calculateProgressDisplay({
+        type: "series",
+        series: audioSeries,
+        summary: {
+          current_volume_number: 1,
+          total_volumes: 3,
+          current_chapter_number: 2,
+          total_chapters: 10,
+          total_duration: 120,
+          listened_duration: 121,
+        },
+        t: mockT,
+      });
+      expect(result.percent).toBe(100);
+      expect(result.label).toBe("100% (2:00 / 2:00)");
+    });
   });
 
   describe("calculateProgressDisplay - Audiobook Volume", () => {

@@ -39,7 +39,7 @@ export function calculateProgressDisplay(params: {
 
   // 오디오북 시리즈: 시간 기반 진행도
   if (!isVolumeType && isAudiobook && summary?.total_duration && summary.total_duration > 0) {
-    const listened = summary.listened_duration || 0;
+    const listened = Math.min(summary.listened_duration || 0, summary.total_duration);
     const total = summary.total_duration;
     const percent = Math.min(100, Math.max(0, (listened / total) * 100));
     const p = Math.floor(percent);
