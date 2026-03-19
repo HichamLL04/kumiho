@@ -96,7 +96,7 @@ func main() {
 	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo, viewerSessionRepo)
 	audioHandler := handler.NewAudioHandler(chapterRepo, volumeRepo, seriesRepo, authService)
 	bookmarkRepo := repository.NewBookmarkRepository()
-	bookmarkHandler := handler.NewBookmarkHandler(bookmarkRepo, seriesRepo, authService)
+	bookmarkHandler := handler.NewBookmarkHandler(bookmarkRepo, seriesRepo, volumeRepo, chapterRepo, authService)
 	sseHandler := handler.NewSSEHandler(hub)
 
 	// 미들웨어 초기화

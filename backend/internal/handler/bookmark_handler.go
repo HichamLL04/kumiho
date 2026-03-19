@@ -15,6 +15,8 @@ import (
 type BookmarkHandler struct {
 	bookmarkRepo *repository.BookmarkRepository
 	seriesRepo   *repository.SeriesRepository
+	volumeRepo   *repository.VolumeRepository
+	chapterRepo  *repository.ChapterRepository
 	authService  *service.AuthService
 }
 
@@ -27,11 +29,15 @@ var (
 func NewBookmarkHandler(
 	bookmarkRepo *repository.BookmarkRepository,
 	seriesRepo *repository.SeriesRepository,
+	volumeRepo *repository.VolumeRepository,
+	chapterRepo *repository.ChapterRepository,
 	authService *service.AuthService,
 ) *BookmarkHandler {
 	return &BookmarkHandler{
 		bookmarkRepo: bookmarkRepo,
 		seriesRepo:   seriesRepo,
+		volumeRepo:   volumeRepo,
+		chapterRepo:  chapterRepo,
 		authService:  authService,
 	}
 }
@@ -92,6 +98,38 @@ func (h *BookmarkHandler) writeSeriesAccessError(c *fiber.Ctx, err error) error 
 	}
 }
 
+func (h *BookmarkHandler) validateBookmarkTargets(seriesID string, volumeID, chapterID *string) error {
+	if chapterID != nil && *chapterID != "" {
+		chapter, err := h.chapterRepo.FindByID(nil, *chapterID)
+		if err != nil || chapter == nil {
+			return errors.New("invalid chapter_id")
+		}
+
+		volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+		if err != nil || volume == nil {
+			return errors.New("invalid chapter_id")
+		}
+		if volume.SeriesID != seriesID {
+			return errors.New("chapter_id does not belong to series_id")
+		}
+		if volumeID != nil && *volumeID != "" && chapter.VolumeID != *volumeID {
+			return errors.New("chapter_id does not belong to volume_id")
+		}
+	}
+
+	if volumeID != nil && *volumeID != "" {
+		volume, err := h.volumeRepo.FindByID(nil, *volumeID)
+		if err != nil || volume == nil {
+			return errors.New("invalid volume_id")
+		}
+		if volume.SeriesID != seriesID {
+			return errors.New("volume_id does not belong to series_id")
+		}
+	}
+
+	return nil
+}
+
 // CreateBookmark 새 북마크 생성
 // POST /api/v1/bookmarks
 func (h *BookmarkHandler) CreateBookmark(c *fiber.Ctx) error {
@@ -108,6 +146,9 @@ func (h *BookmarkHandler) CreateBookmark(c *fiber.Ctx) error {
 	// 시리즈 존재 + 라이브러리 접근 권한 확인
 	if _, err := h.checkSeriesAccess(c, req.SeriesID, userID); err != nil {
 		return h.writeSeriesAccessError(c, err)
+	}
+	if err := h.validateBookmarkTargets(req.SeriesID, req.VolumeID, req.ChapterID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	bookmark := &model.Bookmark{

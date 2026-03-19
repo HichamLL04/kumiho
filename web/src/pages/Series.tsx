@@ -388,6 +388,10 @@ export function SeriesPage() {
                   ]);
                   const allChapters: Chapter[] = chaptersRes.data.chapters || [];
                   const sorted = allChapters;
+                  if (sorted.length === 0) {
+                    showAlert(t("series.alert.no_readable_chapter"), "warning");
+                    return;
+                  }
 
                   // 진행도의 챕터 찾기, 없으면 첫 챕터
                   let startChapter = sorted[0];
