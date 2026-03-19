@@ -446,8 +446,10 @@ export function SeriesCard({
     if (!item.thumbnail_url) return "";
 
     const versionSource = item.updated_at || item.created_at;
+    const parsedTime = Date.parse(versionSource);
+    const cacheBuster = Number.isFinite(parsedTime) ? parsedTime : 0;
     const separator = item.thumbnail_url.includes("?") ? "&" : "?";
-    const withCacheBuster = `${item.thumbnail_url}${separator}_cb=${new Date(versionSource).getTime()}`;
+    const withCacheBuster = `${item.thumbnail_url}${separator}_cb=${cacheBuster}`;
     return getAuthenticatedImageUrl(withCacheBuster);
   }, [item.thumbnail_url, item.updated_at, item.created_at]);
   const lowerItemPath = String(item.path || "").toLowerCase();

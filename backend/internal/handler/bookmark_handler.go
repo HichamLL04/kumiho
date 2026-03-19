@@ -171,7 +171,8 @@ func (h *BookmarkHandler) UpdateBookmark(c *fiber.Ctx) error {
 	}
 
 	if bookmark.UserID != userID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
+		// 북마크 ID 존재 여부 노출 방지를 위해 404로 통일
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "bookmark not found"})
 	}
 
 	bookmark.Title = req.Title
@@ -196,7 +197,8 @@ func (h *BookmarkHandler) DeleteBookmark(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "bookmark not found"})
 	}
 	if bookmark.UserID != userID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
+		// 북마크 ID 존재 여부 노출 방지를 위해 404로 통일
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "bookmark not found"})
 	}
 
 	if err := h.bookmarkRepo.Delete(nil, id, userID); err != nil {
