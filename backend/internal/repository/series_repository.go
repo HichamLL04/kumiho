@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"math"
 	"strings"
 	"time"
 
@@ -627,7 +628,13 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 		FROM completed_units, inprogress_units`,
 		seriesID, userID, userID, seriesID,
 	).Scan(&read)
-	return int(read), err
+	if err != nil {
+		return 0, err
+	}
+	if read < 0 {
+		return 0, nil
+	}
+	return int(math.Round(read)), nil
 }
 
 // Search 검색어로 시리즈 조회

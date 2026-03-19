@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -74,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 33
+const latestMigrationVersion = 34
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -423,6 +424,7 @@ func Migrate() error {
 		{31, "세로 복원용 앵커 위치 컬럼 추가", migrateProgressRestorePosition},
 		{32, "챕터별 has_audio 컬럼 추가", migrateChaptersHasAudio},
 		{33, "오디오북 관련 컬럼 추가", migrateAudiobookColumns},
+		{34, "오디오 진행시간 문자열 정규화", migrateAudioProgressTimeFormat},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -713,6 +715,18 @@ func migrateReadingProgress() error {
 		return nil
 	}
 
+	// 과거 스키마 호환:
+	// 일부 DB는 reading_progress에 current_time/duration 컬럼이 없을 수 있다.
+	// 이 경우 데이터 복사 시 0.0으로 대체해서 마이그레이션 실패를 방지한다.
+	currentTimeExpr := "current_time"
+	if !columnExists("reading_progress", "current_time") {
+		currentTimeExpr = "0.0 AS current_time"
+	}
+	durationExpr := "duration"
+	if !columnExists("reading_progress", "duration") {
+		durationExpr = "0.0 AS duration"
+	}
+
 	ctx := context.Background()
 	conn, err := DB.Conn(ctx)
 	if err != nil {
@@ -752,15 +766,17 @@ func migrateReadingProgress() error {
 		return fmt.Errorf("create reading_progress_new: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	insertQuery := fmt.Sprintf(`
 		INSERT OR IGNORE INTO reading_progress_new (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, current_time, duration)
-		SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, current_time, duration
+		SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, %s, %s
 		FROM (
 			SELECT *, ROW_NUMBER() OVER(PARTITION BY user_id, series_id ORDER BY updated_at DESC, id DESC) as rn
 			FROM reading_progress
 		) AS rp
 		WHERE rn = 1
-	`); err != nil {
+	`, currentTimeExpr, durationExpr)
+
+	if _, err := tx.ExecContext(ctx, insertQuery); err != nil {
 		return fmt.Errorf("copy data to reading_progress_new: %w", err)
 	}
 
@@ -1400,4 +1416,117 @@ func migrateAudiobookColumns() error {
 		return err
 	}
 	return addColumn("reading_progress", "duration", "REAL DEFAULT 0.0")
+}
+
+// #34 migrateAudioProgressTimeFormat reading_progress.current_time/duration의 문자열 시간값을 초 단위 숫자로 정규화
+func migrateAudioProgressTimeFormat() error {
+	if !columnExists("reading_progress", "current_time") && !columnExists("reading_progress", "duration") {
+		return nil
+	}
+
+	ctx := context.Background()
+	tx, err := DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("start transaction for audio progress time normalize: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, current_time, duration
+		FROM reading_progress
+		WHERE typeof(current_time) = 'text' OR typeof(duration) = 'text'
+	`)
+	if err != nil {
+		return fmt.Errorf("query legacy audio time rows: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var id string
+		var rawCurrentTime interface{}
+		var rawDuration interface{}
+		if err := rows.Scan(&id, &rawCurrentTime, &rawDuration); err != nil {
+			return fmt.Errorf("scan legacy audio time row: %w", err)
+		}
+
+		if parsed, ok := parseLegacyTimeToSeconds(rawCurrentTime); ok {
+			if _, err := tx.ExecContext(ctx, `UPDATE reading_progress SET current_time = ? WHERE id = ?`, parsed, id); err != nil {
+				return fmt.Errorf("normalize current_time for %s: %w", id, err)
+			}
+		}
+		if parsed, ok := parseLegacyTimeToSeconds(rawDuration); ok {
+			if _, err := tx.ExecContext(ctx, `UPDATE reading_progress SET duration = ? WHERE id = ?`, parsed, id); err != nil {
+				return fmt.Errorf("normalize duration for %s: %w", id, err)
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate legacy audio time rows: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit audio progress time normalize: %w", err)
+	}
+
+	return nil
+}
+
+// parseLegacyTimeToSeconds 문자열 시간(HH:MM:SS, MM:SS)을 초 단위 float64로 변환
+func parseLegacyTimeToSeconds(value interface{}) (float64, bool) {
+	var raw string
+	switch v := value.(type) {
+	case nil:
+		return 0, false
+	case string:
+		raw = strings.TrimSpace(v)
+	case []byte:
+		raw = strings.TrimSpace(string(v))
+	default:
+		return 0, false
+	}
+
+	if raw == "" {
+		return 0, false
+	}
+
+	// 이미 숫자 문자열인 경우 그대로 사용
+	if num, err := strconv.ParseFloat(raw, 64); err == nil {
+		return num, true
+	}
+
+	parts := strings.Split(raw, ":")
+	if len(parts) != 2 && len(parts) != 3 {
+		return 0, false
+	}
+
+	parseInt := func(s string) (int64, bool) {
+		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+		if err != nil || n < 0 {
+			return 0, false
+		}
+		return n, true
+	}
+
+	secondsPart, err := strconv.ParseFloat(strings.TrimSpace(parts[len(parts)-1]), 64)
+	if err != nil || secondsPart < 0 {
+		return 0, false
+	}
+
+	if len(parts) == 2 {
+		minutes, ok := parseInt(parts[0])
+		if !ok {
+			return 0, false
+		}
+		return float64(minutes*60) + secondsPart, true
+	}
+
+	hours, ok := parseInt(parts[0])
+	if !ok {
+		return 0, false
+	}
+	minutes, ok := parseInt(parts[1])
+	if !ok {
+		return 0, false
+	}
+	return float64(hours*3600+minutes*60) + secondsPart, true
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"math"
 	"strings"
 	"time"
 
@@ -291,7 +292,13 @@ func (r *VolumeRepository) GetTotalPages(db database.Queryer, volumeID string) (
 		 WHERE c.volume_id IN (SELECT id FROM descendant_volumes)`,
 		volumeID,
 	).Scan(&totalPages)
-	return int(totalPages), err
+	if err != nil {
+		return 0, err
+	}
+	if totalPages < 0 {
+		return 0, nil
+	}
+	return int(math.Round(totalPages)), nil
 }
 
 // GetReadPages 사용자가 볼륨에서 읽은 총 페이지 수 조회 (하위 볼륨 포함)
@@ -349,7 +356,11 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		return 0, err
 	}
 
-	return int(completedPages) + int(progressPages), nil
+	totalRead := completedPages + progressPages
+	if totalRead < 0 {
+		return 0, nil
+	}
+	return int(math.Round(totalRead)), nil
 }
 
 // GetProgressPercent 사용자의 볼륨 실제 진행 퍼센트 조회 (하위 볼륨 포함)
