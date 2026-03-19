@@ -110,6 +110,7 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
     };
 
     const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
       isDraggingRef.current = true;
       startYRef.current = e.pageY;
       startScrollTopRef.current = el.scrollTop;

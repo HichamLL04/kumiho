@@ -74,14 +74,23 @@
   gap: 12px;
   padding: 10px 12px;
   border-radius: 8px;
-  cursor: pointer;
-  background: none;
-  border: none;
-  width: 100%;
-  text-align: left;
   color: var(--text-secondary);
   font-size: 14px;
   transition: background 0.15s;
+}
+
+.itemButton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: none;
+  width: 100%;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .item:hover {

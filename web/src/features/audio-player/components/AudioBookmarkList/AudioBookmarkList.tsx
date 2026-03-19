@@ -70,8 +70,7 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const handleDelete = async (id: string) => {
     try {
       await bookmarkAPI.delete(id);
       setBookmarks((prev) => prev.filter((b) => b.id !== id));
@@ -120,25 +119,23 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
               <div
                 key={bookmark.id}
                 className={styles.item}
-                onClick={() => handleSeek(bookmark)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleSeek(bookmark);
-                  }
-                }}
               >
-                <span className={styles.itemTime}>
-                  {formatDuration(bookmark.current_time ?? 0)}
-                </span>
-                <div className={styles.itemInfo}>
-                  <div className={styles.itemTitle}>{bookmark.title}</div>
-                </div>
                 <button
+                  type="button"
+                  className={styles.itemButton}
+                  onClick={() => handleSeek(bookmark)}
+                >
+                  <span className={styles.itemTime}>
+                    {formatDuration(bookmark.current_time ?? 0)}
+                  </span>
+                  <div className={styles.itemInfo}>
+                    <div className={styles.itemTitle}>{bookmark.title}</div>
+                  </div>
+                </button>
+                <button
+                  type="button"
                   className={styles.deleteBtn}
-                  onClick={(e) => handleDelete(e, bookmark.id)}
+                  onClick={() => handleDelete(bookmark.id)}
                   aria-label="Delete bookmark"
                 >
                   <Trash2 size={16} />

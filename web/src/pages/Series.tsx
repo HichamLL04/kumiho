@@ -200,7 +200,7 @@ export function SeriesPage() {
         status: state.status,
         playerMode: state.playerMode,
         currentChapterId: state.currentChapter?.id ?? null,
-        currentVolumeId: state.currentVolume?.id ?? null,
+        currentVolumeId: state.currentVolumeId ?? state.currentChapter?.volume_id ?? null,
         currentTime: state.currentTime,
         duration: state.duration,
       }),

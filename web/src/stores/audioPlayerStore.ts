@@ -25,6 +25,7 @@ interface AudioPlayerState {
   // Content
   currentSeries: Series | null;
   currentVolume: Volume | null;
+  currentVolumeId: string | null;
   currentChapter: Chapter | null;
   chapters: Chapter[];
   chapterProgressMap: Record<string, AudioChapterProgress>;
@@ -113,6 +114,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
       // Initial state
       currentSeries: null,
       currentVolume: null,
+      currentVolumeId: null,
       currentChapter: null,
       chapters: [],
       chapterProgressMap: {},
@@ -132,6 +134,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
         set({
           currentSeries: series,
           currentVolume: volume ?? null,
+          currentVolumeId: chapter.volume_id ?? volume?.id ?? null,
           currentChapter: chapter,
           chapters: chapters ?? [],
           chapterProgressMap: {},
@@ -150,7 +153,11 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
       },
 
       playChapter: (chapter, startTime = 0) => {
+        const { currentVolume } = get();
+        const nextVolumeId = chapter.volume_id ?? null;
         set({
+          currentVolume: currentVolume?.id === nextVolumeId ? currentVolume : null,
+          currentVolumeId: nextVolumeId,
           currentChapter: chapter,
           status: "loading",
           currentTime: startTime,
@@ -256,6 +263,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
         set({
           currentSeries: null,
           currentVolume: null,
+          currentVolumeId: null,
           currentChapter: null,
           chapters: [],
           chapterProgressMap: {},
