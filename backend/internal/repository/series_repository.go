@@ -488,7 +488,6 @@ func (r *SeriesRepository) GetTotalPages(db database.Queryer, seriesID string) (
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN c.duration > 0 THEN c.duration
 				WHEN c.page_count > 0 THEN c.page_count 
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
@@ -521,7 +520,6 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN c.duration > 0 THEN c.duration
 				WHEN c.page_count > 0 THEN c.page_count 
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
@@ -543,9 +541,9 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 	err = db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
-				WHEN c.duration > 0 THEN (c.duration * rp.progress_percent / 100.0)
 				WHEN c.page_count > 0 THEN rp.current_page
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
+				WHEN c.has_audio = 1 THEN 0
 				ELSE rp.progress_percent
 			END
 		), 0)

@@ -283,7 +283,6 @@ func (r *VolumeRepository) GetTotalPages(db database.Queryer, volumeID string) (
 		)
 			 SELECT COALESCE(SUM(
 				CASE 
-					WHEN c.has_audio = 1 AND c.duration > 0 THEN c.duration
 					WHEN c.page_count > 0 THEN c.page_count 
 					WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 					ELSE 0 
@@ -315,7 +314,6 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		)
 			 SELECT COALESCE(SUM(
 				CASE 
-					WHEN c.has_audio = 1 AND c.duration > 0 THEN c.duration
 					WHEN c.page_count > 0 THEN c.page_count 
 					WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 					ELSE 0 
@@ -338,12 +336,12 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		)
 			 SELECT COALESCE(SUM(
 				CASE 
-					WHEN c.has_audio = 1 AND c.duration > 0 THEN (c.duration * rp.progress_percent / 100.0)
 					WHEN c.page_count > 0 THEN rp.current_page
 					WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
+					WHEN c.has_audio = 1 THEN 0
 					ELSE rp.progress_percent
-			END
-			 ), 0)
+				END
+				 ), 0)
 		 FROM reading_progress rp
 		 JOIN chapters c ON rp.chapter_id = c.id
 		 WHERE rp.user_id = ? AND c.volume_id IN (SELECT id FROM descendant_volumes)
@@ -616,7 +614,6 @@ func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []s
 		)
 			SELECT dv.root_id, COALESCE(SUM(
 				CASE 
-					WHEN c.has_audio = 1 AND c.duration > 0 THEN c.duration
 					WHEN c.page_count > 0 THEN c.page_count 
 					WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 					ELSE 0 

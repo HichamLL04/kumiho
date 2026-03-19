@@ -1,5 +1,14 @@
 import axios from "axios";
-import type { Chapter, Series, Volume, Library, ReadingProgress, Page, UserSeriesSetting } from "../types/series";
+import type {
+  Chapter,
+  Series,
+  Volume,
+  Library,
+  ReadingProgress,
+  Page,
+  UserSeriesSetting,
+  LibraryType,
+} from "../types/series";
 import type { User } from "../types/user";
 import type { Session } from "../types/session";
 
@@ -139,7 +148,7 @@ export const libraryAPI = {
     default_epub_wheel_direction?: string;
     default_epub_keyboard_direction?: string;
     default_epub_click_direction?: string;
-    library_type?: string;
+    library_type?: LibraryType;
   }) => api.post("/libraries", data),
   update: (
     id: string,
@@ -154,7 +163,7 @@ export const libraryAPI = {
       default_epub_wheel_direction?: string;
       default_epub_keyboard_direction?: string;
       default_epub_click_direction?: string;
-      library_type?: string;
+      library_type?: LibraryType;
       is_visible?: boolean;
     },
   ) => api.put(`/libraries/${id}`, data),

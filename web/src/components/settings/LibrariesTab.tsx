@@ -34,6 +34,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { libraryAPI } from "../../api/client";
 import { useLibraryStore, type Library } from "../../stores/libraryStore";
+import type { LibraryType } from "../../types/series";
 import { useScanStore } from "../../stores/scanStore";
 import { Toast } from "../common/Toast";
 import { AlertModal } from "../modals/AlertModal";
@@ -333,7 +334,15 @@ export function LibrariesTab() {
     }),
   );
 
-  const [newLibrary, setNewLibrary] = useState({
+  const [newLibrary, setNewLibrary] = useState<{
+    name: string;
+    path: string;
+    default_view_mode: string;
+    default_read_direction: string;
+    default_page_transition: string;
+    library_type: LibraryType;
+    scan_excludes: string;
+  }>({
     name: "",
     path: "",
     default_view_mode: "single",
@@ -632,7 +641,7 @@ export function LibrariesTab() {
               <div className={commonStyles.itemControl}>
                 <select
                   value={newLibrary.library_type}
-                  onChange={(e) => setNewLibrary({ ...newLibrary, library_type: e.target.value })}
+                  onChange={(e) => setNewLibrary({ ...newLibrary, library_type: e.target.value as LibraryType })}
                   className={commonStyles.settingsSelect}
                 >
                   <option value="book">{t("settings.libraries.type_book")}</option>

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { libraryAPI } from "../api/client";
+import type { LibraryType } from "../types/series";
 
 export interface Library {
   id: string;
@@ -19,7 +20,7 @@ export interface Library {
   last_scan_result: string;
   type?: "LOCAL" | "SYSTEM";
   is_visible?: boolean;
-  library_type?: string;
+  library_type?: LibraryType;
   scan_excludes?: string;
 }
 

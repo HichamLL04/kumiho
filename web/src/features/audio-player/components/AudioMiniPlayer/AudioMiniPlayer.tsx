@@ -55,8 +55,15 @@ export function AudioMiniPlayer() {
 
     // 렌더링 후 높이 측정
     requestAnimationFrame(updateHeight);
+    const resizeObserver = new ResizeObserver(updateHeight);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    window.addEventListener("resize", updateHeight);
 
     return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateHeight);
       document.documentElement.style.setProperty("--mini-player-height", "0px");
     };
   }, [isVisible]);

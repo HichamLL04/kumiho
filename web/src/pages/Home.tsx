@@ -8,7 +8,7 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { HorizontalDragScroll } from "../components/common/HorizontalDragScroll";
 import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
-import type { Series, Volume } from "../types/series";
+import type { Series, Volume, LibraryType } from "../types/series";
 import { parseSupportedExtension, type ExtensionBadge, type SupportedExtension } from "../utils/extension";
 import styles from "./Home.module.css";
 
@@ -30,7 +30,7 @@ interface RecentProgress {
   chapter_number?: number;
   chapter_title?: string;
   has_audio?: boolean;
-  library_type?: string;
+  library_type?: LibraryType;
   path?: string;
   chapter_path?: string;
   volume_path?: string;

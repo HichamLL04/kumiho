@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"strings"
 
@@ -81,11 +80,8 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 		chapters, err := svc.chapterRepo.FindBySeriesID(nil, s.ID)
 		if err == nil && len(chapters) > 0 {
 			total := 0
-			audioDurationTotal := 0.0
 			for _, c := range chapters {
-				if c.HasAudio && c.Duration != nil && *c.Duration > 0 {
-					audioDurationTotal += *c.Duration
-				} else if c.TotalPositions > 0 {
+				if c.TotalPositions > 0 {
 					total += c.TotalPositions
 				} else if c.PageCount > 0 {
 					total += c.PageCount
@@ -107,7 +103,6 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 					}
 				}
 			}
-			total += int(math.Round(audioDurationTotal))
 			s.TotalPageCount = total
 		}
 	}

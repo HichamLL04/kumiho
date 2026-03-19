@@ -1,5 +1,7 @@
 import type { ExtensionBadge } from "../utils/extension";
 
+export type LibraryType = "book" | "audiobook";
+
 export interface EbookMetadata {
   series_id: string;
   status: string;
@@ -29,7 +31,7 @@ export interface Series {
   created_at: string;
   updated_at: string;
   extension?: ExtensionBadge | "";
-  library_type?: string;
+  library_type?: LibraryType;
   has_audio?: boolean;
 }
 
@@ -55,7 +57,7 @@ export interface Volume {
   extension?: ExtensionBadge | "";
   created_at: string;
   updated_at?: string;
-  library_type?: string;
+  library_type?: LibraryType;
 }
 
 export interface Chapter {
@@ -154,5 +156,5 @@ export interface Library {
   default_view_mode?: string;
   default_read_direction?: string;
   default_page_transition?: string;
-  library_type?: string;
+  library_type?: LibraryType;
 }
