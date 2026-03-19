@@ -83,7 +83,7 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 			total := 0
 			audioDurationTotal := 0.0
 			for _, c := range chapters {
-				if c.Duration != nil && *c.Duration > 0 {
+				if c.HasAudio && c.Duration != nil && *c.Duration > 0 {
 					audioDurationTotal += *c.Duration
 				} else if c.TotalPositions > 0 {
 					total += c.TotalPositions
