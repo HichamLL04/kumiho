@@ -9,7 +9,7 @@ import { PdfViewerRoute } from "./PdfViewerRoute";
 import { EpubViewerRoute } from "./EpubViewerRoute";
 import { TextViewerRoute } from "./TextViewerRoute";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
-import type { Chapter } from "../types/series";
+import type { Chapter, ReadingProgress } from "../types/series";
 import styles from "./Viewer.module.css";
 
 const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".oga", ".flac", ".m4a", ".m4b", ".aac", ".wma", ".opus", ".mp4"];
@@ -55,6 +55,11 @@ export function ViewerPage() {
 
         const series = seriesRes.data;
         const chapters = chaptersRes.data.chapters || [];
+        const chapterProgressList = progressListRes?.data?.progress_list;
+        const currentChapterProgress = Array.isArray(chapterProgressList)
+          ? chapterProgressList.find((item: ReadingProgress) => item.chapter_id === chapter.id)
+          : undefined;
+        const startTime = currentChapterProgress?.current_time ?? 0;
 
         let volume = null;
         if (volumeId) {
@@ -67,9 +72,9 @@ export function ViewerPage() {
         }
 
         const store = useAudioPlayerStore.getState();
-        store.loadAndPlay(series, chapter as Chapter, chapters, volume);
-        if (progressListRes?.data?.progress_list) {
-          store.setChapterProgressList(progressListRes.data.progress_list);
+        store.loadAndPlay(series, chapter as Chapter, chapters, volume, startTime);
+        if (chapterProgressList) {
+          store.setChapterProgressList(chapterProgressList);
         }
       } catch (err) {
         console.error("Failed to load audio player data:", err);

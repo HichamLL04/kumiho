@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { Folder } from "lucide-react";
+import { shallow } from "zustand/shallow";
 import { Header } from "../components/headers/Header";
 import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
@@ -293,7 +294,8 @@ export function SeriesPage() {
           prev.map((v) => (v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v)),
         );
       }
-    },
+      },
+      { equalityFn: shallow },
     );
     return () => {
       unsub();
@@ -389,15 +391,19 @@ export function SeriesPage() {
 
                   // 진행도의 챕터 찾기, 없으면 첫 챕터
                   let startChapter = sorted[0];
+                  let startTime = 0;
                   if (progress?.chapter_id) {
                     const found = sorted.find((c) => c.id === progress.chapter_id);
-                    if (found) startChapter = found;
+                    if (found) {
+                      startChapter = found;
+                      startTime = progress.current_time ?? 0;
+                    }
                   }
 
                   if (startChapter) {
                     // volume 파라미터는 null로 전달 (현재 챕터에 맞춰 자동 감지)
                     const store = useAudioPlayerStore.getState();
-                    store.loadAndPlay(series, startChapter, sorted, null);
+                    store.loadAndPlay(series, startChapter, sorted, null, startTime);
                     if (progressListRes?.data?.progress_list) {
                       store.setChapterProgressList(progressListRes.data.progress_list);
                     }
