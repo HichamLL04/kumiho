@@ -171,18 +171,21 @@ export function SeriesCard({
         const progressList = Array.isArray(progressRes.data) ? progressRes.data : progressRes.data?.progress_list || [];
         const lastProg = progressList[0];
 
-        if (orderedChapters.length > 0) {
-          const startChapter = lastProg?.chapter_id
-            ? orderedChapters.find((c) => c.id === lastProg.chapter_id) ||
-              orderedChapters.find((c) => c.volume_id === vol.id) ||
-              orderedChapters[0]
-            : orderedChapters.find((c) => c.volume_id === vol.id) || orderedChapters[0];
+        if (orderedChapters.length === 0) {
+          setAlertModal({ isOpen: true, type: "warning", message: t("series.alert.no_readable_chapter") });
+          return;
+        }
 
-          const startTime = lastProg?.chapter_id === startChapter.id ? (lastProg.current_time ?? 0) : 0;
-          store.loadAndPlay(series, startChapter, orderedChapters, vol, startTime);
-          if (seriesProgressListRes?.data?.progress_list) {
-            store.setChapterProgressList(seriesProgressListRes.data.progress_list);
-          }
+        const startChapter = lastProg?.chapter_id
+          ? orderedChapters.find((c) => c.id === lastProg.chapter_id) ||
+            orderedChapters.find((c) => c.volume_id === vol.id) ||
+            orderedChapters[0]
+          : orderedChapters.find((c) => c.volume_id === vol.id) || orderedChapters[0];
+
+        const startTime = lastProg?.chapter_id === startChapter.id ? (lastProg.current_time ?? 0) : 0;
+        store.loadAndPlay(series, startChapter, orderedChapters, vol, startTime);
+        if (seriesProgressListRes?.data?.progress_list) {
+          store.setChapterProgressList(seriesProgressListRes.data.progress_list);
         }
       } else {
         const series = item as Series;
@@ -195,16 +198,19 @@ export function SeriesCard({
         const orderedChapters = allChapters;
         const progress = progressRes.data?.progress;
 
-        if (orderedChapters.length > 0) {
-          const resumeChapter = progress?.chapter_id
-            ? orderedChapters.find((c) => c.id === progress.chapter_id) || orderedChapters[0]
-            : orderedChapters[0];
+        if (orderedChapters.length === 0) {
+          setAlertModal({ isOpen: true, type: "warning", message: t("series.alert.no_readable_chapter") });
+          return;
+        }
 
-          const startTime = progress?.chapter_id === resumeChapter.id ? (progress.current_time ?? 0) : 0;
-          store.loadAndPlay(series, resumeChapter, orderedChapters, null, startTime);
-          if (seriesProgressListRes?.data?.progress_list) {
-            store.setChapterProgressList(seriesProgressListRes.data.progress_list);
-          }
+        const resumeChapter = progress?.chapter_id
+          ? orderedChapters.find((c) => c.id === progress.chapter_id) || orderedChapters[0]
+          : orderedChapters[0];
+
+        const startTime = progress?.chapter_id === resumeChapter.id ? (progress.current_time ?? 0) : 0;
+        store.loadAndPlay(series, resumeChapter, orderedChapters, null, startTime);
+        if (seriesProgressListRes?.data?.progress_list) {
+          store.setChapterProgressList(seriesProgressListRes.data.progress_list);
         }
       }
     } catch (err) {

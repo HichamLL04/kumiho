@@ -80,15 +80,15 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 	if s.TotalPageCount <= 0 {
 		chapters, err := svc.chapterRepo.FindBySeriesID(nil, s.ID)
 		if err == nil && len(chapters) > 0 {
-				total := 0
-				audioDurationTotal := 0.0
-				for _, c := range chapters {
-					if c.Duration != nil && *c.Duration > 0 {
-						audioDurationTotal += *c.Duration
-					} else if c.TotalPositions > 0 {
-						total += c.TotalPositions
-					} else if c.PageCount > 0 {
-						total += c.PageCount
+			total := 0
+			audioDurationTotal := 0.0
+			for _, c := range chapters {
+				if c.Duration != nil && *c.Duration > 0 {
+					audioDurationTotal += *c.Duration
+				} else if c.TotalPositions > 0 {
+					total += c.TotalPositions
+				} else if c.PageCount > 0 {
+					total += c.PageCount
 				} else if c.PageCount == 0 && strings.HasSuffix(strings.ToLower(c.Path), ".pdf") {
 					if _, err := os.Stat(c.Path); err == nil {
 						pc, pageErr := util.GetPdfPageCount(c.Path)
@@ -104,13 +104,13 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 						} else {
 							_ = svc.chapterRepo.UpdatePageCount(nil, c.ID, -1)
 						}
-						}
 					}
 				}
-				total += int(math.Round(audioDurationTotal))
-				s.TotalPageCount = total
 			}
+			total += int(math.Round(audioDurationTotal))
+			s.TotalPageCount = total
 		}
+	}
 
 	if userID != "" {
 		readPages, err := svc.seriesRepo.GetReadPages(nil, userID, s.ID)

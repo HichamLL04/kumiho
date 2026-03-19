@@ -49,7 +49,7 @@ export function calculateProgressDisplay(params: {
 
   // 오디오북 볼륨: current_time / duration 기반 진행도
   if (isVolumeType && isAudiobook && progress?.duration && progress.duration > 0) {
-    const currentTime = progress.current_time || 0;
+    const currentTime = Math.min(progress.current_time || 0, progress.duration);
     const duration = progress.duration;
     const percent = Math.min(100, Math.max(0, (currentTime / duration) * 100));
     const p = Math.floor(percent);
