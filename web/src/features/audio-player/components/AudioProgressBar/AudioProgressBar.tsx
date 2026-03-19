@@ -62,16 +62,27 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
       if (!isDragging) return;
-      setIsDragging(false);
       const pct = getPercentFromEvent(e.clientX);
       const time = (pct / 100) * duration;
       seekTo(time);
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId);
       }
+      setIsDragging(false);
     },
     [isDragging, getPercentFromEvent, duration, seekTo],
   );
+
+  const handlePointerCancel = useCallback((e: React.PointerEvent) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setIsDragging(false);
+  }, []);
+
+  const handleLostPointerCapture = useCallback(() => {
+    setIsDragging(false);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -112,6 +123,8 @@ export function AudioProgressBar({ variant = "fullscreen", showTime = true }: Au
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handleLostPointerCapture}
       >
         <div className={styles.track}>
           <div

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -16,6 +17,12 @@ type BookmarkHandler struct {
 	seriesRepo   *repository.SeriesRepository
 	authService  *service.AuthService
 }
+
+var (
+	errBookmarkSeriesNotFound    = errors.New("series not found")
+	errBookmarkAccessDenied      = errors.New("access denied")
+	errBookmarkPermissionFailure = errors.New("permission check failed")
+)
 
 func NewBookmarkHandler(
 	bookmarkRepo *repository.BookmarkRepository,
@@ -50,14 +57,14 @@ type UpdateBookmarkRequest struct {
 func (h *BookmarkHandler) checkSeriesAccess(c *fiber.Ctx, seriesID, userID string) (*model.Series, error) {
 	series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
 	if err != nil || series == nil {
-		return nil, c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found"})
+		return nil, errBookmarkSeriesNotFound
 	}
 
 	role := middleware.GetUserRole(c)
 	if role != model.RoleMaster {
 		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
 		if checkErr != nil {
-			return nil, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check permissions"})
+			return nil, errBookmarkPermissionFailure
 		}
 		allowed := false
 		for _, aid := range allowedIDs {
@@ -67,11 +74,22 @@ func (h *BookmarkHandler) checkSeriesAccess(c *fiber.Ctx, seriesID, userID strin
 			}
 		}
 		if !allowed {
-			return nil, c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
+			return nil, errBookmarkAccessDenied
 		}
 	}
 
 	return series, nil
+}
+
+func (h *BookmarkHandler) writeSeriesAccessError(c *fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, errBookmarkSeriesNotFound):
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found"})
+	case errors.Is(err, errBookmarkAccessDenied):
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
+	default:
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check permissions"})
+	}
 }
 
 // CreateBookmark 새 북마크 생성
@@ -89,7 +107,7 @@ func (h *BookmarkHandler) CreateBookmark(c *fiber.Ctx) error {
 
 	// 시리즈 존재 + 라이브러리 접근 권한 확인
 	if _, err := h.checkSeriesAccess(c, req.SeriesID, userID); err != nil {
-		return nil // checkSeriesAccess가 이미 응답을 보냄
+		return h.writeSeriesAccessError(c, err)
 	}
 
 	bookmark := &model.Bookmark{
@@ -121,7 +139,7 @@ func (h *BookmarkHandler) ListBySeries(c *fiber.Ctx) error {
 
 	// 시리즈 존재 + 라이브러리 접근 권한 확인
 	if _, err := h.checkSeriesAccess(c, seriesID, userID); err != nil {
-		return nil
+		return h.writeSeriesAccessError(c, err)
 	}
 
 	bookmarks, err := h.bookmarkRepo.FindByUserAndSeries(nil, userID, seriesID)
