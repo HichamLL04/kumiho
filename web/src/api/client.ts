@@ -279,12 +279,24 @@ export const volumeAPI = {
       }
       const resolvedVolumes = allVolumes ?? [];
       const resolvedChapters = allChapters ?? [];
+      const childrenByParentId = new Map<string, Volume[]>();
+      for (const volume of resolvedVolumes) {
+        if (!volume.parent_id) continue;
+        const children = childrenByParentId.get(volume.parent_id);
+        if (children) {
+          children.push(volume);
+        } else {
+          childrenByParentId.set(volume.parent_id, [volume]);
+        }
+      }
 
       // 해당 볼륨과 그 모든 자식 볼륨의 ID 수집
       const targetVolumeIds = new Set<string>();
       const collectIds = (vId: string) => {
         targetVolumeIds.add(vId);
-        resolvedVolumes.filter((v: Volume) => v.parent_id === vId).forEach((v: Volume) => collectIds(v.id));
+        const children = childrenByParentId.get(vId);
+        if (!children) return;
+        children.forEach((v: Volume) => collectIds(v.id));
       };
       collectIds(volumeId);
 
