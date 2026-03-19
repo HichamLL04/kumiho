@@ -22,6 +22,7 @@ export function AudioMiniPlayer() {
   const toggleMute = useAudioPlayerStore((s) => s.toggleMute);
   const close = useAudioPlayerStore((s) => s.close);
   const containerRef = useRef<HTMLDivElement>(null);
+  const volumeGroupRef = useRef<HTMLDivElement>(null);
 
   // 썸네일 URL (캐시 버스팅 포함)
   const thumbnailUrl = useMemo(() => {
@@ -58,6 +59,21 @@ export function AudioMiniPlayer() {
       document.documentElement.style.setProperty("--mini-player-height", "0px");
     };
   }, [isVisible]);
+
+  // Handle wheel events with non-passive listener to block page scroll
+  useEffect(() => {
+    const el = volumeGroupRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.05 : 0.05;
+      setVolume(Math.min(1, Math.max(0, volume + delta)));
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [volume, setVolume, isVisible]);
 
   if (!isVisible) return null;
 
@@ -119,7 +135,10 @@ export function AudioMiniPlayer() {
           />
 
           {/* Volume (desktop only) */}
-          <div className={styles.volumeGroup}>
+          <div
+            className={styles.volumeGroup}
+            ref={volumeGroupRef}
+          >
             <button
               className={styles.actionBtn}
               onClick={toggleMute}
@@ -135,6 +154,9 @@ export function AudioMiniPlayer() {
               step={0.05}
               value={isMuted ? 0 : volume}
               onChange={handleVolumeChange}
+              style={{
+                background: `linear-gradient(to right, var(--accent-primary) ${(isMuted ? 0 : volume) * 100}%, rgba(255, 255, 255, 0.15) ${(isMuted ? 0 : volume) * 100}%)`,
+              }}
             />
           </div>
 

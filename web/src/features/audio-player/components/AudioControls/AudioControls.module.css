@@ -1,3 +1,10 @@
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
 .controls {
   display: flex;
   align-items: center;
@@ -86,7 +93,6 @@
   font-family: "Inter", system-ui, sans-serif;
 }
 
-/* Hover effects for the label as well */
 .controlBtn:hover .skipLabel {
   color: var(--text-primary);
 }
