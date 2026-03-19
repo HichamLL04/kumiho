@@ -499,7 +499,13 @@ func (r *SeriesRepository) GetTotalPages(db database.Queryer, seriesID string) (
 		 WHERE v.series_id = ?`,
 		seriesID,
 	).Scan(&totalPages)
-	return int(totalPages), err
+	if err != nil {
+		return 0, err
+	}
+	if totalPages < 0 {
+		return 0, nil
+	}
+	return int(math.Round(totalPages)), nil
 }
 
 // GetReadPages 사용자가 시리즈에서 읽은 총 페이지 수 조회
@@ -556,7 +562,11 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 		return 0, err
 	}
 
-	return int(completedPages) + int(progressPages), nil
+	totalRead := completedPages + progressPages
+	if totalRead < 0 {
+		return 0, nil
+	}
+	return int(math.Round(totalRead)), nil
 }
 
 // GetTotalProgressUnits 시리즈 진행률 표시용 총량(용량 기반 단위) 조회

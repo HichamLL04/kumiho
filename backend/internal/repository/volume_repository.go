@@ -614,6 +614,7 @@ func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []s
 		)
 		SELECT dv.root_id, COALESCE(SUM(
 			CASE 
+				WHEN c.duration > 0 THEN c.duration
 				WHEN c.page_count > 0 THEN c.page_count 
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
 				ELSE 0 
@@ -645,7 +646,11 @@ func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []s
 		if err := rows.Scan(&id, &total); err != nil {
 			return nil, err
 		}
-		result[id] = int(total)
+		if total < 0 {
+			result[id] = 0
+			continue
+		}
+		result[id] = int(math.Round(total))
 	}
 	return result, nil
 }

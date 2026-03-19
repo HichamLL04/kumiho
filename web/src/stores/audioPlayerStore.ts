@@ -15,13 +15,19 @@ export interface AudioPlayerSettings {
   volumeBoost: boolean;
 }
 
+export type AudioChapterProgress = Partial<ReadingProgress> & {
+  chapter_id?: string;
+  current_page: number;
+  total_pages: number;
+};
+
 interface AudioPlayerState {
   // Content
   currentSeries: Series | null;
   currentVolume: Volume | null;
   currentChapter: Chapter | null;
   chapters: Chapter[];
-  chapterProgressMap: Record<string, ReadingProgress>;
+  chapterProgressMap: Record<string, AudioChapterProgress>;
 
   // Playback
   status: PlaybackStatus;
@@ -154,7 +160,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
 
       setChapters: (chapters) => set({ chapters }),
       setChapterProgressList: (progressList) => {
-        const chapterProgressMap: Record<string, ReadingProgress> = {};
+        const chapterProgressMap: Record<string, AudioChapterProgress> = {};
         for (const progress of progressList) {
           const chapterID = progress.chapter_id;
           if (chapterID) {
