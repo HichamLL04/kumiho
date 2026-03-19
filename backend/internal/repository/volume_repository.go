@@ -398,8 +398,8 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 		inprogress_units AS (
 				SELECT COALESCE(SUM(
 					CASE
-						WHEN cu.has_audio = 1 AND COALESCE(rp.duration, CAST(cu.unit_total AS REAL)) > 0 THEN
-							MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(rp.duration, CAST(cu.unit_total AS REAL)))) * cu.unit_total
+						WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)) > 0 THEN
+							MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)))) * cu.unit_total
 					WHEN rp.total_pages > 0 THEN
 						MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL))) * cu.unit_total
 					ELSE
@@ -797,8 +797,8 @@ func (r *VolumeRepository) GetProgressPercentBatch(db database.Queryer, userID s
 				SUM(CASE WHEN cc.chapter_id IS NOT NULL THEN cu.unit_total ELSE 0 END) AS completed_units,
 					SUM(CASE WHEN rp.chapter_id IS NOT NULL AND cc.chapter_id IS NULL THEN
 						CASE
-							WHEN cu.has_audio = 1 AND COALESCE(rp.duration, CAST(cu.unit_total AS REAL)) > 0 THEN
-								MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(rp.duration, CAST(cu.unit_total AS REAL)))) * cu.unit_total
+							WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)) > 0 THEN
+								MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)))) * cu.unit_total
 						WHEN rp.total_pages > 0 THEN
 							MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL))) * cu.unit_total
 						ELSE
