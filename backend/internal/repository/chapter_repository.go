@@ -203,12 +203,12 @@ func (r *ChapterRepository) GetListenedDurationBySeriesID(db database.Queryer, u
 	var listened float64
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
-			CASE
-				WHEN cc.id IS NOT NULL THEN COALESCE(c.duration, 0)
-				WHEN rp.current_time IS NOT NULL THEN rp.current_time
-				ELSE 0
-			END
-		), 0)
+				CASE
+					WHEN cc.id IS NOT NULL THEN COALESCE(c.duration, 0)
+					WHEN rp.current_time IS NOT NULL THEN MIN(MAX(rp.current_time, 0), COALESCE(c.duration, 0))
+					ELSE 0
+				END
+			), 0)
 		FROM chapters c
 		JOIN volumes v ON c.volume_id = v.id
 		LEFT JOIN chapter_completions cc ON c.id = cc.chapter_id AND cc.user_id = ?

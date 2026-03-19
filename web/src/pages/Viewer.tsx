@@ -81,6 +81,12 @@ export function ViewerPage() {
         }
       } catch (err) {
         console.error("Failed to load audio player data:", err);
+        if (cancelled) return;
+        if (volumeId) {
+          navigate(`/volumes/${volumeId}`, { replace: true });
+        } else {
+          navigate(`/series/${seriesId}`, { replace: true });
+        }
       }
     })();
 
