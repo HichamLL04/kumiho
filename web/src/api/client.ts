@@ -252,32 +252,45 @@ export const volumeAPI = {
   /**
    * 볼륨 내의 첫 번째 읽을 수 있는 챕터를 재귀적으로 탐색 (통합 API 사용 버전)
    */
-  findFirstChapterRecursively: async (volumeId: string): Promise<Chapter | null> => {
+  findFirstChapterRecursively: async (
+    volumeId: string,
+    context?: { seriesId?: string; allVolumes?: Volume[]; allChapters?: Chapter[] },
+  ): Promise<Chapter | null> => {
     try {
-      // 볼륨 정보 먼저 가져오기 (series_id 확인용)
-      const volRes = await volumeAPI.get(volumeId);
-      const volume = volRes.data;
-      if (!volume || !volume.series_id) return null;
+      let seriesId = context?.seriesId;
+      let allChapters = context?.allChapters;
+      let allVolumes = context?.allVolumes;
 
-      // 시리즈 전체 챕터를 가져와서 해당 볼륨 및 하위 볼륨의 챕터 필터링
-      const chaptersRes = await seriesAPI.getChapters(volume.series_id);
-      const allChapters = chaptersRes.data.chapters || [];
+      if (!seriesId) {
+        // 볼륨 정보 먼저 가져오기 (series_id 확인용)
+        const volRes = await volumeAPI.get(volumeId);
+        const volume = volRes.data;
+        seriesId = volume?.series_id;
+      }
+      if (!seriesId) return null;
 
-      // 모든 볼륨 목록 (하위 볼륨 포함 여부 확인을 위해)
-      const volumesRes = await seriesAPI.getVolumes(volume.series_id);
-      const allVolumes = volumesRes.data.volumes || [];
+      if (!allChapters) {
+        const chaptersRes = await seriesAPI.getChapters(seriesId);
+        allChapters = chaptersRes.data.chapters || [];
+      }
+      if (!allVolumes) {
+        const volumesRes = await seriesAPI.getVolumes(seriesId);
+        allVolumes = volumesRes.data.volumes || [];
+      }
+      const resolvedVolumes = allVolumes ?? [];
+      const resolvedChapters = allChapters ?? [];
 
       // 해당 볼륨과 그 모든 자식 볼륨의 ID 수집
       const targetVolumeIds = new Set<string>();
       const collectIds = (vId: string) => {
         targetVolumeIds.add(vId);
-        allVolumes.filter((v: Volume) => v.parent_id === vId).forEach((v: Volume) => collectIds(v.id));
+        resolvedVolumes.filter((v: Volume) => v.parent_id === vId).forEach((v: Volume) => collectIds(v.id));
       };
       collectIds(volumeId);
 
       // 백엔드의 시리즈 챕터 정렬(volume_number, chapter_number)을 그대로 사용
       // 대상 볼륨(및 하위 볼륨)에 속하는 첫 챕터를 순서 보존 상태에서 찾는다.
-      const firstChapter = allChapters.find((c) => targetVolumeIds.has(c.volume_id));
+      const firstChapter = resolvedChapters.find((c) => targetVolumeIds.has(c.volume_id));
       return firstChapter ?? null;
     } catch (error) {
       console.error("Failed to find first chapter recursively:", error);
@@ -305,7 +318,7 @@ export const chapterAPI = {
 
 // Bookmark API
 export const bookmarkAPI = {
-  getAll: (seriesId?: string) => api.get(`/bookmarks${seriesId ? `/series/${seriesId}` : ""}`),
+  getAll: (seriesId: string) => api.get(`/bookmarks/series/${seriesId}`),
   create: (data: {
     series_id: string;
     volume_id?: string;
