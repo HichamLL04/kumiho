@@ -28,7 +28,15 @@ export function SeriesPage() {
   const handleUpdate = (updated: Series | Volume) => {
     // 서재 페이지에서는 Series만 다룸
     if (!("volume_number" in updated)) {
-      setSeries(updated as Series);
+      const updatedSeries = updated as Series;
+      setSeries(updatedSeries);
+      // 오디오 플레이어 스토어 동기화
+      const audioStore = useAudioPlayerStore.getState();
+      if (audioStore.currentSeries?.id === updatedSeries.id) {
+        audioStore.updateCurrentSeries(updatedSeries);
+        // 만약 업데이트된 객체에 volumes/chapters 정보가 포함되어 있다면 함께 갱신 (선택적)
+        // 여기서는 Series 타입에 직접적인 chapters 배열이 없을 수도 있으므로 체크 필요
+      }
     }
   };
   const [volumes, setVolumes] = useState<Volume[]>([]);
@@ -158,6 +166,16 @@ export function SeriesPage() {
   useEffect(() => {
     if (id) loadData();
   }, [id, loadData]);
+
+  // 시리즈 데이터가 변경될 때마다 오디오 플레이어 스토어 동기화
+  useEffect(() => {
+    if (series) {
+      const audioStore = useAudioPlayerStore.getState();
+      if (audioStore.currentSeries?.id === series.id) {
+        audioStore.updateCurrentSeries(series);
+      }
+    }
+  }, [series]);
 
   // 오디오 재생 중이면 스토어의 currentTime을 구독하여 summary를 실시간 갱신
   const baseListenedRef = useRef<number | null>(null);

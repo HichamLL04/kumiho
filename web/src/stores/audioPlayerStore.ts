@@ -51,6 +51,7 @@ interface AudioPlayerState {
     volume?: Volume | null,
     startTime?: number,
   ) => void;
+  updateCurrentSeries: (series: Series) => void;
   playChapter: (chapter: Chapter, startTime?: number) => void;
   setChapters: (chapters: Chapter[]) => void;
   setChapterProgressList: (progressList: ReadingProgress[]) => void;
@@ -133,6 +134,13 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
           duration: 0,
           playerMode: "fullscreen",
         });
+      },
+
+      updateCurrentSeries: (series) => {
+        const { currentSeries } = get();
+        if (currentSeries && currentSeries.id === series.id) {
+          set({ currentSeries: series });
+        }
       },
 
       playChapter: (chapter, startTime = 0) => {

@@ -106,63 +106,67 @@ export function AudioProvider() {
   }, [store]);
 
   // 진행률 저장
-  const saveProgressSnapshot = useCallback((snapshot: SaveProgressSnapshot, isFinished: boolean = false) => {
-    const { chapterId, currentTime, duration, seriesId } = snapshot;
-    if (currentTime <= 0) return;
-    // 마지막 저장 시점과 동일하면 스킵 (단, 완료 시점은 무조건 저장)
-    if (!isFinished && Math.abs(currentTime - lastSavedTimeRef.current) < 1) return;
+  const saveProgressSnapshot = useCallback(
+    (snapshot: SaveProgressSnapshot, isFinished: boolean = false) => {
+      const { chapterId, currentTime, duration, seriesId } = snapshot;
+      if (currentTime <= 0) return;
+      // 마지막 저장 시점과 동일하면 스킵 (단, 완료 시점은 무조건 저장)
+      if (!isFinished && Math.abs(currentTime - lastSavedTimeRef.current) < 1) return;
 
-    lastSavedTimeRef.current = currentTime;
+      lastSavedTimeRef.current = currentTime;
 
-    const progressValue = isFinished ? 100 : duration > 0 ? (currentTime / duration) * 100 : 0;
-    const timeValue = isFinished && duration > 0 ? duration : currentTime;
+      const progressValue = isFinished ? 100 : duration > 0 ? (currentTime / duration) * 100 : 0;
+      const timeValue = isFinished && duration > 0 ? duration : currentTime;
 
-    // 서버 반영 전 로컬 맵을 먼저 업데이트해서
-    // 챕터 이동 직후 즉시 복귀해도 최신 진행시간으로 이어재생되도록 보장
-    const state = store.getState();
-    const prevProgress = state.chapterProgressMap[chapterId];
-    if (prevProgress) {
+      // 서버 반영 전 로컬 맵을 먼저 업데이트해서
+      // 챕터 이동 직후 즉시 복귀해도 최신 진행시간으로 이어재생되도록 보장
+      const state = store.getState();
+      const prevProgress = state.chapterProgressMap[chapterId];
       store.setState({
         chapterProgressMap: {
           ...state.chapterProgressMap,
           [chapterId]: {
-            ...prevProgress,
+            ...(prevProgress || { chapter_id: chapterId, current_page: 0, total_pages: 0 }),
             current_time: timeValue,
             duration,
             progress_percent: Math.min(100, progressValue),
           },
         },
       });
-    }
 
-    seriesAPI
-      .updateProgress(seriesId, {
-        chapter_id: chapterId,
-        current_page: 0,
-        total_pages: 0,
-        current_time: timeValue,
-        duration: duration,
-        progress_percent: Math.min(100, progressValue),
-      })
-      .catch((err) => {
-        console.warn("Failed to save audio progress:", err);
-      });
-  }, [store]);
+      seriesAPI
+        .updateProgress(seriesId, {
+          chapter_id: chapterId,
+          current_page: 0,
+          total_pages: 0,
+          current_time: timeValue,
+          duration: duration,
+          progress_percent: Math.min(100, progressValue),
+        })
+        .catch((err) => {
+          console.warn("Failed to save audio progress:", err);
+        });
+    },
+    [store],
+  );
 
-  const saveProgress = useCallback((isFinished: boolean = false) => {
-    const { currentChapter, currentTime, duration, currentSeries } = store.getState();
-    if (!currentChapter || !currentSeries) return;
+  const saveProgress = useCallback(
+    (isFinished: boolean = false) => {
+      const { currentChapter, currentTime, duration, currentSeries } = store.getState();
+      if (!currentChapter || !currentSeries) return;
 
-    saveProgressSnapshot(
-      {
-        seriesId: currentSeries.id,
-        chapterId: currentChapter.id,
-        currentTime,
-        duration,
-      },
-      isFinished,
-    );
-  }, [store, saveProgressSnapshot]);
+      saveProgressSnapshot(
+        {
+          seriesId: currentSeries.id,
+          chapterId: currentChapter.id,
+          currentTime,
+          duration,
+        },
+        isFinished,
+      );
+    },
+    [store, saveProgressSnapshot],
+  );
 
   // 챕터 변경 감지 → 오디오 소스 교체
   useEffect(() => {

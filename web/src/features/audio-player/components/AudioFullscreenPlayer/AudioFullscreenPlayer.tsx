@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ListMusic, Music, Moon, Bookmark, Gauge, MoreVertical, CheckCircle2 } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import { formatDuration } from "../../../../utils/progressUtils";
+import { getAuthenticatedImageUrl } from "../../../../utils/image";
 import { AudioControls } from "../AudioControls/AudioControls";
 import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
 import { AudioSleepTimer } from "../AudioSleepTimer/AudioSleepTimer";
@@ -38,6 +39,18 @@ export function AudioFullscreenPlayer() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [remainingMinutes, setRemainingMinutes] = useState<number | null>(null);
 
+  // 썸네일 URL (캐시 버스팅 포함)
+  const thumbnailUrl = useMemo(() => {
+    if (!currentSeries?.thumbnail_url) return null;
+    const rawUrl = currentSeries.thumbnail_url;
+    const versionSource = currentSeries.updated_at;
+    // updated_at이 없을 경우 static한 0을 사용하여 렌더링 시마다 값이 변하지 않게 함 (Date.now() 제거)
+    const busterValue = versionSource ? new Date(versionSource).getTime() : 0;
+    const cacheBuster = `_cb=${busterValue}`;
+    const separator = rawUrl.includes("?") ? "&" : "?";
+    return getAuthenticatedImageUrl(`${rawUrl}${separator}${cacheBuster}`);
+  }, [currentSeries]);
+
   useEffect(() => {
     if (!sleepTimerEndTime) {
       const t = setTimeout(() => setRemainingMinutes(null), 0);
@@ -63,7 +76,6 @@ export function AudioFullscreenPlayer() {
 
   if (playerMode !== "fullscreen" || status === "idle") return null;
 
-  const thumbnailUrl = currentSeries?.thumbnail_url;
   const seriesTitle = currentSeries?.title || "";
   const chapterTitle = currentChapter?.title || `Chapter ${currentChapter?.chapter_number ?? ""}`;
 

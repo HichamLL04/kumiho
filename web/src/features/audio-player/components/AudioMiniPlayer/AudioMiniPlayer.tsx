@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { X, Volume2, VolumeX, Music } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
 import { AudioVisualizer } from "../AudioVisualizer/AudioVisualizer";
 import { AudioControls } from "../AudioControls/AudioControls";
+import { getAuthenticatedImageUrl } from "../../../../utils/image";
 import styles from "./AudioMiniPlayer.module.css";
 
 function formatTime(seconds: number): string {
@@ -32,6 +33,18 @@ export function AudioMiniPlayer() {
   const close = useAudioPlayerStore((s) => s.close);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // 썸네일 URL (캐시 버스팅 포함)
+  const thumbnailUrl = useMemo(() => {
+    if (!currentSeries?.thumbnail_url) return null;
+    const rawUrl = currentSeries.thumbnail_url;
+    const versionSource = currentSeries.updated_at;
+    // updated_at이 없을 경우 static한 0을 사용하여 렌더링 시마다 값이 변하지 않게 함 (Date.now() 제거)
+    const busterValue = versionSource ? new Date(versionSource).getTime() : 0;
+    const cacheBuster = `_cb=${busterValue}`;
+    const separator = rawUrl.includes("?") ? "&" : "?";
+    return getAuthenticatedImageUrl(`${rawUrl}${separator}${cacheBuster}`);
+  }, [currentSeries]);
+
   const isVisible = playerMode === "mini" && status !== "idle";
 
   // 미니 플레이어 높이를 CSS 변수로 설정하여 body padding-bottom에 반영
@@ -59,7 +72,6 @@ export function AudioMiniPlayer() {
   if (!isVisible) return null;
 
   const isPlaying = status === "playing";
-  const thumbnailUrl = currentSeries?.thumbnail_url;
   const title = currentSeries?.title || "";
   const chapterTitle = currentChapter?.title || `Chapter ${currentChapter?.chapter_number ?? ""}`;
 
