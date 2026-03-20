@@ -292,6 +292,8 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
   const { chapter, seriesId, volumeId, isLoading: chapterLoading, error } = loaderData;
   const chapterId = chapter?.id || "";
+  const setViewStatus = loaderData.setViewStatus;
+  const viewStatus = loaderData.viewStatus;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -1050,18 +1052,18 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   }, [settings.readingMode]);
 
   useEffect(() => {
-    if (chapterLoading || isLoadingText || !chapter || restoreAnchor) return;
+    if (chapterLoading || isLoadingText || !chapter || restoreAnchor || viewStatus === "ready") return;
 
     let frameId = 0;
     frameId = window.requestAnimationFrame(() => {
       updateVirtualPage();
-      loaderData.setViewStatus?.("ready");
+      setViewStatus?.("ready");
     });
 
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [chapter, chapterLoading, isLoadingText, loaderData, restoreAnchor, updateVirtualPage]);
+  }, [chapter, chapterLoading, isLoadingText, restoreAnchor, setViewStatus, updateVirtualPage, viewStatus]);
 
   useEffect(() => {
     if (!restoreAnchor) return;
