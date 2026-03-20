@@ -292,6 +292,8 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
   const { chapter, seriesId, volumeId, isLoading: chapterLoading, error } = loaderData;
   const chapterId = chapter?.id || "";
+  const setViewStatus = loaderData.setViewStatus;
+  const viewStatus = loaderData.viewStatus;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -1050,6 +1052,20 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   }, [settings.readingMode]);
 
   useEffect(() => {
+    if (chapterLoading || isLoadingText || !chapter || restoreAnchor || viewStatus === "ready") return;
+
+    let frameId = 0;
+    frameId = window.requestAnimationFrame(() => {
+      updateVirtualPage();
+      setViewStatus?.("ready");
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [chapter, chapterLoading, isLoadingText, restoreAnchor, setViewStatus, updateVirtualPage, viewStatus]);
+
+  useEffect(() => {
     if (!restoreAnchor) return;
 
     const container = scrollRef.current;
@@ -1113,7 +1129,10 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           pendingHighlightParagraphRef.current = null;
           pendingModeTransitionRef.current = null;
           isRestoringRef.current = false;
-          window.requestAnimationFrame(() => updateVirtualPage());
+          frameThree = window.requestAnimationFrame(() => {
+            updateVirtualPage();
+            loaderData.setViewStatus?.("ready");
+          });
           setRestoreAnchor(null);
         });
         return;
