@@ -58,6 +58,7 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
   }, [isOpen, sleepTimerMinutes]);
 
   useEffect(() => {
+    if (!isOpen) return;
     if (!sleepTimerEndTime) {
       const t = setTimeout(() => setRemainingText(""), 0);
       return () => clearTimeout(t);
@@ -76,7 +77,7 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
       clearTimeout(timeout);
       clearInterval(interval);
     };
-  }, [sleepTimerEndTime]);
+  }, [isOpen, sleepTimerEndTime]);
 
   // Initial scroll and event listeners
   useEffect(() => {

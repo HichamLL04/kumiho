@@ -52,6 +52,7 @@ export function AudioFullscreenPlayer() {
   }, [currentSeries]);
 
   useEffect(() => {
+    if (playerMode !== "fullscreen") return;
     if (!sleepTimerEndTime) {
       const t = setTimeout(() => setRemainingMinutes(null), 0);
       return () => clearTimeout(t);
@@ -72,7 +73,7 @@ export function AudioFullscreenPlayer() {
       clearTimeout(timeout);
       clearInterval(interval);
     };
-  }, [sleepTimerEndTime]);
+  }, [playerMode, sleepTimerEndTime]);
 
   if (playerMode !== "fullscreen" || status === "idle") return null;
 
