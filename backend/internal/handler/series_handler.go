@@ -42,22 +42,8 @@ func (h *SeriesHandler) assignVolumeThumbnailURL(volume *model.Volume) {
 		return
 	}
 
-	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-		if _, err := os.Stat(*volume.ThumbnailPath); err == nil {
-			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-			volume.ThumbnailURL = &url
-			return
-		}
-	}
-
-	pageID, err := h.volumeRepo.GetFirstPageID(nil, volume.ID)
-	if err == nil && pageID != "" {
-		url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-		volume.ThumbnailURL = &url
-		return
-	}
-
-	volume.ThumbnailURL = nil
+	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+	volume.ThumbnailURL = &url
 }
 
 func NewSeriesHandler(
@@ -1063,7 +1049,12 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 	for i := range volumes {
 		vID := volumes[i].ID
 
-		// 실제로 제공 가능한 경우에만 썸네일 URL 설정
+		// 하위 볼륨 개수 조회 (볼륨 썸네일/플레이스홀더 fallback 판단에도 사용)
+		if subVolCount, err := h.volumeRepo.CountByParentID(nil, vID); err == nil {
+			volumes[i].SubVolumeCount = subVolCount
+		}
+
+		// 이미지 핸들러가 PDF/EPUB/재귀 탐색 및 플레이스홀더 fallback을 처리한다.
 		h.assignVolumeThumbnailURL(&volumes[i])
 
 		// 배 조회된 데이터 매핑
@@ -1075,11 +1066,6 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 		}
 		if percent, ok := progressPercentMap[vID]; ok {
 			volumes[i].ProgressPercent = percent
-		}
-
-		// 하위 볼륨 개수 조회 (이 부분도 추후 최적화 가능하나 우선 순위 낮음)
-		if subVolCount, err := h.volumeRepo.CountByParentID(nil, vID); err == nil {
-			volumes[i].SubVolumeCount = subVolCount
 		}
 
 		totalPages := volumes[i].TotalPageCount

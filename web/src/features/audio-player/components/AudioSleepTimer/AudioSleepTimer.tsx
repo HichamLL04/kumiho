@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
 import styles from "./AudioSleepTimer.module.css";
@@ -13,6 +13,7 @@ const ITEM_HEIGHT = 44;
 
 export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,6 +57,19 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
       window.clearTimeout(syncTimer);
     };
   }, [isOpen, sleepTimerMinutes]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -212,8 +226,18 @@ export function AudioSleepTimer({ isOpen, onClose }: AudioSleepTimerProps) {
       className={styles.overlay}
       onClick={handleOverlayClick}
     >
-      <div className={styles.modal}>
-        <div className={styles.title}>{t("audio_player.sleep_timer", "Sleep Timer")}</div>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <div
+          className={styles.title}
+          id={titleId}
+        >
+          {t("audio_player.sleep_timer", "Sleep Timer")}
+        </div>
 
         <div className={styles.optionsWrapper}>
           <div className={styles.selectionOverlay}></div>

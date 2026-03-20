@@ -126,6 +126,14 @@ func thumbnailExtFromMediaType(mediaType string) string {
 	}
 }
 
+func (h *ImageHandler) redirectThumbnailPlaceholder(c *fiber.Ctx, hasAudio bool) error {
+	placeholderPath := "/reading-kumiho.png"
+	if hasAudio {
+		placeholderPath = "/audio-kumiho.png"
+	}
+	return c.Redirect(placeholderPath, fiber.StatusFound)
+}
+
 func isSvgOrXMLHeaderFile(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
@@ -558,6 +566,7 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 	var firstPagePath string
 	var archivePath string
 	var customThumbnailPath string
+	var fallbackPlaceholderAudio bool
 
 	userID := middleware.GetUserID(c)
 
@@ -666,6 +675,7 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 				"error": "volume not found",
 			})
 		}
+		fallbackPlaceholderAudio = volume.HasAudio
 
 		if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
 			thumbPath := *volume.ThumbnailPath
@@ -712,9 +722,7 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 			// 볼륨의 첫 번째 챕터 → 첫 번째 페이지 (재귀적 탐색 지원)
 			targetChapter, targetPage, targetArchive, found := h.findFirstAvailableChapterRecursively(resourceID)
 			if !found {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "thumbnail not found on disk",
-				})
+				return h.redirectThumbnailPlaceholder(c, volume.HasAudio)
 			}
 
 			// EPUB 챕터는 pages 테이블 레코드가 비어 있을 수 있으므로 커버 추출 fallback 처리
@@ -743,10 +751,12 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 				}
 			}
 
+			if targetChapter.HasAudio {
+				fallbackPlaceholderAudio = true
+			}
+
 			if targetPage == nil {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "no pages found in volume hierarchy",
-				})
+				return h.redirectThumbnailPlaceholder(c, fallbackPlaceholderAudio)
 			}
 			firstPagePath = targetPage.Path
 			archivePath = targetArchive
@@ -810,6 +820,9 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 	} else if firstPagePath != "" {
 		imageData, contentType, err = h.readImageFromDisk(firstPagePath)
 	} else {
+		if resourceType == "volumes" {
+			return h.redirectThumbnailPlaceholder(c, fallbackPlaceholderAudio)
+		}
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "thumbnail not found",
 		})
