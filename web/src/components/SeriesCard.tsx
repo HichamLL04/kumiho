@@ -16,7 +16,7 @@ import {
 import { volumeAPI, seriesAPI, chapterAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
 import { normalizeExtensionBadge, parseSupportedExtension } from "../utils/extension";
-import type { Chapter, Series, Volume } from "../types/series";
+import type { Series, Volume } from "../types/series";
 import { useViewerStore } from "../stores/viewerStore";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import styles from "./SeriesCard.module.css";
@@ -157,61 +157,24 @@ export function SeriesCard({
   const playAudio = async () => {
     const store = useAudioPlayerStore.getState();
     try {
-      if (type === "volume") {
-        const vol = item as Volume;
-        const [seriesRes, chaptersRes, progressRes, seriesProgressListRes] = await Promise.all([
-          seriesAPI.get(vol.series_id),
-          seriesAPI.getChapters(vol.series_id),
-          volumeAPI.getProgress(vol.id), // 볼륨 단위 진행도 조회
-          seriesAPI.getProgressList(vol.series_id).catch(() => null),
-        ]);
-        const series = seriesRes.data;
-        const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-        const orderedChapters = allChapters;
-        const progressList = Array.isArray(progressRes.data) ? progressRes.data : progressRes.data?.progress_list || [];
-        const lastProg = progressList[0];
-
-        if (orderedChapters.length === 0) {
+      const result =
+        type === "volume"
+          ? await store.bootstrapAndPlay({
+              source: "volume",
+              seriesId: (item as Volume).series_id,
+              volumeId: item.id,
+              volume: item as Volume,
+            })
+          : await store.bootstrapAndPlay({
+              source: "series",
+              seriesId: item.id,
+              series: item as Series,
+            });
+      if (!result.ok) {
+        if (result.reason === "no_chapters") {
           setAlertModal({ isOpen: true, type: "warning", message: t("series.alert.no_readable_chapter") });
-          return;
         }
-
-        const startChapter = lastProg?.chapter_id
-          ? orderedChapters.find((c) => c.id === lastProg.chapter_id) ||
-            orderedChapters.find((c) => c.volume_id === vol.id) ||
-            orderedChapters[0]
-          : orderedChapters.find((c) => c.volume_id === vol.id) || orderedChapters[0];
-
-        const startTime = lastProg?.chapter_id === startChapter.id ? (lastProg.current_time ?? 0) : 0;
-        store.loadAndPlay(series, startChapter, orderedChapters, vol, startTime);
-        if (seriesProgressListRes?.data?.progress_list) {
-          store.setChapterProgressList(seriesProgressListRes.data.progress_list);
-        }
-      } else {
-        const series = item as Series;
-        const [chaptersRes, progressRes, seriesProgressListRes] = await Promise.all([
-          seriesAPI.getChapters(series.id),
-          seriesAPI.getProgress(series.id),
-          seriesAPI.getProgressList(series.id).catch(() => null),
-        ]);
-        const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-        const orderedChapters = allChapters;
-        const progress = progressRes.data?.progress;
-
-        if (orderedChapters.length === 0) {
-          setAlertModal({ isOpen: true, type: "warning", message: t("series.alert.no_readable_chapter") });
-          return;
-        }
-
-        const resumeChapter = progress?.chapter_id
-          ? orderedChapters.find((c) => c.id === progress.chapter_id) || orderedChapters[0]
-          : orderedChapters[0];
-
-        const startTime = progress?.chapter_id === resumeChapter.id ? (progress.current_time ?? 0) : 0;
-        store.loadAndPlay(series, resumeChapter, orderedChapters, null, startTime);
-        if (seriesProgressListRes?.data?.progress_list) {
-          store.setChapterProgressList(seriesProgressListRes.data.progress_list);
-        }
+        return;
       }
     } catch (err) {
       console.error("Failed to start audio playback:", err);

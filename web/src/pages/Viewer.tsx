@@ -3,13 +3,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useChapterLoader } from "../features/viewer";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
-import { seriesAPI, volumeAPI } from "../api/client";
 import { ImageViewerRoute } from "./ImageViewerRoute";
 import { PdfViewerRoute } from "./PdfViewerRoute";
 import { EpubViewerRoute } from "./EpubViewerRoute";
 import { TextViewerRoute } from "./TextViewerRoute";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
-import type { Chapter, ReadingProgress } from "../types/series";
+import type { Chapter } from "../types/series";
 import styles from "./Viewer.module.css";
 
 export function ViewerPage() {
@@ -39,40 +38,18 @@ export function ViewerPage() {
 
     void (async () => {
       try {
-        // Fetch series and chapters in parallel
-        const [seriesRes, chaptersRes, progressListRes] = await Promise.all([
-          seriesAPI.get(seriesId),
-          seriesAPI.getChapters(seriesId),
-          seriesAPI.getProgressList(seriesId).catch(() => null),
-        ]);
-
-        const series = seriesRes.data;
-        const chapters = chaptersRes.data.chapters || [];
-        const activeChapter = chapters.find((item) => item.id === chapter.id) ?? (chapter as Chapter);
-        const chapterProgressList = progressListRes?.data?.progress_list;
-        const currentChapterProgress = Array.isArray(chapterProgressList)
-          ? chapterProgressList.find((item: ReadingProgress) => item.chapter_id === activeChapter.id)
-          : undefined;
-        const startTime = currentChapterProgress?.current_time ?? 0;
-
-        let volume = null;
-        if (volumeId) {
-          try {
-            const volRes = await volumeAPI.get(volumeId);
-            if (cancelled) return;
-            volume = volRes.data;
-          } catch {
-            /* ignore */
-          }
-        }
-
-        if (cancelled) return;
         const store = useAudioPlayerStore.getState();
-        store.loadAndPlay(series, activeChapter, chapters, volume, startTime);
-        if (chapterProgressList) {
-          store.setChapterProgressList(chapterProgressList);
-        }
+        const result = await store.bootstrapAndPlay({
+          source: "viewer",
+          seriesId,
+          volumeId: volumeId ?? undefined,
+          preferredChapterId: chapter.id,
+          chapter: chapter as Chapter,
+        });
         if (cancelled) return;
+        if (!result.ok) {
+          throw new Error(result.reason ?? "bootstrap_failed");
+        }
         if (window.history.length > 1) {
           navigate(-1);
         } else if (volumeId) {

@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
+import { seriesAPI, volumeAPI } from "../api/client";
 import type { Series, Volume, Chapter, ReadingProgress } from "../types/series";
 
 export type PlaybackStatus = "idle" | "loading" | "playing" | "paused" | "ended" | "error";
 export type PlayerMode = "fullscreen" | "sidebar" | "mini" | "hidden";
+export type AudioBootstrapSource = "series" | "volume" | "viewer";
 
 export interface AudioPlayerSettings {
   playbackRate: number;
@@ -20,6 +22,22 @@ export type AudioChapterProgress = Partial<ReadingProgress> & {
   current_page: number;
   total_pages: number;
 };
+
+export interface AudioBootstrapOptions {
+  source: AudioBootstrapSource;
+  seriesId: string;
+  volumeId?: string;
+  preferredChapterId?: string;
+  preferredStartTime?: number;
+  series?: Series | null;
+  volume?: Volume | null;
+  chapter?: Chapter | null;
+}
+
+export interface AudioBootstrapResult {
+  ok: boolean;
+  reason?: "no_chapters" | "fetch_failed";
+}
 
 interface AudioPlayerState {
   // Content
@@ -58,6 +76,7 @@ interface AudioPlayerState {
     volume?: Volume | null,
     startTime?: number,
   ) => void;
+  bootstrapAndPlay: (options: AudioBootstrapOptions) => Promise<AudioBootstrapResult>;
   updateCurrentSeries: (series: Series) => void;
   playChapter: (chapter: Chapter, startTime?: number) => void;
   setChapters: (chapters: Chapter[]) => void;
@@ -108,6 +127,20 @@ const DEFAULT_SETTINGS: AudioPlayerSettings = {
   volumeBoost: false,
 };
 
+const getChapterProgressMap = (progressList: ReadingProgress[] | undefined): Record<string, AudioChapterProgress> => {
+  const chapterProgressMap: Record<string, AudioChapterProgress> = {};
+  if (!Array.isArray(progressList)) return chapterProgressMap;
+
+  for (const progress of progressList) {
+    const chapterID = progress.chapter_id;
+    if (chapterID) {
+      chapterProgressMap[chapterID] = progress;
+    }
+  }
+
+  return chapterProgressMap;
+};
+
 export const useAudioPlayerStore = create<AudioPlayerState>()(
   devtools(
     subscribeWithSelector((set, get) => ({
@@ -145,6 +178,85 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
         });
       },
 
+      bootstrapAndPlay: async ({
+        source,
+        seriesId,
+        volumeId,
+        preferredChapterId,
+        preferredStartTime,
+        series: initialSeries,
+        volume: initialVolume,
+        chapter: initialChapter,
+      }) => {
+        try {
+          const [seriesRes, chaptersRes, progressListRes, progressRes, volumeRes] = await Promise.all([
+            initialSeries ? Promise.resolve({ data: initialSeries }) : seriesAPI.get(seriesId),
+            seriesAPI.getChapters(seriesId),
+            seriesAPI.getProgressList(seriesId).catch(() => null),
+            source === "series"
+              ? seriesAPI.getProgress(seriesId).catch(() => null)
+              : source === "volume" && volumeId
+                ? volumeAPI.getProgress(volumeId).catch(() => null)
+                : Promise.resolve(null),
+            volumeId
+              ? initialVolume
+                ? Promise.resolve({ data: initialVolume })
+                : volumeAPI.get(volumeId).catch(() => null)
+              : Promise.resolve(null),
+          ]);
+
+          const series = seriesRes.data;
+          const chapters: Chapter[] = chaptersRes.data.chapters || [];
+          if (chapters.length === 0) {
+            return { ok: false, reason: "no_chapters" };
+          }
+
+          const progressList = progressListRes?.data?.progress_list;
+          const chapterProgressMap = getChapterProgressMap(progressList);
+          let startChapter: Chapter | null = null;
+          let startTime = preferredStartTime ?? 0;
+
+          if (source === "series") {
+            const progress = progressRes?.data?.progress as ReadingProgress | undefined;
+            startChapter = progress?.chapter_id
+              ? chapters.find((item) => item.id === progress.chapter_id) || chapters[0]
+              : chapters[0];
+            startTime = progress?.chapter_id === startChapter.id ? (progress.current_time ?? 0) : 0;
+          } else if (source === "volume") {
+            const progressListData = Array.isArray(progressRes?.data)
+              ? (progressRes.data as ReadingProgress[])
+              : ((progressRes?.data?.progress_list as ReadingProgress[] | undefined) ?? []);
+            const lastProgress = progressListData[0];
+            startChapter = lastProgress?.chapter_id
+              ? chapters.find((item) => item.id === lastProgress.chapter_id) ||
+                (volumeId ? chapters.find((item) => item.volume_id === volumeId) : undefined) ||
+                chapters[0]
+              : (volumeId ? chapters.find((item) => item.volume_id === volumeId) : undefined) || chapters[0];
+            startTime = lastProgress?.chapter_id === startChapter.id ? (lastProgress.current_time ?? 0) : 0;
+          } else {
+            startChapter =
+              (preferredChapterId ? chapters.find((item) => item.id === preferredChapterId) : undefined) ||
+              initialChapter ||
+              null;
+            if (!startChapter) {
+              return { ok: false, reason: "fetch_failed" };
+            }
+            startTime = chapterProgressMap[startChapter.id]?.current_time ?? preferredStartTime ?? 0;
+          }
+
+          if (!startChapter) {
+            return { ok: false, reason: "no_chapters" };
+          }
+
+          get().loadAndPlay(series, startChapter, chapters, volumeRes?.data ?? null, startTime);
+          set({ chapterProgressMap });
+          return { ok: true };
+        } catch (error) {
+          console.error("Failed to bootstrap audio playback:", error);
+          return { ok: false, reason: "fetch_failed" };
+        }
+      },
+
       updateCurrentSeries: (series) => {
         const { currentSeries } = get();
         if (currentSeries && currentSeries.id === series.id) {
@@ -166,16 +278,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
       },
 
       setChapters: (chapters) => set({ chapters }),
-      setChapterProgressList: (progressList) => {
-        const chapterProgressMap: Record<string, AudioChapterProgress> = {};
-        for (const progress of progressList) {
-          const chapterID = progress.chapter_id;
-          if (chapterID) {
-            chapterProgressMap[chapterID] = progress;
-          }
-        }
-        set({ chapterProgressMap });
-      },
+      setChapterProgressList: (progressList) => set({ chapterProgressMap: getChapterProgressMap(progressList) }),
 
       // Playback actions
       play: () => set({ status: "playing" }),

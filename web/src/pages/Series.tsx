@@ -290,9 +290,22 @@ export function SeriesPage() {
           lastVolumeId = currentVolumeId;
 
           const volumePercent = Math.min(100, (audioState.currentTime / audioState.duration) * 100);
-          setVolumes((prev) =>
-            prev.map((v) => (v.id === currentVolumeId ? { ...v, progress_percent: volumePercent } : v)),
-          );
+          setVolumes((prev) => {
+            const index = prev.findIndex((volume) => volume.id === currentVolumeId);
+            if (index < 0) return prev;
+
+            const currentVolume = prev[index];
+            if (
+              typeof currentVolume.progress_percent === "number" &&
+              Math.abs(currentVolume.progress_percent - volumePercent) < 0.01
+            ) {
+              return prev;
+            }
+
+            const next = [...prev];
+            next[index] = { ...currentVolume, progress_percent: volumePercent };
+            return next;
+          });
         }
       },
       { equalityFn: shallow },
@@ -379,38 +392,20 @@ export function SeriesPage() {
               onPlay={async () => {
                 const isAudio = series.library_type === "audiobook" || series.has_audio;
 
-                if (isAudio && volumes.length > 0) {
-                  // 오디오북: 오디오 플레이어로 재생
-                  // 시리즈 전체 챕터 로드 (볼륨 간 매끄러운 이동을 위함)
-                  const [chaptersRes, progressListRes] = await Promise.all([
-                    seriesAPI.getChapters(series.id),
-                    seriesAPI.getProgressList(series.id).catch(() => null),
-                  ]);
-                  const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-                  const sorted = allChapters;
-                  if (sorted.length === 0) {
-                    showAlert(t("series.alert.no_readable_chapter"), "warning");
+                if (isAudio) {
+                  const store = useAudioPlayerStore.getState();
+                  const result = await store.bootstrapAndPlay({
+                    source: "series",
+                    seriesId: series.id,
+                    series,
+                  });
+                  if (!result.ok) {
+                    if (result.reason === "no_chapters") {
+                      showAlert(t("series.alert.no_readable_chapter"), "warning");
+                      return;
+                    }
+                    showAlert(t("series.alert.load_failed", { defaultValue: "오디오 정보를 불러오는데 실패했습니다." }), "error");
                     return;
-                  }
-
-                  // 진행도의 챕터 찾기, 없으면 첫 챕터
-                  let startChapter = sorted[0];
-                  let startTime = 0;
-                  if (progress?.chapter_id) {
-                    const found = sorted.find((c) => c.id === progress.chapter_id);
-                    if (found) {
-                      startChapter = found;
-                      startTime = progress.current_time ?? 0;
-                    }
-                  }
-
-                  if (startChapter) {
-                    // volume 파라미터는 null로 전달 (현재 챕터에 맞춰 자동 감지)
-                    const store = useAudioPlayerStore.getState();
-                    store.loadAndPlay(series, startChapter, sorted, null, startTime);
-                    if (progressListRes?.data?.progress_list) {
-                      store.setChapterProgressList(progressListRes.data.progress_list);
-                    }
                   }
                   return;
                 }
