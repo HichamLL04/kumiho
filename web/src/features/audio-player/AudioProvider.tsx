@@ -402,7 +402,7 @@ export function AudioProvider() {
       if (!settings.autoPlayNext || !currentChapter || chapters.length === 0) return;
       const currentIndex = chapters.findIndex((c) => c.id === currentChapter.id);
       if (currentIndex >= 0 && currentIndex < chapters.length - 1) {
-        store.getState().playChapter(chapters[currentIndex + 1]);
+        store.getState().playChapterFromProgress(chapters[currentIndex + 1]);
       }
     };
 

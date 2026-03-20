@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ListMusic, Music, Moon, Bookmark, Gauge, MoreVertical, CheckCircle2 } from "lucide-react";
-import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
+import { useAudioPlayerStore, isCompletedAudioChapter } from "../../../../stores/audioPlayerStore";
+import type { Chapter } from "../../../../types/series";
 import { formatDuration } from "../../../../utils/progressUtils";
 import { getAuthenticatedImageUrl } from "../../../../utils/image";
 import { AudioControls } from "../AudioControls/AudioControls";
@@ -10,6 +11,7 @@ import { AudioSleepTimer } from "../AudioSleepTimer/AudioSleepTimer";
 import { AudioBookmarkList } from "../AudioBookmarkList/AudioBookmarkList";
 import { AudioSettingsPanel } from "../AudioSettingsPanel/AudioSettingsPanel";
 import { AudioVisualizer } from "../AudioVisualizer/AudioVisualizer";
+import { AlertModal } from "../../../../components/modals/AlertModal";
 import styles from "./AudioFullscreenPlayer.module.css";
 
 const SPEED_CYCLE = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
@@ -32,12 +34,13 @@ export function AudioFullscreenPlayer() {
   const setPlayerMode = useAudioPlayerStore((s) => s.setPlayerMode);
   const setPlaybackRate = useAudioPlayerStore((s) => s.setPlaybackRate);
   const toggleChapterList = useAudioPlayerStore((s) => s.toggleChapterList);
-  const playChapter = useAudioPlayerStore((s) => s.playChapter);
+  const playChapterFromProgress = useAudioPlayerStore((s) => s.playChapterFromProgress);
 
   const [sleepTimerOpen, setSleepTimerOpen] = useState(false);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [remainingMinutes, setRemainingMinutes] = useState<number | null>(null);
+  const [restartConfirmChapter, setRestartConfirmChapter] = useState<Chapter | null>(null);
 
   // 썸네일 URL (캐시 버스팅 포함)
   const thumbnailUrl = useMemo(() => {
@@ -89,8 +92,11 @@ export function AudioFullscreenPlayer() {
 
     const chapter = chapters.find((c) => c.id === chapterId);
     if (chapter) {
-      const resumeTime = chapterProgressMap[chapterId]?.current_time ?? 0;
-      playChapter(chapter, resumeTime);
+      if (isCompletedAudioChapter(chapter, chapterProgressMap[chapter.id])) {
+        setRestartConfirmChapter(chapter);
+        return;
+      }
+      playChapterFromProgress(chapter);
     }
   };
 
@@ -278,6 +284,22 @@ export function AudioFullscreenPlayer() {
       <AudioSettingsPanel
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+      />
+      <AlertModal
+        isOpen={restartConfirmChapter !== null}
+        type="info"
+        title="완독한 회차"
+        message="이미 완독한 회차입니다. 처음부터 재생할까요?"
+        confirmText="처음부터 재생"
+        cancelText="취소"
+        showCancel
+        onConfirm={() => {
+          if (restartConfirmChapter) {
+            playChapterFromProgress(restartConfirmChapter);
+          }
+          setRestartConfirmChapter(null);
+        }}
+        onCancel={() => setRestartConfirmChapter(null)}
       />
     </div>
   );

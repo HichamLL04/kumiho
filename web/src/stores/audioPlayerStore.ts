@@ -23,6 +23,22 @@ export type AudioChapterProgress = Partial<ReadingProgress> & {
   total_pages: number;
 };
 
+export const isCompletedAudioChapter = (
+  chapter: Chapter,
+  progress?: AudioChapterProgress,
+): boolean => {
+  if (!progress) return chapter.is_read === true;
+
+  const duration = chapter.duration ?? progress.duration ?? 0;
+  const currentTime = progress.current_time ?? 0;
+
+  return (
+    chapter.is_read === true ||
+    (progress.progress_percent ?? 0) >= 99.9 ||
+    (duration > 0 && currentTime >= duration - 1)
+  );
+};
+
 export interface AudioBootstrapOptions {
   source: AudioBootstrapSource;
   seriesId: string;
@@ -79,6 +95,7 @@ interface AudioPlayerState {
   bootstrapAndPlay: (options: AudioBootstrapOptions) => Promise<AudioBootstrapResult>;
   updateCurrentSeries: (series: Series) => void;
   playChapter: (chapter: Chapter, startTime?: number) => void;
+  playChapterFromProgress: (chapter: Chapter) => void;
   setChapters: (chapters: Chapter[]) => void;
   setChapterProgressList: (progressList: ReadingProgress[]) => void;
 
@@ -277,6 +294,12 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
         });
       },
 
+      playChapterFromProgress: (chapter) => {
+        const progress = get().chapterProgressMap[chapter.id];
+        const resumeTime = isCompletedAudioChapter(chapter, progress) ? 0 : (progress?.current_time ?? 0);
+        get().playChapter(chapter, resumeTime);
+      },
+
       setChapters: (chapters) => set({ chapters }),
       setChapterProgressList: (progressList) => set({ chapterProgressMap: getChapterProgressMap(progressList) }),
 
@@ -314,7 +337,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
         if (!currentChapter || chapters.length === 0) return;
         const currentIndex = chapters.findIndex((c) => c.id === currentChapter.id);
         if (currentIndex >= 0 && currentIndex < chapters.length - 1) {
-          get().playChapter(chapters[currentIndex + 1]);
+          get().playChapterFromProgress(chapters[currentIndex + 1]);
         }
       },
 
@@ -328,7 +351,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>()(
         }
         const currentIndex = chapters.findIndex((c) => c.id === currentChapter.id);
         if (currentIndex > 0) {
-          get().playChapter(chapters[currentIndex - 1]);
+          get().playChapterFromProgress(chapters[currentIndex - 1]);
         }
       },
 

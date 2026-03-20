@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Moon, Bookmark, Music } from "lucide-react";
-import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
+import { useAudioPlayerStore, isCompletedAudioChapter } from "../../../../stores/audioPlayerStore";
 import { AudioControls } from "../AudioControls/AudioControls";
 import { AudioProgressBar } from "../AudioProgressBar/AudioProgressBar";
 import { AudioSleepTimer } from "../AudioSleepTimer/AudioSleepTimer";
 import { AudioBookmarkList } from "../AudioBookmarkList/AudioBookmarkList";
 import { AudioSpeedSelector } from "../AudioSpeedSelector/AudioSpeedSelector";
 import { formatDuration } from "../../../../utils/progressUtils";
+import type { Chapter } from "../../../../types/series";
+import { AlertModal } from "../../../../components/modals/AlertModal";
 import styles from "./AudioSidebarPlayer.module.css";
 
 export function AudioSidebarPlayer() {
@@ -17,14 +19,16 @@ export function AudioSidebarPlayer() {
   const currentSeries = useAudioPlayerStore((s) => s.currentSeries);
   const currentChapter = useAudioPlayerStore((s) => s.currentChapter);
   const chapters = useAudioPlayerStore((s) => s.chapters);
+  const chapterProgressMap = useAudioPlayerStore((s) => s.chapterProgressMap);
   const playbackRate = useAudioPlayerStore((s) => s.settings.playbackRate);
   const sleepTimerMinutes = useAudioPlayerStore((s) => s.sleepTimerMinutes);
   const setPlayerMode = useAudioPlayerStore((s) => s.setPlayerMode);
-  const playChapter = useAudioPlayerStore((s) => s.playChapter);
+  const playChapterFromProgress = useAudioPlayerStore((s) => s.playChapterFromProgress);
 
   const [sleepTimerOpen, setSleepTimerOpen] = useState(false);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [speedOpen, setSpeedOpen] = useState(false);
+  const [restartConfirmChapter, setRestartConfirmChapter] = useState<Chapter | null>(null);
 
   if (playerMode !== "sidebar" || status === "idle") return null;
 
@@ -39,7 +43,11 @@ export function AudioSidebarPlayer() {
   const handleChapterClick = (chapterId: string) => {
     const chapter = chapters.find((c) => c.id === chapterId);
     if (chapter) {
-      playChapter(chapter);
+      if (isCompletedAudioChapter(chapter, chapterProgressMap[chapter.id])) {
+        setRestartConfirmChapter(chapter);
+        return;
+      }
+      playChapterFromProgress(chapter);
     }
   };
 
@@ -168,6 +176,22 @@ export function AudioSidebarPlayer() {
       <AudioSpeedSelector
         isOpen={speedOpen}
         onClose={() => setSpeedOpen(false)}
+      />
+      <AlertModal
+        isOpen={restartConfirmChapter !== null}
+        type="info"
+        title="완독한 회차"
+        message="이미 완독한 회차입니다. 처음부터 재생할까요?"
+        confirmText="처음부터 재생"
+        cancelText="취소"
+        showCancel
+        onConfirm={() => {
+          if (restartConfirmChapter) {
+            playChapterFromProgress(restartConfirmChapter);
+          }
+          setRestartConfirmChapter(null);
+        }}
+        onCancel={() => setRestartConfirmChapter(null)}
       />
     </div>
   );
