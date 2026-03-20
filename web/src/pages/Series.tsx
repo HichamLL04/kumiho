@@ -413,31 +413,36 @@ export function SeriesPage() {
                 if (progress && progress.chapter_id) {
                   navigate(`/viewer/${progress.chapter_id}`, { state: { from: viewerFrom } });
                 } else if (volumes.length > 0) {
-                  const sortedVolumes = [...volumes].sort((a, b) => a.volume_number - b.volume_number);
-                  const [chaptersRes, volumesRes] = await Promise.all([
-                    seriesAPI.getChapters(series.id),
-                    seriesAPI.getVolumes(series.id),
-                  ]);
-                  const allChapters: Chapter[] = chaptersRes.data.chapters || [];
-                  const allVolumes: Volume[] = volumesRes.data.volumes || [];
-                  const chapterSearchContext = {
-                    seriesId: series.id,
-                    allChapters,
-                    allVolumes,
-                  };
+                  try {
+                    const sortedVolumes = [...volumes].sort((a, b) => a.volume_number - b.volume_number);
+                    const [chaptersRes, volumesRes] = await Promise.all([
+                      seriesAPI.getChapters(series.id),
+                      seriesAPI.getVolumes(series.id),
+                    ]);
+                    const allChapters: Chapter[] = chaptersRes.data.chapters || [];
+                    const allVolumes: Volume[] = volumesRes.data.volumes || [];
+                    const chapterSearchContext = {
+                      seriesId: series.id,
+                      allChapters,
+                      allVolumes,
+                    };
 
-                  // 재귀적으로 첫 번째 챕터 탐색
-                  let firstChapter: Chapter | null = null;
-                  for (const vol of sortedVolumes) {
-                    firstChapter = await volumeAPI.findFirstChapterRecursively(vol.id, chapterSearchContext);
-                    if (firstChapter) break;
-                  }
+                    // 재귀적으로 첫 번째 챕터 탐색
+                    let firstChapter: Chapter | null = null;
+                    for (const vol of sortedVolumes) {
+                      firstChapter = await volumeAPI.findFirstChapterRecursively(vol.id, chapterSearchContext);
+                      if (firstChapter) break;
+                    }
 
-                  if (firstChapter) {
-                    navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
-                  } else {
-                    // 챕터를 전혀 찾지 못한 경우 첫 번째 볼륨으로 이동
-                    openVolume(sortedVolumes[0]);
+                    if (firstChapter) {
+                      navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
+                    } else {
+                      // 챕터를 전혀 찾지 못한 경우 첫 번째 볼륨으로 이동
+                      openVolume(sortedVolumes[0]);
+                    }
+                  } catch (error) {
+                    console.error("Failed to find first readable chapter:", error);
+                    showAlert(t("series.alert.load_failed", { defaultValue: "시리즈 정보를 불러오는데 실패했습니다." }), "error");
                   }
                 } else {
                   showAlert(t("series.alert.no_readable_volume"), "warning");
