@@ -63,6 +63,7 @@ It was originally developed by a developer for personal convenience, after feeli
 | **📂 File-System Mirroring** | It mirrors your physical folder structure directly. No complex metadata matching required—what you see in your OS is what you get in the app. |
 | **⚡ Lightweight**           | Optimized for low-resource environments. It runs smoothly with minimal memory footprint.                                                      |
 | **📱 Responsive Viewer**     | Provides a seamless streaming experience on PC, Tablet, and Mobile devices. Supports 'Webtoon' scrolling mode.                                |
+| **🎧 Audiobook Support**     | Supports audiobook libraries with chapter list, resume playback, progress tracking, bookmarks, and sleep timer.                               |
 | **🎵 Immersive BGM**         | Automatically plays audio files (`.mp3`) within the series folder when the filename matches.                                                  |
 
 ### Supported Formats
@@ -72,6 +73,7 @@ It was originally developed by a developer for personal convenience, after feeli
 | **Images**   | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
 | **Archives** | `.zip`, `.cbz`                                   |
 | **E-books**  | `.epub`, `.pdf`, `.txt`                          |
+| **Audio**    | `.mp3`, `.wav`, `.ogg`, `.oga`, `.flac`, `.m4a`, `.m4b`, `.aac`, `.wma`, `.opus`, `.mp4` |
 
 > 📁 **Folder Structure**: Automatically recognizes image files in folders or archive files and organizes them into volumes/chapters.
 
@@ -134,6 +136,13 @@ Kumiho supports **infinite folder hierarchy**. You can organize your series with
 - BGM auto-plays when the audio file has the same base filename as the currently opened volume/chapter file.
 - Example: `001.zip` ↔ `001.mp3`, `001.epub` ↔ `001.mp3`
 
+### 🎧 Audiobook Support
+
+- Supported audiobook formats: `.mp3`, `.wav`, `.ogg`, `.oga`, `.flac`, `.m4a`, `.m4b`, `.aac`, `.wma`, `.opus`, `.mp4`
+- Supports resume playback, chapter-based navigation, progress tracking, bookmarks, and sleep timer
+- Audiobooks can be organized with the same nested folder structure used for books
+- When creating a library for audiobooks, set the library type to **Audiobook**
+
 ### 🛠 Installation (Docker)
 
 #### Docker Compose (Recommended)
@@ -185,6 +194,8 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 2. Click the **Add New Library** button.
 3. Enter `/books` in the **Set Path** field. (Do NOT use the host path `./books`!)
 
+> Note: The scanner automatically excludes `@eaDir`, `#recycle`, `.DS_Store`, and `Thumbs.db`.
+
 ## 🐞 Bug Reports & Feature Requests
 
 - [GitHub Issues](https://github.com/aha-hyeong/kumiho/issues)
@@ -221,6 +232,7 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 | **📂 ファイルシステムミラーリング** | 複雑なメタデータ管理なしで、フォルダ構造そのままで（ツリービュー）ライブラリを表示します。                  |
 | **⚡ 軽量なリソース**               | 低スペックのNASでもメモリ使用量を気にせず快適に動作します。                                                 |
 | **📱 レスポンシブWebビューア**      | PC、タブレット、モバイルなど、どこでも途切れのないストリーミングビューアを提供します。（Webtoonモード対応） |
+| **🎧 オーディオブック対応**         | オーディオブックライブラリをサポートし、チャプター一覧、続きから再生、進捗管理、ブックマーク、スリープタイマーを提供します。 |
 | **🎵 没入型BGM再生**                | シリーズフォルダ内に作品ファイル名と同じオーディオファイル(`.mp3`)があれば、鑑賞時に自動再生されます。      |
 
 ### 対応フォーマット
@@ -230,6 +242,7 @@ If you mounted `./books:/books` in your Docker Compose `volumes` configuration, 
 | **画像**       | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
 | **アーカイブ** | `.zip`, `.cbz`                                   |
 | **電子書籍**   | `.epub`, `.pdf`, `.txt`                          |
+| **オーディオ** | `.mp3`, `.wav`, `.ogg`, `.oga`, `.flac`, `.m4a`, `.m4b`, `.aac`, `.wma`, `.opus`, `.mp4` |
 
 > 📁 **フォルダ構造**: フォルダ内の画像ファイル、またはアーカイブファイルを自動的に認識し、巻/チャプターとして構成します。
 
@@ -292,6 +305,13 @@ Kumihoは**無制限のフォルダ階層**をサポートしています。サ�
 - 閲覧中の巻/チャプターファイルと同じベース名のオーディオがある場合、自動再生されます。
 - 例: `001.zip` ↔ `001.mp3`, `001.epub` ↔ `001.mp3`
 
+### 🎧 オーディオブック対応
+
+- 対応オーディオ形式: `.mp3`, `.wav`, `.ogg`, `.oga`, `.flac`, `.m4a`, `.m4b`, `.aac`, `.wma`, `.opus`, `.mp4`
+- 続きから再生、チャプター移動、進捗管理、ブックマーク、スリープタイマーに対応
+- 書籍と同じように、入れ子フォルダ構造でオーディオブックを整理できます
+- オーディオブック用ライブラリを作成する場合は、ライブラリタイプを **Audiobook** に設定してください
+
 ### 🛠 インストール方法 (Docker)
 
 #### Docker Compose (推奨)
@@ -343,6 +363,8 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 2. **Add New Library** ボタンをクリックします。
 3. **Set Path** フィールドに `/books` を入力します。（ホストパスである `./books` ではありません！）
 
+> 注: スキャナーは `@eaDir`, `#recycle`, `.DS_Store`, `Thumbs.db` を自動的に除外します。
+
 ## 🐞 バグ報告・機能リクエスト
 
 - [GitHub Issues](https://github.com/aha-hyeong/kumiho/issues)
@@ -379,6 +401,7 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 | **📂 파일 시스템 미러링** | 복잡한 메타데이터 관리 없이도, 내 폴더 구조 그대로(Tree View) 라이브러리를 보여줍니다.         |
 | **⚡ 가벼운 리소스**      | 저사양 NAS에서도 메모리 점유율 걱정 없이 쾌적하게 구동됩니다.                                  |
 | **📱 반응형 웹 뷰어**     | PC, 태블릿, 모바일 어디서든 끊김 없는 스트리밍 뷰어를 제공합니다. (Webtoon 모드 지원)          |
+| **🎧 오디오북 지원**      | 오디오북 라이브러리를 지원하며 챕터 목록, 이어듣기, 진행도 추적, 북마크, 수면 타이머를 제공합니다. |
 | **🎵 몰입형 BGM 재생**    | 시리즈 폴더 내에 작품 파일명과 동일한 오디오 파일(`.mp3`)이 있으면 감상 시 자동 재생됩니다.    |
 
 ### 지원 포맷
@@ -388,6 +411,7 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 | **이미지**   | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp` |
 | **아카이브** | `.zip`, `.cbz`                                   |
 | **전자책**   | `.epub`, `.pdf`, `.txt`                          |
+| **오디오**   | `.mp3`, `.wav`, `.ogg`, `.oga`, `.flac`, `.m4a`, `.m4b`, `.aac`, `.wma`, `.opus`, `.mp4` |
 
 > 📁 **폴더 구조**: 폴더 내 이미지 파일들, 또는 아카이브 파일을 자동으로 인식하여 볼륨/챕터로 구성합니다.
 
@@ -450,6 +474,13 @@ Docker Compose設定で`volumes`に`./books:/books`としてマウントした�
 - 현재 읽는 볼륨/챕터 파일과 베이스 파일명이 동일한 오디오 파일이 있으면 자동 재생됩니다.
 - 예시: `001.zip` ↔ `001.mp3`, `001.epub` ↔ `001.mp3`
 
+### 🎧 오디오북 지원
+
+- 지원 오디오 형식: `.mp3`, `.wav`, `.ogg`, `.oga`, `.flac`, `.m4a`, `.m4b`, `.aac`, `.wma`, `.opus`, `.mp4`
+- 이어듣기, 챕터 이동, 진행도 추적, 북마크, 수면 타이머를 지원합니다
+- 책과 동일하게 중첩 폴더 구조로 오디오북을 정리할 수 있습니다
+- 오디오북용 라이브러리를 생성할 때는 라이브러리 타입을 **Audiobook**으로 설정해야 합니다
+
 ### 🛠 설치 방법 (Docker)
 
 #### Docker Compose (권장)
@@ -500,6 +531,8 @@ Docker Compose 설정에서 `volumes`에 `./books:/books`로 마운트한 경우
 1. **설정 > 라이브러리** 탭으로 이동합니다.
 2. **Add New Library** 버튼을 클릭합니다.
 3. **Set Path** 필드에 `/books`를 입력합니다. (호스트 경로인 `./books`가 아닙니다!)
+
+> 참고: 스캐너는 `@eaDir`, `#recycle`, `.DS_Store`, `Thumbs.db`를 자동으로 제외합니다.
 
 ## 🐞 버그 제보 및 기능 요청
 
