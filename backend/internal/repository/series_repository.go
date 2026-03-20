@@ -605,6 +605,7 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 		`WITH chapter_units AS (
 			SELECT
 				c.id AS chapter_id,
+				c.has_audio AS has_audio,
 				CASE
 					WHEN c.duration > 0 THEN c.duration
 					WHEN c.total_positions > 0 THEN c.total_positions
@@ -625,6 +626,8 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 			SELECT COALESCE(SUM(
 				cu.unit_total * (
 					CASE
+						WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), cu.unit_total) > 0 THEN
+							MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), cu.unit_total)))
 						WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
 						ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
 					END

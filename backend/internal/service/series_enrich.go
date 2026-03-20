@@ -59,7 +59,7 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 	}
 
 	// 진행도 계산
-	totalPages, err := svc.seriesRepo.GetTotalPages(nil, s.ID)
+	totalPages, err := svc.seriesRepo.GetTotalProgressUnits(nil, s.ID)
 	if err != nil {
 		log.Printf("failed to get total pages for series %s: %v", s.ID, err)
 	} else {
@@ -108,7 +108,7 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 	}
 
 	if userID != "" {
-		readPages, err := svc.seriesRepo.GetReadPages(nil, userID, s.ID)
+		readPages, err := svc.seriesRepo.GetReadProgressUnits(nil, userID, s.ID)
 		if err != nil {
 			log.Printf("failed to get read pages for user %s, series %s: %v", userID, s.ID, err)
 		} else {
