@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"math"
 	"strings"
 	"time"
 
@@ -15,6 +16,13 @@ type SeriesRepository struct{}
 
 func NewSeriesRepository() *SeriesRepository {
 	return &SeriesRepository{}
+}
+
+func normalizeLibraryType(libraryType sql.NullString) string {
+	if libraryType.Valid && strings.TrimSpace(libraryType.String) != "" {
+		return libraryType.String
+	}
+	return "book"
 }
 
 // Create 새 시리즈 생성
@@ -62,8 +70,10 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 	rows, err := db.Query(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
 		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
-				sm.original_title, sm.publisher, sm.published_at, sm.isbn
+				sm.original_title, sm.publisher, sm.published_at, sm.isbn,
+				l.library_type
 		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
 		 LEFT JOIN series_metadata sm ON s.id = sm.series_id
 		 LEFT JOIN user_bookmarks ub ON s.id = ub.series_id AND ub.user_id = ?
 		 WHERE s.library_id = ? ORDER BY s.title`,
@@ -81,10 +91,12 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 		var thumbnail, ext sql.NullString
 		var desc, status, authors, tags, pubYear, originalTitle, publisher, publishedAt, isbn sql.NullString
 		var isBookmarked sql.NullBool
+		var libraryType sql.NullString
 
 		err := rows.Scan(
 			&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
 			&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &publisher, &publishedAt, &isbn,
+			&libraryType,
 		)
 		if err != nil {
 			return nil, err
@@ -96,6 +108,7 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 		if ext.Valid {
 			s.Extension = ext.String
 		}
+		s.LibraryType = normalizeLibraryType(libraryType)
 
 		m.SeriesID = s.ID
 		if desc.Valid {
@@ -143,8 +156,10 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 	rows, err := db.Query(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
 		        sm.description, 1 AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
-				sm.original_title, sm.publisher, sm.published_at, sm.isbn
+				sm.original_title, sm.publisher, sm.published_at, sm.isbn,
+				l.library_type
 		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
 		 JOIN user_bookmarks ub ON s.id = ub.series_id
 		 LEFT JOIN series_metadata sm ON s.id = sm.series_id
 		 WHERE ub.user_id = ? ORDER BY s.title`,
@@ -162,10 +177,12 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 		var thumbnail, ext sql.NullString
 		var desc, status, authors, tags, pubYear, originalTitle, publisher, publishedAt, isbn sql.NullString
 		var isBookmarked sql.NullBool
+		var libraryType sql.NullString
 
 		err := rows.Scan(
 			&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
 			&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &publisher, &publishedAt, &isbn,
+			&libraryType,
 		)
 		if err != nil {
 			return nil, err
@@ -177,6 +194,7 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 		if ext.Valid {
 			s.Extension = ext.String
 		}
+		s.LibraryType = normalizeLibraryType(libraryType)
 
 		m.SeriesID = s.ID
 		if desc.Valid {
@@ -227,11 +245,14 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	var desc, status, authors, tags, pubYear, originalTitle, publisher, publishedAt, isbn sql.NullString
 	var isBookmarked sql.NullBool
 
+	var libraryType sql.NullString
 	err := db.QueryRow(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
 		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
-				sm.original_title, sm.publisher, sm.published_at, sm.isbn
+				sm.original_title, sm.publisher, sm.published_at, sm.isbn,
+				l.library_type
 		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
 		 LEFT JOIN series_metadata sm ON s.id = sm.series_id
 		 LEFT JOIN user_bookmarks ub ON s.id = ub.series_id AND ub.user_id = ?
 		 WHERE s.id = ?`,
@@ -239,6 +260,7 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	).Scan(
 		&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
 		&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &publisher, &publishedAt, &isbn,
+		&libraryType,
 	)
 
 	if err == sql.ErrNoRows {
@@ -254,6 +276,7 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	if ext.Valid {
 		s.Extension = ext.String
 	}
+	s.LibraryType = normalizeLibraryType(libraryType)
 
 	m.SeriesID = s.ID
 	if desc.Valid {
@@ -301,12 +324,15 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	var thumbnail, ext sql.NullString
 	var desc, status, authors, tags, pubYear, originalTitle, publisher, publishedAt, isbn sql.NullString
 	var isBookmarked sql.NullBool
+	var libraryType sql.NullString
 
 	err := db.QueryRow(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
 		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
-				sm.original_title, sm.publisher, sm.published_at, sm.isbn
+				sm.original_title, sm.publisher, sm.published_at, sm.isbn,
+				l.library_type
 		 FROM series s
+		 JOIN libraries l ON s.library_id = l.id
 		 LEFT JOIN series_metadata sm ON s.id = sm.series_id
 		 LEFT JOIN user_bookmarks ub ON s.id = ub.series_id AND ub.user_id = ?
 		 WHERE s.path = ?`,
@@ -314,6 +340,7 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	).Scan(
 		&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
 		&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &publisher, &publishedAt, &isbn,
+		&libraryType,
 	)
 
 	if err == sql.ErrNoRows {
@@ -329,6 +356,7 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	if ext.Valid {
 		s.Extension = ext.String
 	}
+	s.LibraryType = normalizeLibraryType(libraryType)
 
 	m.SeriesID = s.ID
 	if desc.Valid {
@@ -456,7 +484,7 @@ func (r *SeriesRepository) GetFirstPageID(db database.Queryer, seriesID string) 
 // page_count <= 0 이면서 total_positions > 0인 챕터(예: EPUB): total_positions 반영
 func (r *SeriesRepository) GetTotalPages(db database.Queryer, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
-	var totalPages int
+	var totalPages float64
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
@@ -469,7 +497,13 @@ func (r *SeriesRepository) GetTotalPages(db database.Queryer, seriesID string) (
 		 WHERE v.series_id = ?`,
 		seriesID,
 	).Scan(&totalPages)
-	return totalPages, err
+	if err != nil {
+		return 0, err
+	}
+	if totalPages < 0 {
+		return 0, nil
+	}
+	return int(math.Round(totalPages)), nil
 }
 
 // GetReadPages 사용자가 시리즈에서 읽은 총 페이지 수 조회
@@ -482,7 +516,7 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 	// 1. 완독된 챕터들의 페이지 수 합계
 	// page_count > 0인 챕터: 실제 page_count 사용
 	// page_count <= 0인 챕터(EPUB 등): total_positions 사용
-	var completedPages int
+	var completedPages float64
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
@@ -503,13 +537,14 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 	// 2. 진행 중인(완독되지 않은) 챕터들의 현재 페이지 합계
 	// page_count > 0인 챕터: current_page 사용
 	// page_count <= 0인 챕터(EPUB 등): progress_percent를 100 스케일로 변환 (예: 50% → 50)
-	var progressPages int
+	var progressPages float64
 	err = db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE 
 				WHEN c.page_count > 0 THEN rp.current_page
 				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
-				ELSE CAST(rp.progress_percent AS INTEGER)
+				WHEN c.has_audio = 1 THEN 0
+				ELSE rp.progress_percent
 			END
 		), 0)
 		 FROM reading_progress rp
@@ -524,7 +559,11 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 		return 0, err
 	}
 
-	return completedPages + progressPages, nil
+	totalRead := completedPages + progressPages
+	if totalRead < 0 {
+		return 0, nil
+	}
+	return int(math.Round(totalRead)), nil
 }
 
 // GetTotalProgressUnits 시리즈 진행률 표시용 총량(용량 기반 단위) 조회
@@ -532,10 +571,11 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 // - 그 외 page_count > 0: page_count 사용 (이미지/PDF 등)
 func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
-	var total int
+	var total float64
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(
 			CASE
+				WHEN c.duration > 0 THEN c.duration
 				WHEN c.total_positions > 0 THEN c.total_positions
 				WHEN c.page_count > 0 THEN c.page_count
 				ELSE 0
@@ -546,7 +586,13 @@ func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID s
 		WHERE v.series_id = ?`,
 		seriesID,
 	).Scan(&total)
-	return total, err
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(total) || math.IsInf(total, 0) || total < 0 {
+		return 0, nil
+	}
+	return int(math.Round(total)), nil
 }
 
 // GetReadProgressUnits 시리즈 진행률 표시용 완료량 조회
@@ -554,12 +600,14 @@ func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID s
 // - 미완독 챕터: 뷰어 진행(current_page/total_pages, fallback: progress_percent) 비율만큼 반영
 func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
-	var read int
+	var read float64
 	err := db.QueryRow(
 		`WITH chapter_units AS (
 			SELECT
 				c.id AS chapter_id,
+				c.has_audio AS has_audio,
 				CASE
+					WHEN c.duration > 0 THEN c.duration
 					WHEN c.total_positions > 0 THEN c.total_positions
 					WHEN c.page_count > 0 THEN c.page_count
 					ELSE 0
@@ -576,14 +624,14 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 		),
 		inprogress_units AS (
 			SELECT COALESCE(SUM(
-				CAST(ROUND(
-					cu.unit_total * (
-						CASE
-							WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
-							ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
-						END
-					)
-				) AS INTEGER)
+				cu.unit_total * (
+					CASE
+						WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), cu.unit_total) > 0 THEN
+							MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), cu.unit_total)))
+						WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
+						ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
+					END
+				)
 			), 0) AS value
 			FROM chapter_units cu
 			JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id
@@ -596,7 +644,13 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 		FROM completed_units, inprogress_units`,
 		seriesID, userID, userID, seriesID,
 	).Scan(&read)
-	return read, err
+	if err != nil {
+		return 0, err
+	}
+	if read < 0 {
+		return 0, nil
+	}
+	return int(math.Round(read)), nil
 }
 
 // Search 검색어로 시리즈 조회

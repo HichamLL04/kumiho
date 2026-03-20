@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -16,8 +16,9 @@ import {
 import { volumeAPI, seriesAPI, chapterAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
 import { normalizeExtensionBadge, parseSupportedExtension } from "../utils/extension";
-import type { Chapter, Series, Volume } from "../types/series";
+import type { Series, Volume } from "../types/series";
 import { useViewerStore } from "../stores/viewerStore";
+import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import styles from "./SeriesCard.module.css";
 import { AlertModal, type AlertType } from "./modals/AlertModal";
 
@@ -151,9 +152,44 @@ export function SeriesCard({
     }
   };
 
+  const isAudioItem =
+    ("has_audio" in item && item.has_audio) || ("library_type" in item && item.library_type === "audiobook");
+  const playAudio = async () => {
+    const store = useAudioPlayerStore.getState();
+    try {
+      const result =
+        type === "volume"
+          ? await store.bootstrapAndPlay({
+              source: "volume",
+              seriesId: (item as Volume).series_id,
+              volumeId: item.id,
+              volume: item as Volume,
+            })
+          : await store.bootstrapAndPlay({
+              source: "series",
+              seriesId: item.id,
+              series: item as Series,
+            });
+      if (!result.ok) {
+        if (result.reason === "no_chapters") {
+          setAlertModal({ isOpen: true, type: "warning", message: t("series.alert.no_readable_chapter") });
+        }
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to start audio playback:", err);
+    }
+  };
+
   const playSmart = async () => {
     setIsUpdating(true);
     try {
+      // 오디오북이면 오디오 플레이어로 재생
+      if (isAudioItem) {
+        await playAudio();
+        return;
+      }
+
       if (type === "volume") {
         // 1. 재귀적 진행도 먼저 확인 (하위 볼륨 포함)
         const progressRes = await volumeAPI.getProgress(item.id);
@@ -187,23 +223,12 @@ export function SeriesCard({
         return;
       }
 
-      const volumesRes = await seriesAPI.getVolumes(item.id);
-      const volumes = volumesRes.data.volumes || [];
-
-      if (volumes.length === 0) {
-        navigate(`/series/${item.id}`);
-        return;
-      }
-
-      const sortedVolumes = [...volumes].sort((a: Volume, b: Volume) => a.volume_number - b.volume_number);
-      const firstVolume = sortedVolumes[0];
-
-      const chaptersRes = await volumeAPI.getChapters(firstVolume.id);
-      const chapters = Array.isArray(chaptersRes.data) ? chaptersRes.data : chaptersRes.data.chapters || [];
+      // 시리즈 전체 챕터를 가져와서 첫 번째 챕터 탐색
+      const chaptersRes = await seriesAPI.getChapters(item.id);
+      const chapters = chaptersRes.data.chapters || [];
 
       if (chapters.length > 0) {
-        const sortedChapters = [...chapters].sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number);
-        navigate(`/viewer/${sortedChapters[0].id}`, { state: { from: viewerFrom } });
+        navigate(`/viewer/${chapters[0].id}`, { state: { from: viewerFrom } });
       } else {
         navigate(`/series/${item.id}`);
       }
@@ -374,9 +399,20 @@ export function SeriesCard({
   const showMetaExtensionBadge = shouldShowExtensionBadge && extensionBadgePlacement === "meta" && !!extensionBadge;
   const showThumbnailExtensionBadge =
     shouldShowExtensionBadge && extensionBadgePlacement === "thumbnail" && !!extensionBadge;
-  const hasAudio = "has_audio" in item && item.has_audio;
+  const hasAudio =
+    ("has_audio" in item && item.has_audio) || ("library_type" in item && item.library_type === "audiobook");
   const showOverlayProgress =
     progressStyle === "overlay" && displayProgress !== null && (displayProgress > 0 || forceShowProgress);
+  const thumbnailSrc = useMemo(() => {
+    if (!item.thumbnail_url) return "";
+
+    const versionSource = item.updated_at || item.created_at;
+    const parsedTime = Date.parse(versionSource);
+    const cacheBuster = Number.isFinite(parsedTime) ? parsedTime : 0;
+    const separator = item.thumbnail_url.includes("?") ? "&" : "?";
+    const withCacheBuster = `${item.thumbnail_url}${separator}_cb=${cacheBuster}`;
+    return getAuthenticatedImageUrl(withCacheBuster);
+  }, [item.thumbnail_url, item.updated_at, item.created_at]);
   const lowerItemPath = String(item.path || "").toLowerCase();
   const isTextFile = extensionBadge === "TXT" || lowerItemPath.endsWith(".txt");
 
@@ -419,14 +455,45 @@ export function SeriesCard({
       <div className={styles.seriesCover}>
         <div className={styles.seriesThumbnailWrapper}>
           {item.thumbnail_url && !imageError ? (
-            <img
-              src={getAuthenticatedImageUrl(item.thumbnail_url)}
-              alt={item.title}
-              className={styles.seriesThumbnail}
-              loading="lazy"
-              onError={() => setImageError(true)}
-              draggable={false}
-            />
+            hasAudio ? (
+              <>
+                <img
+                  src={thumbnailSrc}
+                  alt=""
+                  className={styles.seriesThumbnailBlur}
+                  loading="lazy"
+                  draggable={false}
+                  aria-hidden="true"
+                />
+                <img
+                  src={thumbnailSrc}
+                  alt={item.title}
+                  className={styles.seriesThumbnailContain}
+                  loading="lazy"
+                  onError={() => setImageError(true)}
+                  draggable={false}
+                />
+              </>
+            ) : (
+              <img
+                src={thumbnailSrc}
+                alt={item.title}
+                className={styles.seriesThumbnail}
+                loading="lazy"
+                onError={() => setImageError(true)}
+                draggable={false}
+              />
+            )
+          ) : hasAudio ? (
+            <div className={styles.seriesPlaceholderImageWrapper}>
+              <img
+                src="/audio-kumiho.png"
+                alt=""
+                className={styles.seriesPlaceholderImage}
+                loading="lazy"
+                draggable={false}
+              />
+            </div>
           ) : isTextFile ? (
             <div className={styles.seriesPlaceholderImageWrapper}>
               <img

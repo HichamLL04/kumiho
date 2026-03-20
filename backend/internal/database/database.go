@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -70,6 +71,46 @@ func Close() error {
 	return nil
 }
 
+// ============================================================
+// 마이그레이션 버전 관리
+// ============================================================
+
+const latestMigrationVersion = 34
+
+// getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
+func getMigrationVersion() int {
+	var version int
+	if err := DB.QueryRow(`SELECT CAST(value AS INTEGER) FROM server_settings WHERE key = 'migration_version'`).Scan(&version); err != nil {
+		return 0
+	}
+	return version
+}
+
+// setMigrationVersion server_settings에 마이그레이션 버전 저장
+func setMigrationVersion(version int) {
+	_, _ = DB.Exec(
+		`INSERT INTO server_settings (key, value, updated_at) VALUES ('migration_version', ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+		fmt.Sprintf("%d", version),
+	)
+}
+
+// addColumn 테이블에 컬럼이 없으면 추가하는 헬퍼
+func addColumn(table, column, definition string) error {
+	if !columnExists(table, column) {
+		if _, err := DB.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)); err != nil {
+			return fmt.Errorf("add %s.%s: %w", table, column, err)
+		}
+	}
+	return nil
+}
+
+type migration struct {
+	version int
+	name    string
+	fn      func() error
+}
+
 // Migrate 스키마 마이그레이션
 func Migrate() error {
 	schema := `
@@ -91,6 +132,7 @@ func Migrate() error {
 		name TEXT NOT NULL,
 		path TEXT UNIQUE NOT NULL,
 		type TEXT DEFAULT 'LOCAL',
+		library_type TEXT DEFAULT 'book', -- "book", "audiobook"
 		is_visible BOOLEAN DEFAULT 1,
 		default_view_mode TEXT DEFAULT 'single',
 		default_read_direction TEXT DEFAULT 'ltr',
@@ -167,6 +209,8 @@ func Migrate() error {
 		page_count INTEGER DEFAULT 0,
 		total_bytes INTEGER DEFAULT 0,
 		total_positions INTEGER DEFAULT 0,
+		has_audio BOOLEAN DEFAULT 0,
+		duration REAL, -- 오디오 길이 (초)
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -176,7 +220,9 @@ func Migrate() error {
 		id TEXT PRIMARY KEY,
 		chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
 		page_number INTEGER NOT NULL,
-		path TEXT NOT NULL
+		path TEXT NOT NULL,
+		width INTEGER DEFAULT 0,
+		height INTEGER DEFAULT 0
 	);
 
 	-- 읽기 진행도 (UNIQUE 제약조건: user_id + chapter_id)
@@ -192,12 +238,14 @@ func Migrate() error {
 		total_pages INTEGER NOT NULL DEFAULT 0,
 		current_position INTEGER DEFAULT 0,
 		total_positions INTEGER DEFAULT 0,
+		current_time REAL DEFAULT 0.0, -- 오디오 재생 위치 (초)
+		duration REAL DEFAULT 0.0,     -- 오디오 전체 길이 (초)
 		progress_percent REAL DEFAULT 0.0,
 		device_id TEXT,
 		device_name TEXT,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		read_time_seconds INTEGER DEFAULT 0,
-		current_cfi TEXT, -- EPUB용 CFI (migrateEpubCFI 대응)
+		current_cfi TEXT, -- EPUB용 CFI
 		UNIQUE(user_id, chapter_id)
 	);
 
@@ -263,6 +311,22 @@ func Migrate() error {
 		PRIMARY KEY (user_id, series_id)
 	);
 
+	-- 북마크 (특정 위치 저장용, 범용)
+	CREATE TABLE IF NOT EXISTS bookmarks (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+		volume_id TEXT REFERENCES volumes(id) ON DELETE CASCADE,
+		chapter_id TEXT REFERENCES chapters(id) ON DELETE CASCADE,
+		title TEXT DEFAULT '',
+		description TEXT DEFAULT '',
+		page_number INTEGER DEFAULT 0,
+		current_position INTEGER DEFAULT 0,
+		current_cfi TEXT,
+		current_time REAL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	-- 사용자별 일일 활동 로그 (정확한 잔디 통계용)
 	CREATE TABLE IF NOT EXISTS daily_activity (
 		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -300,259 +364,87 @@ func Migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
 	CREATE INDEX IF NOT EXISTS idx_user_series_settings_user ON user_series_settings(user_id);
 	CREATE INDEX IF NOT EXISTS idx_user_series_settings_series ON user_series_settings(series_id);
+	CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id);
+	CREATE INDEX IF NOT EXISTS idx_bookmarks_series ON bookmarks(series_id);
+	CREATE INDEX IF NOT EXISTS idx_bookmarks_chapter ON bookmarks(chapter_id);
 	`
 
 	if _, err := DB.Exec(schema); err != nil {
 		return err
 	}
 
-	// 기존 데이터 호환성을 위한 마이그레이션 로직 (배포 전까지 유지)
+	// 현재 마이그레이션 버전 확인
+	currentVersion := getMigrationVersion()
 
-	// 1. 사용자 테이블 (email 삭제, nickname 추가 및 데이터 복제)
-	migrateUsersTable()
+	// 기존 DB 감지: migration_version이 아직 없지만 이미 마이그레이션이 완료된 DB
+	// (버전 관리 도입 이전 코드에서 업그레이드할 때)
+	// 마지막 마이그레이션(#33)의 결과물인 libraries.library_type이 존재하면
+	// 모든 마이그레이션이 완료된 것으로 간주하고 버전만 기록
+	if currentVersion == 0 && columnExists("libraries", "library_type") {
+		setMigrationVersion(latestMigrationVersion)
+		return nil
+	}
 
-	// 2. 라이브러리 추가 데이터 처리
-	migrateSystemLibrary()
+	if currentVersion >= latestMigrationVersion {
+		return nil
+	}
 
-	// 3. 시리즈 관련 정리
-	migrateSeriesMetadata() // 기존 ebook_metadata 이전 및 series 정보 분리
-	migrateSeriesCleanup()
+	// 마이그레이션 목록 (버전 순서대로)
+	migrations := []migration{
+		{1, "사용자 테이블 정리 (email 삭제, nickname 추가)", migrateUsersTable},
+		{2, "시스템 라이브러리 지원", migrateSystemLibrary},
+		{3, "시리즈 메타데이터 분리", migrateSeriesMetadata},
+		{4, "시리즈 테이블 정리", migrateSeriesCleanup},
+		{5, "읽기 진행도 제약조건 정립", migrateReadingProgress},
+		{6, "사용자별 북마크 이전", migrateUserBookmarks},
+		{7, "페이지 이미지 크기 컬럼 추가", migratePagesWidthHeight},
+		{8, "유저 다운로드 권한 컬럼 추가", migrateUserDownloadPermission},
+		{9, "볼륨 오디오 여부 컬럼 추가", migrateVolumesHasAudio},
+		{10, "볼륨 단위(unit) 컬럼 추가", migrateVolumesUnit},
+		{11, "읽기 진행도 볼륨 기반으로 변경", migrateReadingProgressPerVolume},
+		{12, "볼륨 메타데이터 컬럼 추가", migrateVolumesMetadata},
+		{13, "시리즈 메타데이터 확장 컬럼 추가", migrateSeriesMetadataColumns},
+		{14, "챕터 완독 테이블 추가", migrateChapterCompletions},
+		{15, "읽기 시간 컬럼 추가", migrateReadingTime},
+		{16, "읽기 진행도 챕터 기반으로 변경", migrateProgressToChapterBased},
+		{17, "세션 테이블 추가", migrateSessions},
+		{18, "읽기 진행도 유니크 인덱스 수정 (Partial → Standard)", fixReadingProgressUniqueIndex},
+		{19, "읽기 진행도 유니크 제약조건 수정 (Series → Chapter)", fixReadingProgressUniqueIndexV2},
+		{20, "터치 스와이프 방향 컬럼 추가", migrateSwipeDirection},
+		{21, "마우스 휠 방향 컬럼 추가", migrateWheelDirection},
+		{22, "EPUB CFI 컬럼 추가", migrateEpubCFI},
+		{23, "EPUB 가상 포지션 컬럼 추가", migrateEpubVirtualPositions},
+		{24, "EPUB 렌더 모드 컬럼 추가", migrateEpubRenderMode},
+		{25, "EPUB 시리즈 설정 컬럼 추가", migrateEpubSeriesSettings},
+		{26, "라이브러리 EPUB 기본값 컬럼 추가", migrateLibraryEpubDefaults},
+		{27, "볼륨 챕터 수 컬럼 추가", migrateVolumesChapterCount},
+		{28, "볼륨 부모 ID 컬럼 추가", migrateVolumesParentID},
+		{29, "볼륨 확장자 컬럼 추가", migrateVolumesExtension},
+		{30, "시리즈 확장자 컬럼 추가", migrateSeriesExtension},
+		{31, "세로 복원용 앵커 위치 컬럼 추가", migrateProgressRestorePosition},
+		{32, "챕터별 has_audio 컬럼 추가", migrateChaptersHasAudio},
+		{33, "오디오북 관련 컬럼 추가", migrateAudiobookColumns},
+		{34, "오디오 진행시간 문자열 정규화", migrateAudioProgressTimeFormat},
+	}
 
-	// 4. 진행도 관련 정리
-	migrateReadingProgress()
-
-	// 5. 사용자별 북마크 이전
-	migrateUserBookmarks()
-
-	// 6. 페이지 이미지 크기 컬럼 추가
-	migratePagesWidthHeight()
-
-	// 7. 유저 다운로드 권한 컬럼 추가
-	migrateUserDownloadPermission()
-
-	// 8. 볼륨 오디오 여부 컬럼 추가
-	migrateVolumesHasAudio()
-
-	// 9. 볼륨 단위(unit) 컬럼 추가
-	migrateVolumesUnit()
-
-	// 10. 읽기 진행도 제약조건 변경 (Series 단위 -> Volume 단위)
-	migrateReadingProgressPerVolume()
-
-	// 11. 볼륨 메타데이터 컬럼 추가 (description, authors, publication_year)
-	migrateVolumesMetadata()
-
-	// 11-1. 시리즈 메타데이터 컬럼 추가 (original_title, publisher, published_at, isbn)
-	migrateSeriesMetadataColumns()
-
-	// 12. 챕터 완독 테이블 추가
-	migrateChapterCompletions()
-
-	// 13. 총 읽은 시간 컬럼 추가 (이후 마이그레이션에서 이 컬럼을 참조하므로 먼저 실행)
-	migrateReadingTime()
-
-	// 14. 읽기 진행도 볼륨 기반 → 챕터 기반으로 변경
-	migrateProgressToChapterBased()
-
-	// 15. 세션 테이블 추가 (기기별 로그인 관리)
-	migrateSessions()
-
-	// 16. 읽기 진행도 유니크 인덱스 수정 (Partial Index -> Standard Index)
-	fixReadingProgressUniqueIndex()
-
-	// 17. 읽기 진행도 유니크 제약조건 수정 (Series -> Chapter) - V2
-	fixReadingProgressUniqueIndexV2()
-
-	// 18. 사용자별 시리즈 설정에 터치 스와이프 방향 추가
-	migrateSwipeDirection()
-
-	// 18-1. 사용자별 시리즈 설정에 마우스 휠 방향 추가
-	migrateWheelDirection()
-
-	// 19. EPUB 위치 복원용 current_cfi 컬럼 추가
-	migrateEpubCFI()
-
-	// 20. EPUB 가상 포지션 관련 컬럼 추가
-	migrateEpubVirtualPositions()
-
-	// 21. 사용자별 시리즈 설정에 EPUB 렌더 모드 추가
-	migrateEpubRenderMode()
-
-	// 22. 사용자별 시리즈 설정에 EPUB 오버라이드 컬럼 추가
-	migrateEpubSeriesSettings()
-
-	// 23. 라이브러리 EPUB 기본값 컬럼 추가
-	migrateLibraryEpubDefaults()
-
-	// 24. 볼륨 챕터 수 컬럼 추가
-	migrateVolumesChapterCount()
-
-	// 25. 볼륨 부모 ID 컬럼 추가 (계층형 볼륨 지원)
-	migrateVolumesParentID()
-
-	// 26. 볼륨 확장자 컬럼 추가
-	migrateVolumesExtension()
-
-	// 27. 시리즈 확장자 컬럼 추가
-	migrateSeriesExtension()
-
-	// 28. 세로 복원용 앵커 위치 컬럼 추가
-	migrateProgressRestorePosition()
-
-	// 29. 챕터별 has_audio 컬럼 추가
-	migrateChaptersHasAudio()
+	// 필요한 마이그레이션만 실행
+	for _, m := range migrations {
+		if m.version <= currentVersion {
+			continue
+		}
+		fmt.Printf("[Migration %d/%d] %s\n", m.version, latestMigrationVersion, m.name)
+		if err := m.fn(); err != nil {
+			return fmt.Errorf("migration %d (%s) failed: %w", m.version, m.name, err)
+		}
+		setMigrationVersion(m.version)
+	}
 
 	return nil
 }
 
-// migrateVolumesParentID volumes 테이블에 parent_id 컬럼 추가
-func migrateVolumesParentID() {
-	if !columnExists("volumes", "parent_id") {
-		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN parent_id TEXT REFERENCES volumes(id) ON DELETE CASCADE`)
-		if err != nil {
-			fmt.Printf("Migration error (volumes.parent_id): %v\n", err)
-		} else {
-			fmt.Println("Migrated volumes table: added parent_id column.")
-			// 인덱스 추가
-			_, _ = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_volumes_parent ON volumes(parent_id)`)
-		}
-	}
-}
-
-// migrateVolumesExtension volumes 테이블에 extension 컬럼 추가
-func migrateVolumesExtension() {
-	if !columnExists("volumes", "extension") {
-		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN extension TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (volumes.extension): %v\n", err)
-		} else {
-			fmt.Println("Migrated volumes table: added extension column.")
-		}
-	}
-}
-
-// migrateSeriesExtension series 테이블에 extension 컬럼 추가
-func migrateSeriesExtension() {
-	if !columnExists("series", "extension") {
-		_, err := DB.Exec(`ALTER TABLE series ADD COLUMN extension TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (series.extension): %v\n", err)
-		} else {
-			fmt.Println("Migrated series table: added extension column.")
-		}
-	}
-}
-
-// migrateSessions 세션 테이블 생성 (기기별 로그인 관리)
-func migrateSessions() {
-	_, err := DB.Exec(`
-		CREATE TABLE IF NOT EXISTS sessions (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-			refresh_token_hash TEXT NOT NULL,
-			device_name TEXT DEFAULT '',
-			device_type TEXT DEFAULT '',
-			browser TEXT DEFAULT '',
-			os TEXT DEFAULT '',
-			ip_address TEXT DEFAULT '',
-			last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			expires_at DATETIME NOT NULL
-		)
-	`)
-	if err != nil {
-		fmt.Printf("Failed to create sessions table: %v\n", err)
-		return
-	}
-
-	// 인덱스 생성
-	_, _ = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`)
-	_, _ = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(refresh_token_hash)`)
-	_, _ = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`)
-
-	fmt.Println("Migrated database: added sessions table.")
-}
-
-// migrateReadingTime reading_progress 테이블에 read_time_seconds 컬럼 추가
-func migrateReadingTime() {
-	if !columnExists("reading_progress", "read_time_seconds") {
-		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN read_time_seconds INTEGER DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (reading_progress.read_time_seconds): %v\n", err)
-		} else {
-			fmt.Println("Migrated reading_progress table: added read_time_seconds column.")
-		}
-	}
-}
-
-// migrateChapterCompletions chapter_completions 테이블 추가
-func migrateChapterCompletions() {
-	_, err := DB.Exec(`
-		CREATE TABLE IF NOT EXISTS chapter_completions (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-			chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-			completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(user_id, chapter_id)
-		)
-	`)
-	if err != nil {
-		fmt.Printf("Failed to create chapter_completions table: %v\n", err)
-		return
-	}
-
-	// 인덱스 생성
-	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_chapter_completions_user ON chapter_completions(user_id)`)
-	if err != nil {
-		fmt.Printf("Failed to create index on chapter_completions(user_id): %v\n", err)
-	}
-	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_chapter_completions_chapter ON chapter_completions(chapter_id)`)
-	if err != nil {
-		fmt.Printf("Failed to create index on chapter_completions(chapter_id): %v\n", err)
-	}
-
-	fmt.Println("Migrated database: added chapter_completions table.")
-}
-
-// migrateVolumesChapterCount volumes 테이블에 chapter_count 컬럼 추가
-func migrateVolumesChapterCount() {
-	if !columnExists("volumes", "chapter_count") {
-		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN chapter_count INTEGER DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (volumes.chapter_count): %v\n", err)
-		} else {
-			fmt.Println("Migrated volumes table: added chapter_count column.")
-		}
-	}
-}
-
-// migrateVolumesMetadata volumes 테이블에 메타 데이터(description, authors, publication_year) 컬럼 추가
-func migrateVolumesMetadata() {
-	if !columnExists("volumes", "description") {
-		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN description TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (volumes.description): %v\n", err)
-		} else {
-			fmt.Println("Migrated volumes table: added description column.")
-		}
-	}
-	if !columnExists("volumes", "authors") {
-		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN authors TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (volumes.authors): %v\n", err)
-		} else {
-			fmt.Println("Migrated volumes table: added authors column.")
-		}
-	}
-	if !columnExists("volumes", "publication_year") {
-		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN publication_year TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (volumes.publication_year): %v\n", err)
-		} else {
-			fmt.Println("Migrated volumes table: added publication_year column.")
-		}
-	}
-}
+// ============================================================
+// 유틸리티
+// ============================================================
 
 // columnExists 테이블에 특정 컬럼이 존재하는지 확인
 func columnExists(tableName, columnName string) bool {
@@ -579,21 +471,128 @@ func columnExists(tableName, columnName string) bool {
 	return false
 }
 
-// migrateSeriesMetadata series_metadata 테이블 신설 및 데이터 이전
-func migrateSeriesMetadata() {
+// ============================================================
+// 마이그레이션 함수 (버전 순)
+// ============================================================
+
+// #1 migrateUsersTable users 테이블 구조 변경 (email 삭제, nickname 추가)
+func migrateUsersTable() error {
+	// 1. nickname 컬럼 추가 및 기본값 설정
+	if !columnExists("users", "nickname") {
+		if _, err := DB.Exec(`ALTER TABLE users ADD COLUMN nickname TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("add users.nickname: %w", err)
+		}
+		if _, err := DB.Exec(`UPDATE users SET nickname = username WHERE nickname = ''`); err != nil {
+			return fmt.Errorf("update users.nickname: %w", err)
+		}
+	}
+
+	// 2. email 컬럼 삭제를 위한 테이블 재생성
+	if !columnExists("users", "email") {
+		return nil
+	}
+
+	ctx := context.Background()
+	conn, err := DB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("get connection for users cleanup: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
+		return fmt.Errorf("disable foreign keys: %w", execErr)
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("start transaction for users cleanup: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TABLE users_new (
+			id TEXT PRIMARY KEY,
+			username TEXT UNIQUE NOT NULL,
+			nickname TEXT NOT NULL,
+			password_hash TEXT NOT NULL,
+			role TEXT NOT NULL DEFAULT 'USER',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`); err != nil {
+		return fmt.Errorf("create users_new: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO users_new (id, username, nickname, password_hash, role, created_at, updated_at)
+		SELECT id, username, nickname, password_hash, role, created_at, updated_at FROM users
+	`); err != nil {
+		return fmt.Errorf("copy data to users_new: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DROP TABLE users`); err != nil {
+		return fmt.Errorf("drop old users table: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE users_new RENAME TO users`); err != nil {
+		return fmt.Errorf("rename users_new to users: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit users cleanup: %w", err)
+	}
+
+	return nil
+}
+
+// #2 migrateSystemLibrary 시스템 라이브러리 지원을 위한 마이그레이션
+func migrateSystemLibrary() error {
+	if err := addColumn("libraries", "type", "TEXT DEFAULT 'LOCAL'"); err != nil {
+		return err
+	}
+	if err := addColumn("libraries", "default_view_mode", "TEXT DEFAULT 'single'"); err != nil {
+		return err
+	}
+	if err := addColumn("libraries", "default_read_direction", "TEXT DEFAULT 'ltr'"); err != nil {
+		return err
+	}
+	if err := addColumn("libraries", "default_page_transition", "TEXT DEFAULT 'slide'"); err != nil {
+		return err
+	}
+	if err := addColumn("libraries", "is_visible", "BOOLEAN DEFAULT 1"); err != nil {
+		return err
+	}
+
+	// 좋아요(즐겨찾기) 라이브러리 생성
+	var exists int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM libraries WHERE id = 'system-likes'`).Scan(&exists); err != nil {
+		return fmt.Errorf("check system-likes: %w", err)
+	}
+	if exists == 0 {
+		if _, err := DB.Exec(`
+			INSERT INTO libraries (id, name, path, type, is_visible, default_view_mode, default_read_direction, default_page_transition, created_at, updated_at, sort_order)
+			VALUES ('system-likes', '좋아요한 시리즈', 'SYSTEM://LIKES', 'SYSTEM', 1, 'single', 'ltr', 'slide', datetime('now'), datetime('now'), 0)
+		`); err != nil {
+			return fmt.Errorf("create system-likes library: %w", err)
+		}
+	}
+
+	return addColumn("libraries", "scan_excludes", "TEXT DEFAULT ''")
+}
+
+// #3 migrateSeriesMetadata series_metadata 테이블 신설 및 데이터 이전
+func migrateSeriesMetadata() error {
 	// 1. 기존 ebook_metadata 테이블이 있으면 이름을 변경
 	var exists int
-	err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ebook_metadata'`).Scan(&exists)
-	if err == nil && exists > 0 {
-		fmt.Println("Renaming ebook_metadata to series_metadata...")
-		_, err = DB.Exec(`ALTER TABLE ebook_metadata RENAME TO series_metadata`)
-		if err != nil {
-			fmt.Printf("Failed to rename ebook_metadata: %v\n", err)
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ebook_metadata'`).Scan(&exists); err == nil && exists > 0 {
+		if _, err := DB.Exec(`ALTER TABLE ebook_metadata RENAME TO series_metadata`); err != nil {
+			return fmt.Errorf("rename ebook_metadata: %w", err)
 		}
 	}
 
 	// 2. 테이블 생성 (기본 스키마에 이미 선언되어 있지만 안전하게 수행)
-	_, err = DB.Exec(`
+	if _, err := DB.Exec(`
 		CREATE TABLE IF NOT EXISTS series_metadata (
 			series_id TEXT PRIMARY KEY REFERENCES series(id) ON DELETE CASCADE,
 			description TEXT DEFAULT '',
@@ -607,119 +606,146 @@ func migrateSeriesMetadata() {
 			published_at TEXT DEFAULT '',
 			isbn TEXT DEFAULT ''
 		)
-	`)
-	if err != nil {
-		fmt.Printf("Failed to create series_metadata table: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("create series_metadata: %w", err)
 	}
 
-	// 3. 기존 series 테이블에서 데이터 이전 (series_metadata로)
-	// description 컬럼이 존재할 때만 실행
+	// 3. 기존 series 테이블에서 데이터 이전
 	if columnExists("series", "description") {
-		_, err = DB.Exec(`
+		_, _ = DB.Exec(`
 			INSERT OR IGNORE INTO series_metadata (series_id, description, is_bookmarked)
 			SELECT id, description, is_bookmarked FROM series
 		`)
-		if err != nil {
-			fmt.Printf("Note: series_metadata data migration skip or partial: %v\n", err)
-		}
 	}
+
+	return nil
 }
 
-// migrateSeriesMetadataColumns series_metadata 테이블에 EPUB 확장 메타데이터 컬럼 추가
-func migrateSeriesMetadataColumns() {
-	if !columnExists("series_metadata", "original_title") {
-		_, err := DB.Exec(`ALTER TABLE series_metadata ADD COLUMN original_title TEXT DEFAULT ''`)
+// #4 migrateSeriesCleanup series 테이블에서 series_metadata로 이전된 불필요한 컬럼 제거
+func migrateSeriesCleanup() error {
+	hasExtraCol := false
+	{
+		rows, err := DB.Query(`PRAGMA table_info(series)`)
 		if err != nil {
-			fmt.Printf("Migration error (series_metadata.original_title): %v\n", err)
-		} else {
-			fmt.Println("Migrated series_metadata table: added original_title column.")
+			return nil
 		}
-	}
-	if !columnExists("series_metadata", "publisher") {
-		_, err := DB.Exec(`ALTER TABLE series_metadata ADD COLUMN publisher TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (series_metadata.publisher): %v\n", err)
-		} else {
-			fmt.Println("Migrated series_metadata table: added publisher column.")
+		for rows.Next() {
+			var cid int
+			var name, dtype string
+			var notnull int
+			var dflt_value interface{}
+			var pk int
+			if err := rows.Scan(&cid, &name, &dtype, &notnull, &dflt_value, &pk); err != nil {
+				continue
+			}
+			if name == "description" || name == "status" || name == "authors" {
+				hasExtraCol = true
+				break
+			}
 		}
-	}
-	if !columnExists("series_metadata", "published_at") {
-		_, err := DB.Exec(`ALTER TABLE series_metadata ADD COLUMN published_at TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (series_metadata.published_at): %v\n", err)
-		} else {
-			fmt.Println("Migrated series_metadata table: added published_at column.")
-		}
-	}
-	if !columnExists("series_metadata", "isbn") {
-		_, err := DB.Exec(`ALTER TABLE series_metadata ADD COLUMN isbn TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (series_metadata.isbn): %v\n", err)
-		} else {
-			fmt.Println("Migrated series_metadata table: added isbn column.")
-		}
-	}
-}
-
-// migrateUserBookmarks 기존 전역 북마크를 사용자별 북마크로 이전
-func migrateUserBookmarks() {
-	// 모든 사용자에게 기존 북마크 정보 복사 (호환성 유지)
-	_, err := DB.Exec(`
-		INSERT OR IGNORE INTO user_bookmarks (user_id, series_id)
-		SELECT 
-			(SELECT id FROM users ORDER BY created_at ASC LIMIT 1) as user_id, 
-			sm.series_id
-		FROM series_metadata sm
-		WHERE sm.is_bookmarked = 1
-	`)
-	if err != nil {
-		fmt.Printf("Failed to migrate user bookmarks: %v\n", err)
-	}
-}
-
-// migrateReadingProgress reading_progress 테이블 제약조건 정립
-// (user_id, chapter_id) → (user_id, series_id)로 변경하여 시리즈당 하나의 진행도만 유지
-func migrateReadingProgress() {
-	// 이미 UNIQUE(user_id, series_id)이고 chapter_id가 NULL 허용인 상태인지 확인
-	// idx_progress_chapter 인덱스가 있으면 PR #58 버전(chapter_id 필수)이므로 마이그레이션 수행
-	var count int
-	err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_progress_unique_chapter'`).Scan(&count)
-	if err != nil || count == 0 {
-		return // 이미 최신 구조이거나 이전 상태
+		_ = rows.Close()
 	}
 
-	fmt.Println("Consolidating reading_progress: changing unique constraint to (user_id, series_id)...")
+	if !hasExtraCol {
+		return nil
+	}
 
 	ctx := context.Background()
 	conn, err := DB.Conn(ctx)
 	if err != nil {
-		fmt.Printf("Failed to get connection for progress migration: %v\n", err)
-		return
+		return fmt.Errorf("get connection for series cleanup: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
-		fmt.Printf("Failed to disable foreign keys: %v\n", execErr)
-		return
+		return fmt.Errorf("disable foreign keys: %w", execErr)
 	}
-	defer func() {
-		if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`); execErr != nil {
-			fmt.Printf("Failed to enable foreign keys: %v\n", execErr)
-		}
-	}()
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
 
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		fmt.Printf("Failed to start transaction for progress migration: %v\n", err)
-		return
+		return fmt.Errorf("start transaction for series cleanup: %w", err)
 	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
+	defer func() { _ = tx.Rollback() }()
 
-	// 1. 새 테이블 생성 (UNIQUE(user_id, series_id), chapter_id NULL 허용)
-	_, err = tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TABLE series_new (
+			id TEXT PRIMARY KEY,
+			library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+			title TEXT NOT NULL,
+			path TEXT NOT NULL,
+			thumbnail_path TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`); err != nil {
+		return fmt.Errorf("create series_new: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO series_new (id, library_id, title, path, thumbnail_path, created_at, updated_at)
+		SELECT id, library_id, title, path, thumbnail_path, created_at, updated_at FROM series
+	`); err != nil {
+		return fmt.Errorf("copy data to series_new: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DROP TABLE series`); err != nil {
+		return fmt.Errorf("drop old series table: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE series_new RENAME TO series`); err != nil {
+		return fmt.Errorf("rename series_new to series: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_series_library ON series(library_id)`); err != nil {
+		return fmt.Errorf("recreate index on series: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit series cleanup: %w", err)
+	}
+
+	return nil
+}
+
+// #5 migrateReadingProgress reading_progress 테이블 제약조건 정립
+func migrateReadingProgress() error {
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_progress_unique_chapter'`).Scan(&count); err != nil || count == 0 {
+		return nil
+	}
+
+	// 과거 스키마 호환:
+	// 일부 DB는 reading_progress에 current_time/duration 컬럼이 없을 수 있다.
+	// 이 경우 데이터 복사 시 0.0으로 대체해서 마이그레이션 실패를 방지한다.
+	currentTimeExpr := "current_time"
+	if !columnExists("reading_progress", "current_time") {
+		currentTimeExpr = "0.0 AS current_time"
+	}
+	durationExpr := "duration"
+	if !columnExists("reading_progress", "duration") {
+		durationExpr = "0.0 AS duration"
+	}
+
+	ctx := context.Background()
+	conn, err := DB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("get connection for progress migration: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
+		return fmt.Errorf("disable foreign keys: %w", execErr)
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("start transaction for progress migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
 		CREATE TABLE reading_progress_new (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -732,454 +758,123 @@ func migrateReadingProgress() {
 			device_id TEXT,
 			device_name TEXT,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			current_time REAL DEFAULT 0.0,
+			duration REAL DEFAULT 0.0,
 			UNIQUE(user_id, series_id)
 		)
-	`)
-	if err != nil {
-		fmt.Printf("Failed to create reading_progress_new: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("create reading_progress_new: %w", err)
 	}
 
-	// 2. 데이터 복사 (각 시리즈별 최신 진척도만 유지)
-	// 중복 방지를 위해 INSERT OR IGNORE를 사용하고, 동일 시간대 발생 시 ID 기준 정렬로 1개만 선택
-	_, err = tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO reading_progress_new (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at)
-		SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at
+	insertQuery := fmt.Sprintf(`
+		INSERT OR IGNORE INTO reading_progress_new (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, current_time, duration)
+		SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, %s, %s
 		FROM (
 			SELECT *, ROW_NUMBER() OVER(PARTITION BY user_id, series_id ORDER BY updated_at DESC, id DESC) as rn
 			FROM reading_progress
 		) AS rp
 		WHERE rn = 1
-	`)
-	if err != nil {
-		fmt.Printf("Failed to copy data to reading_progress_new: %v\n", err)
-		return
+	`, currentTimeExpr, durationExpr)
+
+	if _, err := tx.ExecContext(ctx, insertQuery); err != nil {
+		return fmt.Errorf("copy data to reading_progress_new: %w", err)
 	}
 
-	// 3. 기존 테이블 삭제 및 교체
-	_, err = tx.ExecContext(ctx, `DROP TABLE reading_progress`)
-	if err != nil {
-		fmt.Printf("Failed to drop old progress table: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `DROP TABLE reading_progress`); err != nil {
+		return fmt.Errorf("drop old progress table: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, `ALTER TABLE reading_progress_new RENAME TO reading_progress`)
-	if err != nil {
-		fmt.Printf("Failed to rename progress table: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE reading_progress_new RENAME TO reading_progress`); err != nil {
+		return fmt.Errorf("rename progress table: %w", err)
 	}
 
-	// 4. 인덱스 재생성
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_user ON reading_progress(user_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate progress index (user): %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_user ON reading_progress(user_id)`); err != nil {
+		return fmt.Errorf("recreate progress index (user): %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate progress index (series): %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`); err != nil {
+		return fmt.Errorf("recreate progress index (series): %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		fmt.Printf("Failed to commit progress migration: %v\n", err)
-		return
+		return fmt.Errorf("commit progress migration: %w", err)
 	}
 
-	fmt.Println("Successfully consolidated reading_progress table.")
+	return nil
 }
 
-// migrateSeriesCleanup series 테이블에서 series_metadata로 이전된 불필요한 컬럼 제거
-func migrateSeriesCleanup() {
-	hasExtraCol := false
-	{
-		rows, err := DB.Query(`PRAGMA table_info(series)`)
-		if err != nil {
-			return
-		}
-		defer func() { _ = rows.Close() }()
-
-		for rows.Next() {
-			var cid int
-			var name, dtype string
-			var notnull int
-			var dflt_value interface{}
-			var pk int
-			if err := rows.Scan(&cid, &name, &dtype, &notnull, &dflt_value, &pk); err != nil {
-				continue
-			}
-			// metadata로 이동한 컬럼들이 남아있는지 확인
-			if name == "description" || name == "status" || name == "authors" {
-				hasExtraCol = true
-				break
-			}
-		}
-		_ = rows.Close()
-	}
-
-	if !hasExtraCol {
-		return // 이미 정리됨
-	}
-
-	fmt.Println("Cleaning up series table: removing metadata columns...")
-
-	ctx := context.Background()
-	conn, err := DB.Conn(ctx)
-	if err != nil {
-		fmt.Printf("Failed to get connection for series cleanup: %v\n", err)
-		return
-	}
-	defer func() { _ = conn.Close() }()
-
-	if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
-		fmt.Printf("Failed to disable foreign keys: %v\n", execErr)
-		return
-	}
-	defer func() {
-		if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`); execErr != nil {
-			fmt.Printf("Failed to enable foreign keys: %v\n", execErr)
-		}
-	}()
-
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		fmt.Printf("Failed to start transaction for series cleanup: %v\n", err)
-		return
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	// 1. 새 테이블 생성 (metadata 컬럼 제외)
-	_, err = tx.ExecContext(ctx, `
-		CREATE TABLE series_new (
-			id TEXT PRIMARY KEY,
-			library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
-			title TEXT NOT NULL,
-			path TEXT NOT NULL,
-			thumbnail_path TEXT,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)
+// #6 migrateUserBookmarks 기존 전역 북마크를 사용자별 북마크로 이전
+func migrateUserBookmarks() error {
+	_, err := DB.Exec(`
+		INSERT OR IGNORE INTO user_bookmarks (user_id, series_id)
+		SELECT
+			(SELECT id FROM users ORDER BY created_at ASC LIMIT 1) as user_id,
+			sm.series_id
+		FROM series_metadata sm
+		WHERE sm.is_bookmarked = 1
 	`)
 	if err != nil {
-		fmt.Printf("Failed to create series_new: %v\n", err)
-		return
+		return fmt.Errorf("migrate user bookmarks: %w", err)
 	}
-
-	// 2. 데이터 복사
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO series_new (id, library_id, title, path, thumbnail_path, created_at, updated_at)
-		SELECT id, library_id, title, path, thumbnail_path, created_at, updated_at FROM series
-	`)
-	if err != nil {
-		fmt.Printf("Failed to copy data to series_new: %v\n", err)
-		return
-	}
-
-	// 3. 기존 테이블 삭제 및 이름 변경
-	_, err = tx.ExecContext(ctx, `DROP TABLE series`)
-	if err != nil {
-		fmt.Printf("Failed to drop old series table: %v\n", err)
-		return
-	}
-
-	_, err = tx.ExecContext(ctx, `ALTER TABLE series_new RENAME TO series`)
-	if err != nil {
-		fmt.Printf("Failed to rename series_new to series: %v\n", err)
-		return
-	}
-
-	// 4. 인덱스 재생성
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_series_library ON series(library_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate index on series: %v\n", err)
-		return
-	}
-
-	if err := tx.Commit(); err != nil {
-		fmt.Printf("Failed to commit series cleanup: %v\n", err)
-		return
-	}
-
-	fmt.Println("Successfully cleaned up series table.")
+	return nil
 }
 
-// migrateSystemLibrary 시스템 라이브러리 지원을 위한 마이그레이션
-func migrateSystemLibrary() {
-	// 1. type 컬럼 추가
-	if !columnExists("libraries", "type") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN type TEXT DEFAULT 'LOCAL'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.type): %v\n", err)
-		}
+// #7 migratePagesWidthHeight pages 테이블에 width, height 컬럼 추가
+func migratePagesWidthHeight() error {
+	if err := addColumn("pages", "width", "INTEGER DEFAULT 0"); err != nil {
+		return err
 	}
-
-	// 2. 추가 설정 컬럼 확인
-	if !columnExists("libraries", "default_view_mode") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_view_mode TEXT DEFAULT 'single'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_view_mode): %v\n", err)
-		}
-	}
-	if !columnExists("libraries", "default_read_direction") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_read_direction TEXT DEFAULT 'ltr'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_read_direction): %v\n", err)
-		}
-	}
-	if !columnExists("libraries", "default_page_transition") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_page_transition TEXT DEFAULT 'slide'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_page_transition): %v\n", err)
-		}
-	}
-
-	// 3. is_visible 컬럼 추가
-	if !columnExists("libraries", "is_visible") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN is_visible BOOLEAN DEFAULT 1`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.is_visible): %v\n", err)
-		}
-	}
-
-	// 4. 좋아요(즐겨찾기) 라이브러리 생성
-	// type='SYSTEM', id='system-likes'
-	var exists int
-	err := DB.QueryRow(`SELECT COUNT(*) FROM libraries WHERE id = 'system-likes'`).Scan(&exists)
-	if err == nil && exists == 0 {
-		_, err := DB.Exec(`
-			INSERT INTO libraries (id, name, path, type, is_visible, default_view_mode, default_read_direction, default_page_transition, created_at, updated_at, sort_order)
-			VALUES ('system-likes', '좋아요한 시리즈', 'SYSTEM://LIKES', 'SYSTEM', 1, 'single', 'ltr', 'slide', datetime('now'), datetime('now'), 0)
-		`)
-		if err != nil {
-			fmt.Printf("Failed to create system library: %v\n", err)
-		} else {
-			fmt.Println("Created 'Liked Series' system library.")
-		}
-	}
-
-	// 5. scan_excludes 컬럼 추가
-	if !columnExists("libraries", "scan_excludes") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN scan_excludes TEXT DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.scan_excludes): %v\n", err)
-		} else {
-			fmt.Println("Migrated libraries table: added scan_excludes column.")
-		}
-	}
+	return addColumn("pages", "height", "INTEGER DEFAULT 0")
 }
 
-// migrateUsersTable users 테이블 구조 변경 (email 삭제, nickname 추가)
-func migrateUsersTable() {
-	// 1. nickname 컬럼 추가 및 기본값 설정
-	if !columnExists("users", "nickname") {
-		_, err := DB.Exec(`ALTER TABLE users ADD COLUMN nickname TEXT NOT NULL DEFAULT ''`)
-		if err != nil {
-			fmt.Printf("Migration error (add nickname): %v\n", err)
-		} else {
-			_, err = DB.Exec(`UPDATE users SET nickname = username WHERE nickname = ''`)
-			if err != nil {
-				fmt.Printf("Migration error (update nickname): %v\n", err)
-			}
-			fmt.Println("Migrated users table: added nickname column.")
-		}
-	}
-
-	// 2. email 컬럼 삭제를 위한 테이블 재생성 (SQLite 제한사항 해결)
-	if columnExists("users", "email") {
-		fmt.Println("Cleaning up users table: removing email column...")
-
-		ctx := context.Background()
-		conn, err := DB.Conn(ctx)
-		if err != nil {
-			fmt.Printf("Failed to get connection for users cleanup: %v\n", err)
-			return
-		}
-		defer func() { _ = conn.Close() }()
-
-		if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
-			fmt.Printf("Failed to disable foreign keys: %v\n", execErr)
-			return
-		}
-		defer func() {
-			if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`); execErr != nil {
-				fmt.Printf("Failed to enable foreign keys: %v\n", execErr)
-			}
-		}()
-
-		tx, err := conn.BeginTx(ctx, nil)
-		if err != nil {
-			fmt.Printf("Failed to start transaction for users cleanup: %v\n", err)
-			return
-		}
-		defer func() {
-			_ = tx.Rollback()
-		}()
-
-		// 1. 새 테이블 생성 (email 제외)
-		_, err = tx.ExecContext(ctx, `
-			CREATE TABLE users_new (
-				id TEXT PRIMARY KEY,
-				username TEXT UNIQUE NOT NULL,
-				nickname TEXT NOT NULL,
-				password_hash TEXT NOT NULL,
-				role TEXT NOT NULL DEFAULT 'USER',
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-			)
-		`)
-		if err != nil {
-			fmt.Printf("Failed to create users_new: %v\n", err)
-			return
-		}
-
-		// 2. 데이터 복사
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO users_new (id, username, nickname, password_hash, role, created_at, updated_at)
-			SELECT id, username, nickname, password_hash, role, created_at, updated_at FROM users
-		`)
-		if err != nil {
-			fmt.Printf("Failed to copy data to users_new: %v\n", err)
-			return
-		}
-
-		// 3. 기존 테이블 삭제 및 이름 변경
-		_, err = tx.ExecContext(ctx, `DROP TABLE users`)
-		if err != nil {
-			fmt.Printf("Failed to drop old users table: %v\n", err)
-			return
-		}
-
-		_, err = tx.ExecContext(ctx, `ALTER TABLE users_new RENAME TO users`)
-		if err != nil {
-			fmt.Printf("Failed to rename users_new to users: %v\n", err)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			fmt.Printf("Failed to commit users cleanup: %v\n", err)
-			return
-		}
-
-		fmt.Println("Successfully cleaned up users table: removed email column.")
-	}
-}
-
-// migratePagesWidthHeight pages 테이블에 width, height 컬럼 추가
-func migratePagesWidthHeight() {
-	// width 컬럼이 없으면 추가
-	if !columnExists("pages", "width") {
-		_, err := DB.Exec(`ALTER TABLE pages ADD COLUMN width INTEGER DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Failed to add width column to pages: %v\n", err)
-		} else {
-			fmt.Println("Added width column to pages table.")
-		}
-	}
-
-	// height 컬럼이 없으면 추가
-	if !columnExists("pages", "height") {
-		_, err := DB.Exec(`ALTER TABLE pages ADD COLUMN height INTEGER DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Failed to add height column to pages: %v\n", err)
-		} else {
-			fmt.Println("Added height column to pages table.")
-		}
-	}
-}
-
-// migrateUserDownloadPermission users 테이블에 can_download 컬럼 추가
-func migrateUserDownloadPermission() {
+// #8 migrateUserDownloadPermission users 테이블에 can_download 컬럼 추가
+func migrateUserDownloadPermission() error {
 	if !columnExists("users", "can_download") {
-		_, err := DB.Exec(`ALTER TABLE users ADD COLUMN can_download BOOLEAN DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (users.can_download): %v\n", err)
-		} else {
-			// MASTER 계정은 기본적으로 다운로드 권한 허용
-			_, err = DB.Exec(`UPDATE users SET can_download = 1 WHERE role = 'MASTER'`)
-			if err != nil {
-				fmt.Printf("Migration error (users.can_download update master): %v\n", err)
-			}
-			fmt.Println("Migrated users table: added can_download column.")
+		if _, err := DB.Exec(`ALTER TABLE users ADD COLUMN can_download BOOLEAN DEFAULT 0`); err != nil {
+			return fmt.Errorf("add users.can_download: %w", err)
+		}
+		if _, err := DB.Exec(`UPDATE users SET can_download = 1 WHERE role = 'MASTER'`); err != nil {
+			return fmt.Errorf("update master can_download: %w", err)
 		}
 	}
+	return nil
 }
 
-// migrateVolumesHasAudio volumes 테이블에 has_audio 컬럼 추가
-func migrateVolumesHasAudio() {
-	if !columnExists("volumes", "has_audio") {
-		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN has_audio BOOLEAN DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (volumes.has_audio): %v\n", err)
-		} else {
-			fmt.Println("Migrated volumes table: added has_audio column.")
-		}
-	}
+// #9 migrateVolumesHasAudio volumes 테이블에 has_audio 컬럼 추가
+func migrateVolumesHasAudio() error {
+	return addColumn("volumes", "has_audio", "BOOLEAN DEFAULT 0")
 }
 
-// migrateVolumesUnit volumes 테이블에 unit 컬럼 추가
-func migrateVolumesUnit() {
-	if !columnExists("volumes", "unit") {
-		_, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN unit TEXT DEFAULT 'volume'`)
-		if err != nil {
-			fmt.Printf("Migration error (volumes.unit): %v\n", err)
-		} else {
-			fmt.Println("Migrated volumes table: added unit column.")
-		}
-	}
+// #10 migrateVolumesUnit volumes 테이블에 unit 컬럼 추가
+func migrateVolumesUnit() error {
+	return addColumn("volumes", "unit", "TEXT DEFAULT 'volume'")
 }
 
-// migrateReadingProgressPerVolume 읽기 진행도를 볼륨별로 저장하도록 제약조건 변경
-// (user_id, series_id) UNIQUE -> (user_id, volume_id) UNIQUE
-// 주의: volume_id가 NULL인 경우(거의 없어야 함)는 중복 허용됨
-func migrateReadingProgressPerVolume() {
-	// 이미 변경되었는지 확인하기 위해 인덱스 이름 확인?
-	// 아니면 그냥 시도. Safe하게 하려면 별도 flag 체크 필요하지만,
-	// 여기서는 reading_progress 테이블의 인덱스 정보를 조회해서 판단.
-	// (기존 idx_progress_unique_volume 같은게 있는지)
-
-	// 간단히: UNIQUE 제약조건이 (user_id, series_id)인지 확인하는 쿼리가 복잡하므로,
-	// 별도의 tracking table이나 version check가 없으니
-	// 임의의 키(컬럼 아님)를 체크하거나, 그냥 매번 실행하되 "table_info"로 판단... 어렵다.
-	// 그래서 "idx_progress_unique_volume" 이라는 이름의 Index가 없으면 실행하는 것으로 함.
+// #11 migrateReadingProgressPerVolume 읽기 진행도를 볼륨별로 저장하도록 제약조건 변경
+func migrateReadingProgressPerVolume() error {
 	var count int
-	err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_progress_unique_volume'`).Scan(&count)
-	if err == nil && count > 0 {
-		return // 이미 마이그레이션 됨
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_progress_unique_volume'`).Scan(&count); err == nil && count > 0 {
+		return nil
 	}
-
-	fmt.Println("Migrating reading_progress to per-volume unique constraint...")
 
 	ctx := context.Background()
 	conn, err := DB.Conn(ctx)
 	if err != nil {
-		fmt.Printf("Failed to get connection for progress migration v2: %v\n", err)
-		return
+		return fmt.Errorf("get connection for progress migration v2: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
-		fmt.Printf("Failed to disable foreign keys: %v\n", execErr)
-		return
+		return fmt.Errorf("disable foreign keys: %w", execErr)
 	}
-	defer func() {
-		if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`); execErr != nil {
-			fmt.Printf("Failed to enable foreign keys: %v\n", execErr)
-		}
-	}()
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
 
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		fmt.Printf("Failed to start transaction for progress migration v2: %v\n", err)
-		return
+		return fmt.Errorf("start transaction for progress migration v2: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// 1. 새 테이블 생성 (UNIQUE(user_id, volume_id))
-	// volume_id가 NULL인 경우 CONFLICT가 발생하지 않으므로 여러 개 생길 수 있음 -> OK (시리즈 레벨 더미 진행도 등)
-	// 하지만 일반적인 읽기 진행도는 volume_id가 필수임.
-	_, err = tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		CREATE TABLE reading_progress_v2 (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1191,129 +886,137 @@ func migrateReadingProgressPerVolume() {
 			progress_percent REAL DEFAULT 0.0,
 			device_id TEXT,
 			device_name TEXT,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			current_time REAL DEFAULT 0.0,
+			duration REAL DEFAULT 0.0
 		)
-	`)
-	if err != nil {
-		fmt.Printf("Failed to create reading_progress_v2: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("create reading_progress_v2: %w", err)
 	}
 
-	// Unique Index 생성 (테이블 정의에 넣지 않고 별도 인덱스로 명시적 제어)
-	// volume_id가 NULL이 아닌 경우에만 Unique 해야 하나?
-	// SQLite에서 UNIQUE(user_id, volume_id)는 volume_id가 NULL이면 중복 허용.
-	// 우리가 원하는 것은 "같은 유저가 같은 볼륨에 대해 하나의 진행도만 가짐". OK.
-	_, err = tx.ExecContext(ctx, `CREATE UNIQUE INDEX idx_progress_unique_volume ON reading_progress_v2(user_id, volume_id) WHERE volume_id IS NOT NULL`)
-	if err != nil {
-		fmt.Printf("Failed to create unique index on reading_progress_v2: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX idx_progress_unique_volume ON reading_progress_v2(user_id, volume_id) WHERE volume_id IS NOT NULL`); err != nil {
+		return fmt.Errorf("create unique index on reading_progress_v2: %w", err)
 	}
-	// volume_id가 NULL인 경우 series_id로 Unique해야 하나?
-	// 일단 기존 데이터 유지를 위해 (user_id, series_id) where volume_id is null 추가?
-	// 복잡해지므로 일단 volume 단위만 확실히 잡음.
 
-	// 2. 데이터 복사
-	// 기존 테이블의 모든 데이터를 복사하되, 중복 발생 시(이전 마이그레이션 실패 등) 무시
-	_, err = tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO reading_progress_v2 (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at)
-		SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at
+	if _, err := tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO reading_progress_v2 (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, current_time, duration)
+		SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, current_time, duration
 		FROM reading_progress
-	`)
-	if err != nil {
-		fmt.Printf("Failed to copy data to reading_progress_v2: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("copy data to reading_progress_v2: %w", err)
 	}
 
-	// 3. 테이블 교체
-	_, err = tx.ExecContext(ctx, `DROP TABLE reading_progress`)
-	if err != nil {
-		fmt.Printf("Failed to drop old progress table: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `DROP TABLE reading_progress`); err != nil {
+		return fmt.Errorf("drop old progress table: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, `ALTER TABLE reading_progress_v2 RENAME TO reading_progress`)
-	if err != nil {
-		fmt.Printf("Failed to rename progress table: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE reading_progress_v2 RENAME TO reading_progress`); err != nil {
+		return fmt.Errorf("rename progress table: %w", err)
 	}
 
-	// 4. 인덱스 재생성 (Helper Index)
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_user ON reading_progress(user_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate progress index (user): %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_user ON reading_progress(user_id)`); err != nil {
+		return fmt.Errorf("recreate progress index (user): %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate progress index (series): %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`); err != nil {
+		return fmt.Errorf("recreate progress index (series): %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_chapter ON reading_progress(chapter_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate progress index (chapter): %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_chapter ON reading_progress(chapter_id)`); err != nil {
+		return fmt.Errorf("recreate progress index (chapter): %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		fmt.Printf("Failed to commit progress migration v2: %v\n", err)
-		return
+		return fmt.Errorf("commit progress migration v2: %w", err)
 	}
 
-	fmt.Println("Successfully migrated reading_progress to per-volume tracking.")
+	return nil
 }
 
-// migrateProgressToChapterBased 볼륨 기반 진행도를 챕터 기반으로 변경
-// 기존: UNIQUE(user_id, volume_id) → 볼륨당 하나의 진행도만 저장
-// 변경: UNIQUE(user_id, chapter_id) → 챕터당 개별 진행도 저장
-func migrateProgressToChapterBased() {
-	// idx_progress_unique_volume 인덱스가 있는지 확인
-	var count int
-	err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_progress_unique_volume'`).Scan(&count)
-	if err != nil || count == 0 {
-		return // 이미 마이그레이션됨 또는 해당 인덱스 없음
+// #12 migrateVolumesMetadata volumes 테이블에 메타데이터 컬럼 추가
+func migrateVolumesMetadata() error {
+	if err := addColumn("volumes", "description", "TEXT DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := addColumn("volumes", "authors", "TEXT DEFAULT ''"); err != nil {
+		return err
+	}
+	return addColumn("volumes", "publication_year", "TEXT DEFAULT ''")
+}
+
+// #13 migrateSeriesMetadataColumns series_metadata 테이블에 확장 메타데이터 컬럼 추가
+func migrateSeriesMetadataColumns() error {
+	if err := addColumn("series_metadata", "original_title", "TEXT DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := addColumn("series_metadata", "publisher", "TEXT DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := addColumn("series_metadata", "published_at", "TEXT DEFAULT ''"); err != nil {
+		return err
+	}
+	return addColumn("series_metadata", "isbn", "TEXT DEFAULT ''")
+}
+
+// #14 migrateChapterCompletions chapter_completions 테이블 추가
+func migrateChapterCompletions() error {
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS chapter_completions (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+			completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(user_id, chapter_id)
+		)
+	`); err != nil {
+		return fmt.Errorf("create chapter_completions: %w", err)
 	}
 
-	fmt.Println("Migrating reading_progress: Changing unique constraint from (user_id, volume_id) to (user_id, chapter_id)...")
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_chapter_completions_user ON chapter_completions(user_id)`); err != nil {
+		return fmt.Errorf("create index chapter_completions(user_id): %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_chapter_completions_chapter ON chapter_completions(chapter_id)`); err != nil {
+		return fmt.Errorf("create index chapter_completions(chapter_id): %w", err)
+	}
+
+	return nil
+}
+
+// #15 migrateReadingTime reading_progress 테이블에 read_time_seconds 컬럼 추가
+func migrateReadingTime() error {
+	return addColumn("reading_progress", "read_time_seconds", "INTEGER DEFAULT 0")
+}
+
+// #16 migrateProgressToChapterBased 볼륨 기반 진행도를 챕터 기반으로 변경
+func migrateProgressToChapterBased() error {
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_progress_unique_volume'`).Scan(&count); err != nil || count == 0 {
+		return nil
+	}
 
 	ctx := context.Background()
 	conn, err := DB.Conn(ctx)
 	if err != nil {
-		fmt.Printf("Failed to get connection for chapter-based progress migration: %v\n", err)
-		return
+		return fmt.Errorf("get connection for chapter-based progress migration: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
-		fmt.Printf("Failed to disable foreign keys: %v\n", execErr)
-		return
+		return fmt.Errorf("disable foreign keys: %w", execErr)
 	}
-	defer func() {
-		if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`); execErr != nil {
-			fmt.Printf("Failed to enable foreign keys: %v\n", execErr)
-		}
-	}()
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
 
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		fmt.Printf("Failed to start transaction for chapter-based migration: %v\n", err)
-		return
+		return fmt.Errorf("start transaction for chapter-based migration: %w", err)
 	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
+	defer func() { _ = tx.Rollback() }()
 
-	// 0. 유실될 데이터 확인 (chapter_id IS NULL)
+	// 유실될 데이터 확인 (chapter_id IS NULL)
 	var skippedCount int
-	err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM reading_progress WHERE chapter_id IS NULL").Scan(&skippedCount)
-	if err != nil {
-		fmt.Printf("Failed to count skipped rows (chapter_id IS NULL): %v\n", err)
-		// 카운트 실패하더라도 마이그레이션 계속 진행
-	} else if skippedCount > 0 {
-		fmt.Printf("[Migration Warning] %d rows with NULL chapter_id will be skipped/deleted during migration.\n", skippedCount)
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM reading_progress WHERE chapter_id IS NULL").Scan(&skippedCount); err == nil && skippedCount > 0 {
+		fmt.Printf("[Migration Warning] %d rows with NULL chapter_id will be skipped during migration.\n", skippedCount)
 	}
 
-	// 1. 새 테이블 생성 (UNIQUE(user_id, chapter_id))
-	_, err = tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		CREATE TABLE reading_progress_new (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1327,156 +1030,150 @@ func migrateProgressToChapterBased() {
 			device_name TEXT,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			read_time_seconds INTEGER DEFAULT 0,
+			current_time REAL DEFAULT 0.0,
+			duration REAL DEFAULT 0.0,
 			UNIQUE(user_id, chapter_id)
 		)
-	`)
-	if err != nil {
-		fmt.Printf("Failed to create reading_progress_new: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("create reading_progress_new: %w", err)
 	}
 
-	// 3. 기존 데이터 복사 (모든 레코드 보존, 챕터 단위로 저장됨)
-	// UNIQUE 제약조건 충돌 방지를 위해 INSERT OR IGNORE 사용
-	_, err = tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO reading_progress_new 
-		(id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, read_time_seconds)
-		SELECT 
-			id, user_id, series_id, volume_id, chapter_id, 
-			current_page, total_pages, progress_percent, 
-			device_id, device_name, updated_at, read_time_seconds
+	if _, err := tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO reading_progress_new
+		(id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, read_time_seconds, current_time, duration)
+		SELECT
+			id, user_id, series_id, volume_id, chapter_id,
+			current_page, total_pages, progress_percent,
+			device_id, device_name, updated_at, read_time_seconds, current_time, duration
 		FROM reading_progress
 		WHERE chapter_id IS NOT NULL
 		ORDER BY updated_at DESC
-	`)
-	if err != nil {
-		fmt.Printf("Failed to copy data to reading_progress_new: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("copy data to reading_progress_new: %w", err)
 	}
 
-	// 4. 기존 테이블 삭제
-	_, err = tx.ExecContext(ctx, `DROP TABLE reading_progress`)
-	if err != nil {
-		fmt.Printf("Failed to drop old progress table: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `DROP TABLE reading_progress`); err != nil {
+		return fmt.Errorf("drop old progress table: %w", err)
 	}
 
-	// 5. 새 테이블을 원래 이름으로 변경
-	_, err = tx.ExecContext(ctx, `ALTER TABLE reading_progress_new RENAME TO reading_progress`)
-	if err != nil {
-		fmt.Printf("Failed to rename progress table: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE reading_progress_new RENAME TO reading_progress`); err != nil {
+		return fmt.Errorf("rename progress table: %w", err)
 	}
 
-	// 6. 기타 인덱스 재생성
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_user ON reading_progress(user_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate progress index (user): %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_user ON reading_progress(user_id)`); err != nil {
+		return fmt.Errorf("recreate progress index (user): %w", err)
 	}
-
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate progress index (series): %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`); err != nil {
+		return fmt.Errorf("recreate progress index (series): %w", err)
 	}
-
-	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_chapter ON reading_progress(chapter_id)`)
-	if err != nil {
-		fmt.Printf("Failed to recreate progress index (chapter): %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_chapter ON reading_progress(chapter_id)`); err != nil {
+		return fmt.Errorf("recreate progress index (chapter): %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		fmt.Printf("Failed to commit chapter-based progress migration: %v\n", err)
-		return
+		return fmt.Errorf("commit chapter-based progress migration: %w", err)
 	}
 
-	fmt.Println("Successfully migrated reading_progress to chapter-based storage.")
+	return nil
 }
 
-// fixReadingProgressUniqueIndex 읽기 진행도 유니크 인덱스 수정
-// 기존 idx_progress_unique_chapter가 Partial Index(WHERE chapter_id IS NOT NULL)여서
-// ON CONFLICT(user_id, chapter_id) 구문과 매칭되지 않는 문제 해결
-func fixReadingProgressUniqueIndex() {
-	// 인덱스 정보를 확인하여 Partial Index인지 확인하기는 복잡하므로,
-	// 그냥 안전하게 삭제 후 재생성 시도 (IF EXISTS / IF NOT EXISTS 활용)
+// #17 migrateSessions 세션 테이블 생성 (기기별 로그인 관리)
+func migrateSessions() error {
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			refresh_token_hash TEXT NOT NULL,
+			device_name TEXT DEFAULT '',
+			device_type TEXT DEFAULT '',
+			browser TEXT DEFAULT '',
+			os TEXT DEFAULT '',
+			ip_address TEXT DEFAULT '',
+			last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			expires_at DATETIME NOT NULL
+		)
+	`); err != nil {
+		return fmt.Errorf("create sessions table: %w", err)
+	}
 
-	// 하지만 매번 실행하면 비효율적이므로, 별도의 마이그레이션 확인용 로직이 없으니
-	// 일단 항상 실행하되, 실제 변경 필요 여부를 인덱스 SQL로 판단하면 좋겠지만
-	// 여기서는 간단히 Drop & Create 전략 사용 (데이터 무결성 영향 없음)
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`); err != nil {
+		return fmt.Errorf("create index sessions(user_id): %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(refresh_token_hash)`); err != nil {
+		return fmt.Errorf("create index sessions(refresh_token_hash): %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`); err != nil {
+		return fmt.Errorf("create index sessions(expires_at): %w", err)
+	}
 
-	// 단, 이미 올바른 인덱스가 있는지 확인할 방법이 마땅치 않으므로
-	// 에러 무시하고 강제 실행
+	return nil
+}
+
+// #18 fixReadingProgressUniqueIndex 읽기 진행도 유니크 인덱스 수정 (Partial → Standard)
+func fixReadingProgressUniqueIndex() error {
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_progress_unique_chapter'`).Scan(&count); err != nil || count == 0 {
+		return nil
+	}
+
+	var indexSQL string
+	if err := DB.QueryRow(`SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_progress_unique_chapter'`).Scan(&indexSQL); err != nil {
+		return nil
+	}
+
+	// WHERE 절이 없으면 이미 올바른 인덱스
+	if !strings.Contains(strings.ToUpper(indexSQL), "WHERE") {
+		return nil
+	}
 
 	ctx := context.Background()
 	conn, err := DB.Conn(ctx)
 	if err != nil {
-		fmt.Printf("Failed to get connection for fixing progress index: %v\n", err)
-		return
+		return fmt.Errorf("get connection for fixing progress index: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
-	// 트랜잭션 시작
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		fmt.Printf("Failed to start transaction for fixing progress index: %v\n", err)
-		return
+		return fmt.Errorf("start transaction for fixing progress index: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// 1. 기존 인덱스 삭제
-	_, err = tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_progress_unique_chapter`)
-	if err != nil {
-		fmt.Printf("Failed to drop idx_progress_unique_chapter: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_progress_unique_chapter`); err != nil {
+		return fmt.Errorf("drop idx_progress_unique_chapter: %w", err)
 	}
 
-	// 2. 표준 유니크 인덱스 생성 (WHERE 절 없음)
-	// 이를 통해 ON CONFLICT(user_id, chapter_id) 가 정상 동작하게 함
-	_, err = tx.ExecContext(ctx, `
-		CREATE UNIQUE INDEX idx_progress_unique_chapter 
+	if _, err := tx.ExecContext(ctx, `
+		CREATE UNIQUE INDEX idx_progress_unique_chapter
 		ON reading_progress(user_id, chapter_id)
-	`)
-	if err != nil {
-		fmt.Printf("Failed to create fixed idx_progress_unique_chapter: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("create fixed idx_progress_unique_chapter: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		fmt.Printf("Failed to commit index fix: %v\n", err)
-		return
+		return fmt.Errorf("commit index fix: %w", err)
 	}
 
-	fmt.Println("Fixed reading_progress unique index (removed partial constraint).")
+	return nil
 }
 
-// fixReadingProgressUniqueIndexV2 읽기 진행도 유니크 제약조건을 (user_id, series_id)에서 (user_id, chapter_id)로 수정
-// SQLite에서는 ALTER TABLE로 제약조건을 삭제할 수 없으므로 테이블 재생성이 필요할 수 있으나,
-// 여기서는 유니크 인덱스로 우회하거나, 필요한 경우 테이블을 스왑함.
-func fixReadingProgressUniqueIndexV2() {
+// #19 fixReadingProgressUniqueIndexV2 유니크 제약조건 수정 (Series → Chapter)
+func fixReadingProgressUniqueIndexV2() error {
 	ctx := context.Background()
 	conn, err := DB.Conn(ctx)
 	if err != nil {
-		fmt.Printf("Failed to get connection for fixing progress unique index V2: %v\n", err)
-		return
+		return fmt.Errorf("get connection for fixing progress unique index V2: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
-	// 현재 테이블 구조 확인 (UNIQUE(user_id, series_id) 가 있는지 체크)
-	var sqlStr string
-	err = conn.QueryRowContext(ctx, "SELECT sql FROM sqlite_master WHERE type='table' AND name='reading_progress'").Scan(&sqlStr)
-	if err != nil {
-		return
-	}
-
-	// 현재 테이블의 실제 유니크 인덱스 구조 확인 (UNIQUE(user_id, series_id) 가 있는지 체크)
+	// 현재 테이블의 유니크 인덱스 확인
 	hasUniqueUserSeries := false
 
 	indexRows, err := conn.QueryContext(ctx, "PRAGMA index_list('reading_progress')")
 	if err != nil {
-		return
+		return nil
 	}
-	defer indexRows.Close()
 
 	for indexRows.Next() {
 		var seq int
@@ -1485,65 +1182,53 @@ func fixReadingProgressUniqueIndexV2() {
 		var origin string
 		var partial int
 
-		err = indexRows.Scan(&seq, &indexName, &unique, &origin, &partial)
-		if err != nil {
-			return
+		if scanErr := indexRows.Scan(&seq, &indexName, &unique, &origin, &partial); scanErr != nil {
+			_ = indexRows.Close()
+			return nil
 		}
 
-		// 유니크 인덱스만 대상
 		if unique != 1 {
 			continue
 		}
 
-		// 해당 인덱스의 컬럼 목록 조회
 		escapedName := strings.ReplaceAll(indexName, "'", "''")
-		var infoRows *sql.Rows
-		infoRows, err = conn.QueryContext(ctx, fmt.Sprintf("PRAGMA index_info('%s')", escapedName))
-		if err != nil {
-			return
+		infoRows, queryErr := conn.QueryContext(ctx, fmt.Sprintf("PRAGMA index_info('%s')", escapedName))
+		if queryErr != nil {
+			_ = indexRows.Close()
+			return nil
 		}
 
 		var cols []string
 		for infoRows.Next() {
 			var seqno, cid int
 			var colName string
-			err = infoRows.Scan(&seqno, &cid, &colName)
-			if err != nil {
+			if scanErr := infoRows.Scan(&seqno, &cid, &colName); scanErr != nil {
 				_ = infoRows.Close()
-				return
+				_ = indexRows.Close()
+				return nil
 			}
 			cols = append(cols, colName)
 		}
 		_ = infoRows.Close()
 
-		// 컬럼이 정확히 (user_id, series_id) 인 유니크 인덱스가 있는지 확인
 		if len(cols) == 2 && cols[0] == "user_id" && cols[1] == "series_id" {
 			hasUniqueUserSeries = true
 			break
 		}
 	}
+	_ = indexRows.Close()
 
-	err = indexRows.Err()
-	if err != nil {
-		return
-	}
-
-	// 해당 유니크 인덱스가 없으면 마이그레이션 불필요
 	if !hasUniqueUserSeries {
-		return
+		return nil
 	}
-
-	fmt.Println("Migrating reading_progress: Removing UNIQUE(user_id, series_id) constraint...")
 
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		fmt.Printf("Failed to start transaction for unique index fix V2: %v\n", err)
-		return
+		return fmt.Errorf("start transaction for unique index fix V2: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// 1. 임시 테이블 생성 (올바른 제약조건으로)
-	_, err = tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		CREATE TABLE reading_progress_v3 (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1557,286 +1242,291 @@ func fixReadingProgressUniqueIndexV2() {
 			device_name TEXT,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			read_time_seconds INTEGER DEFAULT 0,
+			current_time REAL DEFAULT 0.0,
+			duration REAL DEFAULT 0.0,
 			UNIQUE(user_id, chapter_id)
 		)
-	`)
-	if err != nil {
-		fmt.Printf("Failed to create reading_progress_v3: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("create reading_progress_v3: %w", err)
 	}
 
-	// 1.5 유실될 데이터 확인 (chapter_id IS NULL)
+	// 유실될 데이터 확인
 	var skippedCount int
-	err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM reading_progress WHERE chapter_id IS NULL").Scan(&skippedCount)
-	if err != nil {
-		fmt.Printf("Failed to count skipped rows (chapter_id IS NULL) in V2: %v\n", err)
-	} else if skippedCount > 0 {
-		fmt.Printf("[Migration V2 Warning] %d rows with NULL chapter_id will be skipped/deleted during unique index fix.\n", skippedCount)
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM reading_progress WHERE chapter_id IS NULL").Scan(&skippedCount); err == nil && skippedCount > 0 {
+		fmt.Printf("[Migration V2 Warning] %d rows with NULL chapter_id will be skipped during unique index fix.\n", skippedCount)
 	}
 
-	// 2. 데이터 복사
-	// (user_id, chapter_id)가 중복되는 경우 가장 최근(updated_at이 가장 큰) 레코드만 유지하기 위해
-	// updated_at 기준 내림차순으로 정렬하여 먼저 삽입하고, 이후 중복은 ON CONFLICT ... DO NOTHING으로 무시
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO reading_progress_v3 (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, read_time_seconds)
-		SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, read_time_seconds
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO reading_progress_v3 (id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, read_time_seconds, current_time, duration)
+		SELECT id, user_id, series_id, volume_id, chapter_id, current_page, total_pages, progress_percent, device_id, device_name, updated_at, read_time_seconds, current_time, duration
 		FROM reading_progress
 		WHERE chapter_id IS NOT NULL
 		ORDER BY updated_at DESC
 		ON CONFLICT(user_id, chapter_id) DO NOTHING
-	`)
-	if err != nil {
-		fmt.Printf("Failed to copy data to reading_progress_v3: %v\n", err)
-		return
+	`); err != nil {
+		return fmt.Errorf("copy data to reading_progress_v3: %w", err)
 	}
 
-	// 3. 테이블 교체
-	_, err = tx.ExecContext(ctx, `DROP TABLE reading_progress`)
-	if err != nil {
-		fmt.Printf("Failed to drop old progress table: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `DROP TABLE reading_progress`); err != nil {
+		return fmt.Errorf("drop old progress table: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, `ALTER TABLE reading_progress_v3 RENAME TO reading_progress`)
-	if err != nil {
-		fmt.Printf("Failed to rename progress table: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE reading_progress_v3 RENAME TO reading_progress`); err != nil {
+		return fmt.Errorf("rename progress table: %w", err)
 	}
 
-	// 4. 인덱스 재생성
-	if _, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_user ON reading_progress(user_id)`); err != nil {
-		fmt.Printf("Failed to create user index: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_user ON reading_progress(user_id)`); err != nil {
+		return fmt.Errorf("create user index: %w", err)
 	}
-	if _, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`); err != nil {
-		fmt.Printf("Failed to create series index: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_series ON reading_progress(series_id)`); err != nil {
+		return fmt.Errorf("create series index: %w", err)
 	}
-	if _, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_chapter ON reading_progress(chapter_id)`); err != nil {
-		fmt.Printf("Failed to create chapter index: %v\n", err)
-		return
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_progress_chapter ON reading_progress(chapter_id)`); err != nil {
+		return fmt.Errorf("create chapter index: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		fmt.Printf("Failed to commit progress migration V2: %v\n", err)
-		return
+		return fmt.Errorf("commit progress migration V2: %w", err)
 	}
 
-	fmt.Println("Successfully fixed reading_progress unique constraint (Series -> Chapter).")
+	return nil
 }
 
-// migrateSwipeDirection 사용자별 시리즈 설정에 swipe_direction 컬럼 추가
-func migrateSwipeDirection() {
-	if !columnExists("user_series_settings", "swipe_direction") {
-		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN swipe_direction TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (user_series_settings.swipe_direction): %v\n", err)
-		} else {
-			fmt.Println("Migrated user_series_settings table: added swipe_direction column.")
-		}
-	}
+// #20 migrateSwipeDirection 사용자별 시리즈 설정에 swipe_direction 컬럼 추가
+func migrateSwipeDirection() error {
+	return addColumn("user_series_settings", "swipe_direction", "TEXT")
 }
 
-// migrateWheelDirection 사용자별 시리즈 설정에 wheel_direction 컬럼 추가
-func migrateWheelDirection() {
-	if !columnExists("user_series_settings", "wheel_direction") {
-		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN wheel_direction TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (user_series_settings.wheel_direction): %v\n", err)
-		} else {
-			fmt.Println("Migrated user_series_settings table: added wheel_direction column.")
-		}
-	}
+// #21 migrateWheelDirection 사용자별 시리즈 설정에 wheel_direction 컬럼 추가
+func migrateWheelDirection() error {
+	return addColumn("user_series_settings", "wheel_direction", "TEXT")
 }
 
-// migrateEpubRenderMode 사용자별 시리즈 설정에 epub_render_mode 컬럼 추가
-func migrateEpubRenderMode() {
-	if !columnExists("user_series_settings", "epub_render_mode") {
-		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_render_mode TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (user_series_settings.epub_render_mode): %v\n", err)
-		} else {
-			fmt.Println("Migrated user_series_settings table: added epub_render_mode column.")
-		}
-	}
+// #22 migrateEpubCFI reading_progress 테이블에 current_cfi 컬럼 추가
+func migrateEpubCFI() error {
+	return addColumn("reading_progress", "current_cfi", "TEXT")
 }
 
-// migrateEpubSeriesSettings 사용자별 시리즈 설정에 EPUB 오버라이드 컬럼 추가
-func migrateEpubSeriesSettings() {
-	if !columnExists("user_series_settings", "epub_theme") {
-		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_theme TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (user_series_settings.epub_theme): %v\n", err)
-		} else {
-			fmt.Println("Migrated user_series_settings table: added epub_theme column.")
-		}
+// #23 migrateEpubVirtualPositions EPUB 가상 포지션 관련 컬럼 추가
+func migrateEpubVirtualPositions() error {
+	if err := addColumn("chapters", "total_bytes", "INTEGER DEFAULT 0"); err != nil {
+		return err
 	}
-	if !columnExists("user_series_settings", "epub_spread") {
-		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_spread TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (user_series_settings.epub_spread): %v\n", err)
-		} else {
-			fmt.Println("Migrated user_series_settings table: added epub_spread column.")
-		}
+	if err := addColumn("chapters", "total_positions", "INTEGER DEFAULT 0"); err != nil {
+		return err
 	}
-	if !columnExists("user_series_settings", "epub_wheel_direction") {
-		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_wheel_direction TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (user_series_settings.epub_wheel_direction): %v\n", err)
-		} else {
-			fmt.Println("Migrated user_series_settings table: added epub_wheel_direction column.")
-		}
+	if err := addColumn("reading_progress", "current_position", "INTEGER DEFAULT 0"); err != nil {
+		return err
 	}
-	if !columnExists("user_series_settings", "epub_keyboard_direction") {
-		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_keyboard_direction TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (user_series_settings.epub_keyboard_direction): %v\n", err)
-		} else {
-			fmt.Println("Migrated user_series_settings table: added epub_keyboard_direction column.")
-		}
-	}
-	if !columnExists("user_series_settings", "epub_click_direction") {
-		_, err := DB.Exec(`ALTER TABLE user_series_settings ADD COLUMN epub_click_direction TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (user_series_settings.epub_click_direction): %v\n", err)
-		} else {
-			fmt.Println("Migrated user_series_settings table: added epub_click_direction column.")
-		}
-	}
+	return addColumn("reading_progress", "total_positions", "INTEGER DEFAULT 0")
 }
 
-// migrateLibraryEpubDefaults libraries 테이블에 EPUB 기본값 컬럼 추가
-func migrateLibraryEpubDefaults() {
-	if !columnExists("libraries", "default_epub_render_mode") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_render_mode TEXT DEFAULT 'auto'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_epub_render_mode): %v\n", err)
-		} else {
-			fmt.Println("Migrated libraries table: added default_epub_render_mode column.")
-		}
-	}
-	if !columnExists("libraries", "default_epub_theme") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_theme TEXT DEFAULT 'light'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_epub_theme): %v\n", err)
-		} else {
-			fmt.Println("Migrated libraries table: added default_epub_theme column.")
-		}
-	}
-	if !columnExists("libraries", "default_epub_spread") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_spread TEXT DEFAULT 'auto'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_epub_spread): %v\n", err)
-		} else {
-			fmt.Println("Migrated libraries table: added default_epub_spread column.")
-		}
-	}
-	if !columnExists("libraries", "default_epub_wheel_direction") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_wheel_direction TEXT DEFAULT 'down'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_epub_wheel_direction): %v\n", err)
-		} else {
-			fmt.Println("Migrated libraries table: added default_epub_wheel_direction column.")
-		}
-	}
-	if !columnExists("libraries", "default_epub_keyboard_direction") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_keyboard_direction TEXT DEFAULT 'right'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_epub_keyboard_direction): %v\n", err)
-		} else {
-			fmt.Println("Migrated libraries table: added default_epub_keyboard_direction column.")
-		}
-	}
-	if !columnExists("libraries", "default_epub_click_direction") {
-		_, err := DB.Exec(`ALTER TABLE libraries ADD COLUMN default_epub_click_direction TEXT DEFAULT 'right'`)
-		if err != nil {
-			fmt.Printf("Migration error (libraries.default_epub_click_direction): %v\n", err)
-		} else {
-			fmt.Println("Migrated libraries table: added default_epub_click_direction column.")
-		}
-	}
+// #24 migrateEpubRenderMode 사용자별 시리즈 설정에 epub_render_mode 컬럼 추가
+func migrateEpubRenderMode() error {
+	return addColumn("user_series_settings", "epub_render_mode", "TEXT")
 }
 
-// migrateEpubCFI reading_progress 테이블에 current_cfi 컬럼 추가 (EPUB 위치 복원용)
-func migrateEpubCFI() {
-	if !columnExists("reading_progress", "current_cfi") {
-		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN current_cfi TEXT`)
-		if err != nil {
-			fmt.Printf("Migration error (reading_progress.current_cfi): %v\n", err)
-		} else {
-			fmt.Println("Migrated reading_progress table: added current_cfi column.")
-		}
+// #25 migrateEpubSeriesSettings 사용자별 시리즈 설정에 EPUB 오버라이드 컬럼 추가
+func migrateEpubSeriesSettings() error {
+	if err := addColumn("user_series_settings", "epub_theme", "TEXT"); err != nil {
+		return err
 	}
+	if err := addColumn("user_series_settings", "epub_spread", "TEXT"); err != nil {
+		return err
+	}
+	if err := addColumn("user_series_settings", "epub_wheel_direction", "TEXT"); err != nil {
+		return err
+	}
+	if err := addColumn("user_series_settings", "epub_keyboard_direction", "TEXT"); err != nil {
+		return err
+	}
+	return addColumn("user_series_settings", "epub_click_direction", "TEXT")
 }
 
-// migrateEpubVirtualPositions EPUB 가상 포지션 관련 컬럼 추가
-func migrateEpubVirtualPositions() {
-	// chapters 테이블
-	if !columnExists("chapters", "total_bytes") {
-		_, err := DB.Exec(`ALTER TABLE chapters ADD COLUMN total_bytes INTEGER DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (chapters.total_bytes): %v\n", err)
-		} else {
-			fmt.Println("Migrated chapters table: added total_bytes column.")
-		}
+// #26 migrateLibraryEpubDefaults libraries 테이블에 EPUB 기본값 컬럼 추가
+func migrateLibraryEpubDefaults() error {
+	if err := addColumn("libraries", "default_epub_render_mode", "TEXT DEFAULT 'auto'"); err != nil {
+		return err
 	}
-	if !columnExists("chapters", "total_positions") {
-		_, err := DB.Exec(`ALTER TABLE chapters ADD COLUMN total_positions INTEGER DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (chapters.total_positions): %v\n", err)
-		} else {
-			fmt.Println("Migrated chapters table: added total_positions column.")
-		}
+	if err := addColumn("libraries", "default_epub_theme", "TEXT DEFAULT 'light'"); err != nil {
+		return err
 	}
-
-	// reading_progress 테이블
-	if !columnExists("reading_progress", "current_position") {
-		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN current_position INTEGER DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (reading_progress.current_position): %v\n", err)
-		} else {
-			fmt.Println("Migrated reading_progress table: added current_position column.")
-		}
+	if err := addColumn("libraries", "default_epub_spread", "TEXT DEFAULT 'auto'"); err != nil {
+		return err
 	}
-	if !columnExists("reading_progress", "total_positions") {
-		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN total_positions INTEGER DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (reading_progress.total_positions): %v\n", err)
-		} else {
-			fmt.Println("Migrated reading_progress table: added total_positions column.")
-		}
+	if err := addColumn("libraries", "default_epub_wheel_direction", "TEXT DEFAULT 'down'"); err != nil {
+		return err
 	}
+	if err := addColumn("libraries", "default_epub_keyboard_direction", "TEXT DEFAULT 'right'"); err != nil {
+		return err
+	}
+	return addColumn("libraries", "default_epub_click_direction", "TEXT DEFAULT 'right'")
 }
 
-// migrateProgressRestorePosition reading_progress 테이블에 anchor_page, offset_ratio 컬럼 추가
-func migrateProgressRestorePosition() {
-	if !columnExists("reading_progress", "anchor_page") {
-		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN anchor_page INTEGER`)
-		if err != nil {
-			fmt.Printf("Migration error (reading_progress.anchor_page): %v\n", err)
-		} else {
-			fmt.Println("Migrated reading_progress table: added anchor_page column.")
-		}
-	}
-
-	if !columnExists("reading_progress", "offset_ratio") {
-		_, err := DB.Exec(`ALTER TABLE reading_progress ADD COLUMN offset_ratio REAL`)
-		if err != nil {
-			fmt.Printf("Migration error (reading_progress.offset_ratio): %v\n", err)
-		} else {
-			fmt.Println("Migrated reading_progress table: added offset_ratio column.")
-		}
-	}
+// #27 migrateVolumesChapterCount volumes 테이블에 chapter_count 컬럼 추가
+func migrateVolumesChapterCount() error {
+	return addColumn("volumes", "chapter_count", "INTEGER DEFAULT 0")
 }
 
-// migrateChaptersHasAudio chapters 테이블에 has_audio 컬럼 추가
-func migrateChaptersHasAudio() {
-	if !columnExists("chapters", "has_audio") {
-		_, err := DB.Exec(`ALTER TABLE chapters ADD COLUMN has_audio BOOLEAN DEFAULT 0`)
-		if err != nil {
-			fmt.Printf("Migration error (chapters.has_audio): %v\n", err)
-		} else {
-			fmt.Println("Migrated chapters table: added has_audio column.")
+// #28 migrateVolumesParentID volumes 테이블에 parent_id 컬럼 추가
+func migrateVolumesParentID() error {
+	if !columnExists("volumes", "parent_id") {
+		if _, err := DB.Exec(`ALTER TABLE volumes ADD COLUMN parent_id TEXT REFERENCES volumes(id) ON DELETE CASCADE`); err != nil {
+			return fmt.Errorf("add volumes.parent_id: %w", err)
+		}
+		if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_volumes_parent ON volumes(parent_id)`); err != nil {
+			return fmt.Errorf("create index volumes(parent_id): %w", err)
 		}
 	}
+	return nil
+}
+
+// #29 migrateVolumesExtension volumes 테이블에 extension 컬럼 추가
+func migrateVolumesExtension() error {
+	return addColumn("volumes", "extension", "TEXT DEFAULT ''")
+}
+
+// #30 migrateSeriesExtension series 테이블에 extension 컬럼 추가
+func migrateSeriesExtension() error {
+	return addColumn("series", "extension", "TEXT DEFAULT ''")
+}
+
+// #31 migrateProgressRestorePosition reading_progress 테이블에 anchor_page, offset_ratio 컬럼 추가
+func migrateProgressRestorePosition() error {
+	if err := addColumn("reading_progress", "anchor_page", "INTEGER"); err != nil {
+		return err
+	}
+	return addColumn("reading_progress", "offset_ratio", "REAL")
+}
+
+// #32 migrateChaptersHasAudio chapters 테이블에 has_audio 컬럼 추가
+func migrateChaptersHasAudio() error {
+	return addColumn("chapters", "has_audio", "BOOLEAN DEFAULT 0")
+}
+
+// #33 migrateAudiobookColumns 오디오북 관련 컬럼들을 각 테이블에 추가
+func migrateAudiobookColumns() error {
+	if err := addColumn("libraries", "library_type", "TEXT DEFAULT 'book'"); err != nil {
+		return err
+	}
+	if err := addColumn("chapters", "duration", "REAL"); err != nil {
+		return err
+	}
+	if err := addColumn("reading_progress", "current_time", "REAL DEFAULT 0.0"); err != nil {
+		return err
+	}
+	return addColumn("reading_progress", "duration", "REAL DEFAULT 0.0")
+}
+
+// #34 migrateAudioProgressTimeFormat reading_progress.current_time/duration의 문자열 시간값을 초 단위 숫자로 정규화
+func migrateAudioProgressTimeFormat() error {
+	if !columnExists("reading_progress", "current_time") && !columnExists("reading_progress", "duration") {
+		return nil
+	}
+
+	ctx := context.Background()
+	tx, err := DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("start transaction for audio progress time normalize: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, current_time, duration
+		FROM reading_progress
+		WHERE typeof(current_time) = 'text' OR typeof(duration) = 'text'
+	`)
+	if err != nil {
+		return fmt.Errorf("query legacy audio time rows: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var id string
+		var rawCurrentTime interface{}
+		var rawDuration interface{}
+		if err := rows.Scan(&id, &rawCurrentTime, &rawDuration); err != nil {
+			return fmt.Errorf("scan legacy audio time row: %w", err)
+		}
+
+		if parsed, ok := parseLegacyTimeToSeconds(rawCurrentTime); ok {
+			if _, err := tx.ExecContext(ctx, `UPDATE reading_progress SET current_time = ? WHERE id = ?`, parsed, id); err != nil {
+				return fmt.Errorf("normalize current_time for %s: %w", id, err)
+			}
+		}
+		if parsed, ok := parseLegacyTimeToSeconds(rawDuration); ok {
+			if _, err := tx.ExecContext(ctx, `UPDATE reading_progress SET duration = ? WHERE id = ?`, parsed, id); err != nil {
+				return fmt.Errorf("normalize duration for %s: %w", id, err)
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate legacy audio time rows: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit audio progress time normalize: %w", err)
+	}
+
+	return nil
+}
+
+// parseLegacyTimeToSeconds 문자열 시간(HH:MM:SS, MM:SS)을 초 단위 float64로 변환
+func parseLegacyTimeToSeconds(value interface{}) (float64, bool) {
+	var raw string
+	switch v := value.(type) {
+	case nil:
+		return 0, false
+	case string:
+		raw = strings.TrimSpace(v)
+	case []byte:
+		raw = strings.TrimSpace(string(v))
+	default:
+		return 0, false
+	}
+
+	if raw == "" {
+		return 0, false
+	}
+
+	// 이미 숫자 문자열인 경우 그대로 사용
+	if num, err := strconv.ParseFloat(raw, 64); err == nil {
+		return num, true
+	}
+
+	parts := strings.Split(raw, ":")
+	if len(parts) != 2 && len(parts) != 3 {
+		return 0, false
+	}
+
+	parseInt := func(s string) (int64, bool) {
+		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+		if err != nil || n < 0 {
+			return 0, false
+		}
+		return n, true
+	}
+
+	secondsPart, err := strconv.ParseFloat(strings.TrimSpace(parts[len(parts)-1]), 64)
+	if err != nil || secondsPart < 0 {
+		return 0, false
+	}
+
+	if len(parts) == 2 {
+		minutes, ok := parseInt(parts[0])
+		if !ok {
+			return 0, false
+		}
+		return float64(minutes*60) + secondsPart, true
+	}
+
+	hours, ok := parseInt(parts[0])
+	if !ok {
+		return 0, false
+	}
+	minutes, ok := parseInt(parts[1])
+	if !ok {
+		return 0, false
+	}
+	return float64(hours*3600+minutes*60) + secondsPart, true
 }

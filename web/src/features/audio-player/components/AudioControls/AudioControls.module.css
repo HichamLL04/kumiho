@@ -1,0 +1,132 @@
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.controlBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  color: var(--text-secondary);
+  border-radius: 50%;
+  transition:
+    color 0.15s,
+    background 0.15s;
+  position: relative;
+  outline: none;
+}
+
+.controlBtn:focus-visible {
+  outline: 2px solid rgba(92, 200, 232, 0.7);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(92, 200, 232, 0.2);
+}
+
+.controlBtn:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.controlBtn:hover {
+  color: var(--text-primary);
+  filter: drop-shadow(0 0 6px var(--accent-primary));
+}
+
+.controlBtn:active {
+  filter: drop-shadow(0 0 8px var(--accent-primary));
+}
+
+.controlBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.controlBtn:disabled:hover {
+  background: none;
+  color: var(--text-secondary);
+}
+
+.playBtn {
+  width: 72px;
+  height: 72px;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border-radius: 50%;
+  padding: 0;
+}
+
+.playBtn:hover {
+  background: #5cc8e8;
+  color: var(--bg-primary);
+  box-shadow: 0 0 15px rgba(77, 184, 217, 0.6);
+}
+
+.playBtn:active {
+  background: #3fa8c4;
+  box-shadow: 0 0 10px rgba(77, 184, 217, 0.4);
+}
+
+.skipLabel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  pointer-events: none;
+  line-height: 1;
+  letter-spacing: -0.8px;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.controlBtn:hover .skipLabel {
+  color: var(--text-primary);
+}
+
+/* Mini variant */
+.mini {
+  gap: 12px;
+}
+
+.mini .controlBtn {
+  padding: 4px;
+}
+
+.mini .playBtn {
+  width: 44px;
+  height: 44px;
+}
+
+.mini .skipLabel {
+  font-size: 9px;
+  letter-spacing: -0.5px;
+  transform: translate(-50%, -55%);
+}
+
+/* Sidebar variant */
+.sidebar {
+  gap: 20px;
+}
+
+.sidebar .playBtn {
+  width: 60px;
+  height: 60px;
+}
+
+.sidebar .skipLabel {
+  transform: translate(-50%, -55%);
+}

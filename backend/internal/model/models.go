@@ -45,6 +45,7 @@ type Library struct {
 	ScanStatus             string     `json:"scan_status" db:"scan_status"`           // "IDLE", "SCANNING", "ERROR"
 	LastScanResult         string     `json:"last_scan_result" db:"last_scan_result"` // 스캔 결과 요약
 	Type                   string     `json:"type" db:"type"`                         // "LOCAL", "SYSTEM"
+	LibraryType            string     `json:"library_type" db:"library_type"`         // "book", "audiobook"
 	IsVisible              bool       `json:"is_visible" db:"is_visible"`
 	ScanExcludes           string     `json:"scan_excludes" db:"scan_excludes"` // comma-separated patterns
 }
@@ -61,7 +62,8 @@ type Series struct {
 	IsBookmarked  bool      `json:"is_bookmarked" db:"is_bookmarked"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
-	Extension     string    `json:"extension" db:"extension"` // 시리즈 대표 확장자
+	Extension     string    `json:"extension" db:"extension"`       // 시리즈 대표 확장자
+	LibraryType   string    `json:"library_type" db:"-"`            // "book", "audiobook" (JOIN으로 채움)
 
 	// 시리즈 부가 메타데이터 (필요 시 로드)
 	Metadata *SeriesMetadata `json:"metadata,omitempty" db:"-"`
@@ -124,6 +126,7 @@ type Chapter struct {
 	TotalBytes     int64     `json:"total_bytes" db:"total_bytes"`         // EPUB 등에서 가상 포지션 계산용 (HTML 합계)
 	TotalPositions int       `json:"total_positions" db:"total_positions"` // 가상 포지션 총수 (6KB = 1포지션)
 	HasAudio       bool      `json:"has_audio" db:"has_audio"`
+	Duration       *float64  `json:"duration,omitempty" db:"duration"` // 오디오 길이 (초)
 	RenderMode     *string   `json:"render_mode,omitempty" db:"-"`
 	ThumbnailURL   *string   `json:"thumbnail_url,omitempty" db:"-"`
 	IsRead         bool      `json:"is_read" db:"-"`
@@ -154,12 +157,30 @@ type ReadingProgress struct {
 	TotalPages      int       `json:"total_pages"`
 	CurrentPosition int       `json:"current_position" db:"current_position"` // 가상 포지션 중심 위치
 	TotalPositions  int       `json:"total_positions" db:"total_positions"`   // 가상 포지션 총수
+	CurrentTime     *float64  `json:"current_time,omitempty" db:"current_time"` // 오디오 재생 위치 (초)
+	Duration        *float64  `json:"duration,omitempty" db:"duration"`         // 오디오 전체 길이 (초)
 	ProgressPercent float64   `json:"progress_percent"`
 	DeviceID        *string   `json:"device_id,omitempty"`
 	DeviceName      *string   `json:"device_name,omitempty"`
 	CurrentCFI      *string   `json:"current_cfi,omitempty"`
 	ReadTimeSeconds int       `json:"read_time_seconds"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// Bookmark 범용 북마크 모델
+type Bookmark struct {
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	SeriesID        string    `json:"series_id"`
+	VolumeID        *string   `json:"volume_id,omitempty"`
+	ChapterID       *string   `json:"chapter_id,omitempty"`
+	Title           string    `json:"title"`           // 사용자 지정 제목
+	Description     string    `json:"description"`     // 메모
+	PageNumber      int       `json:"page_number"`      // 이미지/PDF 용
+	CurrentPosition int       `json:"current_position"` // EPUB 가상 포지션
+	CurrentCFI      *string   `json:"current_cfi,omitempty"` // EPUB CFI
+	CurrentTime     *float64  `json:"current_time,omitempty"` // 오디오 시간
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // VolumeCompletion 볼륨 완료 기록 모델

@@ -37,6 +37,15 @@ type SeriesHandler struct {
 	seriesEnrichSvc       *service.SeriesEnrichService
 }
 
+func (h *SeriesHandler) assignVolumeThumbnailURL(volume *model.Volume) {
+	if volume == nil {
+		return
+	}
+
+	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail", volume.ID)
+	volume.ThumbnailURL = &url
+}
+
 func NewSeriesHandler(
 	seriesRepo *repository.SeriesRepository,
 	libraryRepo *repository.LibraryRepository,
@@ -359,16 +368,7 @@ func (h *SeriesHandler) UpdateVolume(c *fiber.Ctx) error {
 	}
 
 	// 썸네일 URL 설정 (응답용)
-	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-		volume.ThumbnailURL = &url
-	} else {
-		pageID, err := h.volumeRepo.GetFirstPageID(nil, volume.ID)
-		if err == nil && pageID != "" {
-			url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-			volume.ThumbnailURL = &url
-		}
-	}
+	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
 }
@@ -489,8 +489,7 @@ func (h *SeriesHandler) UploadVolumeThumbnail(c *fiber.Ctx) error {
 	}
 
 	// 썸네일 URL 업데이트
-	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-	volume.ThumbnailURL = &url
+	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
 }
@@ -613,8 +612,7 @@ func (h *SeriesHandler) UploadVolumeThumbnailFromURL(c *fiber.Ctx) error {
 		})
 	}
 
-	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-	volume.ThumbnailURL = &url
+	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
 }
@@ -658,12 +656,7 @@ func (h *SeriesHandler) DeleteVolumeThumbnail(c *fiber.Ctx) error {
 		})
 	}
 
-	// 첫 페이지를 썸네일로 보정
-	pageID, err := h.volumeRepo.GetFirstPageID(nil, volume.ID)
-	if err == nil && pageID != "" {
-		url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-		volume.ThumbnailURL = &url
-	}
+	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
 }
@@ -1040,9 +1033,13 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 	for i := range volumes {
 		vID := volumes[i].ID
 
-		// 썸네일 URL 설정
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", vID, time.Now().Unix())
-		volumes[i].ThumbnailURL = &url
+		// 하위 볼륨 개수 조회 (볼륨 썸네일/플레이스홀더 fallback 판단에도 사용)
+		if subVolCount, err := h.volumeRepo.CountByParentID(nil, vID); err == nil {
+			volumes[i].SubVolumeCount = subVolCount
+		}
+
+		// 이미지 핸들러가 PDF/EPUB/재귀 탐색 및 플레이스홀더 fallback을 처리한다.
+		h.assignVolumeThumbnailURL(&volumes[i])
 
 		// 배 조회된 데이터 매핑
 		if total, ok := totalPageMap[vID]; ok {
@@ -1053,11 +1050,6 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 		}
 		if percent, ok := progressPercentMap[vID]; ok {
 			volumes[i].ProgressPercent = percent
-		}
-
-		// 하위 볼륨 개수 조회 (이 부분도 추후 최적화 가능하나 우선 순위 낮음)
-		if subVolCount, err := h.volumeRepo.CountByParentID(nil, vID); err == nil {
-			volumes[i].SubVolumeCount = subVolCount
 		}
 
 		totalPages := volumes[i].TotalPageCount
@@ -1099,15 +1091,8 @@ func (h *SeriesHandler) GetVolume(c *fiber.Ctx) error {
 		})
 	}
 
-	// 썸네일 URL 설정
-	// 커스텀 썸네일 유무와 관계없이 볼륨 썸네일 API를 기본 경로로 사용합니다.
-	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-		volume.ThumbnailURL = &url
-	} else {
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-		volume.ThumbnailURL = &url
-	}
+	// 실제로 제공 가능한 경우에만 썸네일 URL 설정
+	h.assignVolumeThumbnailURL(volume)
 
 	// 페이지 진행도 계산 및 완독 상태 확인
 	userID := middleware.GetUserID(c)
@@ -1228,6 +1213,9 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 	} else if strings.HasSuffix(chapterPath, ".txt") {
 		renderMode := "text"
 		chapter.RenderMode = &renderMode
+	} else if isAudioFile(chapterPath) {
+		renderMode := "audio"
+		chapter.RenderMode = &renderMode
 	}
 
 	return c.JSON(chapter)
@@ -1255,6 +1243,9 @@ func (h *SeriesHandler) GetViewerInitData(c *fiber.Ctx) error {
 		chapter.RenderMode = &renderMode
 	} else if strings.HasSuffix(chapterPath, ".txt") {
 		renderMode := "text"
+		chapter.RenderMode = &renderMode
+	} else if isAudioFile(chapterPath) {
+		renderMode := "audio"
 		chapter.RenderMode = &renderMode
 	}
 
@@ -1718,5 +1709,62 @@ func (h *SeriesHandler) BatchGetExtensions(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"extensions": extensions,
+	})
+}
+
+// isAudioFile checks if the given path has an audio file extension
+func isAudioFile(path string) bool {
+	return isSupportedAudioPath(path)
+}
+
+// ListChaptersBySeries 시리즈의 모든 챕터 목록 조회
+// GET /api/v1/series/:seriesId/chapters
+func (h *SeriesHandler) ListChaptersBySeries(c *fiber.Ctx) error {
+	seriesID := c.Params("seriesId")
+	userID := middleware.GetUserID(c)
+
+	series, err := h.seriesRepo.FindByID(nil, seriesID, userID)
+	if err != nil || series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	role := middleware.GetUserRole(c)
+	if role != model.RoleMaster {
+		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
+		if checkErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to check permissions",
+			})
+		}
+
+		allowed := false
+		for _, aid := range allowedIDs {
+			if aid == series.LibraryID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "access denied",
+			})
+		}
+	}
+
+	chapters, err := h.chapterRepo.FindBySeriesID(nil, seriesID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch chapters",
+		})
+	}
+
+	if chapters == nil {
+		chapters = []model.Chapter{}
+	}
+
+	return c.JSON(fiber.Map{
+		"chapters": chapters,
 	})
 }

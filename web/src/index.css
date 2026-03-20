@@ -25,6 +25,7 @@
   --border-color: rgba(100, 180, 220, 0.3);
   --glow-color: rgba(77, 184, 217, 0.4);
   --header-height: 56px;
+  --mini-player-height: 0px;
 }
 
 a {

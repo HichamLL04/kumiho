@@ -318,7 +318,11 @@
       "path_desc": "サーバー内の実際のフォルダパスを入力してください。",
       "name_placeholder": "ライブラリ名 (例: 漫画)",
       "path_placeholder": "フォルダパス (例: /data/comics)",
-      "view_mode_label": "デフォルト表示設定",
+      "type_label": "ライブラリタイプ",
+      "type_desc": "このライブラリに含まれるメディアの種類を選択します。",
+      "type_book": "書籍 (ZIP/PDF/EPUB/TXT)",
+      "type_audiobook": "オーディオブック",
+      "view_mode_label": "デフォルトビューアー設定",
       "view_mode_desc": "このライブラリのデフォルト表示モードを設定します。",
       "excludes_label": "スキャン除外設定",
       "excludes_desc": "スキャン時に無視するファイルやフォルダ名を設定します。(カンマ区切り)",
@@ -360,11 +364,15 @@
         "ltr": "左から右",
         "rtl": "右から左",
         "system_notice": "すべての設定は元のライブラリに従います",
-        "edit_name": "ライブラリ名",
-        "edit_view_mode": "表示モード",
-        "edit_read_direction": "読み取り方向",
-        "edit_excludes": "スキャン除外 (カンマ区切り)",
-        "edit_system_warning": "システムライブラリは変更できません。(可視性のみ変更可能)"
+        "edit": {
+          "name_label": "ライブラリ名",
+          "type_label": "ライブラリタイプ",
+          "view_mode_label": "表示モード",
+          "read_direction_label": "読み取り方向",
+          "excludes_label": "スキャン除外 (カンマ区切り)",
+          "excludes_placeholder": "例: .DS_Store, #recycle, @eaDir",
+          "system_warning": "システムライブラリは変更できません。(可視性のみ変更可能)"
+        }
       },
       "delete_modal": {
         "title": "ライブラリ削除",
@@ -452,6 +460,9 @@
         "empty": "まだ読んだ本がありません",
         "empty_hint": "ライブラリから本を選んで読み始めましょう！"
       },
+      "continue_listening": {
+        "title": "続きから聴く"
+      },
       "liked": {
         "title": "お気に入り",
         "desc": "お気に入りに追加したシリーズ。",
@@ -499,9 +510,12 @@
     "action": {
       "like": "いいね",
       "read_now": "すぐ読む",
+      "listen_now": "すぐ聴く",
       "continue": "続きを見る",
       "read_first_volume": "第1巻を読む",
+      "listen_first_volume": "第1巻を聴く",
       "read_first_chapter": "第1話を読む",
+      "listen_first_chapter": "第1話を聴く",
       "incognito": "シークレットモード",
       "mark_completed": "既読にする",
       "mark_previous_completed": "選択した項目より前のエピソードをすべて既読にする",
@@ -818,5 +832,35 @@
     "progress_marker": {
       "navigate": "目次移動: {{label}}"
     }
+  },
+  "audio_player": {
+    "now_playing": "再生中",
+    "paused": "一時停止",
+    "chapters": "List",
+    "list": "List",
+    "total": "全体",
+    "sleep": "スリープ",
+    "bookmark": "ブックマーク",
+    "bookmarks": "ブックマーク",
+    "bookmark_add": "追加",
+    "bookmark_empty": "ブックマークはまだありません",
+    "personal_library": "パーソナルライブラリサーバー",
+    "synced": "KUMIHOと同期中",
+    "sleep_timer": "スリープタイマー",
+    "sleep_timer_minutes": "{{count}}分",
+    "sleep_timer_remaining": "残り: {{time}}",
+    "sleep_timer_off": "タイマーオフ",
+    "playback_speed": "再生速度",
+    "settings": "設定",
+    "skip_backward_time": "巻き戻し時間",
+    "skip_forward_time": "早送り時間",
+    "auto_play_next": "次のチャプターを自動再生",
+    "auto_play_next_desc": "チャプター終了時に次のチャプターを自動で再生します",
+    "volume_boost": "音量ブースト",
+    "volume_boost_desc": "音の小さいオーディオブック向けに音量を最大2倍まで増幅します",
+    "completed_chapter_title": "完読済みのチャプター",
+    "completed_chapter_message": "このチャプターはすでに完読しています。最初から再生しますか？",
+    "completed_chapter_confirm": "最初から再生",
+    "completed_chapter_cancel": "キャンセル"
   }
 }

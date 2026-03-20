@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"math"
 	"strings"
 	"time"
 
@@ -259,27 +260,44 @@ func (r *VolumeRepository) GetChapterCount(db database.Queryer, volumeID string)
 	return count, nil
 }
 
+// HasZeroPageChapters page_count가 0인 비-오디오 챕터가 있는지 확인합니다.
+func (r *VolumeRepository) HasZeroPageChapters(db database.Queryer, volumeID string) (bool, error) {
+	db = database.GetQueryer(db)
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM chapters WHERE volume_id = ? AND page_count <= 0 AND has_audio = 0`, volumeID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // GetTotalPages 볼륨의 전체 페이지 수 조회 (하위 볼륨 포함)
 func (r *VolumeRepository) GetTotalPages(db database.Queryer, volumeID string) (int, error) {
 	db = database.GetQueryer(db)
-	var totalPages int
+	var totalPages float64
 	err := db.QueryRow(
 		`WITH RECURSIVE descendant_volumes(id) AS (
 			SELECT id FROM volumes WHERE id = ?
 			UNION ALL
 			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
 		)
-		 SELECT COALESCE(SUM(
-			CASE 
-				WHEN c.page_count > 0 THEN c.page_count 
-				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
-				ELSE 0 
+			 SELECT COALESCE(SUM(
+				CASE 
+					WHEN c.page_count > 0 THEN c.page_count 
+					WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
+					ELSE 0 
 			END), 0)
 		 FROM chapters c
 		 WHERE c.volume_id IN (SELECT id FROM descendant_volumes)`,
 		volumeID,
 	).Scan(&totalPages)
-	return totalPages, err
+	if err != nil {
+		return 0, err
+	}
+	if totalPages < 0 {
+		return 0, nil
+	}
+	return int(math.Round(totalPages)), nil
 }
 
 // GetReadPages 사용자가 볼륨에서 읽은 총 페이지 수 조회 (하위 볼륨 포함)
@@ -287,18 +305,18 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 	db = database.GetQueryer(db)
 
 	// 하위 볼륨 포함 재귀 집계
-	var completedPages int
+	var completedPages float64
 	err := db.QueryRow(
 		`WITH RECURSIVE descendant_volumes(id) AS (
 			SELECT id FROM volumes WHERE id = ?
 			UNION ALL
 			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
 		)
-		 SELECT COALESCE(SUM(
-			CASE 
-				WHEN c.page_count > 0 THEN c.page_count 
-				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
-				ELSE 0 
+			 SELECT COALESCE(SUM(
+				CASE 
+					WHEN c.page_count > 0 THEN c.page_count 
+					WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
+					ELSE 0 
 			END), 0)
 		 FROM chapter_completions cc
 		 JOIN chapters c ON cc.chapter_id = c.id
@@ -309,20 +327,21 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		return 0, err
 	}
 
-	var progressPages int
+	var progressPages float64
 	err = db.QueryRow(
 		`WITH RECURSIVE descendant_volumes(id) AS (
 			SELECT id FROM volumes WHERE id = ?
 			UNION ALL
 			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
 		)
-		 SELECT COALESCE(SUM(
-			CASE 
-				WHEN c.page_count > 0 THEN rp.current_page
-				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
-				ELSE CAST(rp.progress_percent AS INTEGER)
-			END
-			 ), 0)
+			 SELECT COALESCE(SUM(
+				CASE 
+					WHEN c.page_count > 0 THEN rp.current_page
+					WHEN c.page_count <= 0 AND c.total_positions > 0 THEN rp.current_page
+					WHEN c.has_audio = 1 THEN 0
+					ELSE rp.progress_percent
+				END
+				 ), 0)
 		 FROM reading_progress rp
 		 JOIN chapters c ON rp.chapter_id = c.id
 		 WHERE rp.user_id = ? AND c.volume_id IN (SELECT id FROM descendant_volumes)
@@ -335,7 +354,11 @@ func (r *VolumeRepository) GetReadPages(db database.Queryer, userID, volumeID st
 		return 0, err
 	}
 
-	return completedPages + progressPages, nil
+	totalRead := completedPages + progressPages
+	if totalRead < 0 {
+		return 0, nil
+	}
+	return int(math.Round(totalRead)), nil
 }
 
 // GetProgressPercent 사용자의 볼륨 실제 진행 퍼센트 조회 (하위 볼륨 포함)
@@ -353,10 +376,12 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 			SELECT
 				c.id AS chapter_id,
 				CASE
+					WHEN c.has_audio = 1 AND c.duration > 0 THEN CAST(c.duration AS INTEGER)
 					WHEN c.total_positions > 0 THEN c.total_positions
 					WHEN c.page_count > 0 THEN c.page_count
 					ELSE 0
-				END AS unit_total
+				END AS unit_total,
+				c.has_audio
 			FROM chapters c
 			WHERE c.volume_id IN (SELECT id FROM descendant_volumes)
 		),
@@ -371,13 +396,15 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 			WHERE cc.user_id = ?
 		),
 		inprogress_units AS (
-			SELECT COALESCE(SUM(
-				cu.unit_total * (
+				SELECT COALESCE(SUM(
 					CASE
-						WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
-						ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
-					END
-				)
+						WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)) > 0 THEN
+							MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)))) * cu.unit_total
+					WHEN rp.total_pages > 0 THEN
+						MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL))) * cu.unit_total
+					ELSE
+						MIN(1.0, MAX(0.0, rp.progress_percent / 100.0)) * cu.unit_total
+				END
 			), 0.0) AS value
 			FROM chapter_units cu
 			JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id
@@ -548,6 +575,7 @@ func (r *VolumeRepository) FindRootVolumesBySeriesID(db database.Queryer, series
 	}
 	return volumes, nil
 }
+
 // GetDistinctExtensions 시리즈 내 모든 볼륨의 고유한 확장자 목록 조회
 func (r *VolumeRepository) GetDistinctExtensions(db database.Queryer, seriesID string) ([]string, error) {
 	db = database.GetQueryer(db)
@@ -570,6 +598,7 @@ func (r *VolumeRepository) GetDistinctExtensions(db database.Queryer, seriesID s
 	}
 	return extensions, nil
 }
+
 // GetTotalPagesBatch 시리즈 내 하위 볼륨들의 전체 페이지 수 배치 조회
 func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []string) (map[string]int, error) {
 	if len(volumeIDs) == 0 {
@@ -583,11 +612,11 @@ func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []s
 			UNION ALL
 			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
 		)
-		SELECT dv.root_id, COALESCE(SUM(
-			CASE 
-				WHEN c.page_count > 0 THEN c.page_count 
-				WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
-				ELSE 0 
+			SELECT dv.root_id, COALESCE(SUM(
+				CASE 
+					WHEN c.page_count > 0 THEN c.page_count 
+					WHEN c.page_count <= 0 AND c.total_positions > 0 THEN c.total_positions
+					ELSE 0 
 			END), 0)
 		FROM chapters c
 		JOIN descendant_volumes dv ON c.volume_id = dv.id
@@ -612,11 +641,15 @@ func (r *VolumeRepository) GetTotalPagesBatch(db database.Queryer, volumeIDs []s
 	result := make(map[string]int)
 	for rows.Next() {
 		var id string
-		var total int
+		var total float64
 		if err := rows.Scan(&id, &total); err != nil {
 			return nil, err
 		}
-		result[id] = total
+		if total < 0 {
+			result[id] = 0
+			continue
+		}
+		result[id] = int(math.Round(total))
 	}
 	return result, nil
 }
@@ -748,10 +781,12 @@ func (r *VolumeRepository) GetProgressPercentBatch(db database.Queryer, userID s
 				dv.root_id,
 				c.id AS chapter_id,
 				CASE
+					WHEN c.has_audio = 1 AND c.duration > 0 THEN CAST(c.duration AS INTEGER)
 					WHEN c.total_positions > 0 THEN c.total_positions
 					WHEN c.page_count > 0 THEN c.page_count
 					ELSE 0
-				END AS unit_total
+				END AS unit_total,
+				c.has_audio
 			FROM chapters c
 			JOIN descendant_volumes dv ON c.volume_id = dv.id
 		),
@@ -760,13 +795,15 @@ func (r *VolumeRepository) GetProgressPercentBatch(db database.Queryer, userID s
 				cu.root_id,
 				SUM(cu.unit_total) AS total_units,
 				SUM(CASE WHEN cc.chapter_id IS NOT NULL THEN cu.unit_total ELSE 0 END) AS completed_units,
-				SUM(CASE WHEN rp.chapter_id IS NOT NULL AND cc.chapter_id IS NULL THEN
-					cu.unit_total * (
+					SUM(CASE WHEN rp.chapter_id IS NOT NULL AND cc.chapter_id IS NULL THEN
 						CASE
-							WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
-							ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
-						END
-					)
+							WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)) > 0 THEN
+								MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)))) * cu.unit_total
+						WHEN rp.total_pages > 0 THEN
+							MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL))) * cu.unit_total
+						ELSE
+							MIN(1.0, MAX(0.0, rp.progress_percent / 100.0)) * cu.unit_total
+					END
 					ELSE 0 END) AS inprogress_units
 			FROM chapter_units cu
 			LEFT JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id AND cc.user_id = ?

@@ -81,7 +81,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className={styles.settingsPage}>
+    <div className={`${styles.settingsPage} page-with-sidebar ${isSidebarOpen ? "sidebar-open" : ""}`}>
       <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
       <Sidebar
         isOpen={isSidebarOpen}

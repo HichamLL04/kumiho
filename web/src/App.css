@@ -14,8 +14,8 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans KR",
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans KR", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: #050a10;
@@ -30,6 +30,11 @@ a {
 
 button {
   font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid #4db8d9;
+  outline-offset: 2px;
 }
 
 .loading-container {
@@ -83,7 +88,11 @@ button {
 
 /* Layout Helpers */
 .page-with-sidebar {
-  transition: margin-left 0.3s ease, width 0.3s ease;
+  transition:
+    margin-left 0.3s ease,
+    width 0.3s ease,
+    padding-bottom 0.2s ease;
+  padding-bottom: var(--mini-player-height);
 }
 
 .page-with-sidebar.sidebar-open {
