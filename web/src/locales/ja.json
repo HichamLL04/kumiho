@@ -857,6 +857,10 @@
     "auto_play_next": "次のチャプターを自動再生",
     "auto_play_next_desc": "チャプター終了時に次のチャプターを自動で再生します",
     "volume_boost": "音量ブースト",
-    "volume_boost_desc": "音の小さいオーディオブック向けに音量を最大2倍まで増幅します"
+    "volume_boost_desc": "音の小さいオーディオブック向けに音量を最大2倍まで増幅します",
+    "completed_chapter_title": "完読済みのチャプター",
+    "completed_chapter_message": "このチャプターはすでに完読しています。最初から再生しますか？",
+    "completed_chapter_confirm": "最初から再生",
+    "completed_chapter_cancel": "キャンセル"
   }
 }

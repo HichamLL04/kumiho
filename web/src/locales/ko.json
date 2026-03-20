@@ -858,6 +858,10 @@
     "auto_play_next": "자동 다음 챕터",
     "auto_play_next_desc": "챕터 종료 시 다음 챕터를 자동으로 재생합니다",
     "volume_boost": "볼륨 부스트",
-    "volume_boost_desc": "소리가 작은 오디오북을 위해 볼륨을 2배로 증폭합니다"
+    "volume_boost_desc": "소리가 작은 오디오북을 위해 볼륨을 2배로 증폭합니다",
+    "completed_chapter_title": "완독한 회차",
+    "completed_chapter_message": "이미 완독한 회차입니다. 처음부터 재생할까요?",
+    "completed_chapter_confirm": "처음부터 재생",
+    "completed_chapter_cancel": "취소"
   }
 }

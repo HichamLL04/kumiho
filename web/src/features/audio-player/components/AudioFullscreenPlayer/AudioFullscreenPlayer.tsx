@@ -288,10 +288,10 @@ export function AudioFullscreenPlayer() {
       <AlertModal
         isOpen={restartConfirmChapter !== null}
         type="info"
-        title="완독한 회차"
-        message="이미 완독한 회차입니다. 처음부터 재생할까요?"
-        confirmText="처음부터 재생"
-        cancelText="취소"
+        title={t("audio_player.completed_chapter_title", "완독한 회차")}
+        message={t("audio_player.completed_chapter_message", "이미 완독한 회차입니다. 처음부터 재생할까요?")}
+        confirmText={t("audio_player.completed_chapter_confirm", "처음부터 재생")}
+        cancelText={t("audio_player.completed_chapter_cancel", "취소")}
         showCancel
         onConfirm={() => {
           if (restartConfirmChapter) {

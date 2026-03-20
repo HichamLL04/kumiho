@@ -857,6 +857,10 @@
     "auto_play_next": "Auto Play Next",
     "auto_play_next_desc": "Automatically plays the next chapter when the current one ends",
     "volume_boost": "Volume Boost",
-    "volume_boost_desc": "Amplifies quiet audiobooks up to 2x volume"
+    "volume_boost_desc": "Amplifies quiet audiobooks up to 2x volume",
+    "completed_chapter_title": "Completed Chapter",
+    "completed_chapter_message": "This chapter is already completed. Play it from the beginning?",
+    "completed_chapter_confirm": "Play from Start",
+    "completed_chapter_cancel": "Cancel"
   }
 }
