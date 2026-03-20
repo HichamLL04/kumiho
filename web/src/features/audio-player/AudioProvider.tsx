@@ -443,7 +443,7 @@ export function AudioProvider() {
     };
   }, [store, saveProgress]);
 
-  // 30초 간격 자동 저장
+  // 10초 간격 자동 저장
   useEffect(() => {
     const unsub = store.subscribe((state, prevState) => {
       if (state.status === "playing" && prevState.status !== "playing") {

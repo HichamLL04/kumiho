@@ -190,7 +190,7 @@ func (r *ChapterRepository) GetTotalDurationBySeriesID(db database.Queryer, seri
 		`SELECT COALESCE(SUM(c.duration), 0)
 		 FROM chapters c
 		 JOIN volumes v ON c.volume_id = v.id
-		 WHERE v.series_id = ? AND c.duration IS NOT NULL`,
+		 WHERE v.series_id = ? AND c.has_audio = 1 AND c.duration IS NOT NULL`,
 		seriesID,
 	).Scan(&total)
 	return total, err
@@ -209,11 +209,11 @@ func (r *ChapterRepository) GetListenedDurationBySeriesID(db database.Queryer, u
 					ELSE 0
 				END
 			), 0)
-		FROM chapters c
-		JOIN volumes v ON c.volume_id = v.id
-		LEFT JOIN chapter_completions cc ON c.id = cc.chapter_id AND cc.user_id = ?
-		LEFT JOIN reading_progress rp ON c.id = rp.chapter_id AND rp.user_id = ?
-		WHERE v.series_id = ? AND c.duration IS NOT NULL`,
+			FROM chapters c
+			JOIN volumes v ON c.volume_id = v.id
+			LEFT JOIN chapter_completions cc ON c.id = cc.chapter_id AND cc.user_id = ?
+			LEFT JOIN reading_progress rp ON c.id = rp.chapter_id AND rp.user_id = ?
+			WHERE v.series_id = ? AND c.duration IS NOT NULL AND c.has_audio = 1`,
 		userID, userID, seriesID,
 	).Scan(&listened)
 	return listened, err
