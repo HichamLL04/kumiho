@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
 import { useAudioPlayerStore } from "../../../../stores/audioPlayerStore";
@@ -21,6 +21,7 @@ interface AudioBookmarkListProps {
 
 export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const currentSeries = useAudioPlayerStore((s) => s.currentSeries);
   const currentChapter = useAudioPlayerStore((s) => s.currentChapter);
   const currentTime = useAudioPlayerStore((s) => s.currentTime);
@@ -48,6 +49,19 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [isOpen, currentSeries, loadBookmarks]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -98,9 +112,17 @@ export function AudioBookmarkList({ isOpen, onClose }: AudioBookmarkListProps) {
 
   return (
     <div className={styles.overlay} onClick={handleOverlayClick}>
-      <div className={styles.modal}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         <div className={styles.header}>
-          <span className={styles.title}>
+          <span
+            className={styles.title}
+            id={titleId}
+          >
             {t("audio_player.bookmarks", "Bookmarks")}
           </span>
           <button className={styles.addBtn} onClick={handleAdd}>
