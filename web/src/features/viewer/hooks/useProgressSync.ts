@@ -24,6 +24,7 @@ interface UseProgressSyncParams {
   anchorPage?: number;
   offsetRatio?: number;
   viewStatus?: ViewStatus;
+  isRestoreSettled?: boolean;
 }
 
 export function useProgressSync({
@@ -34,6 +35,7 @@ export function useProgressSync({
   anchorPage = currentPage,
   offsetRatio = 0,
   viewStatus = "ready",
+  isRestoreSettled = true,
 }: UseProgressSyncParams) {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [serverProgress, setServerProgress] = useState<ServerProgress | null>(null);
@@ -60,7 +62,16 @@ export function useProgressSync({
   }, [skipSyncCheck]);
 
   const checkSync = useCallback(async () => {
-    if (!seriesId || !chapter || isLoading || viewStatus !== "ready" || isCheckedRef.current || skipSyncCheck) return;
+    if (
+      !seriesId ||
+      !chapter ||
+      isLoading ||
+      viewStatus !== "ready" ||
+      !isRestoreSettled ||
+      isCheckedRef.current ||
+      skipSyncCheck
+    )
+      return;
 
     try {
       // 볼륨 번호 가져오기
@@ -87,18 +98,18 @@ export function useProgressSync({
     } catch (error) {
       console.error("[useProgressSync] Failed to compare progress:", error);
     }
-  }, [anchorPage, chapter, currentPage, isLoading, offsetRatio, seriesId, skipSyncCheck, viewStatus]);
+  }, [anchorPage, chapter, currentPage, isLoading, isRestoreSettled, offsetRatio, seriesId, skipSyncCheck, viewStatus]);
 
   useEffect(() => {
     const triggerSync = async () => {
       // 로딩이 막 끝난 시점에 한 번만 체크
-      if (!isLoading && viewStatus === "ready" && chapter && seriesId && !isCheckedRef.current) {
+      if (!isLoading && viewStatus === "ready" && isRestoreSettled && chapter && seriesId && !isCheckedRef.current) {
         await checkSync();
       }
     };
 
     triggerSync();
-  }, [checkSync, chapter, isLoading, seriesId, viewStatus]);
+  }, [checkSync, chapter, isLoading, isRestoreSettled, seriesId, viewStatus]);
 
   const handleConfirmSync = useCallback(() => {
     if (!serverProgress) return;

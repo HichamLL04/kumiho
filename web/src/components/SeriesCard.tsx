@@ -152,8 +152,7 @@ export function SeriesCard({
     }
   };
 
-  const isAudioItem =
-    ("has_audio" in item && item.has_audio) || ("library_type" in item && item.library_type === "audiobook");
+  const isAudioItem = "library_type" in item && item.library_type === "audiobook";
   const playAudio = async () => {
     const store = useAudioPlayerStore.getState();
     try {
