@@ -104,7 +104,7 @@ func main() {
 
 	// Fiber 앱 생성
 	app := fiber.New(fiber.Config{
-		AppName:   "Kumiho API v0.11.3",
+		AppName:   "Kumiho API v0.12.0",
 		BodyLimit: 50 * 1024 * 1024, // 50MB
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
