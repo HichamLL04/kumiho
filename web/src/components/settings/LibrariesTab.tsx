@@ -12,6 +12,8 @@ import {
   Clock,
   Folder,
   Square,
+  Headphones,
+  Book as BookIcon,
 } from "lucide-react";
 import {
   DndContext,
@@ -32,6 +34,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { libraryAPI } from "../../api/client";
 import { useLibraryStore, type Library } from "../../stores/libraryStore";
+import type { LibraryType } from "../../types/series";
 import { useScanStore } from "../../stores/scanStore";
 import { Toast } from "../common/Toast";
 import { AlertModal } from "../modals/AlertModal";
@@ -94,6 +97,19 @@ function SortableLibraryItem({
                 {isSystem && lib.name === "좋아요한 시리즈" ? t("sidebar.system.liked") : lib.name}
               </label>
               {isSystem && <span className={styles.systemBadge}>{t("settings.libraries.item.system_badge")}</span>}
+              {!isSystem && (
+                <span className={styles.typeBadge}>
+                  {lib.library_type === "audiobook" ? (
+                    <>
+                      <Headphones size={12} /> {t("settings.libraries.type_audiobook")}
+                    </>
+                  ) : (
+                    <>
+                      <BookIcon size={12} /> {t("settings.libraries.type_book")}
+                    </>
+                  )}
+                </span>
+              )}
             </div>
             <p className={styles.libraryPath}>{lib.path}</p>
             <div className={styles.libraryMeta}>
@@ -190,40 +206,63 @@ function SortableLibraryItem({
             {!isSystem && (
               <>
                 <div className={styles.flexOne}>
-                  <label className={styles.fieldLabel}>{t("settings.libraries.item.edit.view_mode_label")}</label>
+                  <label className={styles.fieldLabel}>{t("settings.libraries.item.edit.type_label")}</label>
                   <select
-                    value={editingLibrary.default_view_mode}
-                    onChange={(e) => setEditingLibrary({ ...editingLibrary, default_view_mode: e.target.value })}
+                    value={editingLibrary.library_type || "book"}
+                    onChange={(e) =>
+                      setEditingLibrary({ ...editingLibrary, library_type: e.target.value as "book" | "audiobook" })
+                    }
                     className={commonStyles.settingsSelect}
                   >
-                    <option value="single">{t("settings.viewer.mode.single")}</option>
-                    <option value="double">{t("settings.viewer.mode.double")}</option>
-                    <option value="vertical">{t("settings.viewer.mode.vertical")}</option>
+                    <option value="book">{t("settings.libraries.type_book")}</option>
+                    <option value="audiobook">{t("settings.libraries.type_audiobook")}</option>
                   </select>
                 </div>
-                <div className={styles.flexOne}>
-                  <label className={styles.fieldLabel}>{t("settings.libraries.item.edit.read_direction_label")}</label>
-                  <select
-                    value={editingLibrary.default_read_direction}
-                    onChange={(e) => setEditingLibrary({ ...editingLibrary, default_read_direction: e.target.value })}
-                    className={commonStyles.settingsSelect}
-                  >
-                    <option value="ltr">{t("settings.viewer.direction.ltr")}</option>
-                    <option value="rtl">{t("settings.viewer.direction.rtl")}</option>
-                  </select>
-                </div>
-                <div className={styles.flexOne}>
-                  <label className={styles.fieldLabel}>{t("viewer.settings.page_transition.label")}</label>
-                  <select
-                    value={editingLibrary.default_page_transition}
-                    onChange={(e) => setEditingLibrary({ ...editingLibrary, default_page_transition: e.target.value })}
-                    className={commonStyles.settingsSelect}
-                  >
-                    <option value="slide">{t("viewer.settings.page_transition.slide")}</option>
-                    <option value="fade">{t("viewer.settings.page_transition.fade")}</option>
-                    <option value="none">{t("viewer.settings.page_transition.none")}</option>
-                  </select>
-                </div>
+                {editingLibrary.library_type !== "audiobook" && (
+                  <>
+                    <div className={styles.flexOne}>
+                      <label className={styles.fieldLabel}>{t("settings.libraries.item.edit.view_mode_label")}</label>
+                      <select
+                        value={editingLibrary.default_view_mode}
+                        onChange={(e) => setEditingLibrary({ ...editingLibrary, default_view_mode: e.target.value })}
+                        className={commonStyles.settingsSelect}
+                      >
+                        <option value="single">{t("settings.viewer.mode.single")}</option>
+                        <option value="double">{t("settings.viewer.mode.double")}</option>
+                        <option value="vertical">{t("settings.viewer.mode.vertical")}</option>
+                      </select>
+                    </div>
+                    <div className={styles.flexOne}>
+                      <label className={styles.fieldLabel}>
+                        {t("settings.libraries.item.edit.read_direction_label")}
+                      </label>
+                      <select
+                        value={editingLibrary.default_read_direction}
+                        onChange={(e) =>
+                          setEditingLibrary({ ...editingLibrary, default_read_direction: e.target.value })
+                        }
+                        className={commonStyles.settingsSelect}
+                      >
+                        <option value="ltr">{t("settings.viewer.direction.ltr")}</option>
+                        <option value="rtl">{t("settings.viewer.direction.rtl")}</option>
+                      </select>
+                    </div>
+                    <div className={styles.flexOne}>
+                      <label className={styles.fieldLabel}>{t("viewer.settings.page_transition.label")}</label>
+                      <select
+                        value={editingLibrary.default_page_transition}
+                        onChange={(e) =>
+                          setEditingLibrary({ ...editingLibrary, default_page_transition: e.target.value })
+                        }
+                        className={commonStyles.settingsSelect}
+                      >
+                        <option value="slide">{t("viewer.settings.page_transition.slide")}</option>
+                        <option value="fade">{t("viewer.settings.page_transition.fade")}</option>
+                        <option value="none">{t("viewer.settings.page_transition.none")}</option>
+                      </select>
+                    </div>
+                  </>
+                )}
                 <div className={styles.flexOne}>
                   <label className={styles.fieldLabel}>{t("settings.libraries.item.edit.excludes_label")}</label>
                   <input
@@ -295,12 +334,21 @@ export function LibrariesTab() {
     }),
   );
 
-  const [newLibrary, setNewLibrary] = useState({
+  const [newLibrary, setNewLibrary] = useState<{
+    name: string;
+    path: string;
+    default_view_mode: string;
+    default_read_direction: string;
+    default_page_transition: string;
+    library_type: LibraryType;
+    scan_excludes: string;
+  }>({
     name: "",
     path: "",
     default_view_mode: "single",
     default_read_direction: "ltr",
     default_page_transition: "slide",
+    library_type: "book",
     scan_excludes: "",
   });
 
@@ -407,6 +455,7 @@ export function LibrariesTab() {
         default_view_mode: "single",
         default_read_direction: "ltr",
         default_page_transition: "slide",
+        library_type: "book",
         scan_excludes: "",
       });
       fetchLibraries();
@@ -586,38 +635,56 @@ export function LibrariesTab() {
             </div>
             <div className={commonStyles.settingsItem}>
               <div className={commonStyles.itemInfo}>
-                <label>{t("settings.libraries.view_mode_label")}</label>
-                <p>{t("settings.libraries.view_mode_desc")}</p>
+                <label>{t("settings.libraries.type_label")}</label>
+                <p>{t("settings.libraries.type_desc")}</p>
               </div>
-              <div className={`${commonStyles.itemControl} ${styles.selectGroup}`}>
+              <div className={commonStyles.itemControl}>
                 <select
-                  value={newLibrary.default_view_mode}
-                  onChange={(e) => setNewLibrary({ ...newLibrary, default_view_mode: e.target.value })}
-                  className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
+                  value={newLibrary.library_type}
+                  onChange={(e) => setNewLibrary({ ...newLibrary, library_type: e.target.value as LibraryType })}
+                  className={commonStyles.settingsSelect}
                 >
-                  <option value="single">{t("settings.viewer.mode.single")}</option>
-                  <option value="double">{t("settings.viewer.mode.double")}</option>
-                  <option value="vertical">{t("settings.viewer.mode.vertical")}</option>
-                </select>
-                <select
-                  value={newLibrary.default_read_direction}
-                  onChange={(e) => setNewLibrary({ ...newLibrary, default_read_direction: e.target.value })}
-                  className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
-                >
-                  <option value="ltr">{t("settings.viewer.direction.ltr")}</option>
-                  <option value="rtl">{t("settings.viewer.direction.rtl")}</option>
-                </select>
-                <select
-                  value={newLibrary.default_page_transition}
-                  onChange={(e) => setNewLibrary({ ...newLibrary, default_page_transition: e.target.value })}
-                  className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
-                >
-                  <option value="slide">{t("viewer.settings.page_transition.slide")}</option>
-                  <option value="fade">{t("viewer.settings.page_transition.fade")}</option>
-                  <option value="none">{t("viewer.settings.page_transition.none")}</option>
+                  <option value="book">{t("settings.libraries.type_book")}</option>
+                  <option value="audiobook">{t("settings.libraries.type_audiobook")}</option>
                 </select>
               </div>
             </div>
+            {newLibrary.library_type !== "audiobook" && (
+              <div className={commonStyles.settingsItem}>
+                <div className={commonStyles.itemInfo}>
+                  <label>{t("settings.libraries.view_mode_label")}</label>
+                  <p>{t("settings.libraries.view_mode_desc")}</p>
+                </div>
+                <div className={`${commonStyles.itemControl} ${styles.selectGroup}`}>
+                  <select
+                    value={newLibrary.default_view_mode}
+                    onChange={(e) => setNewLibrary({ ...newLibrary, default_view_mode: e.target.value })}
+                    className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
+                  >
+                    <option value="single">{t("settings.viewer.mode.single")}</option>
+                    <option value="double">{t("settings.viewer.mode.double")}</option>
+                    <option value="vertical">{t("settings.viewer.mode.vertical")}</option>
+                  </select>
+                  <select
+                    value={newLibrary.default_read_direction}
+                    onChange={(e) => setNewLibrary({ ...newLibrary, default_read_direction: e.target.value })}
+                    className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
+                  >
+                    <option value="ltr">{t("settings.viewer.direction.ltr")}</option>
+                    <option value="rtl">{t("settings.viewer.direction.rtl")}</option>
+                  </select>
+                  <select
+                    value={newLibrary.default_page_transition}
+                    onChange={(e) => setNewLibrary({ ...newLibrary, default_page_transition: e.target.value })}
+                    className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
+                  >
+                    <option value="slide">{t("viewer.settings.page_transition.slide")}</option>
+                    <option value="fade">{t("viewer.settings.page_transition.fade")}</option>
+                    <option value="none">{t("viewer.settings.page_transition.none")}</option>
+                  </select>
+                </div>
+              </div>
+            )}
             <div className={commonStyles.settingsItem}>
               <div className={commonStyles.itemInfo}>
                 <label>{t("settings.libraries.excludes_label")}</label>

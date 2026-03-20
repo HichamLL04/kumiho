@@ -126,6 +126,14 @@ func thumbnailExtFromMediaType(mediaType string) string {
 	}
 }
 
+func (h *ImageHandler) redirectThumbnailPlaceholder(c *fiber.Ctx, hasAudio bool) error {
+	placeholderPath := "/reading-kumiho.png"
+	if hasAudio {
+		placeholderPath = "/audio-kumiho.png"
+	}
+	return c.Redirect(placeholderPath, fiber.StatusFound)
+}
+
 func isSvgOrXMLHeaderFile(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
@@ -558,6 +566,7 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 	var firstPagePath string
 	var archivePath string
 	var customThumbnailPath string
+	var fallbackPlaceholderAudio bool
 
 	userID := middleware.GetUserID(c)
 
@@ -666,6 +675,7 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 				"error": "volume not found",
 			})
 		}
+		fallbackPlaceholderAudio = volume.HasAudio
 
 		if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
 			thumbPath := *volume.ThumbnailPath
@@ -712,9 +722,7 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 			// 볼륨의 첫 번째 챕터 → 첫 번째 페이지 (재귀적 탐색 지원)
 			targetChapter, targetPage, targetArchive, found := h.findFirstAvailableChapterRecursively(resourceID)
 			if !found {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "no chapters found in volume hierarchy",
-				})
+				return h.redirectThumbnailPlaceholder(c, volume.HasAudio)
 			}
 
 			// EPUB 챕터는 pages 테이블 레코드가 비어 있을 수 있으므로 커버 추출 fallback 처리
@@ -743,10 +751,12 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 				}
 			}
 
+			if targetChapter.HasAudio {
+				fallbackPlaceholderAudio = true
+			}
+
 			if targetPage == nil {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "no pages found in volume hierarchy",
-				})
+				return h.redirectThumbnailPlaceholder(c, fallbackPlaceholderAudio)
 			}
 			firstPagePath = targetPage.Path
 			archivePath = targetArchive
@@ -810,14 +820,18 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 	} else if firstPagePath != "" {
 		imageData, contentType, err = h.readImageFromDisk(firstPagePath)
 	} else {
+		if resourceType == "volumes" {
+			return h.redirectThumbnailPlaceholder(c, fallbackPlaceholderAudio)
+		}
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "thumbnail not found",
 		})
 	}
 
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to read thumbnail",
+		log.Printf("[IMAGE_HANDLER] failed to read thumbnail for %s %s: %v", resourceType, resourceID, err)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "thumbnail not found or failed to read",
 		})
 	}
 
@@ -1383,7 +1397,9 @@ func (h *ImageHandler) findFirstAvailableChapterRecursively(volumeID string) (*m
 	if err == nil && len(chapters) > 0 {
 		for _, ch := range chapters {
 			// EPUB의 경우 페이지 레코드 없이도 썸네일 추출 로직(커버 fallback)이 있으므로 일단 반환
-			if strings.ToLower(filepath.Ext(ch.Path)) == ".epub" {
+			// 오디오북인 경우에도 페이지 없이 앨범 아트나 폴더 이미지를 활용할 수 있으므로 반환
+			ext := strings.ToLower(filepath.Ext(ch.Path))
+			if ext == ".epub" || ch.HasAudio {
 				return &ch, nil, "", true
 			}
 

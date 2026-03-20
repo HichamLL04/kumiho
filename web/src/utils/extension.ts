@@ -1,4 +1,22 @@
-export const SUPPORTED_EXTENSIONS = ["ZIP", "CBZ", "PDF", "EPUB", "TXT", "IMG"] as const;
+export const SUPPORTED_EXTENSIONS = [
+  "ZIP",
+  "CBZ",
+  "PDF",
+  "EPUB",
+  "TXT",
+  "IMG",
+  "MP3",
+  "WAV",
+  "OGG",
+  "OGA",
+  "FLAC",
+  "M4A",
+  "M4B",
+  "AAC",
+  "WMA",
+  "OPUS",
+  "MP4",
+] as const;
 
 export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number];
 export type ExtensionBadge = SupportedExtension | "MIX";

@@ -42,13 +42,13 @@ func (r *LibraryRepository) Create(db database.Queryer, library *model.Library) 
 			id, name, path, default_view_mode, default_read_direction, default_page_transition,
 			default_epub_render_mode, default_epub_theme, default_epub_spread, default_epub_wheel_direction,
 			default_epub_keyboard_direction, default_epub_click_direction,
-			sort_order, created_at, updated_at, type, is_visible, scan_excludes
+			sort_order, created_at, updated_at, type, library_type, is_visible, scan_excludes
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOCAL', 1, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOCAL', ?, 1, ?)`,
 		library.ID, library.Name, library.Path, library.DefaultViewMode, library.DefaultReadDirection, library.DefaultPageTransition,
 		library.DefaultEpubRenderMode, library.DefaultEpubTheme, library.DefaultEpubSpread, library.DefaultEpubWheelDir,
 		library.DefaultEpubKeyboardDir, library.DefaultEpubClickDir,
-		library.SortOrder, library.CreatedAt, library.UpdatedAt, library.ScanExcludes,
+		library.SortOrder, library.CreatedAt, library.UpdatedAt, library.LibraryType, library.ScanExcludes,
 	)
 	return err
 }
@@ -60,7 +60,7 @@ func (r *LibraryRepository) FindAll(db database.Queryer) ([]model.Library, error
 		`SELECT id, name, path, default_view_mode, default_read_direction, default_page_transition,
 		        default_epub_render_mode, default_epub_theme, default_epub_spread,
 		        default_epub_wheel_direction, default_epub_keyboard_direction, default_epub_click_direction,
-		        sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes
+		        sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes, library_type
 		 FROM libraries ORDER BY sort_order ASC, name ASC`,
 	)
 	if err != nil {
@@ -72,13 +72,13 @@ func (r *LibraryRepository) FindAll(db database.Queryer) ([]model.Library, error
 	for rows.Next() {
 		var lib model.Library
 		var lastScanned sql.NullTime
-		var viewMode, readDirection, pageTransition, libType, scanStatus, scanResult, scanExcludes sql.NullString
+		var viewMode, readDirection, pageTransition, libType, scanStatus, scanResult, scanExcludes, libraryType sql.NullString
 		var epubRenderMode, epubTheme, epubSpread, epubWheelDir, epubKeyboardDir, epubClickDir sql.NullString
 		var isVisible sql.NullBool
 		if err := rows.Scan(
 			&lib.ID, &lib.Name, &lib.Path, &viewMode, &readDirection, &pageTransition,
 			&epubRenderMode, &epubTheme, &epubSpread, &epubWheelDir, &epubKeyboardDir, &epubClickDir,
-			&lib.SortOrder, &lib.CreatedAt, &lib.UpdatedAt, &lastScanned, &scanStatus, &scanResult, &libType, &isVisible, &scanExcludes,
+			&lib.SortOrder, &lib.CreatedAt, &lib.UpdatedAt, &lastScanned, &scanStatus, &scanResult, &libType, &isVisible, &scanExcludes, &libraryType,
 		); err != nil {
 			return nil, err
 		}
@@ -128,6 +128,12 @@ func (r *LibraryRepository) FindAll(db database.Queryer) ([]model.Library, error
 			lib.ScanExcludes = scanExcludes.String
 		}
 
+		if libraryType.Valid {
+			lib.LibraryType = libraryType.String
+		} else {
+			lib.LibraryType = "book"
+		}
+
 		// 기본값 보장
 		if lib.DefaultViewMode == "" {
 			lib.DefaultViewMode = "single"
@@ -166,20 +172,20 @@ func (r *LibraryRepository) FindByID(db database.Queryer, id string) (*model.Lib
 	db = database.GetQueryer(db)
 	var lib model.Library
 	var lastScanned sql.NullTime
-	var viewMode, readDirection, pageTransition, libType, scanStatus, scanResult, scanExcludes sql.NullString
+	var viewMode, readDirection, pageTransition, libType, scanStatus, scanResult, scanExcludes, libraryType sql.NullString
 	var epubRenderMode, epubTheme, epubSpread, epubWheelDir, epubKeyboardDir, epubClickDir sql.NullString
 	var isVisible sql.NullBool
 	err := db.QueryRow(
 		`SELECT id, name, path, default_view_mode, default_read_direction, default_page_transition,
 		        default_epub_render_mode, default_epub_theme, default_epub_spread,
 		        default_epub_wheel_direction, default_epub_keyboard_direction, default_epub_click_direction,
-		        sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes
+		        sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes, library_type
 		 FROM libraries WHERE id = ?`,
 		id,
 	).Scan(
 		&lib.ID, &lib.Name, &lib.Path, &viewMode, &readDirection, &pageTransition,
 		&epubRenderMode, &epubTheme, &epubSpread, &epubWheelDir, &epubKeyboardDir, &epubClickDir,
-		&lib.SortOrder, &lib.CreatedAt, &lib.UpdatedAt, &lastScanned, &scanStatus, &scanResult, &libType, &isVisible, &scanExcludes,
+		&lib.SortOrder, &lib.CreatedAt, &lib.UpdatedAt, &lastScanned, &scanStatus, &scanResult, &libType, &isVisible, &scanExcludes, &libraryType,
 	)
 
 	if err == sql.ErrNoRows {
@@ -232,6 +238,11 @@ func (r *LibraryRepository) FindByID(db database.Queryer, id string) (*model.Lib
 	}
 	if scanExcludes.Valid {
 		lib.ScanExcludes = scanExcludes.String
+	}
+	if libraryType.Valid {
+		lib.LibraryType = libraryType.String
+	} else {
+		lib.LibraryType = "book"
 	}
 
 	// 기본값 보장
@@ -271,20 +282,20 @@ func (r *LibraryRepository) FindByPath(db database.Queryer, path string) (*model
 	db = database.GetQueryer(db)
 	var lib model.Library
 	var lastScanned sql.NullTime
-	var viewMode, readDirection, pageTransition, libType, scanStatus, scanResult, scanExcludes sql.NullString
+	var viewMode, readDirection, pageTransition, libType, scanStatus, scanResult, scanExcludes, libraryType sql.NullString
 	var epubRenderMode, epubTheme, epubSpread, epubWheelDir, epubKeyboardDir, epubClickDir sql.NullString
 	var isVisible sql.NullBool
 	err := db.QueryRow(
 		`SELECT id, name, path, default_view_mode, default_read_direction, default_page_transition,
 		        default_epub_render_mode, default_epub_theme, default_epub_spread,
 		        default_epub_wheel_direction, default_epub_keyboard_direction, default_epub_click_direction,
-		        sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes
+		        sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes, library_type
 		 FROM libraries WHERE path = ?`,
 		path,
 	).Scan(
 		&lib.ID, &lib.Name, &lib.Path, &viewMode, &readDirection, &pageTransition,
 		&epubRenderMode, &epubTheme, &epubSpread, &epubWheelDir, &epubKeyboardDir, &epubClickDir,
-		&lib.SortOrder, &lib.CreatedAt, &lib.UpdatedAt, &lastScanned, &scanStatus, &scanResult, &libType, &isVisible, &scanExcludes,
+		&lib.SortOrder, &lib.CreatedAt, &lib.UpdatedAt, &lastScanned, &scanStatus, &scanResult, &libType, &isVisible, &scanExcludes, &libraryType,
 	)
 
 	if err == sql.ErrNoRows {
@@ -337,6 +348,11 @@ func (r *LibraryRepository) FindByPath(db database.Queryer, path string) (*model
 	}
 	if scanExcludes.Valid {
 		lib.ScanExcludes = scanExcludes.String
+	}
+	if libraryType.Valid {
+		lib.LibraryType = libraryType.String
+	} else {
+		lib.LibraryType = "book"
 	}
 
 	// 기본값 보장
@@ -413,12 +429,12 @@ func (r *LibraryRepository) Update(db database.Queryer, library *model.Library) 
 			name = ?, path = ?, default_view_mode = ?, default_read_direction = ?, default_page_transition = ?,
 			default_epub_render_mode = ?, default_epub_theme = ?, default_epub_spread = ?, default_epub_wheel_direction = ?,
 			default_epub_keyboard_direction = ?, default_epub_click_direction = ?,
-			sort_order = ?, is_visible = ?, scan_excludes = ?, updated_at = ?
+			sort_order = ?, library_type = ?, is_visible = ?, scan_excludes = ?, updated_at = ?
 		WHERE id = ?`,
 		library.Name, library.Path, library.DefaultViewMode, library.DefaultReadDirection, library.DefaultPageTransition,
 		library.DefaultEpubRenderMode, library.DefaultEpubTheme, library.DefaultEpubSpread, library.DefaultEpubWheelDir,
 		library.DefaultEpubKeyboardDir, library.DefaultEpubClickDir,
-		library.SortOrder, library.IsVisible, library.ScanExcludes, library.UpdatedAt, library.ID,
+		library.SortOrder, library.LibraryType, library.IsVisible, library.ScanExcludes, library.UpdatedAt, library.ID,
 	)
 	return err
 }

@@ -254,10 +254,25 @@
 
 .systemBadge {
   font-size: 0.7rem;
-  background: #4299e1;
-  color: white;
-  padding: 0.1rem 0.4rem;
+  background: rgba(99, 179, 237, 0.18);
+  color: #90cdf4;
+  padding: 0.15rem 0.5rem;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.typeBadge {
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: #cbd5e0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.5rem;
 }
 
 .btnBlue {

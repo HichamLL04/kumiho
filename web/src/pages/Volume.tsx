@@ -8,8 +8,10 @@ import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
 import { api, volumeAPI, downloadAPI, chapterAPI } from "../api/client";
+import { formatDuration } from "../utils/progressUtils";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
+import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import { Tooltip } from "../components/common/Tooltip";
 import styles from "./Volume.module.css";
 
@@ -85,11 +87,10 @@ export function VolumePage() {
         setSeries(seriesRes.data);
       }
 
-      // 챕터 목록
-      const chapRes = await volumeAPI.getChapters(volumeId!);
-      const chapterList = Array.isArray(chapRes.data) ? chapRes.data : chapRes.data.chapters || [];
+      // 챕터 목록 (볼륨 단위 API 사용)
+      const chaptersRes = await volumeAPI.getChapters(volumeId!);
+      const chapterList = chaptersRes.data.chapters || [];
       setChapters(chapterList.sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number));
-
       // 최근 읽기 진행도 가져오기 (볼륨 단위)
       try {
         const progressRes = await api.get(`/volumes/${volumeId}/progress`);
@@ -242,6 +243,35 @@ export function VolumePage() {
 
   // 이어보기 또는 첫 챕터 읽기
   const handlePlay = async () => {
+    const isAudio = series.library_type === "audiobook" || series.has_audio;
+
+    if (isAudio) {
+      try {
+        const store = useAudioPlayerStore.getState();
+        const result = await store.bootstrapAndPlay({
+          source: "volume",
+          seriesId: series.id,
+          volumeId: volume.id,
+          series,
+          volume,
+        });
+        if (!result.ok) {
+          if (result.reason === "no_chapters") {
+            showAlert(t("series.alert.no_readable_chapter"), "warning");
+            return;
+          }
+          throw new Error(result.reason ?? "bootstrap_failed");
+        }
+      } catch (error) {
+        console.error("Failed to start audiobook playback:", error);
+        showAlert(
+          t("series.alert.load_failed", { defaultValue: "오디오 정보를 불러오는데 실패했습니다." }),
+          "error",
+        );
+      }
+      return;
+    }
+
     if (lastProgress && lastProgress.chapter_id) {
       navigate(`/viewer/${lastProgress.chapter_id}`, { state: { from: viewerFrom } });
       return;
@@ -375,7 +405,9 @@ export function VolumePage() {
               {chapters.map((chapter) => {
                 const chapterProgress = progressList.find((p) => p.chapter_id === chapter.id);
                 const hasPartialProgress =
-                  !!chapterProgress && chapterProgress.current_page > 0 && !chapter.is_read;
+                  !!chapterProgress &&
+                  (chapterProgress.current_page > 0 || (chapterProgress.current_time ?? 0) > 0) &&
+                  !chapter.is_read;
                 const shouldShowResetAction = chapter.is_read || hasPartialProgress;
 
                 return (
@@ -424,9 +456,13 @@ export function VolumePage() {
                       </span>
                       <span className={styles.chapterTitle}>{chapter.title}</span>
                       <span className={styles.chapterPages}>
-                        {chapterProgress
-                          ? `${chapterProgress.current_page} / ${chapter.page_count} P`
-                          : `${chapter.page_count} Pages`}
+                        {chapter.has_audio && typeof chapter.duration === "number"
+                          ? typeof chapterProgress?.current_time === "number"
+                            ? `${formatDuration(chapterProgress.current_time)} / ${formatDuration(chapter.duration)}`
+                            : formatDuration(chapter.duration)
+                          : chapterProgress
+                            ? `${chapterProgress.current_page} / ${chapter.page_count} P`
+                            : `${chapter.page_count} Pages`}
                       </span>
                     </div>
 

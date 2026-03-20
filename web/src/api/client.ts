@@ -1,5 +1,14 @@
 import axios from "axios";
-import type { Chapter, Series, Volume, Library, ReadingProgress, Page, UserSeriesSetting } from "../types/series";
+import type {
+  Chapter,
+  Series,
+  Volume,
+  Library,
+  ReadingProgress,
+  Page,
+  UserSeriesSetting,
+  LibraryType,
+} from "../types/series";
 import type { User } from "../types/user";
 import type { Session } from "../types/session";
 
@@ -139,6 +148,7 @@ export const libraryAPI = {
     default_epub_wheel_direction?: string;
     default_epub_keyboard_direction?: string;
     default_epub_click_direction?: string;
+    library_type?: LibraryType;
   }) => api.post("/libraries", data),
   update: (
     id: string,
@@ -153,6 +163,7 @@ export const libraryAPI = {
       default_epub_wheel_direction?: string;
       default_epub_keyboard_direction?: string;
       default_epub_click_direction?: string;
+      library_type?: LibraryType;
       is_visible?: boolean;
     },
   ) => api.put(`/libraries/${id}`, data),
@@ -168,7 +179,9 @@ export const libraryAPI = {
 export const seriesAPI = {
   get: (id: string) => api.get(`/series/${id}`),
   getVolumes: (seriesId: string) => api.get(`/series/${seriesId}/volumes`),
+  getChapters: (seriesId: string) => api.get<{ chapters: Chapter[] }>(`/series/${seriesId}/chapters`),
   getProgress: (seriesId: string) => api.get(`/series/${seriesId}/progress`),
+  getProgressList: (seriesId: string) => api.get<{ progress_list: ReadingProgress[] }>(`/series/${seriesId}/progress-list`),
   update: (seriesId: string, data: Partial<Series>) => api.patch(`/series/${seriesId}`, data),
   updateProgress: (
     seriesId: string,
@@ -182,6 +195,8 @@ export const seriesAPI = {
       total_pages?: number;
       current_position?: number;
       total_positions?: number;
+      current_time?: number;
+      duration?: number;
       progress_percent?: number;
       page?: number;
       current_cfi?: string;
@@ -243,36 +258,62 @@ export const volumeAPI = {
   getCompletion: (volumeId: string) => api.get(`/volumes/${volumeId}/completion`),
   deleteCompletion: (volumeId: string) => api.delete(`/volumes/${volumeId}/completion`),
   getBGM: (volumeId: string) => api.get<{ exists: boolean; url?: string }>(`/volumes/${volumeId}/bgm`),
-  // 재귀적으로 첫 번째 챕터 찾기
-  findFirstChapterRecursively: async (volumeId: string): Promise<Chapter | null> => {
+  /**
+   * 볼륨 내의 첫 번째 읽을 수 있는 챕터를 재귀적으로 탐색 (통합 API 사용 버전)
+   */
+  findFirstChapterRecursively: async (
+    volumeId: string,
+    context?: { seriesId?: string; allVolumes?: Volume[]; allChapters?: Chapter[] },
+  ): Promise<Chapter | null> => {
     try {
-      // 1. 현재 볼륨의 직계 챕터 확인
-      const chapRes = await volumeAPI.getChapters(volumeId);
-      const chapters = Array.isArray(chapRes.data) ? chapRes.data : chapRes.data.chapters || [];
+      let seriesId = context?.seriesId;
+      let allChapters = context?.allChapters;
+      let allVolumes = context?.allVolumes;
 
-      if (chapters.length > 0) {
-        return [...chapters].sort((a, b) => a.chapter_number - b.chapter_number)[0];
+      if (!seriesId) {
+        // 볼륨 정보 먼저 가져오기 (series_id 확인용)
+        const volRes = await volumeAPI.get(volumeId);
+        const volume = volRes.data;
+        seriesId = volume?.series_id;
       }
+      if (!seriesId) return null;
 
-      // 2. 챕터가 없으면 하위 볼륨 확인
-      const volRes = await volumeAPI.get(volumeId);
-      const volume = volRes.data;
-
-      if (!volume.series_id) return null;
-
-      const subVolsRes = await api.get(`/series/${volume.series_id}/volumes?parent_id=${volumeId}`);
-      const subVolumes = Array.isArray(subVolsRes.data?.volumes) ? subVolsRes.data.volumes : [];
-
-      if (subVolumes.length > 0) {
-        // 첫 번째 하위 볼륨부터 재귀 탐색
-        const sortedSubVols = [...subVolumes].sort((a, b) => a.volume_number - b.volume_number);
-        for (const subVol of sortedSubVols) {
-          const firstChap = await volumeAPI.findFirstChapterRecursively(subVol.id);
-          if (firstChap) return firstChap;
+      if (!allChapters) {
+        const chaptersRes = await seriesAPI.getChapters(seriesId);
+        allChapters = chaptersRes.data.chapters || [];
+      }
+      if (!allVolumes) {
+        const volumesRes = await seriesAPI.getVolumes(seriesId);
+        allVolumes = volumesRes.data.volumes || [];
+      }
+      const resolvedVolumes = allVolumes ?? [];
+      const resolvedChapters = allChapters ?? [];
+      const childrenByParentId = new Map<string, Volume[]>();
+      for (const volume of resolvedVolumes) {
+        if (!volume.parent_id) continue;
+        const children = childrenByParentId.get(volume.parent_id);
+        if (children) {
+          children.push(volume);
+        } else {
+          childrenByParentId.set(volume.parent_id, [volume]);
         }
       }
 
-      return null;
+      // 해당 볼륨과 그 모든 자식 볼륨의 ID 수집
+      const targetVolumeIds = new Set<string>();
+      const collectIds = (vId: string) => {
+        if (targetVolumeIds.has(vId)) return;
+        targetVolumeIds.add(vId);
+        const children = childrenByParentId.get(vId);
+        if (!children) return;
+        children.forEach((v: Volume) => collectIds(v.id));
+      };
+      collectIds(volumeId);
+
+      // 백엔드의 시리즈 챕터 정렬(volume_number, chapter_number)을 그대로 사용
+      // 대상 볼륨(및 하위 볼륨)에 속하는 첫 챕터를 순서 보존 상태에서 찾는다.
+      const firstChapter = resolvedChapters.find((c) => targetVolumeIds.has(c.volume_id));
+      return firstChapter ?? null;
     } catch (error) {
       console.error("Failed to find first chapter recursively:", error);
       return null;
@@ -294,6 +335,24 @@ export const chapterAPI = {
     api.post(`/series/${seriesId}/chapters/${chapterId}/complete-previous`),
   deleteProgress: (chapterId: string) => api.delete(`/chapters/${chapterId}/progress`),
   getBGM: (chapterId: string) => api.get<{ exists: boolean; url?: string }>(`/chapters/${chapterId}/bgm`),
+  getAudioUrl: (chapterId: string) => `${API_BASE_URL}/chapters/${chapterId}/audio`,
+};
+
+// Bookmark API
+export const bookmarkAPI = {
+  getAll: (seriesId: string) => api.get(`/bookmarks/series/${seriesId}`),
+  create: (data: {
+    series_id: string;
+    volume_id?: string;
+    chapter_id?: string;
+    title: string;
+    description?: string;
+    page_number?: number;
+    current_position?: number;
+    current_cfi?: string;
+    current_time?: number;
+  }) => api.post("/bookmarks", data),
+  delete: (id: string) => api.delete(`/bookmarks/${id}`),
 };
 
 // EPUB Progress API (EPUB 전용)

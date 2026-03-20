@@ -6,11 +6,13 @@ export interface Chapter {
   volume_id: string;
   title: string;
   chapter_number: number;
-  render_mode?: "pdf" | "image" | "text";
+  render_mode?: "pdf" | "image" | "text" | "audio";
   page_count: number;
   total_bytes?: number;
   total_positions?: number;
   path?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // 볼륨 정보
@@ -20,6 +22,7 @@ export interface Volume {
   title: string;
   series_id: string;
   is_completed: boolean;
+  thumbnail_url?: string;
 }
 
 // 페이지 메타데이터 (두 페이지 모드용)
