@@ -42,7 +42,7 @@ func (h *SeriesHandler) assignVolumeThumbnailURL(volume *model.Volume) {
 		return
 	}
 
-	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail", volume.ID)
 	volume.ThumbnailURL = &url
 }
 
@@ -368,16 +368,7 @@ func (h *SeriesHandler) UpdateVolume(c *fiber.Ctx) error {
 	}
 
 	// 썸네일 URL 설정 (응답용)
-	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-		volume.ThumbnailURL = &url
-	} else {
-		pageID, err := h.volumeRepo.GetFirstPageID(nil, volume.ID)
-		if err == nil && pageID != "" {
-			url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-			volume.ThumbnailURL = &url
-		}
-	}
+	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
 }
@@ -498,8 +489,7 @@ func (h *SeriesHandler) UploadVolumeThumbnail(c *fiber.Ctx) error {
 	}
 
 	// 썸네일 URL 업데이트
-	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-	volume.ThumbnailURL = &url
+	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
 }
@@ -622,8 +612,7 @@ func (h *SeriesHandler) UploadVolumeThumbnailFromURL(c *fiber.Ctx) error {
 		})
 	}
 
-	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-	volume.ThumbnailURL = &url
+	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
 }
@@ -667,12 +656,7 @@ func (h *SeriesHandler) DeleteVolumeThumbnail(c *fiber.Ctx) error {
 		})
 	}
 
-	// 첫 페이지를 썸네일로 보정
-	pageID, err := h.volumeRepo.GetFirstPageID(nil, volume.ID)
-	if err == nil && pageID != "" {
-		url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-		volume.ThumbnailURL = &url
-	}
+	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
 }
