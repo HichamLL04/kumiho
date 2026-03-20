@@ -208,6 +208,58 @@ describe("TextViewerRoute", () => {
     });
   });
 
+  it("restoreAnchor가 없는 첫 진입에서도 viewStatus를 ready로 전환한다", async () => {
+    const setViewStatus = vi.fn();
+
+    chapterGetTextMock.mockResolvedValue({
+      data: {
+        content: "첫 진입 텍스트",
+      },
+    });
+    chapterGetProgressMock.mockResolvedValue({
+      data: {
+        progress: null,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <TextViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "테스트 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus,
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("첫 진입 텍스트");
+
+    await waitFor(() => {
+      expect(setViewStatus).toHaveBeenCalledWith("ready");
+    });
+  });
+
   it("연속 빈 줄 기준으로 문단을 분리하고 문단 내부 개행은 유지한다", async () => {
     chapterGetTextMock.mockResolvedValue({
       data: {
@@ -505,6 +557,67 @@ describe("TextViewerRoute", () => {
 
     // 에러 없이 정상 동작하는지 확인
     expect(document.querySelector("article")).toBeTruthy();
+  });
+
+  it("세로 모드 진행 위치 복원 후 viewStatus를 ready로 전환한다", async () => {
+    const setViewStatus = vi.fn();
+
+    chapterGetTextMock.mockResolvedValue({
+      data: {
+        content: "세로 복원 텍스트\n\n두 번째 문단",
+      },
+    });
+    chapterGetProgressMock.mockResolvedValue({
+      data: {
+        progress: {
+          current_position: 3,
+        },
+      },
+    });
+
+    useViewerStore.setState({
+      settings: {
+        ...useViewerStore.getState().settings,
+        readingMode: "vertical",
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <TextViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "테스트 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus,
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText(/세로 복원 텍스트/);
+
+    await waitFor(() => {
+      expect(setViewStatus).toHaveBeenCalledWith("ready");
+    });
   });
 
   it("세로에서 복원된 single 페이지 번호를 다음 double 전환의 기준으로 사용한다", async () => {
