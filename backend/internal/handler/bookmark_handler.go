@@ -110,10 +110,10 @@ func (h *BookmarkHandler) validateBookmarkTargets(seriesID string, volumeID, cha
 			return errors.New("invalid chapter_id")
 		}
 		if volume.SeriesID != seriesID {
-			return errors.New("chapter_id does not belong to series_id")
+			return errors.New("invalid chapter_id")
 		}
 		if volumeID != nil && *volumeID != "" && chapter.VolumeID != *volumeID {
-			return errors.New("chapter_id does not belong to volume_id")
+			return errors.New("invalid chapter_id")
 		}
 	}
 

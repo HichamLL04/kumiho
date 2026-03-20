@@ -260,14 +260,6 @@ export function SeriesCard({
         return;
       }
 
-      const volumesRes = await seriesAPI.getVolumes(item.id);
-      const volumes = volumesRes.data.volumes || [];
-
-      if (volumes.length === 0) {
-        navigate(`/series/${item.id}`);
-        return;
-      }
-
       // 시리즈 전체 챕터를 가져와서 첫 번째 챕터 탐색
       const chaptersRes = await seriesAPI.getChapters(item.id);
       const chapters = chaptersRes.data.chapters || [];

@@ -184,7 +184,9 @@ export function SeriesInfoCard({
     if (!rawUrl) return null;
 
     const versionSource = isVolumeType ? volume?.updated_at || volume?.created_at : series.updated_at;
-    const cacheBuster = `_cb=${new Date(versionSource || Date.now()).getTime()}`;
+    const parsedTimestamp = versionSource ? Date.parse(versionSource) : NaN;
+    const cacheBusterValue = Number.isNaN(parsedTimestamp) ? 0 : parsedTimestamp;
+    const cacheBuster = `_cb=${cacheBusterValue}`;
     const separator = rawUrl.includes("?") ? "&" : "?";
     return getAuthenticatedImageUrl(`${rawUrl}${separator}${cacheBuster}`);
   }, [series, volume, isVolumeType]);

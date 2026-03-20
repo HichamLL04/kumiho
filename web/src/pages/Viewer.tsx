@@ -48,9 +48,10 @@ export function ViewerPage() {
 
         const series = seriesRes.data;
         const chapters = chaptersRes.data.chapters || [];
+        const activeChapter = chapters.find((item) => item.id === chapter.id) ?? (chapter as Chapter);
         const chapterProgressList = progressListRes?.data?.progress_list;
         const currentChapterProgress = Array.isArray(chapterProgressList)
-          ? chapterProgressList.find((item: ReadingProgress) => item.chapter_id === chapter.id)
+          ? chapterProgressList.find((item: ReadingProgress) => item.chapter_id === activeChapter.id)
           : undefined;
         const startTime = currentChapterProgress?.current_time ?? 0;
 
@@ -67,7 +68,7 @@ export function ViewerPage() {
 
         if (cancelled) return;
         const store = useAudioPlayerStore.getState();
-        store.loadAndPlay(series, chapter as Chapter, chapters, volume, startTime);
+        store.loadAndPlay(series, activeChapter, chapters, volume, startTime);
         if (chapterProgressList) {
           store.setChapterProgressList(chapterProgressList);
         }
