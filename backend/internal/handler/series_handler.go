@@ -37,6 +37,29 @@ type SeriesHandler struct {
 	seriesEnrichSvc       *service.SeriesEnrichService
 }
 
+func (h *SeriesHandler) assignVolumeThumbnailURL(volume *model.Volume) {
+	if volume == nil {
+		return
+	}
+
+	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
+		if _, err := os.Stat(*volume.ThumbnailPath); err == nil {
+			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+			volume.ThumbnailURL = &url
+			return
+		}
+	}
+
+	pageID, err := h.volumeRepo.GetFirstPageID(nil, volume.ID)
+	if err == nil && pageID != "" {
+		url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
+		volume.ThumbnailURL = &url
+		return
+	}
+
+	volume.ThumbnailURL = nil
+}
+
 func NewSeriesHandler(
 	seriesRepo *repository.SeriesRepository,
 	libraryRepo *repository.LibraryRepository,
@@ -1040,9 +1063,8 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 	for i := range volumes {
 		vID := volumes[i].ID
 
-		// 썸네일 URL 설정
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", vID, time.Now().Unix())
-		volumes[i].ThumbnailURL = &url
+		// 실제로 제공 가능한 경우에만 썸네일 URL 설정
+		h.assignVolumeThumbnailURL(&volumes[i])
 
 		// 배 조회된 데이터 매핑
 		if total, ok := totalPageMap[vID]; ok {
@@ -1099,15 +1121,8 @@ func (h *SeriesHandler) GetVolume(c *fiber.Ctx) error {
 		})
 	}
 
-	// 썸네일 URL 설정
-	// 커스텀 썸네일 유무와 관계없이 볼륨 썸네일 API를 기본 경로로 사용합니다.
-	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-		volume.ThumbnailURL = &url
-	} else {
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
-		volume.ThumbnailURL = &url
-	}
+	// 실제로 제공 가능한 경우에만 썸네일 URL 설정
+	h.assignVolumeThumbnailURL(volume)
 
 	// 페이지 진행도 계산 및 완독 상태 확인
 	userID := middleware.GetUserID(c)
