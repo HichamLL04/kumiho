@@ -1127,7 +1127,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           pendingHighlightParagraphRef.current = null;
           pendingModeTransitionRef.current = null;
           isRestoringRef.current = false;
-          window.requestAnimationFrame(() => {
+          frameThree = window.requestAnimationFrame(() => {
             updateVirtualPage();
             loaderData.setViewStatus?.("ready");
           });
