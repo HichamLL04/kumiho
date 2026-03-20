@@ -188,4 +188,81 @@ describe("useProgressSync fullscreen switching", () => {
 
     expect(result.current.showSyncModal).toBe(false);
   });
+
+  it("does not compare progress before restore is settled", async () => {
+    const { result } = renderHook(() =>
+      useProgressSync({
+        seriesId: "series-1",
+        chapter: {
+          id: "chapter-1",
+          volume_id: "volume-1",
+          title: "chapter",
+          chapter_number: 1,
+          page_count: 10,
+        },
+        currentPage: 3,
+        isLoading: false,
+        isRestoreSettled: false,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.compareProgressMock).not.toHaveBeenCalled();
+    });
+
+    expect(result.current.showSyncModal).toBe(false);
+  });
+
+  it("compares progress only after restore settles", async () => {
+    mocks.volumeGetMock.mockResolvedValue({
+      data: { volume_number: 1 },
+    });
+    mocks.compareProgressMock.mockResolvedValue({
+      data: {
+        server_ahead: true,
+        server_progress: {
+          volume_number: 1,
+          chapter_number: 2,
+          current_page: 7,
+          anchor_page: 7,
+          offset_ratio: 0,
+          chapter_id: "chapter-sync",
+          volume_id: "volume-1",
+        },
+      },
+    });
+
+    const chapter = {
+      id: "chapter-1",
+      volume_id: "volume-1",
+      title: "chapter",
+      chapter_number: 1,
+      page_count: 10,
+    };
+
+    const { result, rerender } = renderHook(
+      ({ isRestoreSettled }) =>
+        useProgressSync({
+          seriesId: "series-1",
+          chapter,
+          currentPage: 3,
+          isLoading: false,
+          isRestoreSettled,
+        }),
+      {
+        initialProps: { isRestoreSettled: false },
+      },
+    );
+
+    await waitFor(() => {
+      expect(mocks.compareProgressMock).not.toHaveBeenCalled();
+    });
+
+    rerender({ isRestoreSettled: true });
+
+    await waitFor(() => {
+      expect(mocks.compareProgressMock).toHaveBeenCalledTimes(1);
+      expect(result.current.showSyncModal).toBe(true);
+    });
+  });
 });

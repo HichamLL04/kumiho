@@ -243,7 +243,7 @@ export function VolumePage() {
 
   // 이어보기 또는 첫 챕터 읽기
   const handlePlay = async () => {
-    const isAudio = series.library_type === "audiobook" || series.has_audio;
+    const isAudio = series.library_type === "audiobook";
 
     if (isAudio) {
       try {

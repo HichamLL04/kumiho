@@ -31,7 +31,13 @@ interface PdfViewerRouteProps {
 
 export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
   const { chapterId: routeChapterId } = useParams<{ chapterId: string }>();
-  const { chapter, seriesId, volumeId, isInitialScrollingRef } = loaderData;
+  const {
+    chapter,
+    seriesId,
+    volumeId,
+    isInitialScrollingRef,
+    restorePosition = { currentPage: 1, anchorPage: 1, offsetRatio: 0 },
+  } = loaderData;
   const chapterId = chapter?.id || "";
 
   // 뷰어 스토어
@@ -71,6 +77,11 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     chapterId,
     isReady: true,
   });
+  const [settledRestoreChapterId, setSettledRestoreChapterId] = useState<string | null>(null);
+  const isRestoreSettled = settledRestoreChapterId === chapterId;
+  const [loadedChapterId, setLoadedChapterId] = useState<string | null>(null);
+  const restoreTargetPage = Math.max(1, restorePosition.currentPage || 1);
+  const isDocumentLoadedForChapter = loadedChapterId === chapterId;
 
   // 진행도 저장
   const { saveProgress } = useProgress({
@@ -90,7 +101,8 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     seriesId,
     chapter,
     currentPage,
-    isLoading: false,
+    isLoading: loaderData.isLoading || !isRestoreSettled,
+    isRestoreSettled,
   });
 
   // 전체화면 토글 핸들러
@@ -175,11 +187,45 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     (numPages: number) => {
       setTotalPages(numPages);
       setZoomScale(1);
-      // PDF 로딩 완료 시 스피너 제거
-      loaderData.setViewStatus?.("ready");
+      setLoadedChapterId(routeChapterId ?? null);
     },
-    [setTotalPages, loaderData],
+    [routeChapterId, setTotalPages],
   );
+
+  const handlePageChange = useCallback(
+    (page: number) => {
+      setCurrentPage(page);
+
+      if (isRestoreSettled) return;
+      if (page !== restoreTargetPage) return;
+
+      loaderData.setViewStatus?.("ready");
+      setSettledRestoreChapterId(routeChapterId ?? null);
+    },
+    [isRestoreSettled, loaderData, restoreTargetPage, routeChapterId, setCurrentPage],
+  );
+
+  useEffect(() => {
+    if (!isDocumentLoadedForChapter || isRestoreSettled) return;
+    if (currentPage !== restoreTargetPage) return;
+
+    let frameId = 0;
+    frameId = window.requestAnimationFrame(() => {
+      loaderData.setViewStatus?.("ready");
+      setSettledRestoreChapterId(routeChapterId ?? null);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [
+    currentPage,
+    isDocumentLoadedForChapter,
+    isRestoreSettled,
+    loaderData,
+    restoreTargetPage,
+    routeChapterId,
+  ]);
 
   const handleOutlineLoad = useCallback((outline: PDFOutlineItem[]) => {
     setTocItems(outline);
@@ -332,7 +378,7 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
         onOutlineLoad={handleOutlineLoad}
         onNext={handleNext}
         onPrev={handlePrev}
-        onPageChange={setCurrentPage}
+        onPageChange={handlePageChange}
         onGoToPage={goToPage}
         onPageJumpClick={() => setShowPageJump(true)}
         onReadingModeChange={setReadingMode}

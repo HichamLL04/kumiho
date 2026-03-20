@@ -33,7 +33,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   usePreventBrowserZoom(true);
   const { chapter, seriesId, volumeId } = loaderData;
   const chapterId = chapter?.id || "";
-  const [, setIsInitializing] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [showSeriesEndModal, setShowSeriesEndModal] = useState(false);
 
   const {
@@ -81,6 +81,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const isInitializingRef = useRef(true);
   const baselineCFIRef = useRef<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const objectUrlRevokeTimerRef = useRef<number | null>(null);
   const isInteractingRef = useRef(false);
 
   const navigate = useNavigate();
@@ -101,6 +102,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     isLoading,
     enablePageProgressSync: false,
   });
+
+  const scheduleObjectUrlRevoke = useCallback((objectUrl: string | null, delayMs = 5000) => {
+    if (!objectUrl) return;
+    window.setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+    }, delayMs);
+  }, []);
 
   // 초기화: 진행도 로딩 후에만 뷰어 렌더링
   useEffect(() => {
@@ -147,8 +155,18 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         try {
           const response = await api.get(`/chapters/${chapterId}/epub`, { responseType: "blob" });
           const objectUrl = URL.createObjectURL(response.data);
+          if (objectUrlRevokeTimerRef.current) {
+            window.clearTimeout(objectUrlRevokeTimerRef.current);
+            objectUrlRevokeTimerRef.current = null;
+          }
           if (objectUrlRef.current) {
-            URL.revokeObjectURL(objectUrlRef.current);
+            const previousObjectUrl = objectUrlRef.current;
+            objectUrlRevokeTimerRef.current = window.setTimeout(() => {
+              URL.revokeObjectURL(previousObjectUrl);
+              if (objectUrlRevokeTimerRef.current) {
+                objectUrlRevokeTimerRef.current = null;
+              }
+            }, 5000);
           }
           objectUrlRef.current = objectUrl;
           setEpubUrl(objectUrl);
@@ -171,12 +189,16 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     fetchProgress();
 
     return () => {
+      if (objectUrlRevokeTimerRef.current) {
+        window.clearTimeout(objectUrlRevokeTimerRef.current);
+        objectUrlRevokeTimerRef.current = null;
+      }
       if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
+        scheduleObjectUrlRevoke(objectUrlRef.current);
         objectUrlRef.current = null;
       }
     };
-  }, [chapterId, reset, setCurrentCFI, setGlobalProgress]);
+  }, [chapterId, reset, scheduleObjectUrlRevoke, setCurrentCFI, setGlobalProgress]);
 
   // 시크릿 모드 설정
   useEffect(() => {
@@ -359,6 +381,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     return () => {
       if (initFallbackTimerRef.current) window.clearTimeout(initFallbackTimerRef.current);
       if (uiTimerRef.current) window.clearTimeout(uiTimerRef.current);
+      if (objectUrlRevokeTimerRef.current) {
+        window.clearTimeout(objectUrlRevokeTimerRef.current);
+        objectUrlRevokeTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -763,50 +789,64 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
   return (
     <div style={{ width: "100%", height: "100vh" }}>
-      <EpubViewer
-        key={chapterId}
-        chapterTitle={chapter?.title || ""}
-        chapterId={chapterId}
-        epubUrl={epubUrl}
-        initialCFI={initialCFI}
-        initialProgressRatio={initialProgressRatio}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        globalProgress={globalProgress}
-        isUIVisible={isUIVisible}
-        isSettingsOpen={isSettingsOpen}
-        isTOCOpen={isTOCOpen}
-        isFullscreen={isFullscreen}
-        isIncognito={isIncognito}
-        isAtFirstPage={isAtFirstPage}
-        isAtLastPage={isAtLastPage}
-        toc={toc}
-        settings={settings}
-        onBack={handleBack}
-        onToggleSettings={toggleSettings}
-        onCloseSettings={closeSettings}
-        onToggleTOC={toggleTOC}
-        onCloseTOC={closeTOC}
-        onToggleFullscreen={handleToggleFullscreen}
-        onReady={handleReady}
-        onTOCLoad={handleTOCLoad}
-        onLocationChange={handleLocationChange}
-        onViewerClick={handleViewerClick}
-        onInitializationComplete={handleInitializationComplete}
-        onFontSizeChange={handleFontSizeChange}
-        onFontFamilyChange={handleFontFamilyChange}
-        onLineHeightChange={handleLineHeightChange}
-        onThemeChange={handleThemeChange}
-        onRenderModeChange={handleRenderModeChange}
-        onWheelDirectionChange={handleWheelDirectionChange}
-        onKeyboardDirectionChange={handleKeyboardDirectionChange}
-        onClickDirectionChange={handleClickDirectionChange}
-        onSpreadChange={handleSpreadChange}
-        onReachedEndNext={handleNextAtEnd}
-        isEndNavigationReady={isAdjacentResolved}
-        onInteractionStart={handleInteractionStart}
-        onInteractionEnd={handleInteractionEnd}
-      />
+      {isInitializing && (
+        <LoadingSpinner
+          fullScreen
+          text={t("epub_viewer.loading")}
+        />
+      )}
+      <div
+        style={{
+          opacity: isInitializing ? 0 : 1,
+          pointerEvents: isInitializing ? "none" : "auto",
+          height: "100%",
+        }}
+      >
+        <EpubViewer
+          key={chapterId}
+          chapterTitle={chapter?.title || ""}
+          chapterId={chapterId}
+          epubUrl={epubUrl}
+          initialCFI={initialCFI}
+          initialProgressRatio={initialProgressRatio}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          globalProgress={globalProgress}
+          isUIVisible={isUIVisible}
+          isSettingsOpen={isSettingsOpen}
+          isTOCOpen={isTOCOpen}
+          isFullscreen={isFullscreen}
+          isIncognito={isIncognito}
+          isAtFirstPage={isAtFirstPage}
+          isAtLastPage={isAtLastPage}
+          toc={toc}
+          settings={settings}
+          onBack={handleBack}
+          onToggleSettings={toggleSettings}
+          onCloseSettings={closeSettings}
+          onToggleTOC={toggleTOC}
+          onCloseTOC={closeTOC}
+          onToggleFullscreen={handleToggleFullscreen}
+          onReady={handleReady}
+          onTOCLoad={handleTOCLoad}
+          onLocationChange={handleLocationChange}
+          onViewerClick={handleViewerClick}
+          onInitializationComplete={handleInitializationComplete}
+          onFontSizeChange={handleFontSizeChange}
+          onFontFamilyChange={handleFontFamilyChange}
+          onLineHeightChange={handleLineHeightChange}
+          onThemeChange={handleThemeChange}
+          onRenderModeChange={handleRenderModeChange}
+          onWheelDirectionChange={handleWheelDirectionChange}
+          onKeyboardDirectionChange={handleKeyboardDirectionChange}
+          onClickDirectionChange={handleClickDirectionChange}
+          onSpreadChange={handleSpreadChange}
+          onReachedEndNext={handleNextAtEnd}
+          isEndNavigationReady={isAdjacentResolved}
+          onInteractionStart={handleInteractionStart}
+          onInteractionEnd={handleInteractionEnd}
+        />
+      </div>
       <AlertModal
         isOpen={terminatedInfo.isOpen}
         type="warning"

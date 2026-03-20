@@ -1008,6 +1008,15 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 		volumes = []model.Volume{}
 	}
 
+	series, seriesErr := h.seriesRepo.FindByID(nil, seriesID, userID)
+	if seriesErr != nil {
+		log.Printf("failed to fetch series %s for volume list: %v", seriesID, seriesErr)
+	}
+	libraryType := "book"
+	if series != nil && series.LibraryType != "" {
+		libraryType = series.LibraryType
+	}
+
 	// 완독 상태 조회 (시리즈 내 모든 완독된 볼륨을 한 번에 조회)
 	completedVolumeIDs := make(map[string]bool)
 	completions, err := h.completionRepo.FindByUserAndSeries(nil, userID, seriesID)
@@ -1032,6 +1041,7 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 	result := make([]VolumeResponse, len(volumes))
 	for i := range volumes {
 		vID := volumes[i].ID
+		volumes[i].LibraryType = libraryType
 
 		// 하위 볼륨 개수 조회 (볼륨 썸네일/플레이스홀더 fallback 판단에도 사용)
 		if subVolCount, err := h.volumeRepo.CountByParentID(nil, vID); err == nil {
@@ -1091,12 +1101,19 @@ func (h *SeriesHandler) GetVolume(c *fiber.Ctx) error {
 		})
 	}
 
+	userID := middleware.GetUserID(c)
+
+	series, seriesErr := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
+	if seriesErr != nil {
+		log.Printf("failed to fetch series %s for volume %s: %v", volume.SeriesID, volume.ID, seriesErr)
+	} else if series != nil {
+		volume.LibraryType = series.LibraryType
+	}
+
 	// 실제로 제공 가능한 경우에만 썸네일 URL 설정
 	h.assignVolumeThumbnailURL(volume)
 
 	// 페이지 진행도 계산 및 완독 상태 확인
-	userID := middleware.GetUserID(c)
-
 	totalPages, err := h.volumeRepo.GetTotalPages(nil, volume.ID)
 	if err != nil {
 		log.Printf("failed to get total pages for volume %s: %v", volume.ID, err)
@@ -1268,7 +1285,7 @@ func (h *SeriesHandler) GetViewerInitData(c *fiber.Ctx) error {
 	}
 
 	// 5. 진행도 조회
-	progress, err := h.progressRepo.FindByUserAndChapter(nil, userID, chapterID)
+	progress, err := h.progressRepo.FindViewerProgressByUserAndChapter(nil, userID, chapterID)
 	if err != nil {
 		// 진행도는 없을 수 있음 (무시)
 		log.Printf("Failed to fetch progress: %v", err)

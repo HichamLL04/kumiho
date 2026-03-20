@@ -260,6 +260,74 @@ func (r *ReadingProgressRepository) FindByUserAndChapter(db database.Queryer, us
 	return &p, nil
 }
 
+// FindViewerProgressByUserAndChapter 뷰어 초기 복원에 필요한 최소 진행도만 조회
+// 과거 스키마 호환을 위해 read_time_seconds/current_time/duration/device 계열 컬럼은 제외한다.
+func (r *ReadingProgressRepository) FindViewerProgressByUserAndChapter(db database.Queryer, userID, chapterID string) (*model.ReadingProgress, error) {
+	db = database.GetQueryer(db)
+	var p model.ReadingProgress
+	var volumeID, chapterIDNull, currentCFI sql.NullString
+	var anchorPage, currentPosition, totalPositions sql.NullInt64
+	var offsetRatio, progressPercent sql.NullFloat64
+
+	err := db.QueryRow(
+		`SELECT id, user_id, series_id, volume_id, chapter_id, current_page, anchor_page, offset_ratio, total_pages,
+		 current_position, total_positions, progress_percent, current_cfi, updated_at
+		 FROM reading_progress WHERE user_id = ? AND chapter_id = ?`,
+		userID, chapterID,
+	).Scan(
+		&p.ID,
+		&p.UserID,
+		&p.SeriesID,
+		&volumeID,
+		&chapterIDNull,
+		&p.CurrentPage,
+		&anchorPage,
+		&offsetRatio,
+		&p.TotalPages,
+		&currentPosition,
+		&totalPositions,
+		&progressPercent,
+		&currentCFI,
+		&p.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if volumeID.Valid {
+		p.VolumeID = &volumeID.String
+	}
+	if chapterIDNull.Valid {
+		p.ChapterID = &chapterIDNull.String
+	}
+	if anchorPage.Valid {
+		p.AnchorPage = int(anchorPage.Int64)
+	} else {
+		p.AnchorPage = p.CurrentPage
+	}
+	if offsetRatio.Valid {
+		p.OffsetRatio = offsetRatio.Float64
+	}
+	if currentPosition.Valid {
+		p.CurrentPosition = int(currentPosition.Int64)
+	}
+	if totalPositions.Valid {
+		p.TotalPositions = int(totalPositions.Int64)
+	}
+	if progressPercent.Valid {
+		p.ProgressPercent = progressPercent.Float64
+	}
+	if currentCFI.Valid {
+		p.CurrentCFI = &currentCFI.String
+	}
+
+	return &p, nil
+}
+
 // DeleteByUserAndChapter 사용자와 챕터로 진행도 삭제
 func (r *ReadingProgressRepository) DeleteByUserAndChapter(db database.Queryer, userID, chapterID string) error {
 	db = database.GetQueryer(db)

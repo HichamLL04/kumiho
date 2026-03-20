@@ -62,8 +62,8 @@ type Series struct {
 	IsBookmarked  bool      `json:"is_bookmarked" db:"is_bookmarked"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
-	Extension     string    `json:"extension" db:"extension"`       // 시리즈 대표 확장자
-	LibraryType   string    `json:"library_type" db:"-"`            // "book", "audiobook" (JOIN으로 채움)
+	Extension     string    `json:"extension" db:"extension"` // 시리즈 대표 확장자
+	LibraryType   string    `json:"library_type" db:"-"`      // "book", "audiobook" (JOIN으로 채움)
 
 	// 시리즈 부가 메타데이터 (필요 시 로드)
 	Metadata *SeriesMetadata `json:"metadata,omitempty" db:"-"`
@@ -94,6 +94,7 @@ type SeriesMetadata struct {
 type Volume struct {
 	ID              string    `json:"id"`
 	SeriesID        string    `json:"series_id"`
+	LibraryType     string    `json:"library_type,omitempty" db:"-"`
 	Title           string    `json:"title"`
 	VolumeNumber    int       `json:"volume_number"`
 	Path            string    `json:"path"`
@@ -155,8 +156,8 @@ type ReadingProgress struct {
 	AnchorPage      int       `json:"anchor_page" db:"anchor_page"`
 	OffsetRatio     float64   `json:"offset_ratio" db:"offset_ratio"`
 	TotalPages      int       `json:"total_pages"`
-	CurrentPosition int       `json:"current_position" db:"current_position"` // 가상 포지션 중심 위치
-	TotalPositions  int       `json:"total_positions" db:"total_positions"`   // 가상 포지션 총수
+	CurrentPosition int       `json:"current_position" db:"current_position"`   // 가상 포지션 중심 위치
+	TotalPositions  int       `json:"total_positions" db:"total_positions"`     // 가상 포지션 총수
 	CurrentTime     *float64  `json:"current_time,omitempty" db:"current_time"` // 오디오 재생 위치 (초)
 	Duration        *float64  `json:"duration,omitempty" db:"duration"`         // 오디오 전체 길이 (초)
 	ProgressPercent float64   `json:"progress_percent"`
@@ -174,11 +175,11 @@ type Bookmark struct {
 	SeriesID        string    `json:"series_id"`
 	VolumeID        *string   `json:"volume_id,omitempty"`
 	ChapterID       *string   `json:"chapter_id,omitempty"`
-	Title           string    `json:"title"`           // 사용자 지정 제목
-	Description     string    `json:"description"`     // 메모
-	PageNumber      int       `json:"page_number"`      // 이미지/PDF 용
-	CurrentPosition int       `json:"current_position"` // EPUB 가상 포지션
-	CurrentCFI      *string   `json:"current_cfi,omitempty"` // EPUB CFI
+	Title           string    `json:"title"`                  // 사용자 지정 제목
+	Description     string    `json:"description"`            // 메모
+	PageNumber      int       `json:"page_number"`            // 이미지/PDF 용
+	CurrentPosition int       `json:"current_position"`       // EPUB 가상 포지션
+	CurrentCFI      *string   `json:"current_cfi,omitempty"`  // EPUB CFI
 	CurrentTime     *float64  `json:"current_time,omitempty"` // 오디오 시간
 	CreatedAt       time.Time `json:"created_at"`
 }

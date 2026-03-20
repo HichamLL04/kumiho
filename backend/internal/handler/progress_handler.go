@@ -308,7 +308,7 @@ func (h *ProgressHandler) GetChapterProgress(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	chapterID := c.Params("chapterId")
 
-	progress, err := h.progressRepo.FindByUserAndChapter(nil, userID, chapterID)
+	progress, err := h.progressRepo.FindViewerProgressByUserAndChapter(nil, userID, chapterID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch progress",
@@ -366,8 +366,9 @@ func (h *ProgressHandler) GetEpubProgress(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	chapterID := c.Params("chapterId")
 
-	progress, err := h.progressRepo.FindByUserAndChapter(nil, userID, chapterID)
+	progress, err := h.progressRepo.FindViewerProgressByUserAndChapter(nil, userID, chapterID)
 	if err != nil {
+		log.Printf("Failed to fetch epub progress for user %s chapter %s: %v", userID, chapterID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch epub progress",
 		})

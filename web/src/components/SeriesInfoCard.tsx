@@ -67,7 +67,7 @@ export function SeriesInfoCard({
   const displayPath = (isVolumeType ? volume?.path : series.path) || "";
   const lowerDisplayPath = displayPath.toLowerCase();
   const isTextFile = lowerDisplayPath.endsWith(".txt") || (!isVolumeType && series.extension === "TXT");
-  const isAudiobook = series.library_type === "audiobook" || series.has_audio;
+  const isAudiobook = series.library_type === "audiobook";
 
   // 시리즈 완독 처리 실행
   const executeMarkComplete = async () => {
@@ -410,7 +410,7 @@ export function SeriesInfoCard({
                 fill="currentColor"
               />
               {(() => {
-                const isAudio = series.library_type === "audiobook" || series.has_audio;
+                const isAudio = series.library_type === "audiobook";
                 if (isVolumeType) {
                   return progress
                     ? t("series.action.continue")
