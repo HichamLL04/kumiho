@@ -302,6 +302,7 @@ export const volumeAPI = {
       // 해당 볼륨과 그 모든 자식 볼륨의 ID 수집
       const targetVolumeIds = new Set<string>();
       const collectIds = (vId: string) => {
+        if (targetVolumeIds.has(vId)) return;
         targetVolumeIds.add(vId);
         const children = childrenByParentId.get(vId);
         if (!children) return;
