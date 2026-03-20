@@ -1050,6 +1050,20 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   }, [settings.readingMode]);
 
   useEffect(() => {
+    if (chapterLoading || isLoadingText || !chapter || restoreAnchor) return;
+
+    let frameId = 0;
+    frameId = window.requestAnimationFrame(() => {
+      updateVirtualPage();
+      loaderData.setViewStatus?.("ready");
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [chapter, chapterLoading, isLoadingText, loaderData, restoreAnchor, updateVirtualPage]);
+
+  useEffect(() => {
     if (!restoreAnchor) return;
 
     const container = scrollRef.current;
@@ -1113,7 +1127,10 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           pendingHighlightParagraphRef.current = null;
           pendingModeTransitionRef.current = null;
           isRestoringRef.current = false;
-          window.requestAnimationFrame(() => updateVirtualPage());
+          window.requestAnimationFrame(() => {
+            updateVirtualPage();
+            loaderData.setViewStatus?.("ready");
+          });
           setRestoreAnchor(null);
         });
         return;
