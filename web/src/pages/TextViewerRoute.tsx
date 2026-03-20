@@ -322,6 +322,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   const [isLoadingText, setIsLoadingText] = useState(true);
   const [showPageJump, setShowPageJump] = useState(false);
   const [restoreAnchor, setRestoreAnchor] = useState<SavedTextAnchor | null>(null);
+  const [settledRestoreChapterId, setSettledRestoreChapterId] = useState<string | null>(null);
   const [currentOffsetX, setCurrentOffsetX] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [highlightParagraphId, setHighlightParagraphId] = useState<string | null>(null);
@@ -343,6 +344,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   const pendingHighlightParagraphRef = useRef<string | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
   const isRestoringRef = useRef(false);
+  const isRestoreSettled = settledRestoreChapterId === chapterId;
 
   totalPagesRef.current = totalPages;
   currentPageRef.current = currentPage;
@@ -973,6 +975,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     chapter,
     currentPage,
     isLoading: chapterLoading || isLoadingText,
+    isRestoreSettled,
   });
 
   const { terminatedInfo } = useViewerSync({
@@ -1058,12 +1061,13 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     frameId = window.requestAnimationFrame(() => {
       updateVirtualPage();
       setViewStatus?.("ready");
+      setSettledRestoreChapterId(chapterId);
     });
 
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [chapter, chapterLoading, isLoadingText, restoreAnchor, setViewStatus, updateVirtualPage, viewStatus]);
+  }, [chapter, chapterId, chapterLoading, isLoadingText, restoreAnchor, setViewStatus, updateVirtualPage, viewStatus]);
 
   useEffect(() => {
     if (!restoreAnchor) return;
@@ -1132,6 +1136,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           frameThree = window.requestAnimationFrame(() => {
             updateVirtualPage();
             loaderData.setViewStatus?.("ready");
+            setSettledRestoreChapterId(chapterId);
           });
           setRestoreAnchor(null);
         });
@@ -1182,6 +1187,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               updateVirtualPage(targetX);
               isRestoringRef.current = false;
               loaderData.setViewStatus?.("ready");
+              setSettledRestoreChapterId(chapterId);
             });
           }
           applyParagraphHighlight(pendingHighlightParagraphRef.current ?? resolved.paragraphId);
@@ -1190,9 +1196,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           setCurrentPage(estimatedPageFromOffset);
           isRestoringRef.current = false;
           loaderData.setViewStatus?.("ready");
+          setSettledRestoreChapterId(chapterId);
         } else {
           isRestoringRef.current = false;
           loaderData.setViewStatus?.("ready");
+          setSettledRestoreChapterId(chapterId);
         }
 
         pendingHighlightParagraphRef.current = null;
@@ -1215,6 +1223,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     setCurrentPage,
     setOffset,
     settings.readingMode,
+    chapterId,
     text.length,
     loaderData,
     updateVirtualPage,

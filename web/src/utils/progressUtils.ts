@@ -35,7 +35,7 @@ export function calculateProgressDisplay(params: {
 }): ProgressDisplayData {
   const { type, series, volume, progress, summary, preferPercentLabel = false, t } = params;
   const isVolumeType = type === "volume";
-  const isAudiobook = series.library_type === "audiobook" || series.has_audio;
+  const isAudiobook = series.library_type === "audiobook";
 
   // 오디오북 시리즈: 시간 기반 진행도
   if (!isVolumeType && isAudiobook && summary?.total_duration && summary.total_duration > 0) {

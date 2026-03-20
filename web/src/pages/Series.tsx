@@ -189,7 +189,7 @@ export function SeriesPage() {
   progressRef.current = progress;
   useEffect(() => {
     if (!id || !series) return;
-    const isAudioSeries = series.library_type === "audiobook" || series.has_audio;
+    const isAudioSeries = series.library_type === "audiobook";
     if (!isAudioSeries) return;
 
     let lastUpdate = 0;
@@ -390,7 +390,7 @@ export function SeriesPage() {
               onRefresh={loadData}
               onAlert={showAlert}
               onPlay={async () => {
-                const isAudio = series.library_type === "audiobook" || series.has_audio;
+                const isAudio = series.library_type === "audiobook";
 
                 if (isAudio) {
                   const store = useAudioPlayerStore.getState();

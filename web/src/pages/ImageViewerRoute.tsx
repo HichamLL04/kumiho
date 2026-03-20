@@ -96,11 +96,13 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     setViewStatus = () => undefined,
   } = loaderData;
   const [viewerContentWidth, setViewerContentWidth] = useState(0);
+  const [settledRestoreChapterId, setSettledRestoreChapterId] = useState<string | null>(null);
   const [syncAnchorPosition, setSyncAnchorPosition] = useState({
     anchorPage: restorePosition.anchorPage,
     offsetRatio: restorePosition.offsetRatio,
   });
   const viewerContentRef = useRef<HTMLDivElement>(null);
+  const isRestoreSettled = settledRestoreChapterId === chapterId;
 
   // subPage 초기화/재계산: 챕터/페이지/모드/방향/메타 변경 시 일관 처리
   useLayoutEffect(() => {
@@ -229,7 +231,53 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     anchorPage: settings.readingMode === "vertical" ? restorePosition.currentPage : syncAnchorPosition.anchorPage,
     offsetRatio: settings.readingMode === "vertical" ? 0 : syncAnchorPosition.offsetRatio,
     viewStatus,
+    isRestoreSettled,
   });
+
+  useEffect(() => {
+    if (isLoading || viewStatus !== "ready" || isRestoreSettled) return;
+
+    if (settings.readingMode === "vertical") {
+      let frameId = 0;
+      let cancelled = false;
+      const waitForInitialScrollToSettle = () => {
+        if (cancelled) return;
+        if (!isInitialScrollingRef.current) {
+          setSettledRestoreChapterId(chapterId ?? null);
+          return;
+        }
+
+        frameId = window.requestAnimationFrame(waitForInitialScrollToSettle);
+      };
+
+      frameId = window.requestAnimationFrame(waitForInitialScrollToSettle);
+
+      return () => {
+        cancelled = true;
+        window.cancelAnimationFrame(frameId);
+      };
+    }
+
+    if (currentPage !== restorePosition.currentPage) return;
+
+    let frameId = 0;
+    frameId = window.requestAnimationFrame(() => {
+      setSettledRestoreChapterId(chapterId ?? null);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [
+    chapterId,
+    currentPage,
+    isInitialScrollingRef,
+    isLoading,
+    isRestoreSettled,
+    restorePosition.currentPage,
+    settings.readingMode,
+    viewStatus,
+  ]);
 
   const { estimatedHeights } = useVerticalRestoreLayout({
     pageMetaMap,
