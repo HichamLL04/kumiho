@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen } from "lucide-react";
 import type { Series, Volume, ReadingProgress, SeriesProgressSummary } from "../types/series";
@@ -40,7 +40,7 @@ export function SeriesInfoCard({
   onDownload,
 }: SeriesInfoCardProps) {
   const { t } = useTranslation();
-  const incognitoMenuId = "series-info-incognito-menu";
+  const incognitoMenuId = useId();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -460,7 +460,7 @@ export function SeriesInfoCard({
               className={styles.btnSplitArrow}
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               aria-label={t("series.action.incognito")}
-              aria-haspopup="menu"
+              aria-haspopup="true"
               aria-expanded={isDropdownOpen}
               aria-controls={incognitoMenuId}
             >

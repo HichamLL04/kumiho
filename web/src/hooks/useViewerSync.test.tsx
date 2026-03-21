@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import axios from "axios";
 import { useViewerSync } from "./useViewerSync";
@@ -135,9 +135,11 @@ describe("useViewerSync", () => {
     rerender({ currentPage: 11 });
     rerender({ currentPage: 12 });
 
-    await waitFor(() => {
-      expect(mocks.progressUpdate).not.toHaveBeenCalled();
+    await act(async () => {
+      await Promise.resolve();
     });
+
+    expect(mocks.progressUpdate).not.toHaveBeenCalled();
   });
 
   it("does not sync page progress in incognito mode", async () => {
@@ -160,9 +162,11 @@ describe("useViewerSync", () => {
     rerender({ currentPage: 11 });
     rerender({ currentPage: 12 });
 
-    await waitFor(() => {
-      expect(mocks.progressUpdate).not.toHaveBeenCalled();
+    await act(async () => {
+      await Promise.resolve();
     });
+
+    expect(mocks.progressUpdate).not.toHaveBeenCalled();
   });
 
   it("notifies viewer start even when seriesId is empty", async () => {
