@@ -143,7 +143,7 @@ func (s *AuthService) Login(req *LoginRequest, ctx *LoginContext) (*TokenRespons
 	}
 
 	// 비밀번호 확인
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
