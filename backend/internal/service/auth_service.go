@@ -126,6 +126,9 @@ func (s *AuthService) Register(req *RegisterRequest, ctx *LoginContext) (*TokenR
 		return nil, err
 	}
 
+	// 만료 세션 정리 (트랜잭션 밖에서 부수 효과로)
+	_ = s.sessionRepo.DeleteExpired(nil)
+
 	return tokens, nil
 }
 
@@ -144,8 +147,26 @@ func (s *AuthService) Login(req *LoginRequest, ctx *LoginContext) (*TokenRespons
 		return nil, ErrInvalidCredentials
 	}
 
+	tx, err := database.DB.BeginTx(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	// 토큰 생성 및 세션 기록
-	return s.generateTokensWithSession(nil, user, ctx)
+	tokens, err := s.generateTokensWithSession(tx, user, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// 만료 세션 정리 (트랜잭션 밖에서 부수 효과로)
+	_ = s.sessionRepo.DeleteExpired(nil)
+
+	return tokens, nil
 }
 
 // RefreshToken 토큰 갱신
@@ -284,9 +305,6 @@ func (s *AuthService) generateTokensWithSession(q database.Queryer, user *model.
 			return nil, err
 		}
 	}
-
-	// 만료 세션 정리 (로그인 시 부수 효과로)
-	_ = s.sessionRepo.DeleteExpired(q)
 
 	return tokens, nil
 }
