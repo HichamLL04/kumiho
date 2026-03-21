@@ -10,6 +10,7 @@ interface ViewerSyncProps {
   currentPage: number;
   isLoading?: boolean;
   enablePageProgressSync?: boolean;
+  isIncognito?: boolean;
 }
 
 const RESUME_CHECK_INTERVAL_MS = 30_000;
@@ -21,6 +22,7 @@ export function useViewerSync({
   currentPage,
   isLoading = false,
   enablePageProgressSync = true,
+  isIncognito = false,
 }: ViewerSyncProps) {
   const { subscribe } = useSSE();
   const { t } = useTranslation();
@@ -157,6 +159,7 @@ export function useViewerSync({
   // 2. 진행도 변경 시 서버에 전송 (REST API)
   // 챕터별 첫 이벤트는 스킵하여 챕터 전환 레이스에서 이전 챕터 페이지가 전송되는 문제를 방지
   const updateProgress = useCallback(async () => {
+    if (isIncognito) return;
     if (!enablePageProgressSync) return;
     if (chapterId && seriesId && !isLoading) {
       try {
@@ -169,12 +172,12 @@ export function useViewerSync({
         console.error("[ViewerSync] Progress update failed:", err);
       }
     }
-  }, [seriesId, chapterId, currentPage, isLoading, enablePageProgressSync]);
+  }, [seriesId, chapterId, currentPage, isLoading, enablePageProgressSync, isIncognito]);
 
   // 페이지가 바뀔 때마다 서버에 알림 (챕터별 첫 이벤트 제외)
   useEffect(() => {
     const chapterKey = chapterId ? `${seriesId}:${chapterId}` : null;
-    if (!enablePageProgressSync || !chapterKey || isLoading) {
+    if (!enablePageProgressSync || !chapterKey || isLoading || isIncognito) {
       return;
     }
 
@@ -184,7 +187,7 @@ export function useViewerSync({
     }
 
     updateProgress();
-  }, [seriesId, chapterId, currentPage, isLoading, enablePageProgressSync, updateProgress]);
+  }, [seriesId, chapterId, currentPage, isLoading, enablePageProgressSync, isIncognito, updateProgress]);
 
   return { terminatedInfo };
 }

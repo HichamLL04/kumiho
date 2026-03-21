@@ -55,6 +55,8 @@ export function useProgress({
   const hasNavigatedRef = useRef(false);
   const initialPageSettledRef = useRef(false); // 초기 페이지 위치가 한 번 안정적으로 정해졌는지 여부
   const location = useLocation();
+  const routeIsIncognito = location.state?.isIncognito === true;
+  const isSecretSession = isIncognito || routeIsIncognito;
   const getAnchorPosition = useCallback(() => {
     return getViewportAnchorPosition(viewerContentRef?.current ?? null, totalPages, currentPage);
   }, [currentPage, totalPages, viewerContentRef]);
@@ -154,7 +156,7 @@ export function useProgress({
   // 진행도 즉시 저장
   const saveProgress = useCallback(async () => {
     // 시크릿 모드인 경우 저장하지 않음
-    if (isIncognito) return;
+    if (isSecretSession) return;
 
     // 초기 로딩 중이거나 초기 정렬(스크롤 이동) 중이면 절대 저장 안 함
     if (
@@ -204,7 +206,7 @@ export function useProgress({
     chapterId,
     currentPage,
     getAnchorPosition,
-    isIncognito,
+    isSecretSession,
     isInitialScrollingRef,
     isLoading,
     readingMode,
@@ -216,7 +218,7 @@ export function useProgress({
   // 마지막 페이지 도달 시 즉시 완료 처리 (Throttle 무시)
   // 빠른 스크롤로 마지막 페이지를 빠르게 지나가도 확실하게 완료 처리
   useEffect(() => {
-    if (isLoading || isIncognito || !isLastChapterOfVolume) return;
+    if (isLoading || isSecretSession || !isLastChapterOfVolume) return;
     if (currentPage !== totalPages || totalPages <= 0) return;
 
     // 초기 스크롤 중에는 완료 처리 하지 않음
@@ -235,7 +237,7 @@ export function useProgress({
     currentPage,
     totalPages,
     isLoading,
-    isIncognito,
+    isSecretSession,
     isLastChapterOfVolume,
     isInitialScrollingRef,
     viewStatus,
@@ -283,7 +285,7 @@ export function useProgress({
   useEffect(() => {
     const handleBeforeUnload = () => {
       // 시크릿 모드인 경우 저장하지 않음
-      if (isIncognito) return;
+      if (isSecretSession) return;
 
       // 페이지 종료 시 진행도 저장 (fetch + keepalive + credentials 사용)
       if (seriesId && chapterId && viewStatus === "ready" && !isInitialScrollingRef.current) {
@@ -317,7 +319,7 @@ export function useProgress({
     chapterId,
     currentPage,
     getAnchorPosition,
-    isIncognito,
+    isSecretSession,
     isInitialScrollingRef,
     readingMode,
     seriesId,

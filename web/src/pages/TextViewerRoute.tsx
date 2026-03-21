@@ -26,6 +26,7 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { AlertModal } from "../components/modals/AlertModal";
 import { API_BASE_URL } from "../features/viewer/utils/imageUrl";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
+import { buildViewerRouteState } from "../utils/viewerRouteState";
 import { getTranslationForVirtualPage, measureVirtualPaging } from "./textViewerPaging";
 import {
   createViewportAnchor,
@@ -298,6 +299,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
 
   const {
     currentPage,
@@ -317,6 +319,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     setReadingMode,
     togglePageOffset,
   } = useViewerStore();
+  const effectiveIncognito = isIncognito || routeIsIncognito;
 
   const [text, setText] = useState("");
   const [isLoadingText, setIsLoadingText] = useState(true);
@@ -615,7 +618,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   );
 
   const buildProgressSnapshot = useCallback((): TextProgressSnapshot | null => {
-    if (isIncognito || !chapter || !chapterId || !seriesId || !text) return null;
+    if (effectiveIncognito || !chapter || !chapterId || !seriesId || !text) return null;
 
     const anchor = buildViewportAnchorSnapshot();
     if (!anchor) return null;
@@ -633,7 +636,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       progress_percent: (safeCurrentPage / safeTotalPages) * 100,
       current_cfi: JSON.stringify(anchor),
     };
-  }, [buildViewportAnchorSnapshot, chapter, chapterId, isIncognito, seriesId, text]);
+  }, [buildViewportAnchorSnapshot, chapter, chapterId, effectiveIncognito, seriesId, text]);
 
   const saveProgress = useCallback(async () => {
     const payload = buildProgressSnapshot();
@@ -787,7 +790,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${nextChapterId}`, {
         replace: true,
-        state: viewerFrom ? { from: viewerFrom } : undefined,
+        state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
       });
     } else if (nextChapterId) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
@@ -812,6 +815,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     showNextHint,
     updateVirtualPage,
     viewerFrom,
+    routeIsIncognito,
   ]);
 
   const handlePrev = useCallback(async () => {
@@ -855,7 +859,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${prevChapterId}?page=last`, {
         replace: true,
-        state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+        state: buildViewerRouteState({
+          from: viewerFrom,
+          isIncognito: routeIsIncognito,
+          preventComplete: true,
+        }),
       });
     } else if (prevChapterId) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
@@ -880,6 +888,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     showPrevHint,
     updateVirtualPage,
     viewerFrom,
+    routeIsIncognito,
   ]);
 
   const handleReadingModeChange = useCallback(
@@ -983,6 +992,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     chapterId: chapter?.id,
     currentPage,
     isLoading: chapterLoading || isLoadingText,
+    isIncognito: effectiveIncognito,
   });
 
   const handleTerminatedConfirm = useCallback(() => {
@@ -1333,7 +1343,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               startChapterSwitching(isDocumentFullscreen());
               navigate(`/viewer/${prevChapterId}?page=last`, {
                 replace: true,
-                state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+                state: buildViewerRouteState({
+                  from: viewerFrom,
+                  isIncognito: routeIsIncognito,
+                  preventComplete: true,
+                }),
               });
             });
         }
@@ -1360,7 +1374,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               startChapterSwitching(isDocumentFullscreen());
               navigate(`/viewer/${nextChapterId}`, {
                 replace: true,
-                state: viewerFrom ? { from: viewerFrom } : undefined,
+                state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
               });
             });
         }
@@ -1420,7 +1434,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             startChapterSwitching(isDocumentFullscreen());
             navigate(`/viewer/${prevChapterId}?page=last`, {
               replace: true,
-              state: { preventComplete: true, ...(viewerFrom ? { from: viewerFrom } : {}) },
+              state: buildViewerRouteState({
+                from: viewerFrom,
+                isIncognito: routeIsIncognito,
+                preventComplete: true,
+              }),
             });
           });
       } else if (currentOffset <= -pullThreshold && nextChapterId && isAdjacentResolved) {
@@ -1432,7 +1450,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             startChapterSwitching(isDocumentFullscreen());
             navigate(`/viewer/${nextChapterId}`, {
               replace: true,
-              state: viewerFrom ? { from: viewerFrom } : undefined,
+              state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
             });
           });
       }
@@ -1502,6 +1520,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
     settings.pullThreshold,
     settings.readingMode,
     viewerFrom,
+    routeIsIncognito,
   ]);
 
   useEffect(() => {
@@ -1628,7 +1647,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             currentPage,
             totalPages: Math.max(1, totalPages),
             isUIVisible,
-            isIncognito,
+            isIncognito: effectiveIncognito,
             isFullscreen,
             bgmInfo: null,
             isBgmPlaying: false,

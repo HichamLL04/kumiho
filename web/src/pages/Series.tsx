@@ -11,6 +11,7 @@ import { api, seriesAPI, volumeAPI, downloadAPI } from "../api/client";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
+import { buildViewerRouteState } from "../utils/viewerRouteState";
 import styles from "./Series.module.css";
 
 import type { Series, Volume, Library, ReadingProgress, SeriesProgressSummary, Chapter } from "../types/series";
@@ -389,7 +390,8 @@ export function SeriesPage() {
               onUpdate={handleUpdate}
               onRefresh={loadData}
               onAlert={showAlert}
-              onPlay={async () => {
+              onPlay={async (incognito = false) => {
+                const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: incognito });
                 const isAudio = series.library_type === "audiobook";
 
                 if (isAudio) {
@@ -411,7 +413,7 @@ export function SeriesPage() {
                 }
 
                 if (progress && progress.chapter_id) {
-                  navigate(`/viewer/${progress.chapter_id}`, { state: { from: viewerFrom } });
+                  navigate(`/viewer/${progress.chapter_id}`, { state: viewerState });
                 } else if (volumes.length > 0) {
                   try {
                     const sortedVolumes = [...volumes].sort((a, b) => a.volume_number - b.volume_number);
@@ -435,7 +437,7 @@ export function SeriesPage() {
                     }
 
                     if (firstChapter) {
-                      navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
+                      navigate(`/viewer/${firstChapter.id}`, { state: viewerState });
                     } else {
                       // 챕터를 전혀 찾지 못한 경우 첫 번째 볼륨으로 이동
                       openVolume(sortedVolumes[0]);

@@ -62,6 +62,8 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
+  const effectiveIncognito = isIncognito || routeIsIncognito;
   usePreventBrowserZoom(true);
 
   // 인접 챕터 탐색
@@ -91,7 +93,7 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     currentPage,
     totalPages,
     isLoading: false,
-    isIncognito,
+    isIncognito: effectiveIncognito,
     isLastChapterOfVolume,
     isInitialScrollingRef,
   });
@@ -168,6 +170,7 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     chapterId: chapterId as string,
     currentPage,
     isLoading: loaderData.isLoading,
+    isIncognito: effectiveIncognito,
   });
 
   // 세션 종료 핸들러
@@ -341,7 +344,7 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
         isUIVisible={isUIVisible}
         isSettingsOpen={isSettingsOpen}
         isFullscreen={isFullscreen}
-        isIncognito={isIncognito}
+        isIncognito={effectiveIncognito}
         settings={{
           backgroundColor: settings.backgroundColor,
           fitMode: settings.fitMode,

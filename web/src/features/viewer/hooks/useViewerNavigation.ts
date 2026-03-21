@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
 import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
 import { startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
+import { buildViewerRouteState } from "../../../utils/viewerRouteState";
 import type { PageMeta } from "../types";
 import type { ReadingDirection, ReadingMode, SubPage } from "../../../stores/viewerStore";
 import { getNextNavState, getPrevNavState } from "../../../utils/pageCalculator";
@@ -71,6 +72,7 @@ export function useViewerNavigation({
   const location = useLocation();
   const { goToPage } = useViewerStore();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
 
   /*
    * 힌트 상태를 boolean이 아닌 '힌트가 발동된 챕터 ID'로 관리합니다.
@@ -136,7 +138,7 @@ export function useViewerNavigation({
         startChapterSwitching(isDocumentFullscreen());
         navigate(`/viewer/${nextChapterId}`, {
           replace: true,
-          state: viewerFrom ? { from: viewerFrom } : undefined,
+          state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
         });
       } else if (nextChapterId) {
         // 기존 타이머 정리
@@ -170,6 +172,7 @@ export function useViewerNavigation({
     currentChapterId,
     onReachedSeriesEnd,
     viewerFrom,
+    routeIsIncognito,
   ]);
 
   // 이전 페이지/챕터 핸들러
@@ -213,10 +216,11 @@ export function useViewerNavigation({
         startChapterSwitching(isDocumentFullscreen());
         navigate(`/viewer/${prevChapterId}`, {
           replace: true,
-          state: {
+          state: buildViewerRouteState({
+            from: viewerFrom,
+            isIncognito: routeIsIncognito,
             preventComplete: true,
-            ...(viewerFrom ? { from: viewerFrom } : {}),
-          },
+          }),
         });
       } else if (prevChapterId) {
         // 기존 타이머 정리
@@ -245,6 +249,7 @@ export function useViewerNavigation({
     setSubPage,
     currentChapterId,
     viewerFrom,
+    routeIsIncognito,
   ]);
 
   // 뒤로가기
