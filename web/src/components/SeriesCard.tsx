@@ -18,6 +18,7 @@ import { getAuthenticatedImageUrl } from "../utils/image";
 import { normalizeExtensionBadge, parseSupportedExtension } from "../utils/extension";
 import type { Series, Volume } from "../types/series";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
+import { buildViewerRouteState } from "../utils/viewerRouteState";
 import styles from "./SeriesCard.module.css";
 import { AlertModal, type AlertType } from "./modals/AlertModal";
 
@@ -181,10 +182,7 @@ export function SeriesCard({
   const playSmart = async (incognito = false) => {
     setIsUpdating(true);
     try {
-      const viewerState = {
-        from: viewerFrom,
-        ...(incognito ? { isIncognito: true } : {}),
-      };
+      const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: incognito });
 
       // 오디오북이면 오디오 플레이어로 재생
       if (isAudioItem) {
@@ -249,10 +247,7 @@ export function SeriesCard({
 
     if (isUpdating) return;
 
-    const viewerState = {
-      from: viewerFrom,
-      ...(incognito ? { isIncognito: true } : {}),
-    };
+    const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: incognito });
 
     if (chapterId && type === "series") {
       navigate(`/viewer/${chapterId}`, { state: viewerState });

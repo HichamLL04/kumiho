@@ -26,6 +26,7 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import { AlertModal } from "../components/modals/AlertModal";
 import { API_BASE_URL } from "../features/viewer/utils/imageUrl";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
+import { buildViewerRouteState } from "../utils/viewerRouteState";
 import { getTranslationForVirtualPage, measureVirtualPaging } from "./textViewerPaging";
 import {
   createViewportAnchor,
@@ -789,10 +790,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${nextChapterId}`, {
         replace: true,
-        state: {
-          ...(viewerFrom ? { from: viewerFrom } : {}),
-          ...(routeIsIncognito ? { isIncognito: true } : {}),
-        },
+        state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
       });
     } else if (nextChapterId) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
@@ -861,11 +859,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${prevChapterId}?page=last`, {
         replace: true,
-        state: {
+        state: buildViewerRouteState({
+          from: viewerFrom,
+          isIncognito: routeIsIncognito,
           preventComplete: true,
-          ...(viewerFrom ? { from: viewerFrom } : {}),
-          ...(routeIsIncognito ? { isIncognito: true } : {}),
-        },
+        }),
       });
     } else if (prevChapterId) {
       if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
@@ -1345,11 +1343,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               startChapterSwitching(isDocumentFullscreen());
               navigate(`/viewer/${prevChapterId}?page=last`, {
                 replace: true,
-                state: {
+                state: buildViewerRouteState({
+                  from: viewerFrom,
+                  isIncognito: routeIsIncognito,
                   preventComplete: true,
-                  ...(viewerFrom ? { from: viewerFrom } : {}),
-                  ...(routeIsIncognito ? { isIncognito: true } : {}),
-                },
+                }),
               });
             });
         }
@@ -1376,10 +1374,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
               startChapterSwitching(isDocumentFullscreen());
               navigate(`/viewer/${nextChapterId}`, {
                 replace: true,
-                state: {
-                  ...(viewerFrom ? { from: viewerFrom } : {}),
-                  ...(routeIsIncognito ? { isIncognito: true } : {}),
-                },
+                state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
               });
             });
         }
@@ -1439,11 +1434,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             startChapterSwitching(isDocumentFullscreen());
             navigate(`/viewer/${prevChapterId}?page=last`, {
               replace: true,
-              state: {
+              state: buildViewerRouteState({
+                from: viewerFrom,
+                isIncognito: routeIsIncognito,
                 preventComplete: true,
-                ...(viewerFrom ? { from: viewerFrom } : {}),
-                ...(routeIsIncognito ? { isIncognito: true } : {}),
-              },
+              }),
             });
           });
       } else if (currentOffset <= -pullThreshold && nextChapterId && isAdjacentResolved) {
@@ -1455,10 +1450,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             startChapterSwitching(isDocumentFullscreen());
             navigate(`/viewer/${nextChapterId}`, {
               replace: true,
-              state: {
-                ...(viewerFrom ? { from: viewerFrom } : {}),
-                ...(routeIsIncognito ? { isIncognito: true } : {}),
-              },
+              state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
             });
           });
       }

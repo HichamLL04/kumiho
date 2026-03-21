@@ -17,6 +17,7 @@ import {
 } from "../features/viewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 import { useViewerSync } from "../hooks/useViewerSync";
+import { buildViewerRouteState } from "../utils/viewerRouteState";
 
 interface EpubViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
@@ -747,10 +748,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     if (nextChapterId) {
       startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${nextChapterId}`, {
-        state: {
-          ...(viewerFrom ? { from: viewerFrom } : {}),
-          ...(routeIsIncognito ? { isIncognito: true } : {}),
-        },
+        state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
       });
       return;
     }

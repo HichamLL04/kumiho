@@ -11,6 +11,7 @@ import { api, seriesAPI, volumeAPI, downloadAPI } from "../api/client";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
+import { buildViewerRouteState } from "../utils/viewerRouteState";
 import styles from "./Series.module.css";
 
 import type { Series, Volume, Library, ReadingProgress, SeriesProgressSummary, Chapter } from "../types/series";
@@ -390,10 +391,7 @@ export function SeriesPage() {
               onRefresh={loadData}
               onAlert={showAlert}
               onPlay={async (incognito = false) => {
-                const viewerState = {
-                  from: viewerFrom,
-                  ...(incognito ? { isIncognito: true } : {}),
-                };
+                const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: incognito });
                 const isAudio = series.library_type === "audiobook";
 
                 if (isAudio) {

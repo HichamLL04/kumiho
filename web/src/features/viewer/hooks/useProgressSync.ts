@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { seriesAPI, volumeAPI } from "../../../api/client";
 import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
 import { finishChapterSwitching, startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
+import { buildViewerRouteState } from "../../../utils/viewerRouteState";
 import type { Chapter } from "../types";
 import type { ViewStatus } from "../types";
 
@@ -130,11 +131,11 @@ export function useProgressSync({
     });
     navigate(`/viewer/${serverProgress.chapter_id}?${searchParams.toString()}`, {
       replace: true,
-      state: {
-        ...(viewerFrom ? { from: viewerFrom } : {}),
-        ...(routeIsIncognito ? { isIncognito: true } : {}),
-        ...(isChapterChanged ? {} : { skipSyncCheck: true }),
-      },
+      state: buildViewerRouteState({
+        from: viewerFrom,
+        isIncognito: routeIsIncognito,
+        skipSyncCheck: !isChapterChanged,
+      }),
     });
     // 페이지 이동 시 콤포넌트가 재마운트되거나 훅이 다시 실행되므로 isCheckedRef는 그대로 둬도 됨
   }, [serverProgress, navigate, viewerFrom, routeIsIncognito, chapter]);

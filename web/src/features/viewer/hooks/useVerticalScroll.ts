@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
 import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
 import { startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
+import { buildViewerRouteState } from "../../../utils/viewerRouteState";
 import type { ReadingMode } from "../../../stores/viewerStore";
 import type { RestorePosition, ViewStatus } from "../types";
 import { getViewportAnchorPage } from "../utils/progressPosition";
@@ -101,11 +102,11 @@ export function useVerticalScroll({
           startChapterSwitching(isDocumentFullscreen());
           navigate(`/viewer/${chapterIdToMove}`, {
             replace: true,
-            state: {
-              ...(options.preventComplete ? { preventComplete: true } : {}),
-              ...(viewerFrom ? { from: viewerFrom } : {}),
-              ...(routeIsIncognito ? { isIncognito: true } : {}),
-            },
+            state: buildViewerRouteState({
+              from: viewerFrom,
+              isIncognito: routeIsIncognito,
+              preventComplete: options.preventComplete,
+            }),
           });
         })
         .catch((error) => {

@@ -471,11 +471,9 @@ export function SeriesInfoCard({
               <div
                 id={incognitoMenuId}
                 className={styles.dropdownMenu}
-                role="menu"
               >
                 <button
                   className={styles.dropdownItem}
-                  role="menuitem"
                   onClick={() => {
                     void onPlay(true);
                     setIsDropdownOpen(false);
