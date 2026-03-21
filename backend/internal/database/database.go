@@ -95,6 +95,54 @@ func setMigrationVersion(version int) {
 	)
 }
 
+func ensureSystemLikesLibrary() error {
+	requiredColumns := []string{
+		"id",
+		"name",
+		"path",
+		"type",
+		"is_visible",
+		"default_view_mode",
+		"default_read_direction",
+		"default_page_transition",
+		"created_at",
+		"updated_at",
+		"sort_order",
+	}
+	for _, column := range requiredColumns {
+		if !columnExists("libraries", column) {
+			return nil
+		}
+	}
+
+	if _, err := DB.Exec(`
+		INSERT INTO libraries (
+			id, name, path, type, library_type, is_visible,
+			default_view_mode, default_read_direction, default_page_transition,
+			created_at, updated_at, sort_order
+		)
+		VALUES (
+			'system-likes', '좋아요한 시리즈', 'SYSTEM://LIKES', 'SYSTEM', 'book', 1,
+			'single', 'ltr', 'slide',
+			datetime('now'), datetime('now'), 0
+		)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			path = excluded.path,
+			type = excluded.type,
+			library_type = excluded.library_type,
+			is_visible = excluded.is_visible,
+			default_view_mode = excluded.default_view_mode,
+			default_read_direction = excluded.default_read_direction,
+			default_page_transition = excluded.default_page_transition,
+			updated_at = datetime('now')
+	`); err != nil {
+		return fmt.Errorf("upsert system-likes library: %w", err)
+	}
+
+	return nil
+}
+
 // addColumn 테이블에 컬럼이 없으면 추가하는 헬퍼
 func addColumn(table, column, definition string) error {
 	if !columnExists(table, column) {
@@ -391,6 +439,10 @@ func Migrate() error {
 		return err
 	}
 
+	if err := ensureSystemLikesLibrary(); err != nil {
+		return err
+	}
+
 	// 현재 마이그레이션 버전 확인
 	currentVersion := getMigrationVersion()
 
@@ -399,6 +451,7 @@ func Migrate() error {
 	// migration_version 도입 이전에 #33 수준 구조를 가진 기존 DB는
 	// 버전만 33으로 기록하고 이후 마이그레이션(#34+)은 계속 수행한다.
 	if currentVersion == 0 &&
+		columnExists("libraries", "type") &&
 		columnExists("libraries", "library_type") &&
 		columnExists("users", "can_download") &&
 		columnExists("sessions", "expires_at") {
@@ -458,6 +511,10 @@ func Migrate() error {
 			return fmt.Errorf("migration %d (%s) failed: %w", m.version, m.name, err)
 		}
 		setMigrationVersion(m.version)
+	}
+
+	if err := ensureSystemLikesLibrary(); err != nil {
+		return err
 	}
 
 	return nil
@@ -586,17 +643,8 @@ func migrateSystemLibrary() error {
 	}
 
 	// 좋아요(즐겨찾기) 라이브러리 생성
-	var exists int
-	if err := DB.QueryRow(`SELECT COUNT(*) FROM libraries WHERE id = 'system-likes'`).Scan(&exists); err != nil {
-		return fmt.Errorf("check system-likes: %w", err)
-	}
-	if exists == 0 {
-		if _, err := DB.Exec(`
-			INSERT INTO libraries (id, name, path, type, is_visible, default_view_mode, default_read_direction, default_page_transition, created_at, updated_at, sort_order)
-			VALUES ('system-likes', '좋아요한 시리즈', 'SYSTEM://LIKES', 'SYSTEM', 1, 'single', 'ltr', 'slide', datetime('now'), datetime('now'), 0)
-		`); err != nil {
-			return fmt.Errorf("create system-likes library: %w", err)
-		}
+	if err := ensureSystemLikesLibrary(); err != nil {
+		return err
 	}
 
 	return addColumn("libraries", "scan_excludes", "TEXT DEFAULT ''")

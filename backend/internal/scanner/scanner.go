@@ -1073,14 +1073,6 @@ func (s *Scanner) processSeries(
 	}
 	seriesTitle = resolveEpubSeriesTitle(seriesPath, seriesTitle, epubMeta, epubTitleOverrideEnabled)
 
-	// 폴더 수정 시간 확인
-	var lastModified time.Time
-	info, err := os.Stat(seriesPath)
-	if err != nil {
-		return nil, err
-	}
-	lastModified = info.ModTime()
-
 	// 기존 시리즈 확인
 	if existing, ok := existingSeriesMap[seriesPath]; ok {
 		series = existing
@@ -1088,14 +1080,6 @@ func (s *Scanner) processSeries(
 		if strings.TrimSpace(series.Title) != seriesTitle {
 			series.Title = seriesTitle
 			seriesChanged = true
-		}
-
-		// 시리즈 정보 업데이트 (Timestamp만 갱신)
-		if lastModified.After(series.UpdatedAt) {
-			if err := s.seriesRepo.UpdateUpdatedAt(nil, series.ID, lastModified); err != nil {
-				return nil, err
-			}
-			series.UpdatedAt = lastModified
 		}
 
 		// 기존 PDF 시리즈인데 썸네일이 없는 경우 추출 시도
@@ -1195,6 +1179,22 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 	existingVolMap := make(map[string]*model.Volume)
 	for i := range existingVolumes {
 		existingVolMap[existingVolumes[i].Path] = &existingVolumes[i]
+	}
+	existingSubVolMap := make(map[string][]*model.Volume)
+	for i := range existingVolumes {
+		parentKey := ""
+		if existingVolumes[i].ParentID != nil {
+			parentKey = *existingVolumes[i].ParentID
+		}
+		existingSubVolMap[parentKey] = append(existingSubVolMap[parentKey], &existingVolumes[i])
+	}
+	allChapters, chErr := s.chapterRepo.FindBySeriesID(nil, series.ID)
+	if chErr != nil {
+		return nil, chErr
+	}
+	existingChapterMap := make(map[string][]model.Chapter, len(existingVolumes))
+	for i := range allChapters {
+		existingChapterMap[allChapters[i].VolumeID] = append(existingChapterMap[allChapters[i].VolumeID], allChapters[i])
 	}
 
 	// 2. 디스크 탐색
@@ -1480,7 +1480,10 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 	}()
 
 	// Consumer: Single Thread DB Save (Sequential)
+	// seriesContentChanged는 consumer 고루틴 내에서만 쓰이고,
+	// <-consumerDone 이후에 읽히므로 동기화가 보장된다.
 	consumerDone := make(chan struct{})
+	seriesContentChanged := false
 	go func() {
 		defer close(consumerDone)
 
@@ -1526,6 +1529,10 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 			}
 
 			if existingVol != nil {
+				if s.hasScannedVolumeContentChange(volData, existingVol, existingSubVolMap, existingChapterMap) {
+					seriesContentChanged = true
+				}
+
 				// 기존 볼륨이 있고, 업데이트가 필요한 경우 (예: 볼륨 번호 변경, 챕터 수 변경 등)
 				// 기존 볼륨을 삭제하고 새로 생성하는 방식으로 처리 (챕터/페이지도 함께 삭제됨)
 				if delErr := s.volumeRepo.Delete(tx, existingVol.ID); delErr != nil {
@@ -1535,6 +1542,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 					mu.Unlock()
 					continue
 				}
+			} else {
+				seriesContentChanged = true
 			}
 
 			// 저장 (Consumer Helper)
@@ -1571,6 +1580,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 	for path, vol := range existingVolMap {
 		if !processedPaths[path] {
 			log.Printf("Removing deleted volume: %s", path)
+			seriesContentChanged = true
 			if dErr := s.volumeRepo.Delete(nil, vol.ID); dErr != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("failed to delete volume %s: %v", vol.Title, dErr))
 			}
@@ -1601,7 +1611,86 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 		result.Errors = append(result.Errors, fmt.Sprintf("failed to get distinct extensions for series %s: %v", series.Title, err))
 	}
 
+	if seriesContentChanged {
+		now := time.Now()
+		if upErr := s.seriesRepo.UpdateUpdatedAt(nil, series.ID, now); upErr != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to update series timestamp: %v", upErr))
+		} else {
+			series.UpdatedAt = now
+		}
+	}
+
 	return result, nil
+}
+
+// hasScannedVolumeContentChange는 홈의 업데이트 목록에 반영해야 하는 실제 콘텐츠 변화만 판별합니다.
+func (s *Scanner) hasScannedVolumeContentChange(
+	volData *scannedVolume,
+	existingVol *model.Volume,
+	existingSubVolMap map[string][]*model.Volume,
+	existingChapterMap map[string][]model.Chapter,
+) bool {
+	if volData == nil || existingVol == nil {
+		return true
+	}
+
+	if existingVol.VolumeNumber != volData.VolumeNumber || existingVol.Unit != volData.Unit || existingVol.HasAudio != volData.HasAudio {
+		return true
+	}
+
+	existingChapters := existingChapterMap[existingVol.ID]
+	if len(existingChapters) != len(volData.Chapters) {
+		return true
+	}
+
+	existingChapterByPath := make(map[string]model.Chapter, len(existingChapters))
+	for _, chapter := range existingChapters {
+		existingChapterByPath[chapter.Path] = chapter
+	}
+	for _, scannedChapter := range volData.Chapters {
+		existingChapter, ok := existingChapterByPath[scannedChapter.Path]
+		if !ok {
+			return true
+		}
+		scannedPageCount := normalizeScannedChapterPageCount(scannedChapter)
+		if existingChapter.ChapterNumber != scannedChapter.ChapterNumber ||
+			existingChapter.Title != scannedChapter.Title ||
+			existingChapter.PageCount != scannedPageCount ||
+			existingChapter.HasAudio != scannedChapter.HasAudio ||
+			existingChapter.TotalBytes != scannedChapter.TotalBytes ||
+			existingChapter.TotalPositions != scannedChapter.TotalPositions {
+			return true
+		}
+	}
+
+	existingSubVolumes := existingSubVolMap[existingVol.ID]
+	if len(existingSubVolumes) != len(volData.SubVolumes) {
+		return true
+	}
+
+	existingSubVolByPath := make(map[string]*model.Volume, len(existingSubVolumes))
+	for _, subVol := range existingSubVolumes {
+		existingSubVolByPath[subVol.Path] = subVol
+	}
+	for _, scannedSubVol := range volData.SubVolumes {
+		existingSubVol, ok := existingSubVolByPath[scannedSubVol.Path]
+		if !ok {
+			return true
+		}
+		if s.hasScannedVolumeContentChange(scannedSubVol, existingSubVol, existingSubVolMap, existingChapterMap) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func normalizeScannedChapterPageCount(chapter scannedChapter) int {
+	pageCount := chapter.PageCount
+	if pageCount == 0 && len(chapter.Pages) == 0 && !chapter.HasAudio {
+		return -1
+	}
+	return pageCount
 }
 
 // analyzeVolumeRecursive scans a folder based volume recursively

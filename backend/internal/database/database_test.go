@@ -63,6 +63,18 @@ func TestConnectFreshDatabaseCreatesMigrationArtifacts(t *testing.T) {
 	if !objectExists(t, "index", "idx_sessions_token_hash") {
 		t.Fatal("idx_sessions_token_hash index was not created")
 	}
+	if !objectExists(t, "table", "libraries") {
+		t.Fatal("libraries table was not created")
+	}
+
+	var systemLikesCount int
+	err := DB.QueryRow(`SELECT COUNT(*) FROM libraries WHERE id = 'system-likes' AND type = 'SYSTEM'`).Scan(&systemLikesCount)
+	if err != nil {
+		t.Fatalf("count system-likes library error = %v", err)
+	}
+	if systemLikesCount != 1 {
+		t.Fatalf("system-likes count = %d, want 1", systemLikesCount)
+	}
 
 	if got := getMigrationVersion(); got != latestMigrationVersion {
 		t.Fatalf("getMigrationVersion() = %d, want %d", got, latestMigrationVersion)
@@ -81,6 +93,16 @@ func TestMigrateLegacyDatabaseWithoutVersionRunsPendingMigration(t *testing.T) {
 
 		CREATE TABLE libraries (
 			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL DEFAULT '',
+			path TEXT NOT NULL DEFAULT '',
+			type TEXT DEFAULT 'LOCAL',
+			is_visible BOOLEAN DEFAULT 1,
+			default_view_mode TEXT DEFAULT 'single',
+			default_read_direction TEXT DEFAULT 'ltr',
+			default_page_transition TEXT DEFAULT 'slide',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			sort_order INTEGER DEFAULT 0,
 			library_type TEXT DEFAULT 'book'
 		);
 
@@ -157,5 +179,67 @@ func TestMigrateLegacyDatabaseWithoutVersionRunsPendingMigration(t *testing.T) {
 	}
 	if textValueCount != 0 {
 		t.Fatalf("textValueCount = %d, want 0", textValueCount)
+	}
+
+	var systemLikesCount int
+	err = DB.QueryRow(`SELECT COUNT(*) FROM libraries WHERE id = 'system-likes' AND type = 'SYSTEM'`).Scan(&systemLikesCount)
+	if err != nil {
+		t.Fatalf("count legacy system-likes library error = %v", err)
+	}
+	if systemLikesCount != 1 {
+		t.Fatalf("legacy system-likes count = %d, want 1", systemLikesCount)
+	}
+}
+
+func TestConnectRepairsSystemLikesLibrary(t *testing.T) {
+	openRawTestDB(t)
+
+	_, err := DB.Exec(`
+		CREATE TABLE libraries (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL DEFAULT '',
+			path TEXT NOT NULL DEFAULT '',
+			type TEXT DEFAULT 'LOCAL',
+			library_type TEXT DEFAULT 'book',
+			is_visible BOOLEAN DEFAULT 1,
+			default_view_mode TEXT DEFAULT 'single',
+			default_read_direction TEXT DEFAULT 'ltr',
+			default_page_transition TEXT DEFAULT 'slide',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			sort_order INTEGER DEFAULT 0
+		)
+	`)
+	if err != nil {
+		t.Fatalf("create libraries table error = %v", err)
+	}
+
+	_, err = DB.Exec(`
+		INSERT INTO libraries (id, name, path, type, library_type, is_visible, default_view_mode, default_read_direction, default_page_transition, sort_order)
+		VALUES ('system-likes', '깨진 좋아요', '/wrong/path', 'LOCAL', 'audiobook', 0, 'double', 'rtl', 'fade', 99)
+	`)
+	if err != nil {
+		t.Fatalf("insert broken system-likes error = %v", err)
+	}
+
+	err = ensureSystemLikesLibrary()
+	if err != nil {
+		t.Fatalf("ensureSystemLikesLibrary() error = %v", err)
+	}
+
+	var name, path, libType, libraryType, viewMode, readDirection, pageTransition string
+	var isVisible bool
+	err = DB.QueryRow(`
+		SELECT name, path, type, library_type, is_visible, default_view_mode, default_read_direction, default_page_transition
+		FROM libraries WHERE id = 'system-likes'
+	`).Scan(&name, &path, &libType, &libraryType, &isVisible, &viewMode, &readDirection, &pageTransition)
+	if err != nil {
+		t.Fatalf("select repaired system-likes error = %v", err)
+	}
+
+	if name != "좋아요한 시리즈" || path != "SYSTEM://LIKES" || libType != "SYSTEM" || libraryType != "book" ||
+		!isVisible || viewMode != "single" || readDirection != "ltr" || pageTransition != "slide" {
+		t.Fatalf("system-likes not repaired correctly: got (%s, %s, %s, %s, %t, %s, %s, %s)",
+			name, path, libType, libraryType, isVisible, viewMode, readDirection, pageTransition)
 	}
 }

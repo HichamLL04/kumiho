@@ -71,10 +71,9 @@ export function HomePage() {
         await fetchLibraries();
 
         // 병렬로 데이터 요청
-        const [progressRes, settingsRes, likedRes] = await Promise.all([
+        const [progressRes, settingsRes] = await Promise.all([
           progressAPI.getRecent(10),
           settingAPI.list(),
-          libraryAPI.getSeries("system-likes"),
         ]);
         if (currentLoad !== loadSequenceRef.current) return;
 
@@ -89,7 +88,13 @@ export function HomePage() {
         });
         setRecentProgressExtensionMap(recentExtMap);
 
-        const likedSeriesList = (likedRes.data.series || []) as Series[];
+        let likedSeriesList: Series[] = [];
+        try {
+          const likedRes = await libraryAPI.getSeries("system-likes");
+          likedSeriesList = (likedRes.data.series || []) as Series[];
+        } catch (error) {
+          console.warn("Failed to load liked series library:", error);
+        }
         setLikedSeries(likedSeriesList);
 
         if (settingsRes.home_layout_order) {
