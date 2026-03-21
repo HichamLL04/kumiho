@@ -76,6 +76,7 @@ func (h *SystemHandler) GetVersion(c *fiber.Ctx) error {
 		})
 	}
 
+	h.cacheMutex.Lock()
 	h.versionCache = &VersionInfo{
 		CurrentVersion: version.Version,
 		LatestVersion:  latest,
