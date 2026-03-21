@@ -459,30 +459,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
       // 진행 데이터는 전역 위치 축(totalPositions/currentPosition)만 사용한다.
       const totalPositions = Math.max(0, location.totalPositions);
-      // totalPositions가 1 이하면 내비게이션 축으로 신뢰하기 어렵다.
-      // (일부 EPUB에서 locations가 1개로 생성되어 끝으로 오인될 수 있음)
+      // totalPositions가 1 이하면 locations가 아직 생성되지 않았거나 신뢰할 수 없는 상태.
+      // 부정확한 page/ratio를 서버에 보내면 완독으로 오인될 수 있으므로 저장을 스킵한다.
+      // (이어보기는 CFI 기반이므로 locations 준비 후 정확한 진행도가 저장되면 충분하다.)
       if (totalPositions <= 1) {
-        const fallbackTotalPages = Math.max(1, location.chapterTotal || totalPages || 1);
-        const fallbackCurrentPage = Math.max(1, Math.min(fallbackTotalPages, location.chapterPage || currentPage || 1));
-        const fallbackRatio =
-          Number.isFinite(location.globalRatio) && location.globalRatio >= 0
-            ? Math.max(0, Math.min(1, location.globalRatio))
-            : fallbackTotalPages > 1
-              ? (fallbackCurrentPage - 1) / (fallbackTotalPages - 1)
-              : 0;
-        const fallbackProgressPercent = fallbackRatio * 100;
-        try {
-          await epubProgressAPI.update(chapterId, {
-            current_page: fallbackCurrentPage,
-            total_pages: fallbackTotalPages,
-            progress_percent: fallbackProgressPercent,
-            current_position: 0,
-            total_positions: 0,
-            current_cfi: location.cfi,
-          });
-        } catch (error) {
-          console.error("Failed to save fallback epub progress:", error);
-        }
         return;
       }
       const currentPosition = Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
