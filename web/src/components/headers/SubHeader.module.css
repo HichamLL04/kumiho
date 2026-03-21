@@ -103,7 +103,7 @@
 /* Responsive */
 @media screen and (max-width: 768px) {
   .subHeaderContent {
-    padding: 12px 20px;
+    padding: 12px 12px;
     flex-direction: column;
     gap: 12px;
     align-items: flex-start;

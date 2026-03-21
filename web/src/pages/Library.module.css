@@ -165,18 +165,22 @@
   }
 
   .libraryMain {
-    padding: 24px 16px;
+    padding: 24px 12px;
   }
 
   .seriesGrid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
   }
 }
 
 @media screen and (max-width: 480px) {
+  .libraryMain {
+    padding: 20px 8px;
+  }
+
   .seriesGrid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
   }
 }
