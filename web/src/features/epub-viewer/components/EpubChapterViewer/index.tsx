@@ -423,7 +423,17 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       if (!rendition || !book || !location?.start?.cfi) return;
 
       const cfi = location.start.cfi;
+      const wasStable = hasStableLocationRef.current;
       hasStableLocationRef.current = true;
+      if (!wasStable) {
+        if (resizeFrameRef.current !== null) {
+          cancelAnimationFrame(resizeFrameRef.current);
+        }
+        resizeFrameRef.current = requestAnimationFrame(() => {
+          resizeFrameRef.current = null;
+          reflowRendition(true);
+        });
+      }
       console.log("[EpubChapterViewer] relocated:", cfi);
 
       const currentLocation = rendition.currentLocation() as unknown as EpubjsLocation;
@@ -492,7 +502,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         atStart: location.atStart,
         atEnd: location.atEnd,
       });
-    }, []);
+    }, [reflowRendition]);
 
     useEffect(() => {
       if (!containerRef.current) return;

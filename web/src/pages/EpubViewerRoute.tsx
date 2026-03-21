@@ -462,6 +462,43 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     [effectiveIncognito],
   );
 
+  const toPseudoProgressPayload = useCallback(
+    (location: {
+      cfi: string;
+      chapterPage: number;
+      chapterTotal: number;
+      globalRatio: number;
+      currentPosition: number;
+      totalPositions: number;
+    }) => {
+      const fallbackTotalPages = 100;
+      let fallbackRatio: number | null = null;
+
+      if (Number.isFinite(location.globalRatio)) {
+        fallbackRatio = Math.max(0, Math.min(0.99, location.globalRatio));
+      } else if (location.chapterTotal > 1 && location.chapterPage > 0) {
+        fallbackRatio = Math.max(0, Math.min(0.99, location.chapterPage / location.chapterTotal));
+      }
+
+      if (fallbackRatio === null) {
+        return null;
+      }
+
+      const currentPage = Math.max(1, Math.min(fallbackTotalPages - 1, Math.round(fallbackRatio * fallbackTotalPages)));
+      const progressPercent = (currentPage / fallbackTotalPages) * 100;
+
+      return {
+        current_page: currentPage,
+        total_pages: fallbackTotalPages,
+        progress_percent: progressPercent,
+        current_position: 0,
+        total_positions: 0,
+        current_cfi: location.cfi,
+      };
+    },
+    [],
+  );
+
   const saveProgress = useCallback(
     async (location: {
       cfi: string;
@@ -471,31 +508,36 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       currentPosition: number;
       totalPositions: number;
     }) => {
-      if (!canSaveProgress(location)) {
+      const payload = canSaveProgress(location)
+        ? (() => {
+            const totalPositions = Math.max(0, location.totalPositions);
+            const currentPosition = Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
+            const calculatedCurrentPage = currentPosition + 1;
+            const calculatedTotalPages = totalPositions;
+            const progressPercent = toPositionRatio(currentPosition, calculatedTotalPages) * 100;
+
+            return {
+              current_page: calculatedCurrentPage,
+              total_pages: calculatedTotalPages,
+              progress_percent: progressPercent,
+              current_position: currentPosition,
+              total_positions: totalPositions,
+              current_cfi: location.cfi,
+            };
+          })()
+        : toPseudoProgressPayload(location);
+
+      if (!payload) {
         return;
       }
 
-      // 진행 데이터는 전역 위치 축(totalPositions/currentPosition)만 사용한다.
-      const totalPositions = Math.max(0, location.totalPositions);
-      const currentPosition = Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
-      const calculatedCurrentPage = currentPosition + 1;
-      const calculatedTotalPages = totalPositions;
-      const progressPercent = toPositionRatio(currentPosition, calculatedTotalPages) * 100;
-
       try {
-        await epubProgressAPI.update(chapterId, {
-          current_page: calculatedCurrentPage,
-          total_pages: calculatedTotalPages,
-          progress_percent: progressPercent,
-          current_position: currentPosition,
-          total_positions: totalPositions,
-          current_cfi: location.cfi,
-        });
+        await epubProgressAPI.update(chapterId, payload);
       } catch (error) {
         console.error("Failed to save progress:", error);
       }
     },
-    [canSaveProgress, chapterId],
+    [canSaveProgress, chapterId, toPseudoProgressPayload],
   );
 
   const handleLocationChange = useCallback(
@@ -547,34 +589,25 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
       // 초기화 후 첫 위치를 baseline으로 잡고, 같은 CFI에서는 저장하지 않는다.
       // (초기 relocated가 beginning CFI를 반복 전달해 기존 위치를 덮어쓰는 문제 방지)
-      const isSaveableLocation = canSaveProgress(location);
-
       if (!baselineCFIRef.current) {
-        if (!isSaveableLocation) {
+        // 초기 위치 저장 보호: 기존 진행률이 있는데 0% 근처라면 저장하지 않음 (레이스 보호)
+        const isAtBeginning = location.globalRatio < 0.02 && location.currentPosition <= 0;
+        const hadSavedProgress = initialCFI !== null || (initialProgressRatio !== null && initialProgressRatio > 0.02);
+        if (isAtBeginning && hadSavedProgress) {
           return;
         }
 
         baselineCFIRef.current = location.cfi;
-        // 초기 위치 저장 보호: 기존 진행률이 있는데 0% 근처라면 저장하지 않음 (레이스 보호)
-        const isAtBeginning = location.globalRatio < 0.02 && location.currentPosition <= 0;
-        const hadSavedProgress = initialCFI !== null || (initialProgressRatio !== null && initialProgressRatio > 0.02);
-        if (!isAtBeginning || !hadSavedProgress) {
-          void saveProgress(location);
-        }
+        void saveProgress(location);
         return;
       }
       if (baselineCFIRef.current === location.cfi) {
         return;
       }
 
-      if (!isSaveableLocation) {
-        return;
-      }
-
       void saveProgress(location);
     },
     [
-      canSaveProgress,
       setCurrentCFI,
       setCurrentPage,
       setTotalPages,

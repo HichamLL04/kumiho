@@ -360,7 +360,7 @@ describe("EpubViewerRoute", () => {
         cfi: "epubcfi(/6/2[chapter]!/4/2/6)",
         chapterPage: 1,
         chapterTotal: 10,
-        globalRatio: 0.45,
+        globalRatio: 0,
         currentPosition: 0,
         totalPositions: 1,
         chapterHref: "chapter.xhtml",
@@ -390,6 +390,71 @@ describe("EpubViewerRoute", () => {
         current_position: 4,
         total_positions: 10,
         current_cfi: "epubcfi(/6/2[chapter]!/4/2/6)",
+      });
+    });
+  });
+
+  it("locations 축이 끝까지 1이어도 pseudo page로 current_cfi를 저장한다", async () => {
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("epub-viewer")).toBeInTheDocument();
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    act(() => {
+      screen.getByTestId("epub-init-complete").click();
+    });
+
+    act(() => {
+      latestViewerProps?.onLocationChange({
+        cfi: "epubcfi(/6/2[chapter]!/4/6/8)",
+        chapterPage: 3,
+        chapterTotal: 10,
+        globalRatio: 0.45,
+        currentPosition: 0,
+        totalPositions: 1,
+        chapterHref: "chapter.xhtml",
+      });
+    });
+
+    await waitFor(() => {
+      expect(epubProgressUpdateMock).toHaveBeenCalledWith("chapter-1", {
+        current_page: 45,
+        total_pages: 100,
+        progress_percent: 45,
+        current_position: 0,
+        total_positions: 0,
+        current_cfi: "epubcfi(/6/2[chapter]!/4/6/8)",
       });
     });
   });
