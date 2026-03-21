@@ -44,6 +44,7 @@ export function useProgressSync({
   const navigate = useNavigate();
   const location = useLocation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
   const skipSyncCheck = location.state?.skipSyncCheck === true;
   const syncContextKey = `${seriesId ?? ""}:${chapter?.id ?? ""}`;
   const syncContextKeyRef = useRef<string>("");
@@ -131,11 +132,12 @@ export function useProgressSync({
       replace: true,
       state: {
         ...(viewerFrom ? { from: viewerFrom } : {}),
+        ...(routeIsIncognito ? { isIncognito: true } : {}),
         ...(isChapterChanged ? {} : { skipSyncCheck: true }),
       },
     });
     // 페이지 이동 시 콤포넌트가 재마운트되거나 훅이 다시 실행되므로 isCheckedRef는 그대로 둬도 됨
-  }, [serverProgress, navigate, viewerFrom, chapter]);
+  }, [serverProgress, navigate, viewerFrom, routeIsIncognito, chapter]);
 
   const handleCloseModal = useCallback(() => {
     setShowSyncModal(false);

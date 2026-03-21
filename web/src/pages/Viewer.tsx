@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useChapterLoader } from "../features/viewer";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
+import { useViewerStore } from "../stores/viewerStore";
+import { useEpubViewerStore } from "../stores/epubViewerStore";
 import { ImageViewerRoute } from "./ImageViewerRoute";
 import { PdfViewerRoute } from "./PdfViewerRoute";
 import { EpubViewerRoute } from "./EpubViewerRoute";
@@ -15,12 +17,28 @@ export function ViewerPage() {
   const { chapterId } = useParams<{ chapterId: string }>();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const audioRedirectDone = useRef(false);
+  const setViewerIncognito = useViewerStore((state) => state.setIncognito);
+  const setEpubIncognito = useEpubViewerStore((state) => state.setIncognito);
 
   // Fetch minimal data to route
   const loaderData = useChapterLoader({ chapterId });
+  const routeIsIncognito = location.state?.isIncognito === true;
 
   const isAudio = loaderData.chapter?.render_mode === "audio";
+
+  useEffect(() => {
+    if (!loaderData.chapter) return;
+
+    const chapterPath = loaderData.chapter.path?.toLowerCase() ?? "";
+    if (chapterPath.endsWith(".epub")) {
+      setEpubIncognito(routeIsIncognito);
+      return;
+    }
+
+    setViewerIncognito(routeIsIncognito);
+  }, [loaderData.chapter, routeIsIncognito, setEpubIncognito, setViewerIncognito]);
 
   useEffect(() => {
     audioRedirectDone.current = false;

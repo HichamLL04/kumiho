@@ -71,6 +71,7 @@ export function useViewerNavigation({
   const location = useLocation();
   const { goToPage } = useViewerStore();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
 
   /*
    * 힌트 상태를 boolean이 아닌 '힌트가 발동된 챕터 ID'로 관리합니다.
@@ -136,7 +137,10 @@ export function useViewerNavigation({
         startChapterSwitching(isDocumentFullscreen());
         navigate(`/viewer/${nextChapterId}`, {
           replace: true,
-          state: viewerFrom ? { from: viewerFrom } : undefined,
+          state: {
+            ...(viewerFrom ? { from: viewerFrom } : {}),
+            ...(routeIsIncognito ? { isIncognito: true } : {}),
+          },
         });
       } else if (nextChapterId) {
         // 기존 타이머 정리
@@ -170,6 +174,7 @@ export function useViewerNavigation({
     currentChapterId,
     onReachedSeriesEnd,
     viewerFrom,
+    routeIsIncognito,
   ]);
 
   // 이전 페이지/챕터 핸들러
@@ -216,6 +221,7 @@ export function useViewerNavigation({
           state: {
             preventComplete: true,
             ...(viewerFrom ? { from: viewerFrom } : {}),
+            ...(routeIsIncognito ? { isIncognito: true } : {}),
           },
         });
       } else if (prevChapterId) {
@@ -245,6 +251,7 @@ export function useViewerNavigation({
     setSubPage,
     currentChapterId,
     viewerFrom,
+    routeIsIncognito,
   ]);
 
   // 뒤로가기

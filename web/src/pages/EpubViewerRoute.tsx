@@ -57,7 +57,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     toggleTOC,
     closeTOC,
     setFullscreen,
-    setIncognito,
+
     reset,
     setFontSize,
     setFontFamily,
@@ -87,6 +87,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
+  const effectiveIncognito = isIncognito || routeIsIncognito;
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
   const initFallbackTimerRef = useRef<number | null>(null);
@@ -101,6 +103,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     currentPage,
     isLoading,
     enablePageProgressSync: false,
+    isIncognito: effectiveIncognito,
   });
 
   const scheduleObjectUrlRevoke = useCallback((objectUrl: string | null, delayMs = 5000) => {
@@ -200,10 +203,6 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     };
   }, [chapterId, reset, scheduleObjectUrlRevoke, setCurrentCFI, setGlobalProgress]);
 
-  // 시크릿 모드 설정
-  useEffect(() => {
-    setIncognito(false);
-  }, [setIncognito]);
 
   // 스크롤 모드 제거: 기존 상태가 scrolled이면 자동으로 페이지 모드로 보정
   useEffect(() => {
@@ -452,7 +451,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       totalPositions: number;
     }) => {
       // 초기 로딩 중에는 저장을 무시하여 기존 진행도를 0으로 덮어쓰는 것 방지
-      if (isInitializingRef.current || isIncognito) {
+      if (isInitializingRef.current || effectiveIncognito) {
         if (isInitializingRef.current) console.log("[EpubViewerRoute] saveProgress skipped: isInitializing is true");
         return;
       }
@@ -503,7 +502,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         console.error("Failed to save progress:", error);
       }
     },
-    [chapterId, isIncognito, totalPages, currentPage],
+    [chapterId, effectiveIncognito, totalPages, currentPage],
   );
 
   const handleLocationChange = useCallback(
@@ -748,12 +747,15 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     if (nextChapterId) {
       startChapterSwitching(isDocumentFullscreen());
       navigate(`/viewer/${nextChapterId}`, {
-        state: viewerFrom ? { from: viewerFrom } : undefined,
+        state: {
+          ...(viewerFrom ? { from: viewerFrom } : {}),
+          ...(routeIsIncognito ? { isIncognito: true } : {}),
+        },
       });
       return;
     }
     handleReachedSeriesEnd();
-  }, [nextChapterId, navigate, handleReachedSeriesEnd, viewerFrom]);
+  }, [nextChapterId, navigate, handleReachedSeriesEnd, viewerFrom, routeIsIncognito]);
 
   const handleTerminatedConfirm = useCallback(() => {
     if (viewerFrom) {
@@ -816,7 +818,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           isSettingsOpen={isSettingsOpen}
           isTOCOpen={isTOCOpen}
           isFullscreen={isFullscreen}
-          isIncognito={isIncognito}
+          isIncognito={effectiveIncognito}
           isAtFirstPage={isAtFirstPage}
           isAtLastPage={isAtLastPage}
           toc={toc}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen } from "lucide-react";
 import type { Series, Volume, ReadingProgress, SeriesProgressSummary } from "../types/series";
@@ -8,7 +8,6 @@ import { AlertModal, type AlertType } from "./modals/AlertModal";
 import { seriesAPI, volumeAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
 import { calculateProgressDisplay } from "../utils/progressUtils";
-import { useViewerStore } from "../stores/viewerStore";
 import { useAuthStore } from "../stores/authStore";
 import { Tooltip } from "./common/Tooltip";
 import styles from "./SeriesInfoCard.module.css";
@@ -21,7 +20,7 @@ interface SeriesInfoCardProps {
   summary?: SeriesProgressSummary;
   preferPercentLabel?: boolean;
   onUpdate?: (updated: Series | Volume) => void;
-  onPlay: () => void;
+  onPlay: (incognito?: boolean) => void | Promise<void>;
   onRefresh?: () => void;
   onAlert?: (message: string, type: "success" | "error" | "warning" | "info") => void;
   onDownload?: () => void;
@@ -46,7 +45,7 @@ export function SeriesInfoCard({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const setIncognito = useViewerStore((state) => state.setIncognito);
+  const splitButtonRef = useRef<HTMLDivElement | null>(null);
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === "MASTER";
   const [confirmModal, setConfirmModal] = useState<{
@@ -194,6 +193,30 @@ export function SeriesInfoCard({
   // 진행도 텍스트 생성
   const getProgressLabel = () => progressLabel;
 
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!splitButtonRef.current?.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isDropdownOpen]);
+
   // 좋아요 (Like) 토글
   const handleToggleLike = async () => {
     if (!onUpdate) return;
@@ -288,7 +311,9 @@ export function SeriesInfoCard({
         {/* 재생 오버레이 */}
         <div
           className={styles.thumbnailPlayOverlay}
-          onClick={onPlay}
+          onClick={() => {
+            void onPlay();
+          }}
         >
           <div className={styles.playIconWrapper}>
             <Play
@@ -400,10 +425,15 @@ export function SeriesInfoCard({
 
         {/* 액션 버튼 */}
         <div className={styles.seriesActions}>
-          <div className={styles.splitButtonGroup}>
+          <div
+            ref={splitButtonRef}
+            className={`${styles.splitButtonGroup} ${isDropdownOpen ? styles.splitButtonGroupOpen : ""}`}
+          >
             <button
               className={styles.btnSplitMain}
-              onClick={onPlay}
+              onClick={() => {
+                void onPlay();
+              }}
             >
               <Play
                 size={20}
@@ -437,8 +467,7 @@ export function SeriesInfoCard({
                 <button
                   className={styles.dropdownItem}
                   onClick={() => {
-                    setIncognito(true);
-                    onPlay();
+                    void onPlay(true);
                     setIsDropdownOpen(false);
                   }}
                 >

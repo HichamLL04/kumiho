@@ -17,7 +17,6 @@ import { volumeAPI, seriesAPI, chapterAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
 import { normalizeExtensionBadge, parseSupportedExtension } from "../utils/extension";
 import type { Series, Volume } from "../types/series";
-import { useViewerStore } from "../stores/viewerStore";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import styles from "./SeriesCard.module.css";
 import { AlertModal, type AlertType } from "./modals/AlertModal";
@@ -67,7 +66,6 @@ export function SeriesCard({
   const [optimisticProgress, setOptimisticProgress] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const setIncognito = useViewerStore((state) => state.setIncognito);
   const [alertModal, setAlertModal] = useState<{
     isOpen: boolean;
     type: AlertType;
@@ -180,9 +178,14 @@ export function SeriesCard({
     }
   };
 
-  const playSmart = async () => {
+  const playSmart = async (incognito = false) => {
     setIsUpdating(true);
     try {
+      const viewerState = {
+        from: viewerFrom,
+        ...(incognito ? { isIncognito: true } : {}),
+      };
+
       // 오디오북이면 오디오 플레이어로 재생
       if (isAudioItem) {
         await playAudio();
@@ -199,7 +202,7 @@ export function SeriesCard({
           const lastProgress = progressList[0];
 
           if (lastProgress && lastProgress.chapter_id) {
-            navigate(`/viewer/${lastProgress.chapter_id}`, { state: { from: viewerFrom } });
+            navigate(`/viewer/${lastProgress.chapter_id}`, { state: viewerState });
             return;
           }
         }
@@ -207,7 +210,7 @@ export function SeriesCard({
         // 2. 진행도가 없으면 첫 번째 챕터 탐색
         const firstChapter = await volumeAPI.findFirstChapterRecursively(item.id);
         if (firstChapter) {
-          navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
+          navigate(`/viewer/${firstChapter.id}`, { state: viewerState });
         } else {
           navigate(`/volumes/${item.id}`);
         }
@@ -218,7 +221,7 @@ export function SeriesCard({
       const targetProgress = progressRes.data?.progress;
 
       if (targetProgress && targetProgress.chapter_id) {
-        navigate(`/viewer/${targetProgress.chapter_id}`, { state: { from: viewerFrom } });
+        navigate(`/viewer/${targetProgress.chapter_id}`, { state: viewerState });
         return;
       }
 
@@ -227,7 +230,7 @@ export function SeriesCard({
       const chapters = chaptersRes.data.chapters || [];
 
       if (chapters.length > 0) {
-        navigate(`/viewer/${chapters[0].id}`, { state: { from: viewerFrom } });
+        navigate(`/viewer/${chapters[0].id}`, { state: viewerState });
       } else {
         navigate(`/series/${item.id}`);
       }
@@ -246,14 +249,15 @@ export function SeriesCard({
 
     if (isUpdating) return;
 
-    if (incognito) {
-      setIncognito(true);
-    }
+    const viewerState = {
+      from: viewerFrom,
+      ...(incognito ? { isIncognito: true } : {}),
+    };
 
     if (chapterId && type === "series") {
-      navigate(`/viewer/${chapterId}`, { state: { from: viewerFrom } });
+      navigate(`/viewer/${chapterId}`, { state: viewerState });
     } else {
-      await playSmart();
+      await playSmart(incognito);
     }
   };
 

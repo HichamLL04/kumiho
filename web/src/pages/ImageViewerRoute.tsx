@@ -77,6 +77,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   const navigate = useNavigate();
   const location = useLocation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
+  const effectiveIncognito = isIncognito || routeIsIncognito;
   usePreventBrowserZoom(true);
 
   // ===== Custom Hooks =====
@@ -215,7 +217,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     readingMode: settings.readingMode,
     totalPages,
     isLoading,
-    isIncognito,
+    isIncognito: effectiveIncognito,
     isLastChapterOfVolume,
     isInitialScrollingRef,
     viewStatus,
@@ -394,6 +396,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     chapterId: chapter?.id,
     currentPage,
     isLoading,
+    isIncognito: effectiveIncognito,
   });
 
   // 세션 종료 핸들러
@@ -572,7 +575,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
               currentPage,
               totalPages,
               isUIVisible,
-              isIncognito,
+              isIncognito: effectiveIncognito,
               isFullscreen,
               bgmInfo,
               isBgmPlaying,

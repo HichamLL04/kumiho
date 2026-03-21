@@ -242,7 +242,11 @@ export function VolumePage() {
   }
 
   // 이어보기 또는 첫 챕터 읽기
-  const handlePlay = async () => {
+  const handlePlay = async (incognito = false) => {
+    const viewerState = {
+      from: viewerFrom,
+      ...(incognito ? { isIncognito: true } : {}),
+    };
     const isAudio = series.library_type === "audiobook";
 
     if (isAudio) {
@@ -273,14 +277,14 @@ export function VolumePage() {
     }
 
     if (lastProgress && lastProgress.chapter_id) {
-      navigate(`/viewer/${lastProgress.chapter_id}`, { state: { from: viewerFrom } });
+      navigate(`/viewer/${lastProgress.chapter_id}`, { state: viewerState });
       return;
     }
 
     // 재귀적으로 첫 번째 챕터 탐색
     const firstChapter = await volumeAPI.findFirstChapterRecursively(volumeId!);
     if (firstChapter) {
-      navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
+      navigate(`/viewer/${firstChapter.id}`, { state: viewerState });
     } else {
       showAlert(t("series.alert.no_readable_chapter"), "warning");
     }

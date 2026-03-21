@@ -63,6 +63,7 @@ export function useVerticalScroll({
   const location = useLocation();
   const { setCurrentPage } = useViewerStore();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
 
   const [pullOffset, setPullOffset] = useState(0);
   const [isTouching, setIsTouching] = useState(false);
@@ -103,6 +104,7 @@ export function useVerticalScroll({
             state: {
               ...(options.preventComplete ? { preventComplete: true } : {}),
               ...(viewerFrom ? { from: viewerFrom } : {}),
+              ...(routeIsIncognito ? { isIncognito: true } : {}),
             },
           });
         })
@@ -111,7 +113,7 @@ export function useVerticalScroll({
           isNavigatingRef.current = false;
         });
     },
-    [handleVolumeCompletion, navigate, saveProgress, viewerFrom],
+    [handleVolumeCompletion, navigate, saveProgress, viewerFrom, routeIsIncognito],
   );
 
   useEffect(() => {
