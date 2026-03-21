@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/aha-hyeong/kumiho/backend/internal/version"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -30,7 +31,6 @@ type VersionInfo struct {
 	NeedsUpdate    bool   `json:"needs_update"`
 }
 
-const CurrentVersion = "v0.12.2"
 const GithubRepo = "aha-hyeong/kumiho"
 
 func NewSystemHandler(settingRepo repository.SettingRepository) *SystemHandler {
@@ -70,17 +70,16 @@ func (h *SystemHandler) GetVersion(c *fiber.Ctx) error {
 			return c.JSON(h.versionCache)
 		}
 		return c.JSON(VersionInfo{
-			CurrentVersion: CurrentVersion,
+			CurrentVersion: version.Version,
 			LatestVersion:  "알 수 없음",
 			NeedsUpdate:    false,
 		})
 	}
 
-	h.cacheMutex.Lock()
 	h.versionCache = &VersionInfo{
-		CurrentVersion: CurrentVersion,
+		CurrentVersion: version.Version,
 		LatestVersion:  latest,
-		NeedsUpdate:    CurrentVersion != latest && latest != "",
+		NeedsUpdate:    version.Version != latest && latest != "",
 	}
 	h.lastChecked = time.Now()
 	h.cacheMutex.Unlock()
