@@ -6,6 +6,7 @@ import (
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
+	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 )
 
@@ -41,8 +42,8 @@ func TestRegisterOnFreshDatabaseCreatesAdminAndSession(t *testing.T) {
 	if tokens.User == nil {
 		t.Fatal("Register() returned nil user")
 	}
-	if tokens.User.Role != "MASTER" {
-		t.Fatalf("Register() role = %s, want MASTER", tokens.User.Role)
+	if tokens.User.Role != model.RoleMaster {
+		t.Fatalf("Register() role = %s, want %s", tokens.User.Role, model.RoleMaster)
 	}
 	if !tokens.User.CanDownload {
 		t.Fatal("Register() can_download = false, want true")

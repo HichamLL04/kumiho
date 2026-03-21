@@ -280,7 +280,9 @@ func (s *AuthService) generateTokensWithSession(q database.Queryer, user *model.
 	// 세션에 refresh token 해시 업데이트
 	if sessionID != "" {
 		hash := repository.HashToken(tokens.RefreshToken)
-		_ = s.sessionRepo.UpdateTokenHash(q, sessionID, hash)
+		if err := s.sessionRepo.UpdateTokenHash(q, sessionID, hash); err != nil {
+			return nil, err
+		}
 	}
 
 	// 만료 세션 정리 (로그인 시 부수 효과로)

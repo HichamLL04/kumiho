@@ -396,13 +396,14 @@ func Migrate() error {
 
 	// 기존 DB 감지: migration_version이 아직 없지만 이미 마이그레이션이 완료된 DB
 	// (버전 관리 도입 이전 코드에서 업그레이드할 때)
-	// migration_version 도입 이전에 충분히 최신 구조를 가진 기존 DB만 최신으로 간주
+	// migration_version 도입 이전에 #33 수준 구조를 가진 기존 DB는
+	// 버전만 33으로 기록하고 이후 마이그레이션(#34+)은 계속 수행한다.
 	if currentVersion == 0 &&
 		columnExists("libraries", "library_type") &&
 		columnExists("users", "can_download") &&
 		columnExists("sessions", "expires_at") {
-		setMigrationVersion(latestMigrationVersion)
-		return nil
+		setMigrationVersion(33)
+		currentVersion = 33
 	}
 
 	if currentVersion >= latestMigrationVersion {
