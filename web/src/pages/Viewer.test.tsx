@@ -78,7 +78,7 @@ describe("ViewerPage routing by chapter type", () => {
     expect(screen.getByTestId("image-viewer-route")).toBeInTheDocument();
     expect(screen.queryByTestId("pdf-viewer-route")).not.toBeInTheDocument();
     expect(setViewerIncognitoMock).toHaveBeenCalledWith(false);
-    expect(setEpubIncognitoMock).not.toHaveBeenCalled();
+    expect(setEpubIncognitoMock).toHaveBeenCalledWith(false);
   });
 
   it("routes PDF chapter with render_mode=pdf to PdfViewerRoute", () => {
@@ -146,7 +146,7 @@ describe("ViewerPage routing by chapter type", () => {
     renderPage({ from: "/series/1", isIncognito: true });
 
     expect(setViewerIncognitoMock).toHaveBeenCalledWith(true);
-    expect(setEpubIncognitoMock).not.toHaveBeenCalled();
+    expect(setEpubIncognitoMock).toHaveBeenCalledWith(false);
   });
 
   it("routes incognito state into the EPUB viewer store for EPUB chapters", () => {
@@ -163,6 +163,19 @@ describe("ViewerPage routing by chapter type", () => {
     renderPage({ from: "/series/1", isIncognito: true });
 
     expect(setEpubIncognitoMock).toHaveBeenCalledWith(true);
-    expect(setViewerIncognitoMock).not.toHaveBeenCalled();
+    expect(setViewerIncognitoMock).toHaveBeenCalledWith(false);
+  });
+
+  it("clears stale incognito state immediately before chapter data is ready", () => {
+    useChapterLoaderMock.mockReturnValue({
+      error: null,
+      isLoading: true,
+      chapter: null,
+    });
+
+    renderPage({ from: "/series/1" });
+
+    expect(setViewerIncognitoMock).toHaveBeenCalledWith(false);
+    expect(setEpubIncognitoMock).toHaveBeenCalledWith(false);
   });
 });

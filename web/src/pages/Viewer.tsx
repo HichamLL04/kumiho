@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useChapterLoader } from "../features/viewer";
@@ -28,16 +28,28 @@ export function ViewerPage() {
 
   const isAudio = loaderData.chapter?.render_mode === "audio";
 
-  useEffect(() => {
-    if (!loaderData.chapter) return;
-
-    const chapterPath = loaderData.chapter.path?.toLowerCase() ?? "";
-    if (chapterPath.endsWith(".epub")) {
-      setEpubIncognito(routeIsIncognito);
+  useLayoutEffect(() => {
+    if (!routeIsIncognito) {
+      setViewerIncognito(false);
+      setEpubIncognito(false);
       return;
     }
 
-    setViewerIncognito(routeIsIncognito);
+    if (!loaderData.chapter) {
+      setViewerIncognito(true);
+      setEpubIncognito(true);
+      return;
+    }
+
+    const chapterPath = loaderData.chapter.path?.toLowerCase() ?? "";
+    if (chapterPath.endsWith(".epub")) {
+      setViewerIncognito(false);
+      setEpubIncognito(true);
+      return;
+    }
+
+    setViewerIncognito(true);
+    setEpubIncognito(false);
   }, [loaderData.chapter, routeIsIncognito, setEpubIncognito, setViewerIncognito]);
 
   useEffect(() => {
