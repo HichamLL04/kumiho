@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { isFullscreen as isDocumentFullscreen } from "../../../../utils/fullscreen";
 import { startChapterSwitching } from "../../../../stores/fullscreenSwitchStore";
+import { buildViewerRouteState } from "../../../../utils/viewerRouteState";
 import styles from "./PullIndicator.module.css";
 
 interface PullIndicatorProps {
@@ -27,6 +28,7 @@ export function PullIndicator({
   const location = useLocation();
   const { t } = useTranslation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
 
   // 챕터 ID가 없으면 아예 렌더링하지 않음
   if (!chapterId) return null;
@@ -43,11 +45,11 @@ export function PullIndicator({
     startChapterSwitching(isDocumentFullscreen());
     if (type === "prev") {
       navigate(`/viewer/${chapterId}?page=last`, {
-        state: viewerFrom ? { from: viewerFrom } : undefined,
+        state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
       });
     } else {
       navigate(`/viewer/${chapterId}`, {
-        state: viewerFrom ? { from: viewerFrom } : undefined,
+        state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
       });
     }
   };

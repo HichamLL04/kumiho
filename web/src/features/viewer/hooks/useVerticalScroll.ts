@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useViewerStore } from "../../../stores/viewerStore";
 import { isFullscreen as isDocumentFullscreen } from "../../../utils/fullscreen";
 import { startChapterSwitching } from "../../../stores/fullscreenSwitchStore";
+import { buildViewerRouteState } from "../../../utils/viewerRouteState";
 import type { ReadingMode } from "../../../stores/viewerStore";
 import type { RestorePosition, ViewStatus } from "../types";
 import { getViewportAnchorPage } from "../utils/progressPosition";
@@ -63,6 +64,7 @@ export function useVerticalScroll({
   const location = useLocation();
   const { setCurrentPage } = useViewerStore();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
+  const routeIsIncognito = location.state?.isIncognito === true;
 
   const [pullOffset, setPullOffset] = useState(0);
   const [isTouching, setIsTouching] = useState(false);
@@ -100,10 +102,11 @@ export function useVerticalScroll({
           startChapterSwitching(isDocumentFullscreen());
           navigate(`/viewer/${chapterIdToMove}`, {
             replace: true,
-            state: {
-              ...(options.preventComplete ? { preventComplete: true } : {}),
-              ...(viewerFrom ? { from: viewerFrom } : {}),
-            },
+            state: buildViewerRouteState({
+              from: viewerFrom,
+              isIncognito: routeIsIncognito,
+              preventComplete: options.preventComplete,
+            }),
           });
         })
         .catch((error) => {
@@ -111,7 +114,7 @@ export function useVerticalScroll({
           isNavigatingRef.current = false;
         });
     },
-    [handleVolumeCompletion, navigate, saveProgress, viewerFrom],
+    [handleVolumeCompletion, navigate, saveProgress, viewerFrom, routeIsIncognito],
   );
 
   useEffect(() => {

@@ -9,6 +9,7 @@ import { SeriesCard } from "../components/SeriesCard";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
 import { api, volumeAPI, downloadAPI, chapterAPI } from "../api/client";
 import { formatDuration } from "../utils/progressUtils";
+import { buildViewerRouteState } from "../utils/viewerRouteState";
 import { initiateDownload } from "../utils/download";
 import { useAuthStore } from "../stores/authStore";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
@@ -242,7 +243,8 @@ export function VolumePage() {
   }
 
   // 이어보기 또는 첫 챕터 읽기
-  const handlePlay = async () => {
+  const handlePlay = async (incognito = false) => {
+    const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: incognito });
     const isAudio = series.library_type === "audiobook";
 
     if (isAudio) {
@@ -273,14 +275,14 @@ export function VolumePage() {
     }
 
     if (lastProgress && lastProgress.chapter_id) {
-      navigate(`/viewer/${lastProgress.chapter_id}`, { state: { from: viewerFrom } });
+      navigate(`/viewer/${lastProgress.chapter_id}`, { state: viewerState });
       return;
     }
 
     // 재귀적으로 첫 번째 챕터 탐색
     const firstChapter = await volumeAPI.findFirstChapterRecursively(volumeId!);
     if (firstChapter) {
-      navigate(`/viewer/${firstChapter.id}`, { state: { from: viewerFrom } });
+      navigate(`/viewer/${firstChapter.id}`, { state: viewerState });
     } else {
       showAlert(t("series.alert.no_readable_chapter"), "warning");
     }
@@ -416,7 +418,10 @@ export function VolumePage() {
                     className={`${styles.chapterItem} ${lastProgress?.chapter_id === chapter.id ? styles.current : ""} ${
                       isUpdating ? styles.loading : ""
                     }`}
-                    onClick={() => !isUpdating && navigate(`/viewer/${chapter.id}`, { state: { from: viewerFrom } })}
+                    onClick={() =>
+                      !isUpdating &&
+                      navigate(`/viewer/${chapter.id}`, { state: buildViewerRouteState({ from: viewerFrom }) })
+                    }
                   >
                     <div className={styles.chapterThumbnailWrapper}>
                       {chapter.thumbnail_url && !imageErrors[chapter.id] ? (
@@ -543,7 +548,7 @@ export function VolumePage() {
                                 e.stopPropagation();
                                 setActiveMenuChapterId(null);
                                 navigate(`/viewer/${chapter.id}`, {
-                                  state: { from: viewerFrom, isIncognito: true },
+                                  state: buildViewerRouteState({ from: viewerFrom, isIncognito: true }),
                                 });
                               }}
                             >
