@@ -192,6 +192,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const tocRefreshSeqRef = useRef(0);
     const resizeFrameRef = useRef<number | null>(null);
     const lastContainerSizeRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
+    const hasStableLocationRef = useRef(false);
 
     useEffect(() => {
       onViewerClickRef.current = onViewerClick;
@@ -225,6 +226,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       const container = containerRef.current;
       const rendition = renditionRef.current;
       if (!container || !rendition) return;
+      if (!hasStableLocationRef.current) return;
 
       const width = Math.round(container.clientWidth);
       const height = Math.round(container.clientHeight);
@@ -234,25 +236,28 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       if (!forceRedisplay && previous.width === width && previous.height === height) return;
       lastContainerSizeRef.current = { width, height };
 
-      const currentLocation = rendition.currentLocation() as unknown as EpubjsLocation;
-      const currentCfi = currentLocation?.start?.cfi;
-
       const anyRendition = rendition as unknown as {
+        currentLocation?: () => EpubjsLocation | undefined;
         resize?: (width: number, height: number) => void;
         display: (target?: string) => Promise<unknown>;
       };
 
+      let currentCfi: string | undefined;
+      try {
+        currentCfi = anyRendition.currentLocation?.()?.start?.cfi;
+      } catch {
+        return;
+      }
+
       try {
         anyRendition.resize?.(width, height);
-      } catch (error) {
-        console.warn("[EpubChapterViewer] rendition resize failed:", error);
+      } catch {
+        return;
       }
 
       if (!currentCfi || isNavigatingRef.current) return;
 
-      void anyRendition.display(currentCfi).catch((error) => {
-        console.warn("[EpubChapterViewer] rendition redisplay after resize failed:", error);
-      });
+      void anyRendition.display(currentCfi).catch(() => {});
     }, []);
     const applyDocumentSettings = useCallback((doc: Document, s: EpubViewerSettings, layout: EpubRenderLayout) => {
       const theme = THEME_STYLES[s.theme] || THEME_STYLES.light;
@@ -418,6 +423,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       if (!rendition || !book || !location?.start?.cfi) return;
 
       const cfi = location.start.cfi;
+      hasStableLocationRef.current = true;
       console.log("[EpubChapterViewer] relocated:", cfi);
 
       const currentLocation = rendition.currentLocation() as unknown as EpubjsLocation;
@@ -499,6 +505,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       locationsReadyRef.current = false;
       allowContentHeuristicRef.current = true;
       autoLayoutLockedRef.current = false;
+      hasStableLocationRef.current = false;
 
       const rendition = book.renderTo(containerRef.current, {
         flow: settings.flow,
@@ -1074,6 +1081,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         renditionRef.current = null;
         locationsReadyRef.current = false;
         generatedTotalRef.current = 0;
+        hasStableLocationRef.current = false;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [epubUrl, chapterId, handleRelocated, applySettings, initialCFI, initialProgressRatio, settings.renderMode]);
