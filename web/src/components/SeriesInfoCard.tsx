@@ -40,6 +40,7 @@ export function SeriesInfoCard({
   onDownload,
 }: SeriesInfoCardProps) {
   const { t } = useTranslation();
+  const incognitoMenuId = "series-info-incognito-menu";
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -458,14 +459,23 @@ export function SeriesInfoCard({
             <button
               className={styles.btnSplitArrow}
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              aria-label={t("series.action.incognito")}
+              aria-haspopup="menu"
+              aria-expanded={isDropdownOpen}
+              aria-controls={incognitoMenuId}
             >
               <ChevronDown size={16} />
             </button>
 
             {isDropdownOpen && (
-              <div className={styles.dropdownMenu}>
+              <div
+                id={incognitoMenuId}
+                className={styles.dropdownMenu}
+                role="menu"
+              >
                 <button
                   className={styles.dropdownItem}
+                  role="menuitem"
                   onClick={() => {
                     void onPlay(true);
                     setIsDropdownOpen(false);
