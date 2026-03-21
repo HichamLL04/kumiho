@@ -65,7 +65,7 @@ jobs:
           push: true
           tags: |
             ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.VERSION }}
-            ${{ env.DOCKER_IMAGE }}:latest
+            ${{ contains(steps.version.outputs.VERSION, 'beta') && format('{0}:beta', env.DOCKER_IMAGE) || format('{0}:latest', env.DOCKER_IMAGE) }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

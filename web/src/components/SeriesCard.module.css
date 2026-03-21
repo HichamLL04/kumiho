@@ -11,6 +11,7 @@
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   border: 1px solid var(--border-color);
   width: 100%;
+  min-width: 0;
   aspect-ratio: 2/3.5;
   position: relative;
   z-index: 1;
@@ -252,6 +253,7 @@
   flex-direction: column;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .seriesTitle {

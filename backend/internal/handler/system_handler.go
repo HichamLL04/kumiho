@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/aha-hyeong/kumiho/backend/internal/version"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -16,7 +17,7 @@ type SystemHandler struct {
 
 	// 버전 캐시
 	versionCache *VersionInfo
-	cacheMutex   sync.Mutex
+	cacheMutex   sync.RWMutex
 	lastChecked  time.Time
 
 	// 수동 체크 제한 (Rate Limit)
@@ -30,7 +31,6 @@ type VersionInfo struct {
 	NeedsUpdate    bool   `json:"needs_update"`
 }
 
-const CurrentVersion = "v0.12.2"
 const GithubRepo = "aha-hyeong/kumiho"
 
 func NewSystemHandler(settingRepo repository.SettingRepository) *SystemHandler {
@@ -57,35 +57,47 @@ func (h *SystemHandler) GetVersion(c *fiber.Ctx) error {
 		}
 		h.manualCheckCount[today]++
 		h.countMutex.Unlock()
-	} else if h.versionCache != nil && time.Since(h.lastChecked) < 24*time.Hour {
-		// 캐시 반환
-		return c.JSON(h.versionCache)
 	}
+
+	// 캐시 확인 (Read Lock) - 수동 체크(force=true)가 아닐 때만 유효함
+	h.cacheMutex.RLock()
+	if !force && h.versionCache != nil && time.Since(h.lastChecked) < 24*time.Hour {
+		cached := *h.versionCache
+		h.cacheMutex.RUnlock()
+		return c.JSON(cached)
+	}
+	h.cacheMutex.RUnlock()
 
 	// 최신 버전 조회
 	latest, err := h.fetchLatestVersion()
 	if err != nil {
-		// 조회 실패 시 캐시가 있으면 캐시라도 반환
+		// 조회 실패 시 캐시가 있으면 캐시라도 반환 (Read Lock)
+		h.cacheMutex.RLock()
 		if h.versionCache != nil {
-			return c.JSON(h.versionCache)
+			cached := *h.versionCache
+			h.cacheMutex.RUnlock()
+			return c.JSON(cached)
 		}
+		h.cacheMutex.RUnlock()
+
 		return c.JSON(VersionInfo{
-			CurrentVersion: CurrentVersion,
+			CurrentVersion: version.Version,
 			LatestVersion:  "알 수 없음",
 			NeedsUpdate:    false,
 		})
 	}
 
 	h.cacheMutex.Lock()
-	h.versionCache = &VersionInfo{
-		CurrentVersion: CurrentVersion,
+	info := &VersionInfo{
+		CurrentVersion: version.Version,
 		LatestVersion:  latest,
-		NeedsUpdate:    CurrentVersion != latest && latest != "",
+		NeedsUpdate:    version.Version != latest && latest != "",
 	}
+	h.versionCache = info
 	h.lastChecked = time.Now()
 	h.cacheMutex.Unlock()
 
-	return c.JSON(h.versionCache)
+	return c.JSON(info)
 }
 
 func (h *SystemHandler) fetchLatestVersion() (string, error) {
