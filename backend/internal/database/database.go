@@ -348,8 +348,26 @@ func Migrate() error {
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	-- 로그인 세션
+	CREATE TABLE IF NOT EXISTS sessions (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		refresh_token_hash TEXT NOT NULL,
+		device_name TEXT DEFAULT '',
+		device_type TEXT DEFAULT '',
+		browser TEXT DEFAULT '',
+		os TEXT DEFAULT '',
+		ip_address TEXT DEFAULT '',
+		last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		expires_at DATETIME NOT NULL
+	);
+
 	-- 인덱스
 	CREATE INDEX IF NOT EXISTS idx_daily_activity_user_date ON daily_activity(user_id, date);
+	CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+	CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(refresh_token_hash);
+	CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 	CREATE INDEX IF NOT EXISTS idx_viewer_sessions_last_seen ON viewer_sessions(last_seen_at);
 	CREATE INDEX IF NOT EXISTS idx_series_library ON series(library_id);
 	CREATE INDEX IF NOT EXISTS idx_volumes_series ON volumes(series_id);
@@ -378,9 +396,11 @@ func Migrate() error {
 
 	// 기존 DB 감지: migration_version이 아직 없지만 이미 마이그레이션이 완료된 DB
 	// (버전 관리 도입 이전 코드에서 업그레이드할 때)
-	// 마지막 마이그레이션(#33)의 결과물인 libraries.library_type이 존재하면
-	// 모든 마이그레이션이 완료된 것으로 간주하고 버전만 기록
-	if currentVersion == 0 && columnExists("libraries", "library_type") {
+	// migration_version 도입 이전에 충분히 최신 구조를 가진 기존 DB만 최신으로 간주
+	if currentVersion == 0 &&
+		columnExists("libraries", "library_type") &&
+		columnExists("users", "can_download") &&
+		columnExists("sessions", "expires_at") {
 		setMigrationVersion(latestMigrationVersion)
 		return nil
 	}
