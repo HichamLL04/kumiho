@@ -73,6 +73,7 @@ const THEME_STYLES: Record<string, Record<string, string>> = {
   dark: { background: "#1a1a1a", color: "#e0e0e0" },
   sepia: { background: "#f4ecd8", color: "#3b2f2f" },
 };
+const EPUB_VIEWER_STYLE_ID = "kumiho-epub-viewer-settings";
 
 // epub.js 관련 내부 타입 정의
 interface EpubjsLocation {
@@ -189,6 +190,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const lastAppliedSpreadRef = useRef<"auto" | "none" | null>(null);
     const contentDisposersRef = useRef<Map<Document, () => void>>(new Map());
     const tocRefreshSeqRef = useRef(0);
+    const resizeFrameRef = useRef<number | null>(null);
+    const lastContainerSizeRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
+    const hasStableLocationRef = useRef(false);
 
     useEffect(() => {
       onViewerClickRef.current = onViewerClick;
@@ -217,137 +221,200 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     useEffect(() => {
       settingsRef.current = settings;
     }, [settings]);
-    const applySettings = useCallback((rendition: Rendition, s: EpubViewerSettings, layout: EpubRenderLayout) => {
+
+    const reflowRendition = useCallback((forceRedisplay = false) => {
+      const container = containerRef.current;
+      const rendition = renditionRef.current;
+      if (!container || !rendition) return;
+      if (!hasStableLocationRef.current) return;
+
+      const width = Math.round(container.clientWidth);
+      const height = Math.round(container.clientHeight);
+      if (width <= 0 || height <= 0) return;
+
+      const previous = lastContainerSizeRef.current;
+      if (!forceRedisplay && previous.width === width && previous.height === height) return;
+      lastContainerSizeRef.current = { width, height };
+
+      const anyRendition = rendition as unknown as {
+        currentLocation?: () => EpubjsLocation | undefined;
+        resize?: (width: number, height: number) => void;
+        display: (target?: string) => Promise<unknown>;
+      };
+
+      let currentCfi: string | undefined;
+      try {
+        currentCfi = anyRendition.currentLocation?.()?.start?.cfi;
+      } catch {
+        return;
+      }
+
+      try {
+        anyRendition.resize?.(width, height);
+      } catch {
+        return;
+      }
+
+      if (!currentCfi || isNavigatingRef.current) return;
+
+      void anyRendition.display(currentCfi).catch(() => {});
+    }, []);
+    const applyDocumentSettings = useCallback((doc: Document, s: EpubViewerSettings, layout: EpubRenderLayout) => {
       const theme = THEME_STYLES[s.theme] || THEME_STYLES.light;
       const isOriginal = s.fontFamily === "original";
       const isComic = layout === "comic";
-      const themes = rendition.themes as unknown as {
-        font?: (value: string) => void;
-        removeOverride?: (name: string) => void;
-      };
-      const clearDefaultThemeStyles = () => {
-        const anyRendition = rendition as unknown as {
-          getContents?: () => Array<{ document?: Document }>;
-        };
-        const contents = anyRendition.getContents?.() || [];
-        contents.forEach((content) => {
-          const doc = content.document;
-          if (!doc) return;
-          doc.getElementById("epubjs-inserted-css-default")?.remove();
-        });
-      };
+      const fontFamily = isOriginal ? "inherit" : (FONT_FAMILY_MAP[s.fontFamily] || "inherit");
+      const linkColor = s.theme === "dark" ? "#7eb8f7" : "#1a6bb5";
+      let styleEl = doc.getElementById(EPUB_VIEWER_STYLE_ID) as HTMLStyleElement | null;
 
-      // Standard Ebooks: 화면 밖으로 텍스트를 밀어내는 패턴(left: -999em) 무력화.
-      // 이 패턴은 가상 페이지(scrollWidth)를 비정상적으로 늘려 수십 개의 빈 페이지를 만듦.
-      // h1, h2, p 뿐만 아니라 hgroup, h3 등 숨겨진 모든 요소를 대상으로 함.
-      // 또한 section 태그에 걸린 break-inside: avoid 및 overflow: hidden이 컬럼 분할(페이지네이션)을 방해하여
-      // 한 페이지씩 넘어가지 않고 챕터 전체가 통째로 넘어가는 현상(pagination breakage)을 수정함.
-      const standardEbooksCorrection: Record<string, Record<string, string>> = {
-        '[epub\\:type~="titlepage"] h1, [epub\\:type~="titlepage"] p, [epub\\:type~="titlepage"] hgroup, [epub\\:type~="colophon"] h2, [epub\\:type~="imprint"] h2, [epub\\:type~="halftitlepage"] h1, [epub\\:type~="dedication"] h1, [epub\\:type~="epigraph"] h1, .epub-type-contains-word-titlepage h1, .epub-type-contains-word-titlepage p, .epub-type-contains-word-colophon h2, .epub-type-contains-word-imprint h2, .epub-type-contains-word-halftitlepage h1, .epub-type-contains-word-dedication h1':
-          {
-            position: "static !important",
-            left: "auto !important",
-            width: "auto !important",
-            height: "auto !important",
-            margin: "0 !important",
-            padding: "0 !important",
-            visibility: "hidden !important",
-            display: "none !important",
-          },
-        // 페이지네이션(컬럼 분할) 복구
-        "section, .epub-type-contains-word-section": {
-          display: "block !important",
-          "break-inside": "auto !important",
-          "page-break-inside": "auto !important",
-          overflow: "visible !important",
-          height: "auto !important",
-        },
-        // 특정 박스 요소(예: 1장 목차)가 다음 페이지로 배경색이 넘어가는 현상 방지
-        ".box_brown, .box_white, .box_grey": {
-          "break-inside": "avoid !important",
-          "-webkit-break-inside": "avoid !important",
-          "page-break-inside": "avoid !important",
-          "min-height": "100% !important",
-        },
+      if (!styleEl) {
+        const headFromTag = doc.getElementsByTagName("head")[0] as HTMLElement | undefined;
+        const containerForStyle =
+          (doc.head as HTMLElement | null) ||
+          headFromTag ||
+          (doc.documentElement as HTMLElement | null);
+
+        if (!containerForStyle) {
+          return;
+        }
+
+        styleEl = doc.createElement("style");
+        styleEl.id = EPUB_VIEWER_STYLE_ID;
+        containerForStyle.appendChild(styleEl);
+      }
+
+      if (isComic) {
+        styleEl.textContent = `
+          html, body {
+            background: ${theme.background} !important;
+          }
+        `;
+        return;
+      }
+
+      styleEl.textContent = `
+        html, body {
+          background: ${theme.background} !important;
+          color: ${theme.color} !important;
+        }
+
+        body {
+          font-family: ${fontFamily} !important;
+          font-size: ${s.fontSize}% !important;
+          line-height: ${s.lineHeight} !important;
+          column-fill: auto !important;
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          padding-left: 8px !important;
+          padding-right: 8px !important;
+        }
+
+        body p,
+        body div,
+        body span,
+        body li,
+        body dd,
+        body dt,
+        body blockquote,
+        body figcaption,
+        body th,
+        body td,
+        body a:not([href]),
+        body h1,
+        body h2,
+        body h3,
+        body h4,
+        body h5,
+        body h6 {
+          color: ${theme.color} !important;
+          line-height: ${s.lineHeight} !important;
+        }
+
+        body a[href] {
+          color: ${linkColor} !important;
+        }
+
+        [epub\\:type~="titlepage"] h1,
+        [epub\\:type~="titlepage"] p,
+        [epub\\:type~="titlepage"] hgroup,
+        [epub\\:type~="colophon"] h2,
+        [epub\\:type~="imprint"] h2,
+        [epub\\:type~="halftitlepage"] h1,
+        [epub\\:type~="dedication"] h1,
+        [epub\\:type~="epigraph"] h1,
+        .epub-type-contains-word-titlepage h1,
+        .epub-type-contains-word-titlepage p,
+        .epub-type-contains-word-colophon h2,
+        .epub-type-contains-word-imprint h2,
+        .epub-type-contains-word-halftitlepage h1,
+        .epub-type-contains-word-dedication h1 {
+          position: static !important;
+          left: auto !important;
+          width: auto !important;
+          height: auto !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          visibility: hidden !important;
+          display: none !important;
+        }
+
+        section, .epub-type-contains-word-section {
+          display: block !important;
+          break-inside: auto !important;
+          page-break-inside: auto !important;
+          overflow: visible !important;
+          height: auto !important;
+        }
+
+        .box_brown, .box_white, .box_grey {
+          break-inside: avoid !important;
+          -webkit-break-inside: avoid !important;
+          page-break-inside: avoid !important;
+          min-height: 100% !important;
+        }
+
+        ${s.theme !== "dark" ? `
+        img[epub\\:type~='se:image.color-depth.black-on-transparent'],
+        img.epub-type-contains-word-se-image-color-depth-black-on-transparent {
+          filter: none !important;
+          background: transparent !important;
+        }` : ""}
+      `;
+
+    }, []);
+    // epub.js themes API는 소형 뷰포트·리사이즈 시 스타일이 유실될 수 있으므로
+    // CSS 스타일링은 applyDocumentSettings(<style> 직접 주입)에서 일원화한다.
+    // 이 함수는 rendition 레벨 설정(spread)과 기존 themes 스타일 정리만 담당한다.
+    const applySettings = useCallback((rendition: Rendition, s: EpubViewerSettings, layout: EpubRenderLayout) => {
+      const isComic = layout === "comic";
+
+      // 기존 epub.js가 삽입한 기본 테마 스타일시트 제거
+      const anyRendition = rendition as unknown as {
+        spread?: (value: "auto" | "none") => void;
+        getContents?: () => Array<{ document?: Document }>;
       };
+      const contents = anyRendition.getContents?.() || [];
+      contents.forEach((content) => {
+        const doc = content.document;
+        if (!doc) return;
+        doc.getElementById("epubjs-inserted-css-default")?.remove();
+      });
 
       // spread()는 내부적으로 updateLayout() → contents.columns()를 트리거하여 iframe을 재레이아웃함.
       // 값이 실제로 바뀔 때만 호출해야 blank screen 버그를 방지할 수 있음.
-      const anyRendition = rendition as unknown as { spread?: (value: "auto" | "none") => void };
       const desiredSpread: "auto" | "none" = isComic ? "none" : s.spread;
       if (desiredSpread !== lastAppliedSpreadRef.current) {
         anyRendition.spread?.(desiredSpread);
         lastAppliedSpreadRef.current = desiredSpread;
       }
 
-      if (isComic) {
-        themes.removeOverride?.("font-family");
-        clearDefaultThemeStyles();
-        rendition.themes.default({
-          body: {
-            background: `${theme.background} !important`,
-          },
-        });
-        return;
-      }
-
-      if (isOriginal) {
-        themes.removeOverride?.("font-family");
-        const originalThemeStyles: Record<string, Record<string, string>> = {
-          body: {
-            background: `${theme.background} !important`,
-            color: `${theme.color} !important`,
-            "font-family": "revert !important",
-            "font-size": `${s.fontSize}%`,
-            "line-height": `${s.lineHeight} !important`,
-            "column-fill": "auto !important",
-            "padding-top": "0 !important",
-            "padding-bottom": "0 !important",
-            "padding-left": "8px !important",
-            "padding-right": "8px !important",
-          },
-          ...standardEbooksCorrection,
-        };
-
-        if (s.theme !== "dark") {
-          // namespace selector(epub|type)는 insertRule에서 브라우저별로 SyntaxError가 발생할 수 있어
-          // escaped attribute selector(epub\:type)로 통일한다.
-          originalThemeStyles["img[epub\\:type~='se:image.color-depth.black-on-transparent']"] = {
-            filter: "none !important",
-            background: "transparent !important",
-          };
-          originalThemeStyles["img.epub-type-contains-word-se-image-color-depth-black-on-transparent"] = {
-            filter: "none !important",
-            background: "transparent !important",
-          };
+      // 모든 iframe에 직접 <style> 주입
+      contents.forEach((content) => {
+        if (content.document) {
+          applyDocumentSettings(content.document, s, layout);
         }
-
-        clearDefaultThemeStyles();
-        rendition.themes.default(originalThemeStyles);
-      } else {
-        const fontFamily = FONT_FAMILY_MAP[s.fontFamily] || "inherit";
-        themes.font?.(fontFamily);
-        clearDefaultThemeStyles();
-        rendition.themes.default({
-          body: {
-            background: `${theme.background} !important`,
-            color: theme.color,
-            "font-family": `${fontFamily} !important`,
-            "font-size": `${s.fontSize}%`,
-            "line-height": `${s.lineHeight} !important`,
-            "column-fill": "auto !important",
-            "padding-top": "0 !important",
-            "padding-bottom": "0 !important",
-            "padding-left": "8px !important",
-            "padding-right": "8px !important",
-          },
-          "p, div, span, a:not([href])": { color: theme.color, "line-height": `${s.lineHeight} !important` },
-          "a[href]": { color: s.theme === "dark" ? "#7eb8f7" : "#1a6bb5" },
-          "li, dd, dt, blockquote, figcaption, th, td": { "line-height": `${s.lineHeight} !important` },
-          ...standardEbooksCorrection,
-        });
-      }
-    }, []);
+      });
+    }, [applyDocumentSettings]);
 
     const handleRelocated = useCallback((location: EpubjsLocation) => {
       if (isNavigatingRef.current) return;
@@ -356,6 +423,17 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       if (!rendition || !book || !location?.start?.cfi) return;
 
       const cfi = location.start.cfi;
+      const wasStable = hasStableLocationRef.current;
+      hasStableLocationRef.current = true;
+      if (!wasStable) {
+        if (resizeFrameRef.current !== null) {
+          cancelAnimationFrame(resizeFrameRef.current);
+        }
+        resizeFrameRef.current = requestAnimationFrame(() => {
+          resizeFrameRef.current = null;
+          reflowRendition(true);
+        });
+      }
       console.log("[EpubChapterViewer] relocated:", cfi);
 
       const currentLocation = rendition.currentLocation() as unknown as EpubjsLocation;
@@ -424,7 +502,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         atStart: location.atStart,
         atEnd: location.atEnd,
       });
-    }, []);
+    }, [reflowRendition]);
 
     useEffect(() => {
       if (!containerRef.current) return;
@@ -437,6 +515,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       locationsReadyRef.current = false;
       allowContentHeuristicRef.current = true;
       autoLayoutLockedRef.current = false;
+      hasStableLocationRef.current = false;
 
       const rendition = book.renderTo(containerRef.current, {
         flow: settings.flow,
@@ -446,6 +525,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         allowScriptedContent: false,
       });
       renditionRef.current = rendition;
+      lastContainerSizeRef.current = { width: 0, height: 0 };
 
       applySettings(rendition, settings, effectiveLayoutRef.current);
 
@@ -458,6 +538,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         // 구형 iOS Safari: iframe pointer-events를 none으로 설정하여
         // 터치 이벤트가 부모 <main>으로 관통하도록 한다.
         applyOldIOSSafariPointerEventFallback(doc);
+        applyDocumentSettings(doc, settingsRef.current, effectiveLayoutRef.current);
 
         const currentSettings = settingsRef.current;
         if (currentSettings.renderMode === "auto") {
@@ -994,6 +1075,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         });
 
       return () => {
+        if (resizeFrameRef.current !== null) {
+          cancelAnimationFrame(resizeFrameRef.current);
+          resizeFrameRef.current = null;
+        }
         rendition.off("relocated", handleRelocated as unknown as (...args: unknown[]) => void);
         const contentHook = rendition.hooks.content as unknown as {
           deregister?: (fn: (...args: unknown[]) => void) => void;
@@ -1006,9 +1091,46 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         renditionRef.current = null;
         locationsReadyRef.current = false;
         generatedTotalRef.current = 0;
+        hasStableLocationRef.current = false;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [epubUrl, chapterId, handleRelocated, applySettings, initialCFI, initialProgressRatio, settings.renderMode]);
+
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const scheduleReflow = () => {
+        if (resizeFrameRef.current !== null) {
+          cancelAnimationFrame(resizeFrameRef.current);
+        }
+        resizeFrameRef.current = requestAnimationFrame(() => {
+          resizeFrameRef.current = null;
+          reflowRendition();
+        });
+      };
+
+      scheduleReflow();
+
+      let observer: ResizeObserver | null = null;
+      if (typeof ResizeObserver !== "undefined") {
+        observer = new ResizeObserver(() => {
+          scheduleReflow();
+        });
+        observer.observe(container);
+      }
+
+      window.addEventListener("resize", scheduleReflow);
+
+      return () => {
+        if (resizeFrameRef.current !== null) {
+          cancelAnimationFrame(resizeFrameRef.current);
+          resizeFrameRef.current = null;
+        }
+        observer?.disconnect();
+        window.removeEventListener("resize", scheduleReflow);
+      };
+    }, [reflowRendition]);
 
     // settings 변경 시 재생성 없이 현재 rendition에 스타일만 다시 적용한다.
 
@@ -1018,7 +1140,14 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       effectiveLayoutRef.current = effectiveLayout;
       onRenderLayoutChangeRef.current?.(effectiveLayout);
       applySettings(renditionRef.current, settings, effectiveLayout);
-    }, [settings, applySettings]);
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+      }
+      resizeFrameRef.current = requestAnimationFrame(() => {
+        resizeFrameRef.current = null;
+        reflowRendition(true);
+      });
+    }, [settings, applySettings, reflowRendition]);
 
     useImperativeHandle(ref, () => {
       const withNavigation = async (action: () => Promise<unknown> | void) => {
