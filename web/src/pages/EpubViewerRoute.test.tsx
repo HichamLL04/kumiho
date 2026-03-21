@@ -458,4 +458,60 @@ describe("EpubViewerRoute", () => {
       });
     });
   });
+
+  it("시크릿 모드에서는 pseudo page fallback도 저장하지 않는다", async () => {
+    render(
+      <MemoryRouter initialEntries={[{ pathname: "/viewer/chapter-1", state: { isIncognito: true } }]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("epub-viewer")).toBeInTheDocument();
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    act(() => {
+      screen.getByTestId("epub-init-complete").click();
+    });
+
+    act(() => {
+      latestViewerProps?.onLocationChange({
+        cfi: "epubcfi(/6/2[chapter]!/4/8/10)",
+        chapterPage: 4,
+        chapterTotal: 10,
+        globalRatio: 0.5,
+        currentPosition: 0,
+        totalPositions: 1,
+        chapterHref: "chapter.xhtml",
+      });
+    });
+
+    expect(epubProgressUpdateMock).not.toHaveBeenCalled();
+  });
 });

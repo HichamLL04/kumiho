@@ -447,11 +447,6 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       currentPosition: number;
       totalPositions: number;
     }) => {
-      if (isInitializingRef.current || effectiveIncognito) {
-        if (isInitializingRef.current) console.log("[EpubViewerRoute] saveProgress skipped: isInitializing is true");
-        return false;
-      }
-
       const totalPositions = Math.max(0, location.totalPositions);
       if (totalPositions <= 1) {
         return false;
@@ -459,7 +454,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
       return true;
     },
-    [effectiveIncognito],
+    [],
   );
 
   const toPseudoProgressPayload = useCallback(
@@ -508,6 +503,11 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       currentPosition: number;
       totalPositions: number;
     }) => {
+      if (isInitializingRef.current || effectiveIncognito) {
+        if (isInitializingRef.current) console.log("[EpubViewerRoute] saveProgress skipped: isInitializing is true");
+        return;
+      }
+
       const payload = canSaveProgress(location)
         ? (() => {
             const totalPositions = Math.max(0, location.totalPositions);
@@ -537,7 +537,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         console.error("Failed to save progress:", error);
       }
     },
-    [canSaveProgress, chapterId, toPseudoProgressPayload],
+    [canSaveProgress, chapterId, effectiveIncognito, toPseudoProgressPayload],
   );
 
   const handleLocationChange = useCallback(
