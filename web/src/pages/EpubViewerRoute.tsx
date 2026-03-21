@@ -442,6 +442,26 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   }, [toggleUIWithTimer]);
 
   // 진행도 저장 (EPUB은 CFI 및 가상 포지션 기반 저장)
+  const canSaveProgress = useCallback(
+    (location: {
+      currentPosition: number;
+      totalPositions: number;
+    }) => {
+      if (isInitializingRef.current || effectiveIncognito) {
+        if (isInitializingRef.current) console.log("[EpubViewerRoute] saveProgress skipped: isInitializing is true");
+        return false;
+      }
+
+      const totalPositions = Math.max(0, location.totalPositions);
+      if (totalPositions <= 1) {
+        return false;
+      }
+
+      return true;
+    },
+    [effectiveIncognito],
+  );
+
   const saveProgress = useCallback(
     async (location: {
       cfi: string;
@@ -451,20 +471,12 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       currentPosition: number;
       totalPositions: number;
     }) => {
-      // 초기 로딩 중에는 저장을 무시하여 기존 진행도를 0으로 덮어쓰는 것 방지
-      if (isInitializingRef.current || effectiveIncognito) {
-        if (isInitializingRef.current) console.log("[EpubViewerRoute] saveProgress skipped: isInitializing is true");
+      if (!canSaveProgress(location)) {
         return;
       }
 
       // 진행 데이터는 전역 위치 축(totalPositions/currentPosition)만 사용한다.
       const totalPositions = Math.max(0, location.totalPositions);
-      // totalPositions가 1 이하면 locations가 아직 생성되지 않았거나 신뢰할 수 없는 상태.
-      // 부정확한 page/ratio를 서버에 보내면 완독으로 오인될 수 있으므로 저장을 스킵한다.
-      // (이어보기는 CFI 기반이므로 locations 준비 후 정확한 진행도가 저장되면 충분하다.)
-      if (totalPositions <= 1) {
-        return;
-      }
       const currentPosition = Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
       const calculatedCurrentPage = currentPosition + 1;
       const calculatedTotalPages = totalPositions;
@@ -483,7 +495,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         console.error("Failed to save progress:", error);
       }
     },
-    [chapterId, effectiveIncognito, totalPages, currentPage],
+    [canSaveProgress, chapterId],
   );
 
   const handleLocationChange = useCallback(
@@ -535,13 +547,19 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
       // 초기화 후 첫 위치를 baseline으로 잡고, 같은 CFI에서는 저장하지 않는다.
       // (초기 relocated가 beginning CFI를 반복 전달해 기존 위치를 덮어쓰는 문제 방지)
+      const isSaveableLocation = canSaveProgress(location);
+
       if (!baselineCFIRef.current) {
+        if (!isSaveableLocation) {
+          return;
+        }
+
         baselineCFIRef.current = location.cfi;
         // 초기 위치 저장 보호: 기존 진행률이 있는데 0% 근처라면 저장하지 않음 (레이스 보호)
         const isAtBeginning = location.globalRatio < 0.02 && location.currentPosition <= 0;
         const hadSavedProgress = initialCFI !== null || (initialProgressRatio !== null && initialProgressRatio > 0.02);
         if (!isAtBeginning || !hadSavedProgress) {
-          saveProgress(location);
+          void saveProgress(location);
         }
         return;
       }
@@ -549,9 +567,14 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         return;
       }
 
-      saveProgress(location);
+      if (!isSaveableLocation) {
+        return;
+      }
+
+      void saveProgress(location);
     },
     [
+      canSaveProgress,
       setCurrentCFI,
       setCurrentPage,
       setTotalPages,

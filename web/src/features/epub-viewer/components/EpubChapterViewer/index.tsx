@@ -263,9 +263,19 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       let styleEl = doc.getElementById(EPUB_VIEWER_STYLE_ID) as HTMLStyleElement | null;
 
       if (!styleEl) {
+        const headFromTag = doc.getElementsByTagName("head")[0] as HTMLElement | undefined;
+        const containerForStyle =
+          (doc.head as HTMLElement | null) ||
+          headFromTag ||
+          (doc.documentElement as HTMLElement | null);
+
+        if (!containerForStyle) {
+          return;
+        }
+
         styleEl = doc.createElement("style");
         styleEl.id = EPUB_VIEWER_STYLE_ID;
-        doc.head.appendChild(styleEl);
+        containerForStyle.appendChild(styleEl);
       }
 
       if (isComic) {
@@ -294,7 +304,23 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           padding-right: 8px !important;
         }
 
-        body :where(p, div, span, li, dd, dt, blockquote, figcaption, th, td, a:not([href]), h1, h2, h3, h4, h5, h6) {
+        body p,
+        body div,
+        body span,
+        body li,
+        body dd,
+        body dt,
+        body blockquote,
+        body figcaption,
+        body th,
+        body td,
+        body a:not([href]),
+        body h1,
+        body h2,
+        body h3,
+        body h4,
+        body h5,
+        body h6 {
           color: ${theme.color} !important;
           line-height: ${s.lineHeight} !important;
         }
