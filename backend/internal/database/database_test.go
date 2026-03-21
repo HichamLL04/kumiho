@@ -122,7 +122,8 @@ func TestMigrateLegacyDatabaseWithoutVersionRunsPendingMigration(t *testing.T) {
 		t.Fatalf("insert legacy reading_progress error = %v", err)
 	}
 
-	if err := Migrate(); err != nil {
+	err = Migrate()
+	if err != nil {
 		t.Fatalf("Migrate() error = %v", err)
 	}
 
