@@ -17,7 +17,7 @@ type SystemHandler struct {
 
 	// 버전 캐시
 	versionCache *VersionInfo
-	cacheMutex   sync.Mutex
+	cacheMutex   sync.RWMutex
 	lastChecked  time.Time
 
 	// 수동 체크 제한 (Rate Limit)
@@ -57,18 +57,29 @@ func (h *SystemHandler) GetVersion(c *fiber.Ctx) error {
 		}
 		h.manualCheckCount[today]++
 		h.countMutex.Unlock()
-	} else if h.versionCache != nil && time.Since(h.lastChecked) < 24*time.Hour {
-		// 캐시 반환
-		return c.JSON(h.versionCache)
 	}
+
+	// 캐시 확인 (Read Lock)
+	h.cacheMutex.RLock()
+	if h.versionCache != nil && time.Since(h.lastChecked) < 24*time.Hour {
+		cached := *h.versionCache
+		h.cacheMutex.RUnlock()
+		return c.JSON(cached)
+	}
+	h.cacheMutex.RUnlock()
 
 	// 최신 버전 조회
 	latest, err := h.fetchLatestVersion()
 	if err != nil {
-		// 조회 실패 시 캐시가 있으면 캐시라도 반환
+		// 조회 실패 시 캐시가 있으면 캐시라도 반환 (Read Lock)
+		h.cacheMutex.RLock()
 		if h.versionCache != nil {
-			return c.JSON(h.versionCache)
+			cached := *h.versionCache
+			h.cacheMutex.RUnlock()
+			return c.JSON(cached)
 		}
+		h.cacheMutex.RUnlock()
+
 		return c.JSON(VersionInfo{
 			CurrentVersion: version.Version,
 			LatestVersion:  "알 수 없음",
