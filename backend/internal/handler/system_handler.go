@@ -88,15 +88,16 @@ func (h *SystemHandler) GetVersion(c *fiber.Ctx) error {
 	}
 
 	h.cacheMutex.Lock()
-	h.versionCache = &VersionInfo{
+	info := &VersionInfo{
 		CurrentVersion: version.Version,
 		LatestVersion:  latest,
 		NeedsUpdate:    version.Version != latest && latest != "",
 	}
+	h.versionCache = info
 	h.lastChecked = time.Now()
 	h.cacheMutex.Unlock()
 
-	return c.JSON(h.versionCache)
+	return c.JSON(info)
 }
 
 func (h *SystemHandler) fetchLatestVersion() (string, error) {
