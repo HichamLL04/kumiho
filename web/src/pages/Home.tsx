@@ -91,10 +91,12 @@ export function HomePage() {
         let likedSeriesList: Series[] = [];
         try {
           const likedRes = await libraryAPI.getSeries("system-likes");
+          if (currentLoad !== loadSequenceRef.current) return;
           likedSeriesList = (likedRes.data.series || []) as Series[];
         } catch (error) {
           console.warn("Failed to load liked series library:", error);
         }
+        if (currentLoad !== loadSequenceRef.current) return;
         setLikedSeries(likedSeriesList);
 
         if (settingsRes.home_layout_order) {

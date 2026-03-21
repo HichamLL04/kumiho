@@ -101,6 +101,7 @@ func ensureSystemLikesLibrary() error {
 		"name",
 		"path",
 		"type",
+		"library_type",
 		"is_visible",
 		"default_view_mode",
 		"default_read_direction",
@@ -135,6 +136,7 @@ func ensureSystemLikesLibrary() error {
 			default_view_mode = excluded.default_view_mode,
 			default_read_direction = excluded.default_read_direction,
 			default_page_transition = excluded.default_page_transition,
+			sort_order = excluded.sort_order,
 			updated_at = datetime('now')
 	`); err != nil {
 		return fmt.Errorf("upsert system-likes library: %w", err)
