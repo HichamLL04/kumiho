@@ -59,9 +59,9 @@ func (h *SystemHandler) GetVersion(c *fiber.Ctx) error {
 		h.countMutex.Unlock()
 	}
 
-	// 캐시 확인 (Read Lock)
+	// 캐시 확인 (Read Lock) - 수동 체크(force=true)가 아닐 때만 유효함
 	h.cacheMutex.RLock()
-	if h.versionCache != nil && time.Since(h.lastChecked) < 24*time.Hour {
+	if !force && h.versionCache != nil && time.Since(h.lastChecked) < 24*time.Hour {
 		cached := *h.versionCache
 		h.cacheMutex.RUnlock()
 		return c.JSON(cached)
