@@ -111,7 +111,8 @@ func (s *AuthService) Register(req *RegisterRequest, ctx *LoginContext) (*TokenR
 		CanDownload:  canDownload,
 	}
 
-	if err := s.userRepo.Create(tx, user); err != nil {
+	err = s.userRepo.Create(tx, user)
+	if err != nil {
 		return nil, err
 	}
 
