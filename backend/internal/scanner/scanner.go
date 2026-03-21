@@ -1480,8 +1480,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 	}()
 
 	// Consumer: Single Thread DB Save (Sequential)
-	// seriesContentChanged는 consumer 고루틴 내에서만 쓰이고,
-	// <-consumerDone 이후에 읽히므로 동기화가 보장된다.
+	// seriesContentChanged는 consumer 고루틴과, <-consumerDone 이후 메인 흐름에서만 쓰이며,
+	// 실제 동기화는 <-consumerDone 수신으로 보장된다.
 	consumerDone := make(chan struct{})
 	seriesContentChanged := false
 	go func() {
