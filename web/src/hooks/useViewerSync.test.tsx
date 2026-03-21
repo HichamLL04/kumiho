@@ -140,6 +140,31 @@ describe("useViewerSync", () => {
     });
   });
 
+  it("does not sync page progress in incognito mode", async () => {
+    const { rerender } = renderHook(
+      ({ currentPage }) =>
+        useViewerSync({
+          seriesId: "series-1",
+          chapterId: "chapter-1",
+          currentPage,
+          isLoading: false,
+          isIncognito: true,
+        }),
+      {
+        initialProps: {
+          currentPage: 10,
+        },
+      },
+    );
+
+    rerender({ currentPage: 11 });
+    rerender({ currentPage: 12 });
+
+    await waitFor(() => {
+      expect(mocks.progressUpdate).not.toHaveBeenCalled();
+    });
+  });
+
   it("notifies viewer start even when seriesId is empty", async () => {
     renderHook(() =>
       useViewerSync({
