@@ -1453,9 +1453,9 @@ func migrateAudioProgressTimeFormat() error {
 	defer func() { _ = tx.Rollback() }()
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, current_time, duration
+		SELECT id, "current_time", "duration"
 		FROM reading_progress
-		WHERE typeof(current_time) = 'text' OR typeof(duration) = 'text'
+		WHERE typeof("current_time") = 'text' OR typeof("duration") = 'text'
 	`)
 	if err != nil {
 		return fmt.Errorf("query legacy audio time rows: %w", err)
