@@ -1365,6 +1365,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 								hasThumbnail := existingVol.ThumbnailPath != nil && *existingVol.ThumbnailPath != ""
 
 								if !hasZeroPages && (!isPdf || hasThumbnail) {
+									s.markExistingVolumeTreeProcessed(existingVol, existingSubVolMap, processedPaths, &mu)
+
 									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)
 									// Extension 필드가 비어있으면 in-place로 업데이트 (볼륨 삭제 없이)
 									if existingVol.Extension == "" {
@@ -1735,6 +1737,25 @@ func (s *Scanner) getCachedChaptersForVolume(
 	existingChapterMap[volumeID] = chapters
 	loadedChapterVolumes[volumeID] = true
 	return chapters, nil
+}
+
+func (s *Scanner) markExistingVolumeTreeProcessed(
+	volume *model.Volume,
+	existingSubVolMap map[string][]*model.Volume,
+	processedPaths map[string]bool,
+	mu *sync.Mutex,
+) {
+	if volume == nil {
+		return
+	}
+
+	mu.Lock()
+	processedPaths[volume.Path] = true
+	mu.Unlock()
+
+	for _, childVolume := range existingSubVolMap[volume.ID] {
+		s.markExistingVolumeTreeProcessed(childVolume, existingSubVolMap, processedPaths, mu)
+	}
 }
 
 // analyzeVolumeRecursive scans a folder based volume recursively
