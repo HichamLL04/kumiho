@@ -123,7 +123,7 @@ export const useScanStore = create<ScanStore>((set, get) => ({
       }
 
       // 스캔이 완료되면 폴링 중지 및 최종 화면 갱신
-      if (wasScanning && !isNowScanning) {
+      if (wasScanning && !isNowScanning && hasObservedScanning) {
         useLibraryStore.getState().triggerRefresh();
         get().stopPolling();
         return;
