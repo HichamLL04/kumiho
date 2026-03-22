@@ -45,8 +45,6 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [otherUserCount, setOtherUserCount] = useState(0);
   const [hasUpdate, setHasUpdate] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-  const [, forceUpdate] = useState({});
-
   const atmosphere = useAtmosphereStore();
   const atmosphereSuppressed = Object.values(atmosphere.suppressedBy).some(Boolean);
   const { subscribe } = useSSE();
@@ -57,15 +55,21 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   const MAX_VISIBLE_RESULTS = 5;
 
-  // 타이머 UI 실시간 갱신을 위한 효과
+  // 타이머 잔여 시간 (렌더 중 Date.now() 직접 호출 방지)
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
   useEffect(() => {
     if (!dropdownOpen || atmosphere.timerEndAt === null) return;
 
-    const interval = setInterval(() => {
-      forceUpdate({});
-    }, 30000); // 30초마다 갱신
+    const update = () => {
+      setTimerRemaining(Math.max(0, Math.ceil((atmosphere.timerEndAt! - Date.now()) / (60 * 1000))));
+    };
 
-    return () => clearInterval(interval);
+    const initialTimeout = setTimeout(update, 0);
+    const interval = setInterval(update, 30000);
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
   }, [dropdownOpen, atmosphere.timerEndAt]);
 
   useEffect(() => {
@@ -122,7 +126,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   // 실시간 검색 (Debounce)
   useEffect(() => {
     if (!searchQuery.trim()) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 검색어 초기화 시 연관 상태 동기 리셋
       setLiveResults([]);
       setShowDropdown(false);
       setSelectedIndex(-1);
@@ -464,10 +468,10 @@ export function Header({ onMenuClick }: HeaderProps) {
                         <option value="30">{t("header.atmosphere_timer_30")}</option>
                         <option value="60">{t("header.atmosphere_timer_60")}</option>
                       </select>
-                      {atmosphere.timerEndAt && (
+                      {timerRemaining !== null && timerRemaining > 0 && (
                         <span className={styles.timerDisplay}>
                           {t("header.atmosphere_timer_remaining", {
-                            minutes: Math.max(0, Math.ceil((atmosphere.timerEndAt - Date.now()) / (60 * 1000))),
+                            minutes: timerRemaining,
                           })}
                         </span>
                       )}
