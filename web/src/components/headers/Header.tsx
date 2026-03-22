@@ -20,6 +20,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { seriesAPI, systemAPI } from "../../api/client";
 import { useSSE } from "../../hooks/useSSE";
 import { useAtmosphereStore } from "../../stores/atmosphereStore";
+import { shallow } from "zustand/shallow";
 import { AMBIENT_TRACKS } from "../../constants/ambientTracks";
 import type { Series } from "../../types/series";
 import { ScanProgressBar } from "../ScanProgressBar";
@@ -45,7 +46,21 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [otherUserCount, setOtherUserCount] = useState(0);
   const [hasUpdate, setHasUpdate] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-  const atmosphere = useAtmosphereStore();
+  const atmosphere = useAtmosphereStore(
+    (s) => ({
+      isEnabled: s.isEnabled,
+      selectedTrackId: s.selectedTrackId,
+      volume: s.volume,
+      timerMinutes: s.timerMinutes,
+      timerEndAt: s.timerEndAt,
+      suppressedBy: s.suppressedBy,
+      setEnabled: s.setEnabled,
+      setSelectedTrackId: s.setSelectedTrackId,
+      setVolume: s.setVolume,
+      setTimer: s.setTimer,
+    }),
+    shallow,
+  );
   const atmosphereSuppressed = Object.values(atmosphere.suppressedBy).some(Boolean);
   const { subscribe } = useSSE();
 
@@ -421,13 +436,14 @@ export function Header({ onMenuClick }: HeaderProps) {
               <div className={styles.atmosphereSection}>
                 <div className={styles.atmosphereHeader}>
                   <span className={styles.atmosphereTitle}>
-                    <Sparkles size={14} /> {t("header.atmosphere_title", "독서 분위기")}
+                    <Sparkles size={14} /> {t("header.atmosphere_title")}
                   </span>
                   <label className={styles.switch}>
                     <input
                       type="checkbox"
                       checked={atmosphere.isEnabled}
                       onChange={(e) => atmosphere.setEnabled(e.target.checked)}
+                      aria-label={t("header.atmosphere_title")}
                     />
                     <span className={styles.slider} />
                   </label>
@@ -441,6 +457,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                         className={styles.atmosphereSelect}
                         value={atmosphere.selectedTrackId}
                         onChange={(e) => atmosphere.setSelectedTrackId(e.target.value)}
+                        aria-label={t("header.atmosphere_track_select")}
                       >
                         {AMBIENT_TRACKS.map((track) => (
                           <option
@@ -458,6 +475,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                       <select
                         className={styles.timerSelect}
                         value={atmosphere.timerMinutes || ""}
+                        aria-label={t("header.atmosphere_timer")}
                         onChange={(e) => {
                           const val = e.target.value;
                           atmosphere.setTimer(val ? parseInt(val) : null);
@@ -487,6 +505,8 @@ export function Header({ onMenuClick }: HeaderProps) {
                           max="1"
                           step="0.01"
                           value={atmosphere.volume}
+                          aria-label={t("header.atmosphere_volume")}
+                          aria-valuetext={`${Math.round(atmosphere.volume * 100)}%`}
                           onChange={(e) => atmosphere.setVolume(parseFloat(e.target.value))}
                         />
                       </div>
@@ -494,7 +514,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
                     {atmosphereSuppressed && (
                       <div className={styles.suppressedNotice}>
-                        {t("header.atmosphere_suppressed", "BGM 재생 중 일시정지됨")}
+                        {t("header.atmosphere_suppressed")}
                       </div>
                     )}
                   </div>

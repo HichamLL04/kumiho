@@ -76,7 +76,7 @@ export function AtmosphereProvider() {
     const gainNode = gainNodeRef.current;
     if (!ctx || !gainNode) return;
 
-    if (ctx.state === "suspended") ctx.resume();
+    if (ctx.state === "suspended") void ctx.resume().catch(console.error);
 
     const gainParam = gainNode.gain;
     const currentTime = ctx.currentTime;
@@ -114,10 +114,13 @@ export function AtmosphereProvider() {
   // 첫 사용자 상호작용 시 오디오 컨텍스트 재개 (Autoplay 정책 대응)
   useEffect(() => {
     const handleInteraction = () => {
-      const { ctx, audio } = initAudioContext();
-      if (ctx.state === "suspended") ctx.resume();
+      // 앰비언트가 비활성 상태이면 불필요한 AudioContext 생성 방지
+      if (!isEnabled || isSuppressed) return;
 
-      if (isEnabled && !isSuppressed && audio.paused && audio.src) {
+      const { ctx, audio } = initAudioContext();
+      if (ctx.state === "suspended") void ctx.resume().catch(console.error);
+
+      if (audio.paused && audio.src) {
         audio
           .play()
           .then(() => {
@@ -181,7 +184,7 @@ export function AtmosphereProvider() {
             audio.load();
           }
 
-          if (ctx.state === "suspended") ctx.resume();
+          if (ctx.state === "suspended") void ctx.resume().catch(console.error);
           if (audio.paused) {
             audio
               .play()

@@ -308,15 +308,6 @@ func Migrate() error {
 		UNIQUE(user_id, volume_id)
 	);
 
-	-- 챕터 완료 기록
-	CREATE TABLE IF NOT EXISTS chapter_completions (
-		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-		completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		UNIQUE(user_id, chapter_id)
-	);
-
 	-- 서버 설정
 	CREATE TABLE IF NOT EXISTS server_settings (
 		key TEXT PRIMARY KEY,
@@ -444,8 +435,6 @@ func Migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id);
 	CREATE INDEX IF NOT EXISTS idx_bookmarks_series ON bookmarks(series_id);
 	CREATE INDEX IF NOT EXISTS idx_bookmarks_chapter ON bookmarks(chapter_id);
-	CREATE INDEX IF NOT EXISTS idx_chapter_completions_user ON chapter_completions(user_id);
-	CREATE INDEX IF NOT EXISTS idx_chapter_completions_chapter ON chapter_completions(chapter_id);
 	`
 
 	if _, err := DB.Exec(schema); err != nil {

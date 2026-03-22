@@ -665,9 +665,11 @@
 }
 
 .atmosphereVolume {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  padding: 2px 0;
 }
 
 .volumeSlider {
@@ -753,13 +755,6 @@ input:checked + .slider:before {
   align-items: center;
   gap: 0.5rem;
   color: #718096;
-}
-
-.atmosphereVolume {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  padding: 2px 0;
 }
 
 .timerDisplay {

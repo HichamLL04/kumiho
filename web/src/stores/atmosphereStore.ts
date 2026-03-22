@@ -70,6 +70,13 @@ export const useAtmosphereStore = create<AtmosphereState>()(
           timerMinutes: state.timerMinutes,
           timerEndAt: state.timerEndAt,
         }),
+        onRehydrateStorage: () => (state) => {
+          if (!state) return;
+          // 저장된 selectedTrackId가 현재 트랙 목록에 없으면 첫 번째 트랙으로 교정
+          if (!AMBIENT_TRACKS.some((t) => t.id === state.selectedTrackId)) {
+            state.selectedTrackId = AMBIENT_TRACKS[0]?.id || "";
+          }
+        },
       },
     ),
     { name: "kumiho-atmosphere" },
