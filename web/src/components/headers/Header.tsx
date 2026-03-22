@@ -20,7 +20,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { seriesAPI, systemAPI } from "../../api/client";
 import { useSSE } from "../../hooks/useSSE";
 import { useAtmosphereStore } from "../../stores/atmosphereStore";
-import { shallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { AMBIENT_TRACKS } from "../../constants/ambientTracks";
 import type { Series } from "../../types/series";
 import { ScanProgressBar } from "../ScanProgressBar";
@@ -47,7 +47,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [hasUpdate, setHasUpdate] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const atmosphere = useAtmosphereStore(
-    (s) => ({
+    useShallow((s) => ({
       isEnabled: s.isEnabled,
       selectedTrackId: s.selectedTrackId,
       volume: s.volume,
@@ -58,8 +58,7 @@ export function Header({ onMenuClick }: HeaderProps) {
       setSelectedTrackId: s.setSelectedTrackId,
       setVolume: s.setVolume,
       setTimer: s.setTimer,
-    }),
-    shallow,
+    })),
   );
   const atmosphereSuppressed = Object.values(atmosphere.suppressedBy).some(Boolean);
   const { subscribe } = useSSE();
@@ -513,9 +512,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                     </div>
 
                     {atmosphereSuppressed && (
-                      <div className={styles.suppressedNotice}>
-                        {t("header.atmosphere_suppressed")}
-                      </div>
+                      <div className={styles.suppressedNotice}>{t("header.atmosphere_suppressed")}</div>
                     )}
                   </div>
                 )}
