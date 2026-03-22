@@ -21,7 +21,7 @@ func connectTestDB(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		if err := database.Close(); err != nil {
-			t.Fatalf("database.Close() error = %v", err)
+			t.Errorf("database.Close() error = %v", err)
 		}
 	})
 }
@@ -33,14 +33,30 @@ func seedLibraryAndChapter(t *testing.T) (seriesID, volumeID, chapterID string) 
 	volumeID = "test-volume-1"
 	chapterID = "test-chapter-1"
 
-	_, err := database.DB.Exec(`
-		INSERT INTO libraries (id, name, path) VALUES ('test-lib', 'Test Library', '/tmp/test');
-		INSERT INTO series (id, library_id, title, path) VALUES (?, 'test-lib', 'Test Series', '/tmp/test/series');
-		INSERT INTO volumes (id, series_id, title, volume_number, path) VALUES (?, ?, 'Test Volume', 1, '/tmp/test/series/vol1');
-		INSERT INTO chapters (id, volume_id, title, chapter_number, path) VALUES (?, ?, 'Test Chapter', 1, '/tmp/test/series/vol1/ch1.cbz');
-	`, seriesID, volumeID, seriesID, chapterID, volumeID)
+	tx, err := database.DB.Begin()
 	if err != nil {
-		t.Fatalf("seed library/series/volume/chapter error = %v", err)
+		t.Fatalf("begin transaction error = %v", err)
+	}
+
+	if _, err := tx.Exec(`INSERT INTO libraries (id, name, path) VALUES ('test-lib', 'Test Library', '/tmp/test')`); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("seed library error = %v", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO series (id, library_id, title, path) VALUES (?, 'test-lib', 'Test Series', '/tmp/test/series')`, seriesID); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("seed series error = %v", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO volumes (id, series_id, title, volume_number, path) VALUES (?, ?, 'Test Volume', 1, '/tmp/test/series/vol1')`, volumeID, seriesID); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("seed volume error = %v", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO chapters (id, volume_id, title, chapter_number, path) VALUES (?, ?, 'Test Chapter', 1, '/tmp/test/series/vol1/ch1.cbz')`, chapterID, volumeID); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("seed chapter error = %v", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit transaction error = %v", err)
 	}
 
 	return
@@ -122,6 +138,11 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("db.Close() error = %v", closeErr)
+		}
+	}()
 
 	_, err = db.Exec(`
 		CREATE TABLE server_settings (
@@ -195,7 +216,7 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 		t.Fatalf("seed legacy schema error = %v", err)
 	}
 
-	// 2. 여러 건의 진행도 데이터 삽입
+	// 2. 여러 건의 진행도 데이터 삽입 (current_time/duration 포함)
 	type testProgress struct {
 		id              string
 		userID          string
@@ -204,14 +225,16 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 		currentPage     int
 		totalPages      int
 		progressPercent float64
+		currentTime     float64
+		duration        float64
 	}
 
 	testData := []testProgress{
-		{"p1", "user-1", "series-1", "chapter-1", 10, 100, 10.0},
-		{"p2", "user-1", "series-1", "chapter-2", 50, 200, 25.0},
-		{"p3", "user-1", "series-2", "chapter-3", 75, 75, 100.0},
-		{"p4", "user-2", "series-1", "chapter-1", 30, 100, 30.0},
-		{"p5", "user-2", "series-3", "chapter-4", 1, 500, 0.2},
+		{"p1", "user-1", "series-1", "chapter-1", 10, 100, 10.0, 0, 0},
+		{"p2", "user-1", "series-1", "chapter-2", 50, 200, 25.0, 123.5, 300.0},
+		{"p3", "user-1", "series-2", "chapter-3", 75, 75, 100.0, 0, 0},
+		{"p4", "user-2", "series-1", "chapter-1", 30, 100, 30.0, 45.0, 120.0},
+		{"p5", "user-2", "series-3", "chapter-4", 1, 500, 0.2, 0, 0},
 	}
 
 	_, err = db.Exec(`INSERT INTO users (id) VALUES ('user-1'), ('user-2')`)
@@ -221,15 +244,18 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 
 	for _, tp := range testData {
 		_, err = db.Exec(
-			`INSERT INTO reading_progress (id, user_id, series_id, chapter_id, current_page, total_pages, progress_percent) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			tp.id, tp.userID, tp.seriesID, tp.chapterID, tp.currentPage, tp.totalPages, tp.progressPercent,
+			`INSERT INTO reading_progress (id, user_id, series_id, chapter_id, current_page, total_pages, progress_percent, "current_time", duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			tp.id, tp.userID, tp.seriesID, tp.chapterID, tp.currentPage, tp.totalPages, tp.progressPercent, tp.currentTime, tp.duration,
 		)
 		if err != nil {
 			t.Fatalf("insert reading_progress %s error = %v", tp.id, err)
 		}
 	}
 
-	db.Close()
+	// database.Connect 전에 명시적으로 닫아야 lock 방지 (defer보다 먼저 실행)
+	if closeErr := db.Close(); closeErr != nil {
+		t.Fatalf("db.Close() before Connect error = %v", closeErr)
+	}
 
 	// 3. Connect 호출 (마이그레이션 실행)
 	err = database.Connect(dbPath)
@@ -238,7 +264,7 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		if closeErr := database.Close(); closeErr != nil {
-			t.Fatalf("database.Close() error = %v", closeErr)
+			t.Errorf("database.Close() error = %v", closeErr)
 		}
 	})
 
@@ -252,14 +278,14 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 		t.Fatalf("reading_progress count = %d, want %d", count, len(testData))
 	}
 
-	// 5. 각 진행도의 주요 필드 보존 확인
+	// 5. 각 진행도의 주요 필드 보존 확인 (current_time/duration 포함)
 	for _, tp := range testData {
 		var currentPage, totalPages int
-		var progressPercent float64
+		var progressPercent, currentTime, duration float64
 		err = database.DB.QueryRow(
-			`SELECT current_page, total_pages, progress_percent FROM reading_progress WHERE user_id = ? AND chapter_id = ?`,
+			`SELECT current_page, total_pages, progress_percent, "current_time", duration FROM reading_progress WHERE user_id = ? AND chapter_id = ?`,
 			tp.userID, tp.chapterID,
-		).Scan(&currentPage, &totalPages, &progressPercent)
+		).Scan(&currentPage, &totalPages, &progressPercent, &currentTime, &duration)
 		if err != nil {
 			t.Fatalf("select progress for user=%s chapter=%s error = %v", tp.userID, tp.chapterID, err)
 		}
@@ -271,6 +297,12 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 		}
 		if progressPercent != tp.progressPercent {
 			t.Fatalf("user=%s chapter=%s progress_percent = %f, want %f", tp.userID, tp.chapterID, progressPercent, tp.progressPercent)
+		}
+		if currentTime != tp.currentTime {
+			t.Fatalf("user=%s chapter=%s current_time = %f, want %f", tp.userID, tp.chapterID, currentTime, tp.currentTime)
+		}
+		if duration != tp.duration {
+			t.Fatalf("user=%s chapter=%s duration = %f, want %f", tp.userID, tp.chapterID, duration, tp.duration)
 		}
 	}
 }
