@@ -23,6 +23,7 @@ func connectTestDB(t *testing.T) {
 		if err := database.Close(); err != nil {
 			t.Errorf("database.Close() error = %v", err)
 		}
+		database.DB = nil
 	})
 }
 
@@ -138,12 +139,6 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
-	defer func() {
-		if closeErr := db.Close(); closeErr != nil {
-			t.Errorf("db.Close() error = %v", closeErr)
-		}
-	}()
-
 	_, err = db.Exec(`
 		CREATE TABLE server_settings (
 			key TEXT PRIMARY KEY,
@@ -266,6 +261,7 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 		if closeErr := database.Close(); closeErr != nil {
 			t.Errorf("database.Close() error = %v", closeErr)
 		}
+		database.DB = nil
 	})
 
 	// 4. 전체 건수 보존 확인
