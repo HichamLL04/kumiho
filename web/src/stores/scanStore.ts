@@ -27,6 +27,8 @@ interface ScanStore {
   scanningLibraries: LibraryScanStatus[];
   // 전체 스캔 여부
   isScanning: boolean;
+  // 스캔이 한 번이라도 시작된 적이 있는지
+  hasObservedScanning: boolean;
   // 스캔 미감지 폴링 횟수
   idlePollCount: number;
   // 폴링 인터벌 ID
@@ -43,6 +45,7 @@ interface ScanStore {
 export const useScanStore = create<ScanStore>((set, get) => ({
   scanningLibraries: [],
   isScanning: false,
+  hasObservedScanning: false,
   idlePollCount: 0,
   pollingInterval: null,
 
@@ -102,12 +105,12 @@ export const useScanStore = create<ScanStore>((set, get) => ({
       }
 
       if (isNowScanning) {
-        set({ idlePollCount: 0 });
+        set({ idlePollCount: 0, hasObservedScanning: true });
         return;
       }
 
-      const { pollingInterval, idlePollCount } = get();
-      if (pollingInterval) {
+      const { pollingInterval, idlePollCount, hasObservedScanning } = get();
+      if (pollingInterval && hasObservedScanning) {
         const nextIdlePollCount = idlePollCount + 1;
         if (nextIdlePollCount >= IDLE_POLL_LIMIT) {
           get().stopPolling();
@@ -124,7 +127,7 @@ export const useScanStore = create<ScanStore>((set, get) => ({
     const { pollingInterval } = get();
     if (pollingInterval) return; // 이미 폴링 중
 
-    set({ idlePollCount: 0 });
+    set({ idlePollCount: 0, hasObservedScanning: false });
 
     // 즉시 한 번 체크
     get().checkScanStatus();
@@ -141,7 +144,7 @@ export const useScanStore = create<ScanStore>((set, get) => ({
     const { pollingInterval } = get();
     if (pollingInterval) {
       clearInterval(pollingInterval);
-      set({ pollingInterval: null, idlePollCount: 0 });
+      set({ pollingInterval: null, idlePollCount: 0, hasObservedScanning: false });
     }
   },
 }));
