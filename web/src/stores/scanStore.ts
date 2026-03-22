@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { libraryAPI } from "../api/client";
 import { useLibraryStore } from "./libraryStore";
 
+const IDLE_POLL_LIMIT = 60;
+
 // 라이브러리 스캔 상태 타입
 interface LibraryScanStatus {
   id: string;
@@ -107,7 +109,7 @@ export const useScanStore = create<ScanStore>((set, get) => ({
       const { pollingInterval, idlePollCount } = get();
       if (pollingInterval) {
         const nextIdlePollCount = idlePollCount + 1;
-        if (nextIdlePollCount >= 5) {
+        if (nextIdlePollCount >= IDLE_POLL_LIMIT) {
           get().stopPolling();
         } else {
           set({ idlePollCount: nextIdlePollCount });
