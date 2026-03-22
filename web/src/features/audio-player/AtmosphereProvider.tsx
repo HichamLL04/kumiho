@@ -97,14 +97,37 @@ export function AtmosphereProvider() {
     const shouldPlay = isEnabled && !isSuppressed;
     const { audio, ctx } = initAudioContext();
     const fTimeout = fadeTimeoutRef.current;
-    const tTimeout = trackChangeTimeoutRef.current;
+
+    // 이전 트랙 변경 타이머 정리
+    if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
 
     if (shouldPlay) {
       if (currentTrack) {
         const trackUrl = `/assets/ambient/${currentTrack.file}.opus`;
         const fullTrackUrl = window.location.origin + trackUrl;
 
-        // 다른 트랙으로 변경되면 즉시 교체 (사용자 요청에 따라 롤백: 지연/페이드 없이 바로 교체)
+        // 다른 트랙으로 변경되는 경우 (전환 페이드 적용)
+        if (audio.src !== fullTrackUrl && audio.src !== "") {
+          if (!audio.paused) {
+            // 1. 현재 트랙 페이드 아웃 (0.5s)
+            fadeVolume(0, 0.5);
+            trackChangeTimeoutRef.current = setTimeout(() => {
+              // 2. 소스 교체 및 로드
+              audio.src = trackUrl;
+              audio.load();
+              // 3. 새 트랙 재생 및 페이드 인 (0.5s)
+              audio
+                .play()
+                .then(() => {
+                  fadeVolume(volume, 0.5);
+                })
+                .catch((e) => console.warn("Track switch play failed:", e));
+            }, 500);
+            return; // 타이머 동작 중이므로 아래 재생 로직 건너뜀
+          }
+        }
+
+        // 초기 시작 혹은 트랙이 이미 교체된 상태인 경우
         if (audio.src !== fullTrackUrl) {
           audio.src = trackUrl;
           audio.load();
@@ -115,12 +138,12 @@ export function AtmosphereProvider() {
           audio
             .play()
             .then(() => {
-              // 켜질 때는 부드럽게 페이드 인 (0.5s)
+              // 처음 켜질 때 부드럽게 페이드 인 (0.5s)
               fadeVolume(volume, 0.5);
             })
             .catch((e) => console.warn("Ambient play failed:", e));
         } else {
-          // 이미 재생 중일 때 볼륨 변화가 있으면 즉각 반영
+          // 이미 재생 중일 때 볼륨 변화가 있으면 즉각 반영 (지연 없음)
           fadeVolume(volume, 0);
         }
       }
@@ -137,7 +160,7 @@ export function AtmosphereProvider() {
 
     return () => {
       if (fTimeout) clearTimeout(fTimeout);
-      if (tTimeout) clearTimeout(tTimeout);
+      if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
     };
   }, [isEnabled, isSuppressed, selectedTrackId, initAudioContext, fadeVolume, currentTrack, volume]);
 
