@@ -1,7 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { LogOut, Menu, Settings, ChevronDown, User, Search, X, ChevronRight, FileText, Sparkles } from "lucide-react";
+import {
+  LogOut,
+  Menu,
+  Settings,
+  ChevronDown,
+  User,
+  Search,
+  X,
+  ChevronRight,
+  FileText,
+  Sparkles,
+  Timer,
+  Music,
+  Volume2,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { seriesAPI, systemAPI } from "../../api/client";
 import { useSSE } from "../../hooks/useSSE";
@@ -31,8 +45,10 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [otherUserCount, setOtherUserCount] = useState(0);
   const [hasUpdate, setHasUpdate] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const [, forceUpdate] = useState({});
 
   const atmosphere = useAtmosphereStore();
+  const atmosphereSuppressed = Object.values(atmosphere.suppressedBy).some(Boolean);
   const { subscribe } = useSSE();
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -40,6 +56,17 @@ export function Header({ onMenuClick }: HeaderProps) {
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const MAX_VISIBLE_RESULTS = 5;
+
+  // 타이머 UI 실시간 갱신을 위한 효과
+  useEffect(() => {
+    if (!dropdownOpen || atmosphere.timerEndAt === null) return;
+
+    const interval = setInterval(() => {
+      forceUpdate({});
+    }, 30000); // 30초마다 갱신
+
+    return () => clearInterval(interval);
+  }, [dropdownOpen, atmosphere.timerEndAt]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -404,32 +431,64 @@ export function Header({ onMenuClick }: HeaderProps) {
 
                 {atmosphere.isEnabled && (
                   <div className={styles.atmosphereControls}>
-                    <select
-                      className={styles.atmosphereSelect}
-                      value={atmosphere.selectedTrackId}
-                      onChange={(e) => atmosphere.setSelectedTrackId(e.target.value)}
-                    >
-                      {AMBIENT_TRACKS.map((track) => (
-                        <option
-                          key={track.id}
-                          value={track.id}
-                        >
-                          {t(`header.atmosphere_tracks.${track.id}`)}
-                        </option>
-                      ))}
-                    </select>
-                    <div className={styles.atmosphereVolume}>
-                      <input
-                        type="range"
-                        className={styles.volumeSlider}
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value={atmosphere.volume}
-                        onChange={(e) => atmosphere.setVolume(parseFloat(e.target.value))}
-                      />
+                    <div className={styles.atmosphereRow}>
+                      <Music size={14} />
+                      <select
+                        className={styles.atmosphereSelect}
+                        value={atmosphere.selectedTrackId}
+                        onChange={(e) => atmosphere.setSelectedTrackId(e.target.value)}
+                      >
+                        {AMBIENT_TRACKS.map((track) => (
+                          <option
+                            key={track.id}
+                            value={track.id}
+                          >
+                            {t(`header.atmosphere_tracks.${track.id}`)}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    {atmosphere.isSuppressed && (
+
+                    <div className={styles.atmosphereRow}>
+                      <Timer size={14} />
+                      <select
+                        className={styles.timerSelect}
+                        value={atmosphere.timerMinutes || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          atmosphere.setTimer(val ? parseInt(val) : null);
+                        }}
+                      >
+                        <option value="">{t("header.atmosphere_timer_off")}</option>
+                        <option value="15">{t("header.atmosphere_timer_15")}</option>
+                        <option value="30">{t("header.atmosphere_timer_30")}</option>
+                        <option value="60">{t("header.atmosphere_timer_60")}</option>
+                      </select>
+                      {atmosphere.timerEndAt && (
+                        <span className={styles.timerDisplay}>
+                          {t("header.atmosphere_timer_remaining", {
+                            minutes: Math.max(0, Math.ceil((atmosphere.timerEndAt - Date.now()) / (60 * 1000))),
+                          })}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className={styles.atmosphereRow}>
+                      <Volume2 size={14} />
+                      <div className={styles.atmosphereVolume}>
+                        <input
+                          type="range"
+                          className={styles.volumeSlider}
+                          min="0"
+                          max="1"
+                          step="0.01"
+                          value={atmosphere.volume}
+                          onChange={(e) => atmosphere.setVolume(parseFloat(e.target.value))}
+                        />
+                      </div>
+                    </div>
+
+                    {atmosphereSuppressed && (
                       <div className={styles.suppressedNotice}>
                         {t("header.atmosphere_suppressed", "BGM 재생 중 일시정지됨")}
                       </div>

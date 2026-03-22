@@ -70,7 +70,13 @@
     "atmosphere_tracks": {
       "rain": "雨音",
       "bonfire": "焚き火の音"
-    }
+    },
+    "atmosphere_timer": "タイマー",
+    "atmosphere_timer_off": "オフ",
+    "atmosphere_timer_15": "15分",
+    "atmosphere_timer_30": "30分",
+    "atmosphere_timer_60": "1時間",
+    "atmosphere_timer_remaining": "残り{{minutes}}分"
   },
   "settings": {
     "title": "設定",

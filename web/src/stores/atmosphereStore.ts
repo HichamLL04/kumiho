@@ -6,12 +6,15 @@ interface AtmosphereState {
   isEnabled: boolean;
   selectedTrackId: string;
   volume: number;
-  isSuppressed: boolean;
+  suppressedBy: Record<string, boolean>;
+  timerMinutes: number | null;
+  timerEndAt: number | null;
 
   setEnabled: (enabled: boolean) => void;
   setSelectedTrackId: (id: string) => void;
   setVolume: (volume: number) => void;
-  setSuppressed: (suppressed: boolean) => void;
+  setSuppressedBy: (source: string, suppressed: boolean) => void;
+  setTimer: (minutes: number | null) => void;
   reset: () => void;
 }
 
@@ -22,27 +25,50 @@ export const useAtmosphereStore = create<AtmosphereState>()(
         isEnabled: false,
         selectedTrackId: AMBIENT_TRACKS[0]?.id || "",
         volume: 0.5,
-        isSuppressed: false,
+        suppressedBy: {},
+        timerMinutes: null,
+        timerEndAt: null,
 
         setEnabled: (enabled) => set({ isEnabled: enabled }),
         setSelectedTrackId: (id) => set({ selectedTrackId: id }),
         setVolume: (volume) => set({ volume }),
-        setSuppressed: (suppressed) => set({ isSuppressed: suppressed }),
+        setSuppressedBy: (source, suppressed) =>
+          set((state) => {
+            const next = { ...state.suppressedBy };
+            if (suppressed) {
+              next[source] = true;
+            } else {
+              delete next[source];
+            }
+            return { suppressedBy: next };
+          }),
+        setTimer: (minutes) => {
+          if (minutes === null) {
+            set({ timerMinutes: null, timerEndAt: null });
+          } else {
+            const endAt = Date.now() + minutes * 60 * 1000;
+            set({ timerMinutes: minutes, timerEndAt: endAt });
+          }
+        },
         reset: () =>
           set({
             isEnabled: false,
             selectedTrackId: AMBIENT_TRACKS[0]?.id || "",
             volume: 0.5,
-            isSuppressed: false,
+            suppressedBy: {},
+            timerMinutes: null,
+            timerEndAt: null,
           }),
       }),
       {
         name: "kumiho-atmosphere-storage",
-        // isSuppressed만 제외하고 유지
+        // suppressedBy는 런타임 전용이므로 제외
         partialize: (state) => ({
           isEnabled: state.isEnabled,
           selectedTrackId: state.selectedTrackId,
           volume: state.volume,
+          timerMinutes: state.timerMinutes,
+          timerEndAt: state.timerEndAt,
         }),
       },
     ),

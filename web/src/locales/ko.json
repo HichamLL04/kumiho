@@ -70,7 +70,13 @@
     "atmosphere_tracks": {
       "rain": "빗소리",
       "bonfire": "모닥불 소리"
-    }
+    },
+    "atmosphere_timer": "타이머",
+    "atmosphere_timer_off": "꺼짐",
+    "atmosphere_timer_15": "15분",
+    "atmosphere_timer_30": "30분",
+    "atmosphere_timer_60": "1시간",
+    "atmosphere_timer_remaining": "{{minutes}}분 남음"
   },
   "settings": {
     "title": "설정",

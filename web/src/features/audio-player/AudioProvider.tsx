@@ -19,18 +19,18 @@ export function AudioProvider() {
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   const store = useAudioPlayerStore;
-  const setSuppressed = useAtmosphereStore((state) => state.setSuppressed);
+  const setSuppressedBy = useAtmosphereStore((state) => state.setSuppressedBy);
 
   // 오디오북 재생 시 앰비언트 사운드 억제
   useEffect(() => {
     const unsub = store.subscribe((state) => {
-      setSuppressed(state.status === "playing");
+      setSuppressedBy("audiobook", state.status === "playing");
     });
     return () => {
       unsub();
-      setSuppressed(false);
+      setSuppressedBy("audiobook", false);
     };
-  }, [store, setSuppressed]);
+  }, [store, setSuppressedBy]);
 
   type SaveProgressSnapshot = {
     seriesId: string;

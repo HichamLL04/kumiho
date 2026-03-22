@@ -637,25 +637,29 @@
   animation: fadeIn 0.2s ease-out;
 }
 
-.atmosphereSelect {
+.atmosphereSelect,
+.timerSelect {
+  flex: 1;
   width: 100%;
-  padding: 0.5rem;
+  padding: 0.4rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   color: #e2e8f0;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   outline: none;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.atmosphereSelect option {
+.atmosphereSelect option,
+.timerSelect option {
   background-color: #1a1a2e;
   color: #e2e8f0;
 }
 
-.atmosphereSelect:hover {
+.atmosphereSelect:hover,
+.timerSelect:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
 }
@@ -742,4 +746,29 @@ input:checked + .slider {
 
 input:checked + .slider:before {
   transform: translateX(14px);
+}
+
+.atmosphereRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #718096;
+}
+
+.atmosphereVolume {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.timerDisplay {
+  font-size: 0.75rem;
+  color: #63b3ed;
+  font-weight: 600;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
 }

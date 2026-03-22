@@ -70,7 +70,13 @@
     "atmosphere_tracks": {
       "rain": "Rain",
       "bonfire": "Bonfire"
-    }
+    },
+    "atmosphere_timer": "Timer",
+    "atmosphere_timer_off": "Off",
+    "atmosphere_timer_15": "15 min",
+    "atmosphere_timer_30": "30 min",
+    "atmosphere_timer_60": "1 hour",
+    "atmosphere_timer_remaining": "{{minutes}}m left"
   },
   "settings": {
     "title": "Settings",
