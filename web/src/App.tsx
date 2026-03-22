@@ -11,6 +11,7 @@ import { SettingsPage } from "./pages/Settings";
 import { SearchPage } from "./pages/Search";
 import { useScrollToTop } from "./hooks/useScrollToTop";
 import { AudioProvider } from "./features/audio-player/AudioProvider";
+import { AtmosphereProvider } from "./features/audio-player/AtmosphereProvider";
 import { AudioFullscreenPlayer } from "./features/audio-player/components/AudioFullscreenPlayer/AudioFullscreenPlayer";
 import { AudioMiniPlayer } from "./features/audio-player/components/AudioMiniPlayer/AudioMiniPlayer";
 import { AudioSidebarPlayer } from "./features/audio-player/components/AudioSidebarPlayer/AudioSidebarPlayer";
@@ -162,111 +163,112 @@ function App() {
 
   return (
     <>
-    <AudioProvider />
-    <AudioFullscreenPlayer />
-    <AudioMiniPlayer />
-    <AudioSidebarPlayer />
-    <Routes>
-      {/* 초기 설정 (사용자가 없을 때) */}
-      <Route
-        path="/setup"
-        element={
-          <SetupRoute>
-            <RegisterPage />
-          </SetupRoute>
-        }
-      />
+      <AudioProvider />
+      <AtmosphereProvider />
+      <AudioFullscreenPlayer />
+      <AudioMiniPlayer />
+      <AudioSidebarPlayer />
+      <Routes>
+        {/* 초기 설정 (사용자가 없을 때) */}
+        <Route
+          path="/setup"
+          element={
+            <SetupRoute>
+              <RegisterPage />
+            </SetupRoute>
+          }
+        />
 
-      {/* 로그인 (사용자가 있을 때) */}
-      <Route
-        path="/login"
-        element={
-          <LoginRoute>
-            <LoginPage />
-          </LoginRoute>
-        }
-      />
+        {/* 로그인 (사용자가 있을 때) */}
+        <Route
+          path="/login"
+          element={
+            <LoginRoute>
+              <LoginPage />
+            </LoginRoute>
+          }
+        />
 
-      {/* 레거시 register 라우트 → setup으로 리다이렉트 */}
-      <Route
-        path="/register"
-        element={
-          <Navigate
-            to="/setup"
-            replace
-          />
-        }
-      />
+        {/* 레거시 register 라우트 → setup으로 리다이렉트 */}
+        <Route
+          path="/register"
+          element={
+            <Navigate
+              to="/setup"
+              replace
+            />
+          }
+        />
 
-      {/* 인증 필요 라우트 */}
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <HomePage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/libraries/:id"
-        element={
-          <ProtectedRoute>
-            <LibraryPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/series/:id"
-        element={
-          <ProtectedRoute>
-            <SeriesPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/volumes/:volumeId"
-        element={
-          <ProtectedRoute>
-            <VolumePage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/viewer/:chapterId"
-        element={
-          <ProtectedRoute>
-            <ViewerPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute>
-            <SettingsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/search"
-        element={
-          <ProtectedRoute>
-            <SearchPage />
-          </ProtectedRoute>
-        }
-      />
+        {/* 인증 필요 라우트 */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <HomePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/libraries/:id"
+          element={
+            <ProtectedRoute>
+              <LibraryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/series/:id"
+          element={
+            <ProtectedRoute>
+              <SeriesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/volumes/:volumeId"
+          element={
+            <ProtectedRoute>
+              <VolumePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/viewer/:chapterId"
+          element={
+            <ProtectedRoute>
+              <ViewerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/search"
+          element={
+            <ProtectedRoute>
+              <SearchPage />
+            </ProtectedRoute>
+          }
+        />
 
-      {/* 404 */}
-      <Route
-        path="*"
-        element={
-          <Navigate
-            to="/"
-            replace
-          />
-        }
-      />
-    </Routes>
+        {/* 404 */}
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/"
+              replace
+            />
+          }
+        />
+      </Routes>
     </>
   );
 }

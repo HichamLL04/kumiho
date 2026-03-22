@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useAudioPlayerStore } from "../../stores/audioPlayerStore";
+import { useAtmosphereStore } from "../../stores/atmosphereStore";
 import { chapterAPI } from "../../api/client";
 import { seriesAPI } from "../../api/client";
 
@@ -18,6 +19,18 @@ export function AudioProvider() {
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   const store = useAudioPlayerStore;
+  const setSuppressed = useAtmosphereStore((state) => state.setSuppressed);
+
+  // 오디오북 재생 시 앰비언트 사운드 억제
+  useEffect(() => {
+    const unsub = store.subscribe((state) => {
+      setSuppressed(state.status === "playing");
+    });
+    return () => {
+      unsub();
+      setSuppressed(false);
+    };
+  }, [store, setSuppressed]);
 
   type SaveProgressSnapshot = {
     seriesId: string;

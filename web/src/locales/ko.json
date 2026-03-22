@@ -66,7 +66,11 @@
     "settings": "설정",
     "logout": "로그아웃",
     "clear_search": "검색어 지우기",
-    "open_menu": "메뉴 열기"
+    "open_menu": "메뉴 열기",
+    "atmosphere_tracks": {
+      "rain": "빗소리",
+      "bonfire": "모닥불 소리"
+    }
   },
   "settings": {
     "title": "설정",
