@@ -139,6 +139,13 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
+	dbClosed := false
+	t.Cleanup(func() {
+		if !dbClosed {
+			_ = db.Close()
+		}
+	})
+
 	_, err = db.Exec(`
 		CREATE TABLE server_settings (
 			key TEXT PRIMARY KEY,
@@ -247,10 +254,11 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 		}
 	}
 
-	// database.Connect 전에 명시적으로 닫아야 lock 방지 (defer보다 먼저 실행)
+	// database.Connect 전에 명시적으로 닫아야 lock 방지
 	if closeErr := db.Close(); closeErr != nil {
 		t.Fatalf("db.Close() before Connect error = %v", closeErr)
 	}
+	dbClosed = true
 
 	// 3. Connect 호출 (마이그레이션 실행)
 	err = database.Connect(dbPath)
