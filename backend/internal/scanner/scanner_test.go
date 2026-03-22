@@ -139,7 +139,7 @@ func TestHasScannedVolumeContentChangeTreatsSentinelPageCountAsUnchanged(t *test
 		},
 	}
 
-	changed := s.hasScannedVolumeContentChange(
+	changed, err := s.hasScannedVolumeContentChange(
 		volData,
 		existingVol,
 		map[string][]*model.Volume{},
@@ -155,7 +155,13 @@ func TestHasScannedVolumeContentChangeTreatsSentinelPageCountAsUnchanged(t *test
 				},
 			},
 		},
+		map[string]bool{
+			"volume-1": true,
+		},
 	)
+	if err != nil {
+		t.Fatalf("hasScannedVolumeContentChange() error = %v", err)
+	}
 
 	if changed {
 		t.Fatal("hasScannedVolumeContentChange() = true, want false")

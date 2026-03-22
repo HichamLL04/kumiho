@@ -1188,13 +1188,10 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 		}
 		existingSubVolMap[parentKey] = append(existingSubVolMap[parentKey], &existingVolumes[i])
 	}
-	allChapters, chErr := s.chapterRepo.FindBySeriesID(nil, series.ID)
-	if chErr != nil {
-		return nil, chErr
-	}
 	existingChapterMap := make(map[string][]model.Chapter, len(existingVolumes))
-	for i := range allChapters {
-		existingChapterMap[allChapters[i].VolumeID] = append(existingChapterMap[allChapters[i].VolumeID], allChapters[i])
+	loadedChapterVolumes := make(map[string]bool, len(existingVolumes))
+	for i := range existingVolumes {
+		loadedChapterVolumes[existingVolumes[i].ID] = false
 	}
 
 	// 2. 디스크 탐색
@@ -1529,7 +1526,21 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 			}
 
 			if existingVol != nil {
-				if s.hasScannedVolumeContentChange(volData, existingVol, existingSubVolMap, existingChapterMap) {
+				contentChanged, changeErr := s.hasScannedVolumeContentChange(
+					volData,
+					existingVol,
+					existingSubVolMap,
+					existingChapterMap,
+					loadedChapterVolumes,
+				)
+				if changeErr != nil {
+					_ = tx.Rollback()
+					mu.Lock()
+					result.Errors = append(result.Errors, fmt.Sprintf("failed to compare scanned volume %s: %v", volData.Title, changeErr))
+					mu.Unlock()
+					continue
+				}
+				if contentChanged {
 					seriesContentChanged = true
 				}
 
@@ -1629,18 +1640,22 @@ func (s *Scanner) hasScannedVolumeContentChange(
 	existingVol *model.Volume,
 	existingSubVolMap map[string][]*model.Volume,
 	existingChapterMap map[string][]model.Chapter,
-) bool {
+	loadedChapterVolumes map[string]bool,
+) (bool, error) {
 	if volData == nil || existingVol == nil {
-		return true
+		return true, nil
 	}
 
 	if existingVol.VolumeNumber != volData.VolumeNumber || existingVol.Unit != volData.Unit || existingVol.HasAudio != volData.HasAudio {
-		return true
+		return true, nil
 	}
 
-	existingChapters := existingChapterMap[existingVol.ID]
+	existingChapters, err := s.getCachedChaptersForVolume(existingVol.ID, existingChapterMap, loadedChapterVolumes)
+	if err != nil {
+		return false, err
+	}
 	if len(existingChapters) != len(volData.Chapters) {
-		return true
+		return true, nil
 	}
 
 	existingChapterByPath := make(map[string]model.Chapter, len(existingChapters))
@@ -1650,7 +1665,7 @@ func (s *Scanner) hasScannedVolumeContentChange(
 	for _, scannedChapter := range volData.Chapters {
 		existingChapter, ok := existingChapterByPath[scannedChapter.Path]
 		if !ok {
-			return true
+			return true, nil
 		}
 		scannedPageCount := normalizeScannedChapterPageCount(scannedChapter)
 		if existingChapter.ChapterNumber != scannedChapter.ChapterNumber ||
@@ -1659,13 +1674,13 @@ func (s *Scanner) hasScannedVolumeContentChange(
 			existingChapter.HasAudio != scannedChapter.HasAudio ||
 			existingChapter.TotalBytes != scannedChapter.TotalBytes ||
 			existingChapter.TotalPositions != scannedChapter.TotalPositions {
-			return true
+			return true, nil
 		}
 	}
 
 	existingSubVolumes := existingSubVolMap[existingVol.ID]
 	if len(existingSubVolumes) != len(volData.SubVolumes) {
-		return true
+		return true, nil
 	}
 
 	existingSubVolByPath := make(map[string]*model.Volume, len(existingSubVolumes))
@@ -1675,14 +1690,24 @@ func (s *Scanner) hasScannedVolumeContentChange(
 	for _, scannedSubVol := range volData.SubVolumes {
 		existingSubVol, ok := existingSubVolByPath[scannedSubVol.Path]
 		if !ok {
-			return true
+			return true, nil
 		}
-		if s.hasScannedVolumeContentChange(scannedSubVol, existingSubVol, existingSubVolMap, existingChapterMap) {
-			return true
+		changed, err := s.hasScannedVolumeContentChange(
+			scannedSubVol,
+			existingSubVol,
+			existingSubVolMap,
+			existingChapterMap,
+			loadedChapterVolumes,
+		)
+		if err != nil {
+			return false, err
+		}
+		if changed {
+			return true, nil
 		}
 	}
 
-	return false
+	return false, nil
 }
 
 func normalizeScannedChapterPageCount(chapter scannedChapter) int {
@@ -1691,6 +1716,25 @@ func normalizeScannedChapterPageCount(chapter scannedChapter) int {
 		return -1
 	}
 	return pageCount
+}
+
+func (s *Scanner) getCachedChaptersForVolume(
+	volumeID string,
+	existingChapterMap map[string][]model.Chapter,
+	loadedChapterVolumes map[string]bool,
+) ([]model.Chapter, error) {
+	if loadedChapterVolumes[volumeID] {
+		return existingChapterMap[volumeID], nil
+	}
+
+	chapters, err := s.chapterRepo.FindByVolumeID(nil, volumeID)
+	if err != nil {
+		return nil, err
+	}
+
+	existingChapterMap[volumeID] = chapters
+	loadedChapterVolumes[volumeID] = true
+	return chapters, nil
 }
 
 // analyzeVolumeRecursive scans a folder based volume recursively
