@@ -117,18 +117,8 @@ func TestFreshDatabaseAllowsAdminRegistrationAndProgressTracking(t *testing.T) {
 // reading_progress 데이터가 유실되지 않는 것을 검증한다.
 func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
-	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_busy_timeout=30000&_journal_mode=WAL")
-	if err != nil {
-		t.Fatalf("sql.Open() error = %v", err)
-	}
-	if err := db.Ping(); err != nil {
-		t.Fatalf("db.Ping() error = %v", err)
-	}
-	db.Close()
-
-	// 1. 레거시 스키마 생성 (마이그레이션 전 상태)
 	// foreign key 끈 상태로 레거시 데이터 삽입
-	db, err = sql.Open("sqlite3", dbPath+"?_foreign_keys=off&_busy_timeout=30000&_journal_mode=WAL")
+	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=off&_busy_timeout=30000&_journal_mode=WAL")
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
@@ -242,12 +232,13 @@ func TestMigratedDatabasePreservesExistingProgress(t *testing.T) {
 	db.Close()
 
 	// 3. Connect 호출 (마이그레이션 실행)
-	if err := database.Connect(dbPath); err != nil {
+	err = database.Connect(dbPath)
+	if err != nil {
 		t.Fatalf("database.Connect() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(); err != nil {
-			t.Fatalf("database.Close() error = %v", err)
+		if closeErr := database.Close(); closeErr != nil {
+			t.Fatalf("database.Close() error = %v", closeErr)
 		}
 	})
 
