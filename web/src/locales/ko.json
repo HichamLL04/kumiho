@@ -66,7 +66,21 @@
     "settings": "설정",
     "logout": "로그아웃",
     "clear_search": "검색어 지우기",
-    "open_menu": "메뉴 열기"
+    "open_menu": "메뉴 열기",
+    "atmosphere_tracks": {
+      "rain": "빗소리",
+      "bonfire": "모닥불 소리"
+    },
+    "atmosphere_timer": "타이머",
+    "atmosphere_timer_off": "꺼짐",
+    "atmosphere_timer_15": "15분",
+    "atmosphere_timer_30": "30분",
+    "atmosphere_timer_60": "1시간",
+    "atmosphere_timer_remaining": "{{minutes}}분 남음",
+    "atmosphere_title": "독서 분위기",
+    "atmosphere_suppressed": "다른 오디오 재생 중이라 일시정지됨",
+    "atmosphere_track_select": "앰비언트 트랙 선택",
+    "atmosphere_volume": "앰비언트 볼륨"
   },
   "settings": {
     "title": "설정",
@@ -619,7 +633,16 @@
         "reset_confirm_msg": "썸네일을 초기화하시겠습니까? (기본 이미지로 돌아갑니다)",
         "reset_success": "썸네일이 초기화되었습니다.",
         "reset_failed": "썸네일 초기화에 실패했습니다.",
+        "upload_success": "썸네일이 업로드되었습니다.",
         "update_failed": "시리즈 정보 수정에 실패했습니다."
+      }
+    }
+  },
+  "volume": {
+    "edit": {
+      "title": "볼륨 정보 수정",
+      "form": {
+        "volume_number": "권 번호"
       }
     }
   },
@@ -641,8 +664,13 @@
       "fullscreen": "전체화면",
       "exit_fullscreen": "전체화면 종료",
       "settings": "뷰어 설정",
-      "bgm_on": "배경음악 켜기",
-      "bgm_off": "배경음악 끄기",
+      "bgm_on": "BGM 켜기",
+      "bgm_off": "BGM 끄기",
+      "atmosphere_on": "독서 분위기 켜기",
+      "atmosphere_off": "독서 분위기 끄기",
+      "atmosphere_settings_open": "독서 분위기 설정 열기",
+      "atmosphere_settings_close": "독서 분위기 설정 닫기",
+      "atmosphere_settings_dialog": "독서 분위기 설정",
       "zoom_in": "확대",
       "zoom_out": "축소",
       "zoom_reset": "확대 초기화",

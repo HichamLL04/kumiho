@@ -66,7 +66,21 @@
     "settings": "設定",
     "logout": "ログアウト",
     "clear_search": "検索ワードをクリア",
-    "open_menu": "メニューを開く"
+    "open_menu": "メニューを開く",
+    "atmosphere_tracks": {
+      "rain": "雨音",
+      "bonfire": "焚き火の音"
+    },
+    "atmosphere_timer": "タイマー",
+    "atmosphere_timer_off": "オフ",
+    "atmosphere_timer_15": "15分",
+    "atmosphere_timer_30": "30分",
+    "atmosphere_timer_60": "1時間",
+    "atmosphere_timer_remaining": "残り{{minutes}}分",
+    "atmosphere_title": "読書の雰囲気",
+    "atmosphere_suppressed": "他のオーディオ再生中のため一時停止中",
+    "atmosphere_track_select": "アンビエントトラック選択",
+    "atmosphere_volume": "アンビエント音量"
   },
   "settings": {
     "title": "設定",
@@ -619,7 +633,16 @@
         "reset_confirm_msg": "サムネイルを初期化しますか？ (デフォルトに戻ります)",
         "reset_success": "サムネイルがリセットされました。",
         "reset_failed": "リセットに失敗しました。",
+        "upload_success": "サムネイルがアップロードされました。",
         "update_failed": "シリーズ情報の更新に失敗しました。"
+      }
+    }
+  },
+  "volume": {
+    "edit": {
+      "title": "巻情報の修正",
+      "form": {
+        "volume_number": "巻数"
       }
     }
   },
@@ -641,8 +664,13 @@
       "fullscreen": "全画面表示",
       "exit_fullscreen": "全画面表示終了",
       "settings": "ビューア設定",
-      "bgm_on": "BGMオン",
-      "bgm_off": "BGMオフ",
+      "bgm_on": "BGMを再生",
+      "bgm_off": "BGMを停止",
+      "atmosphere_on": "読書雰囲気を再生",
+      "atmosphere_off": "読書雰囲気を停止",
+      "atmosphere_settings_open": "読書雰囲気設定を開く",
+      "atmosphere_settings_close": "読書雰囲気設定を閉じる",
+      "atmosphere_settings_dialog": "読書雰囲気設定",
       "zoom_in": "拡大",
       "zoom_out": "縮小",
       "zoom_reset": "拡大をリセット",

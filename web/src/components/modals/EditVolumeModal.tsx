@@ -113,7 +113,7 @@ export function EditVolumeModal({ isOpen, onClose, volume, series, onUpdate }: E
       await volumeAPI.uploadThumbnail(volume.id, file);
       const refreshed = await volumeAPI.get(volume.id);
       onUpdate(refreshed.data);
-      showAlert("success", t("series.edit.alert.upload_success", "썸네일이 업로드되었습니다."));
+      showAlert("success", t("series.edit.alert.upload_success"));
     } catch (error) {
       console.error("Failed to upload thumbnail:", error);
       showAlert("error", t("series.edit.alert.upload_failed"));
@@ -127,7 +127,7 @@ export function EditVolumeModal({ isOpen, onClose, volume, series, onUpdate }: E
       const refreshed = await volumeAPI.get(volume.id);
       onUpdate(refreshed.data);
       setThumbnailUrl("");
-      showAlert("success", t("series.edit.alert.upload_success", "썸네일이 업로드되었습니다."));
+      showAlert("success", t("series.edit.alert.upload_success"));
     } catch (error) {
       console.error("Failed to upload thumbnail from URL:", error);
       showAlert("error", t("series.edit.alert.url_failed"));
@@ -215,7 +215,7 @@ export function EditVolumeModal({ isOpen, onClose, volume, series, onUpdate }: E
             onClick={(e) => e.stopPropagation()}
           >
             <div className={styles.modalHeader}>
-              <h2>{t("volume.edit.title", "볼륨 정보 수정")}</h2>
+              <h2>{t("volume.edit.title")}</h2>
               <button
                 className={styles.btnIcon}
                 onClick={onClose}
@@ -305,7 +305,7 @@ export function EditVolumeModal({ isOpen, onClose, volume, series, onUpdate }: E
                   </div>
 
                   <div className={styles.formGroup}>
-                    <label>권 번호</label>
+                    <label>{t("volume.edit.form.volume_number")}</label>
                     <input
                       type="number"
                       name="volume_number"

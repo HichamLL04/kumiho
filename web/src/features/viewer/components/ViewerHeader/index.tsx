@@ -1,6 +1,9 @@
+import { useCallback, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-import { ArrowLeft, Settings, Maximize, Minimize, Shield, Music, List } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
+import { ArrowLeft, Settings, Maximize, Minimize, Shield, Music, List, Sparkles } from "lucide-react";
+import { useAtmosphereStore } from "../../../../stores/atmosphereStore";
+import { AtmospherePopover } from "../AtmospherePopover";
 import styles from "./ViewerHeader.module.css";
 
 interface ViewerHeaderProps {
@@ -41,6 +44,29 @@ interface ViewerHeaderProps {
 
 export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, onInteractionEnd }: ViewerHeaderProps) {
   const { t } = useTranslation();
+  const { isEnabled: isAtmosphereEnabled, setEnabled: setAtmosphereEnabled, setTimer: setAtmosphereTimer } = useAtmosphereStore(
+    useShallow((state) => ({
+      isEnabled: state.isEnabled,
+      setEnabled: state.setEnabled,
+      setTimer: state.setTimer,
+    })),
+  );
+  const atmosphereButtonRef = useRef<HTMLButtonElement>(null);
+  const atmospherePopoverId = useId();
+  const [isAtmospherePopoverOpen, setIsAtmospherePopoverOpen] = useState(false);
+  const handleCloseAtmospherePopover = useCallback(() => {
+    setIsAtmospherePopoverOpen(false);
+  }, []);
+
+  const handleAtmosphereClick = () => {
+    if (isAtmosphereEnabled) {
+      setAtmosphereEnabled(false);
+      setAtmosphereTimer(null);
+      setIsAtmospherePopoverOpen(false);
+    } else {
+      setIsAtmospherePopoverOpen((prev) => !prev);
+    }
+  };
 
   const { title, currentPage, totalPages, isUIVisible, isIncognito, isFullscreen, isBgmPlaying, bgmInfo } = state;
 
@@ -59,6 +85,12 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
   const onZoomIn = zoomPdfOptions?.onZoomIn;
   const onZoomOut = zoomPdfOptions?.onZoomOut;
   const onZoomReset = zoomPdfOptions?.onZoomReset;
+  const showsAtmosphereDialogState = isAtmospherePopoverOpen || !isAtmosphereEnabled;
+  const atmosphereButtonLabel = isAtmosphereEnabled
+    ? t("viewer.header.atmosphere_off")
+    : isAtmospherePopoverOpen
+      ? t("viewer.header.atmosphere_settings_close")
+      : t("viewer.header.atmosphere_settings_open");
   return (
     <header
       className={`${styles.viewerHeader} ${!isUIVisible ? styles.hidden : ""}`}
@@ -132,6 +164,32 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
           >
             <List size={24} />
           </button>
+        )}
+
+        {/* Atmosphere Toggle */}
+        <button
+          type="button"
+          ref={atmosphereButtonRef}
+          className={`${styles.headerActionBtn} ${styles.atmosphereButton} ${!isAtmosphereEnabled ? styles.muted : ""}`}
+          onClick={handleAtmosphereClick}
+          title={atmosphereButtonLabel}
+          aria-label={atmosphereButtonLabel}
+          aria-haspopup={showsAtmosphereDialogState ? "dialog" : undefined}
+          aria-expanded={showsAtmosphereDialogState ? isAtmospherePopoverOpen : undefined}
+          aria-controls={isAtmospherePopoverOpen ? atmospherePopoverId : undefined}
+        >
+          <Sparkles
+            size={24}
+            fill={isAtmosphereEnabled ? "currentColor" : "none"}
+          />
+        </button>
+
+        {isAtmospherePopoverOpen && (
+          <AtmospherePopover
+            onClose={handleCloseAtmospherePopover}
+            triggerRef={atmosphereButtonRef}
+            id={atmospherePopoverId}
+          />
         )}
 
         <button

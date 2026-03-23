@@ -66,7 +66,21 @@
     "settings": "Settings",
     "logout": "Logout",
     "clear_search": "Clear search",
-    "open_menu": "Open menu"
+    "open_menu": "Open menu",
+    "atmosphere_tracks": {
+      "rain": "Rain",
+      "bonfire": "Bonfire"
+    },
+    "atmosphere_timer": "Timer",
+    "atmosphere_timer_off": "Off",
+    "atmosphere_timer_15": "15 min",
+    "atmosphere_timer_30": "30 min",
+    "atmosphere_timer_60": "1 hour",
+    "atmosphere_timer_remaining": "{{minutes}}m left",
+    "atmosphere_title": "Reading Atmosphere",
+    "atmosphere_suppressed": "Paused while other audio is playing",
+    "atmosphere_track_select": "Select ambient track",
+    "atmosphere_volume": "Ambient volume"
   },
   "settings": {
     "title": "Settings",
@@ -618,7 +632,16 @@
         "reset_confirm_msg": "Reset thumbnail to default? This cannot be undone.",
         "reset_success": "Thumbnail reset.",
         "reset_failed": "Failed to reset thumbnail.",
+        "upload_success": "Thumbnail uploaded successfully.",
         "update_failed": "Failed to update series info."
+      }
+    }
+  },
+  "volume": {
+    "edit": {
+      "title": "Edit Volume Information",
+      "form": {
+        "volume_number": "Volume Number"
       }
     }
   },
@@ -642,6 +665,11 @@
       "settings": "Viewer Settings",
       "bgm_on": "BGM On",
       "bgm_off": "BGM Off",
+      "atmosphere_on": "Atmosphere On",
+      "atmosphere_off": "Atmosphere Off",
+      "atmosphere_settings_open": "Open atmosphere settings",
+      "atmosphere_settings_close": "Close atmosphere settings",
+      "atmosphere_settings_dialog": "Atmosphere settings",
       "zoom_in": "Zoom In",
       "zoom_out": "Zoom Out",
       "zoom_reset": "Reset Zoom",

@@ -7,6 +7,7 @@ import { seriesAPI, systemAPI } from "../../api/client";
 import { useSSE } from "../../hooks/useSSE";
 import type { Series } from "../../types/series";
 import { ScanProgressBar } from "../ScanProgressBar";
+import { AtmosphereSettings } from "../Atmosphere/AtmosphereSettings";
 import styles from "./Header.module.css";
 
 interface HeaderProps {
@@ -29,7 +30,6 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [otherUserCount, setOtherUserCount] = useState(0);
   const [hasUpdate, setHasUpdate] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-
   const { subscribe } = useSSE();
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -37,6 +37,8 @@ export function Header({ onMenuClick }: HeaderProps) {
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const MAX_VISIBLE_RESULTS = 5;
+
+  // 타이머 관련 로직은 AtmosphereSettings로 이동됨
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -92,7 +94,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   // 실시간 검색 (Debounce)
   useEffect(() => {
     if (!searchQuery.trim()) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 검색어 초기화 시 연관 상태 동기 리셋
       setLiveResults([]);
       setShowDropdown(false);
       setSelectedIndex(-1);
@@ -178,231 +180,236 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <header className={styles.appHeader}>
-        <div className={styles.headerLeft}>
-          {onMenuClick && (
-            <button
-              className={styles.menuBtn}
-              onClick={onMenuClick}
-              aria-label={t("header.open_menu", { defaultValue: "Open menu" })} // Keeping default as backup or key
-            >
-              <Menu size={22} />
-            </button>
-          )}
-          <Link
-            to="/"
-            className={styles.logoLink}
+      <div className={styles.headerLeft}>
+        {onMenuClick && (
+          <button
+            className={styles.menuBtn}
+            onClick={onMenuClick}
+            aria-label={t("header.open_menu", { defaultValue: "Open menu" })} // Keeping default as backup or key
           >
-            <img
-              src="/Logo.svg"
-              alt="Kumiho Logo"
-              className={styles.logoIcon}
-            />
-            <span className={styles.logoText}>Kumiho</span>
-          </Link>
-        </div>
-        <div className={styles.headerRight}>
+            <Menu size={22} />
+          </button>
+        )}
+        <Link
+          to="/"
+          className={styles.logoLink}
+        >
+          <img
+            src="/Logo.svg"
+            alt="Kumiho Logo"
+            className={styles.logoIcon}
+          />
+          <span className={styles.logoText}>Kumiho</span>
+        </Link>
+      </div>
+      <div className={styles.headerRight}>
+        <div
+          className={styles.searchContainer}
+          ref={searchContainerRef}
+        >
           <div
-            className={styles.searchContainer}
-            ref={searchContainerRef}
+            className={`${styles.searchWrapper} ${searchExpanded ? styles.expanded : ""}`}
+            onClick={toggleSearch}
           >
-            <div
-              className={`${styles.searchWrapper} ${searchExpanded ? styles.expanded : ""}`}
-              onClick={toggleSearch}
-            >
-              <div className={styles.searchIconWrapper}>
-                <Search size={18} />
-              </div>
-              <form
-                onSubmit={handleSearchSubmit}
-                className={styles.searchForm}
-              >
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  className={styles.searchInput}
-                  placeholder={t("header.search_placeholder")}
-                  aria-label={t("header.search_placeholder")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onBlur={() => {
-                    if (searchQuery === "") setSearchExpanded(false);
-                  }}
-                />
-              </form>
-              {searchExpanded && searchQuery && (
-                <button
-                  className={styles.clearBtn}
-                  aria-label={t("header.clear_search")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSearchQuery("");
-                    setLiveResults([]);
-                    setShowDropdown(false);
-                    setSelectedIndex(-1);
-                    searchInputRef.current?.focus();
-                  }}
-                >
-                  <X size={14} />
-                </button>
-              )}
+            <div className={styles.searchIconWrapper}>
+              <Search size={18} />
             </div>
-
-            {/* 실시간 검색 결과 드롭다운 */}
-            {showDropdown && (
-              <div className={styles.searchDropdown}>
-                <div className={styles.dropdownTitle}>{t("header.search_results_title")}</div>
-                {searchError && <div className={styles.searchError}>{searchError}</div>}
-                <div
-                  className={styles.resultsList}
-                  onMouseMove={() => setIsKeyboardNav(false)}
-                >
-                  {liveResults.length > 0 ? (
-                    <>
-                      {liveResults.slice(0, MAX_VISIBLE_RESULTS).map((series: Series, index: number) => (
-                        <div
-                          key={series.id}
-                          className={`${styles.searchResultItem} ${selectedIndex === index ? styles.active : ""}`}
-                          onClick={() => handleResultClick(series.id)}
-                          onMouseEnter={() => !isKeyboardNav && setSelectedIndex(index)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              handleResultClick(series.id);
-                            }
-                          }}
-                        >
-                          <div className={styles.resultThumbnailWrapper}>
-                            {series.thumbnail_url && !imageErrors[series.id] ? (
-                              <img
-                                src={series.thumbnail_url}
-                                alt={series.title}
-                                className={styles.resultThumbnail}
-                                onError={() => setImageErrors((prev) => ({ ...prev, [series.id]: true }))}
-                              />
-                            ) : ((series.path || "").toLowerCase().endsWith(".pdf")) ? (
-                              <div
-                                className={styles.resultThumbnail}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  backgroundColor: "#1a1f2e",
-                                }}
-                              >
-                                <FileText
-                                  size={20}
-                                  style={{ opacity: 0.5 }}
-                                />
-                              </div>
-                            ) : (
-                              <div
-                                className={styles.resultThumbnail}
-                                style={{ backgroundColor: "#1a1f2e" }}
-                              />
-                            )}
-                          </div>
-                          <div className={styles.resultInfo}>
-                            <span className={styles.resultName}>{series.title}</span>
-                            {series.metadata?.authors && (
-                              <span className={styles.resultAuthor}>{series.metadata.authors}</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                      <button
-                        className={`${styles.allResultsBtn} ${selectedIndex === Math.min(liveResults.length, MAX_VISIBLE_RESULTS) ? styles.active : ""}`}
-                        onClick={() => handleSearchSubmit()}
-                        onMouseEnter={() =>
-                          !isKeyboardNav && setSelectedIndex(Math.min(liveResults.length, MAX_VISIBLE_RESULTS))
-                        }
-                      >
-                        {t("header.view_all_results")} ({liveResults.length}) <ChevronRight size={14} />
-                      </button>
-                    </>
-                  ) : (
-                    <div className={styles.noResults}>{t("header.no_results")}</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div
-            className={styles.userDropdownContainer}
-            ref={dropdownRef}
-          >
-            <button
-              className={`${styles.userDropdownTrigger} ${dropdownOpen ? styles.active : ""}`}
-              onClick={() => setDropdownOpen(!dropdownOpen)}
+            <form
+              onSubmit={handleSearchSubmit}
+              className={styles.searchForm}
             >
-              <span className={styles.userIconWrapper}>
-                <User size={18} />
-                {user?.role === "MASTER" ? (
-                  hasUpdate ? (
-                    <span
-                      className={`${styles.badge} ${styles.updateBadge}`}
-                      aria-label={t("header.new_update_available")}
-                      aria-live="polite"
-                      aria-atomic="true"
-                    >
-                      UP
-                    </span>
-                  ) : otherUserCount > 0 ? (
-                    <span
-                      className={`${styles.badge} ${styles.countBadge}`}
-                      aria-label={t("header.active_users_count", {
-                        count: otherUserCount,
-                      })}
-                      aria-live="polite"
-                      aria-atomic="true"
-                    >
-                      {otherUserCount}
-                    </span>
-                  ) : null
-                ) : null}
-              </span>
-              <span className={styles.userInfo}>
-                <span className={styles.nickname}>{user?.nickname}</span>
-                {user?.role === "MASTER" && <span className={styles.roleBadge}>MASTER</span>}
-              </span>
-              <ChevronDown
-                size={14}
-                className={styles.chevron}
-                style={{ transform: dropdownOpen ? "rotate(180deg)" : "none" }}
+              <input
+                ref={searchInputRef}
+                type="text"
+                className={styles.searchInput}
+                placeholder={t("header.search_placeholder")}
+                aria-label={t("header.search_placeholder")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={() => {
+                  if (searchQuery === "") setSearchExpanded(false);
+                }}
               />
-            </button>
-
-            {dropdownOpen && (
-              <div className={styles.dropdownMenu}>
-                <div className={styles.dropdownHeader}>
-                  <p className={styles.dropdownNickname}>{user?.nickname}</p>
-                  <p className={styles.dropdownRole}>{user?.role}</p>
-                </div>
-                <div className={styles.dropdownDivider} />
-
-                <button
-                  onClick={() => {
-                    navigate("/settings");
-                    setDropdownOpen(false);
-                  }}
-                  className={styles.dropdownItem}
-                >
-                  <Settings size={16} /> {t("header.settings")}
-                </button>
-
-                <button
-                  onClick={handleLogout}
-                  className={`${styles.dropdownItem} ${styles.logoutItem}`}
-                >
-                  <LogOut size={16} /> {t("header.logout")}
-                </button>
-              </div>
+            </form>
+            {searchExpanded && searchQuery && (
+              <button
+                className={styles.clearBtn}
+                aria-label={t("header.clear_search")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSearchQuery("");
+                  setLiveResults([]);
+                  setShowDropdown(false);
+                  setSelectedIndex(-1);
+                  searchInputRef.current?.focus();
+                }}
+              >
+                <X size={14} />
+              </button>
             )}
           </div>
+
+          {/* 실시간 검색 결과 드롭다운 */}
+          {showDropdown && (
+            <div className={styles.searchDropdown}>
+              <div className={styles.dropdownTitle}>{t("header.search_results_title")}</div>
+              {searchError && <div className={styles.searchError}>{searchError}</div>}
+              <div
+                className={styles.resultsList}
+                onMouseMove={() => setIsKeyboardNav(false)}
+              >
+                {liveResults.length > 0 ? (
+                  <>
+                    {liveResults.slice(0, MAX_VISIBLE_RESULTS).map((series: Series, index: number) => (
+                      <div
+                        key={series.id}
+                        className={`${styles.searchResultItem} ${selectedIndex === index ? styles.active : ""}`}
+                        onClick={() => handleResultClick(series.id)}
+                        onMouseEnter={() => !isKeyboardNav && setSelectedIndex(index)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleResultClick(series.id);
+                          }
+                        }}
+                      >
+                        <div className={styles.resultThumbnailWrapper}>
+                          {series.thumbnail_url && !imageErrors[series.id] ? (
+                            <img
+                              src={series.thumbnail_url}
+                              alt={series.title}
+                              className={styles.resultThumbnail}
+                              onError={() => setImageErrors((prev) => ({ ...prev, [series.id]: true }))}
+                            />
+                          ) : (series.path || "").toLowerCase().endsWith(".pdf") ? (
+                            <div
+                              className={styles.resultThumbnail}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: "#1a1f2e",
+                              }}
+                            >
+                              <FileText
+                                size={20}
+                                style={{ opacity: 0.5 }}
+                              />
+                            </div>
+                          ) : (
+                            <div
+                              className={styles.resultThumbnail}
+                              style={{ backgroundColor: "#1a1f2e" }}
+                            />
+                          )}
+                        </div>
+                        <div className={styles.resultInfo}>
+                          <span className={styles.resultName}>{series.title}</span>
+                          {series.metadata?.authors && (
+                            <span className={styles.resultAuthor}>{series.metadata.authors}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      className={`${styles.allResultsBtn} ${selectedIndex === Math.min(liveResults.length, MAX_VISIBLE_RESULTS) ? styles.active : ""}`}
+                      onClick={() => handleSearchSubmit()}
+                      onMouseEnter={() =>
+                        !isKeyboardNav && setSelectedIndex(Math.min(liveResults.length, MAX_VISIBLE_RESULTS))
+                      }
+                    >
+                      {t("header.view_all_results")} ({liveResults.length}) <ChevronRight size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <div className={styles.noResults}>{t("header.no_results")}</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+
+        <div
+          className={styles.userDropdownContainer}
+          ref={dropdownRef}
+        >
+          <button
+            className={`${styles.userDropdownTrigger} ${dropdownOpen ? styles.active : ""}`}
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+          >
+            <span className={styles.userIconWrapper}>
+              <User size={18} />
+              {user?.role === "MASTER" ? (
+                hasUpdate ? (
+                  <span
+                    className={`${styles.badge} ${styles.updateBadge}`}
+                    aria-label={t("header.new_update_available")}
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    UP
+                  </span>
+                ) : otherUserCount > 0 ? (
+                  <span
+                    className={`${styles.badge} ${styles.countBadge}`}
+                    aria-label={t("header.active_users_count", {
+                      count: otherUserCount,
+                    })}
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    {otherUserCount}
+                  </span>
+                ) : null
+              ) : null}
+            </span>
+            <span className={styles.userInfo}>
+              <span className={styles.nickname}>{user?.nickname}</span>
+              {user?.role === "MASTER" && <span className={styles.roleBadge}>MASTER</span>}
+            </span>
+            <ChevronDown
+              size={14}
+              className={styles.chevron}
+              style={{ transform: dropdownOpen ? "rotate(180deg)" : "none" }}
+            />
+          </button>
+
+          {dropdownOpen && (
+            <div className={styles.dropdownMenu}>
+              <div className={styles.dropdownHeader}>
+                <p className={styles.dropdownNickname}>{user?.nickname}</p>
+                <p className={styles.dropdownRole}>{user?.role}</p>
+              </div>
+              <div className={styles.dropdownDivider} />
+
+              {/* 독서 분위기 (앰비언트 사운드) 설정 */}
+              <AtmosphereSettings />
+
+              <div className={styles.dropdownDivider} />
+
+              <button
+                onClick={() => {
+                  navigate("/settings");
+                  setDropdownOpen(false);
+                }}
+                className={styles.dropdownItem}
+              >
+                <Settings size={16} /> {t("header.settings")}
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className={`${styles.dropdownItem} ${styles.logoutItem}`}
+              >
+                <LogOut size={16} /> {t("header.logout")}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       <ScanProgressBar />
     </header>
   );
