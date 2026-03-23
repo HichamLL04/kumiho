@@ -23,9 +23,12 @@ export function AudioProvider() {
 
   // 오디오북 재생 시 앰비언트 사운드 억제
   useEffect(() => {
-    const unsub = store.subscribe((state) => {
-      setSuppressedBy("audiobook", state.status === "playing");
-    });
+    const unsub = useAudioPlayerStore.subscribe(
+      (state) => state.status,
+      (status) => {
+        setSuppressedBy("audiobook", status === "playing");
+      },
+    );
     return () => {
       unsub();
       setSuppressedBy("audiobook", false);

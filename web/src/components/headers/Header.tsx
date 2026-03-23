@@ -477,7 +477,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                         aria-label={t("header.atmosphere_timer")}
                         onChange={(e) => {
                           const val = e.target.value;
-                          atmosphere.setTimer(val ? parseInt(val) : null);
+                          atmosphere.setTimer(val ? parseInt(val, 10) : null);
                         }}
                       >
                         <option value="">{t("header.atmosphere_timer_off")}</option>
@@ -485,7 +485,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                         <option value="30">{t("header.atmosphere_timer_30")}</option>
                         <option value="60">{t("header.atmosphere_timer_60")}</option>
                       </select>
-                      {timerRemaining !== null && timerRemaining > 0 && (
+                      {atmosphere.timerEndAt !== null && timerRemaining !== null && timerRemaining > 0 && (
                         <span className={styles.timerDisplay}>
                           {t("header.atmosphere_timer_remaining", {
                             minutes: timerRemaining,

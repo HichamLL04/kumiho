@@ -36,6 +36,11 @@ export function AtmosphereProvider() {
 
   // Web Audio Context 및 GainNode 초기화
   const initAudioContext = useCallback(() => {
+    // 기능이 꺼져있거나 억제된 상태라면 초기화하지 않음
+    if (!isEnabled || isSuppressed) {
+      return null;
+    }
+
     if (!audioContextRef.current) {
       const AudioContextClass =
         window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -68,7 +73,7 @@ export function AtmosphereProvider() {
     }
 
     return { ctx, gain: gainNodeRef.current!, audio: audioRef.current! };
-  }, []);
+  }, [isEnabled, isSuppressed]);
 
   // 페이드 인/아웃 처리
   const fadeVolume = useCallback((targetVolume: number, duration: number) => {
@@ -87,7 +92,7 @@ export function AtmosphereProvider() {
       // 0.5s 등의 긴 페이드(온/오프용)에만 지수적 페이드 적용
       gainParam.setTargetAtTime(targetVolume, currentTime, duration / 4);
     } else {
-      // 그 외(볼륨 조절 등)에는 지연 없이 즉시 변경 (사용자 요청에 따라 팝 방지 제거)
+      // 그 외(볼륨 조절 등)에는 지연 없이 즉시 변경
       gainParam.setValueAtTime(targetVolume, currentTime);
     }
   }, []);
@@ -102,22 +107,27 @@ export function AtmosphereProvider() {
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
       if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
       if (audioContextRef.current) {
-        audioContextRef.current.close().catch(console.error);
+        if (audioContextRef.current.state !== "closed") {
+          audioContextRef.current.close().catch(console.error);
+        }
+        audioContextRef.current = null;
       }
     };
   }, []);
 
   // 볼륨 ref (interaction 리스너에서 최신 값 참조용 - 의존성 배열에서 volume 제거)
   const volumeRef = useRef(volume);
-  useEffect(() => { volumeRef.current = volume; }, [volume]);
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
 
   // 첫 사용자 상호작용 시 오디오 컨텍스트 재개 (Autoplay 정책 대응)
   useEffect(() => {
     const handleInteraction = () => {
-      // 앰비언트가 비활성 상태이면 불필요한 AudioContext 생성 방지
-      if (!isEnabled || isSuppressed) return;
+      const initialized = initAudioContext();
+      if (!initialized) return;
 
-      const { ctx, audio } = initAudioContext();
+      const { ctx, audio } = initialized;
       if (ctx.state === "suspended") void ctx.resume().catch(console.error);
 
       if (audio.paused && audio.src) {
@@ -126,10 +136,12 @@ export function AtmosphereProvider() {
           .then(() => {
             fadeVolume(volumeRef.current, 0.5);
           })
-          .catch((e) => console.warn("Interaction play failed:", e));
+          .catch((e: unknown) => console.warn("Interaction play failed:", e));
       }
 
-      // 리스너 제거
+      // 리스너 제거는 한 번만 수행되도록 여기서 처리하지 않고 cleanup에서 담당하거나
+      // 로직에 따라 한 번만 실행되게 변경 가능함.
+      // 원본 로직대로 리스너 제거를 추가함.
       window.removeEventListener("click", handleInteraction);
       window.removeEventListener("keydown", handleInteraction);
       window.removeEventListener("touchstart", handleInteraction);
@@ -144,7 +156,7 @@ export function AtmosphereProvider() {
       window.removeEventListener("keydown", handleInteraction);
       window.removeEventListener("touchstart", handleInteraction);
     };
-  }, [isEnabled, isSuppressed, initAudioContext, fadeVolume]);
+  }, [initAudioContext, fadeVolume]);
 
   // 재생/일시정지 및 트랙 전환 제어
   useEffect(() => {
@@ -154,8 +166,9 @@ export function AtmosphereProvider() {
     if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
 
     if (shouldPlay) {
-      const { audio, ctx } = initAudioContext();
-      if (currentTrack) {
+      const initialized = initAudioContext();
+      if (initialized && currentTrack) {
+        const { audio, ctx } = initialized;
         const trackUrl = `/assets/ambient/${currentTrack.file}.opus`;
         const fullTrackUrl = window.location.origin + trackUrl;
 
@@ -173,7 +186,7 @@ export function AtmosphereProvider() {
               .then(() => {
                 fadeVolume(volume, 0.5);
               })
-              .catch((e) => {
+              .catch((e: unknown) => {
                 console.warn("Track switch play failed (normal if not interacted):", e);
               });
           }, 600);
@@ -192,7 +205,7 @@ export function AtmosphereProvider() {
                 // 처음 켜질 때 부드럽게 페이드 인 (0.5s)
                 fadeVolume(volume, 0.5);
               })
-              .catch((e) => {
+              .catch((e: unknown) => {
                 console.warn("Ambient initial play failed (normal if not interacted):", e);
               });
           } else {

@@ -34,6 +34,11 @@ export const useAtmosphereStore = create<AtmosphereState>()(
         setVolume: (volume) => set({ volume }),
         setSuppressedBy: (source, suppressed) =>
           set((state) => {
+            const current = Boolean(state.suppressedBy[source]);
+            if (current === suppressed) {
+              return state;
+            }
+
             const next = { ...state.suppressedBy };
             if (suppressed) {
               next[source] = true;
@@ -73,8 +78,8 @@ export const useAtmosphereStore = create<AtmosphereState>()(
         onRehydrateStorage: () => (state) => {
           if (!state) return;
           // 저장된 selectedTrackId가 현재 트랙 목록에 없으면 첫 번째 트랙으로 교정
-          if (!AMBIENT_TRACKS.some((t) => t.id === state.selectedTrackId)) {
-            state.selectedTrackId = AMBIENT_TRACKS[0]?.id || "";
+          if (state.selectedTrackId && !AMBIENT_TRACKS.some((t) => t.id === state.selectedTrackId)) {
+            useAtmosphereStore.setState({ selectedTrackId: AMBIENT_TRACKS[0]?.id || "" });
           }
         },
       },

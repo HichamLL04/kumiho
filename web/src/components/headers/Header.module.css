@@ -72,10 +72,10 @@
 
 .userInfo {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #a0aec0;
-  font-size: 0.9rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  margin-right: 0.25rem;
 }
 
 .roleBadge {
@@ -194,13 +194,7 @@
   color: #e2e8f0;
 }
 
-.userInfo {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-  margin-right: 0.25rem;
-}
+/* Duplicate userInfo removed */
 
 .nickname {
   font-weight: 600;
@@ -208,7 +202,7 @@
   line-height: 1.2;
 }
 
-.roleBadge {
+.dropdownRoleBadge {
   background: none;
   color: #a0aec0;
   padding: 0;
