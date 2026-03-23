@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { AMBIENT_TRACKS } from "../constants/ambientTracks";
 import { useAtmosphereStore } from "./atmosphereStore";
 
 describe("useAtmosphereStore rehydrate", () => {
   const storageKey = "kumiho-atmosphere-storage";
+  const defaultTrackId = AMBIENT_TRACKS[0]?.id || "";
 
   beforeEach(() => {
     localStorage.clear();
@@ -21,7 +23,7 @@ describe("useAtmosphereStore rehydrate", () => {
       storageKey,
       JSON.stringify({
         state: {
-          selectedTrackId: "rain",
+          selectedTrackId: defaultTrackId,
           volume: 0.5,
           timerMinutes: 15,
           timerEndAt: futureTimerEndAt,
@@ -55,6 +57,6 @@ describe("useAtmosphereStore rehydrate", () => {
 
     await useAtmosphereStore.persist.rehydrate();
 
-    expect(useAtmosphereStore.getState().selectedTrackId).toBe("rain");
+    expect(useAtmosphereStore.getState().selectedTrackId).toBe(defaultTrackId);
   });
 });

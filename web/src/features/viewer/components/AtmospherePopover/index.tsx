@@ -17,7 +17,7 @@ export function AtmospherePopover({ id, onClose, triggerRef }: AtmospherePopover
     const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const triggerElement = triggerRef.current;
 
-    const handleClickOutside = (event: MouseEvent | PointerEvent) => {
+    const handleClickOutside = (event: MouseEvent) => {
       const popoverElement = ref.current;
       const target = event.target as Node | null;
 
