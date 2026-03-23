@@ -1,0 +1,60 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { useAtmosphereStore } from "./atmosphereStore";
+
+describe("useAtmosphereStore rehydrate", () => {
+  const storageKey = "kumiho-atmosphere-storage";
+
+  beforeEach(() => {
+    localStorage.clear();
+    useAtmosphereStore.getState().reset();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    useAtmosphereStore.getState().reset();
+  });
+
+  it("비활성 상태로 리하이드레이트되면 저장된 타이머를 제거한다", async () => {
+    const futureTimerEndAt = Date.now() + 15 * 60 * 1000;
+
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        state: {
+          selectedTrackId: "rain",
+          volume: 0.5,
+          timerMinutes: 15,
+          timerEndAt: futureTimerEndAt,
+        },
+        version: 0,
+      }),
+    );
+
+    await useAtmosphereStore.persist.rehydrate();
+
+    const state = useAtmosphereStore.getState();
+
+    expect(state.isEnabled).toBe(false);
+    expect(state.timerMinutes).toBeNull();
+    expect(state.timerEndAt).toBeNull();
+  });
+
+  it("저장된 트랙이 현재 목록에 없으면 첫 번째 트랙으로 교정한다", async () => {
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        state: {
+          selectedTrackId: "unknown-track",
+          volume: 0.5,
+          timerMinutes: null,
+          timerEndAt: null,
+        },
+        version: 0,
+      }),
+    );
+
+    await useAtmosphereStore.persist.rehydrate();
+
+    expect(useAtmosphereStore.getState().selectedTrackId).toBe("rain");
+  });
+});

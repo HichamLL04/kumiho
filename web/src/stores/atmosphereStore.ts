@@ -78,7 +78,9 @@ export const useAtmosphereStore = create<AtmosphereState>()(
           if (!state) return;
 
           const now = Date.now();
+          const hasInactiveTimerState = !state.isEnabled && (state.timerMinutes !== null || state.timerEndAt !== null);
           const hasInvalidTimerState =
+            hasInactiveTimerState ||
             (state.timerMinutes === null) !== (state.timerEndAt === null) ||
             (state.timerEndAt !== null && state.timerEndAt <= now);
 
