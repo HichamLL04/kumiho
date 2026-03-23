@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AtmosphereSettings } from "./AtmosphereSettings";
+import { AMBIENT_TRACKS } from "../../constants/ambientTracks";
 import { useAtmosphereStore } from "../../stores/atmosphereStore";
 
 vi.mock("react-i18next", () => ({
@@ -24,9 +25,10 @@ vi.mock("zustand/react/shallow", () => ({
 }));
 
 describe("AtmosphereSettings", () => {
+  const defaultTrackId = AMBIENT_TRACKS[0]?.id || "";
   const baseState = {
     isEnabled: true,
-    selectedTrackId: "rain",
+    selectedTrackId: defaultTrackId,
     volume: 0.5,
     timerMinutes: null,
     timerEndAt: null as number | null,
@@ -57,6 +59,7 @@ describe("AtmosphereSettings", () => {
 
   it("타이머 종료 시각이 있으면 interval을 등록함", () => {
     const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
 
     vi.mocked(useAtmosphereStore).mockReturnValue({
       ...baseState,
@@ -68,12 +71,37 @@ describe("AtmosphereSettings", () => {
 
     expect(setIntervalSpy).toHaveBeenCalledTimes(1);
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
   });
 
   it("타이머 종료 시각이 없으면 잔여 시간 문구를 렌더링하지 않음", () => {
     vi.mocked(useAtmosphereStore).mockReturnValue(baseState);
 
     render(<AtmosphereSettings />);
+
+    expect(screen.queryByText(/분 남음/)).not.toBeInTheDocument();
+  });
+
+  it("타이머가 해제되면 이전 잔여 시간 문구를 즉시 숨김", () => {
+    const futureTimerEndAt = Date.now() + 30 * 60 * 1000;
+
+    vi.mocked(useAtmosphereStore).mockReturnValue({
+      ...baseState,
+      timerMinutes: 30,
+      timerEndAt: futureTimerEndAt,
+    });
+
+    const { rerender } = render(<AtmosphereSettings />);
+
+    expect(screen.getByText(/분 남음/)).toBeInTheDocument();
+
+    vi.mocked(useAtmosphereStore).mockReturnValue({
+      ...baseState,
+      timerMinutes: null,
+      timerEndAt: null,
+    });
+
+    rerender(<AtmosphereSettings />);
 
     expect(screen.queryByText(/분 남음/)).not.toBeInTheDocument();
   });

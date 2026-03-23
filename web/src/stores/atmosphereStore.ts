@@ -76,14 +76,16 @@ export const useAtmosphereStore = create<AtmosphereState>()(
           if (!state) return;
 
           const now = Date.now();
+          const hasLegacyEnabledState = state.isEnabled;
           const hasInactiveTimerState = !state.isEnabled && (state.timerMinutes !== null || state.timerEndAt !== null);
           const hasInvalidTimerState =
             hasInactiveTimerState ||
             (state.timerMinutes === null) !== (state.timerEndAt === null) ||
             (state.timerEndAt !== null && state.timerEndAt <= now);
 
-          if (hasInvalidTimerState) {
+          if (hasLegacyEnabledState || hasInvalidTimerState) {
             useAtmosphereStore.setState({
+              isEnabled: false,
               timerMinutes: null,
               timerEndAt: null,
             });

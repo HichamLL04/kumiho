@@ -29,7 +29,7 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
 
   const atmosphereSuppressed = Object.values(atmosphere.suppressedBy).some(Boolean);
 
-  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
+  const [timerSnapshot, setTimerSnapshot] = useState<{ timerEndAt: number; remaining: number } | null>(null);
 
   useEffect(() => {
     if (atmosphere.timerEndAt === null) {
@@ -39,14 +39,16 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
     const timerEndAt = atmosphere.timerEndAt;
 
     const update = () => {
-      setTimerRemaining(Math.max(0, Math.ceil((timerEndAt - Date.now()) / (60 * 1000))));
+      setTimerSnapshot({
+        timerEndAt,
+        remaining: Math.max(0, Math.ceil((timerEndAt - Date.now()) / (60 * 1000))),
+      });
     };
 
-    const timeoutId = setTimeout(update, 0);
+    update();
     const intervalId = setInterval(update, 30000);
 
     return () => {
-      clearTimeout(timeoutId);
       clearInterval(intervalId);
     };
   }, [atmosphere.timerEndAt]);
@@ -113,10 +115,12 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
               <option value="30">{t("header.atmosphere_timer_30")}</option>
               <option value="60">{t("header.atmosphere_timer_60")}</option>
             </select>
-            {atmosphere.timerEndAt !== null && timerRemaining !== null && timerRemaining > 0 && (
+            {atmosphere.timerEndAt !== null &&
+              timerSnapshot?.timerEndAt === atmosphere.timerEndAt &&
+              timerSnapshot.remaining > 0 && (
               <span className={styles.timerDisplay}>
                 {t("header.atmosphere_timer_remaining", {
-                  minutes: timerRemaining,
+                  minutes: timerSnapshot.remaining,
                 })}
               </span>
             )}

@@ -12,8 +12,8 @@ describe("useAtmosphereStore rehydrate", () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
     useAtmosphereStore.getState().reset();
+    localStorage.clear();
   });
 
   it("비활성 상태로 리하이드레이트되면 저장된 타이머를 제거한다", async () => {
@@ -58,5 +58,29 @@ describe("useAtmosphereStore rehydrate", () => {
     await useAtmosphereStore.persist.rehydrate();
 
     expect(useAtmosphereStore.getState().selectedTrackId).toBe(defaultTrackId);
+  });
+
+  it("레거시 저장값에 isEnabled가 남아 있어도 비활성 상태로 정리한다", async () => {
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        state: {
+          isEnabled: true,
+          selectedTrackId: defaultTrackId,
+          volume: 0.5,
+          timerMinutes: 15,
+          timerEndAt: Date.now() + 15 * 60 * 1000,
+        },
+        version: 0,
+      }),
+    );
+
+    await useAtmosphereStore.persist.rehydrate();
+
+    const state = useAtmosphereStore.getState();
+
+    expect(state.isEnabled).toBe(false);
+    expect(state.timerMinutes).toBeNull();
+    expect(state.timerEndAt).toBeNull();
   });
 });
