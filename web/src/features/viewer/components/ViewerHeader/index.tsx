@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { ArrowLeft, Settings, Maximize, Minimize, Shield, Music, List, Sparkles } from "lucide-react";
 import { useAtmosphereStore } from "../../../../stores/atmosphereStore";
 import { AtmospherePopover } from "../AtmospherePopover";
@@ -43,7 +44,12 @@ interface ViewerHeaderProps {
 
 export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, onInteractionEnd }: ViewerHeaderProps) {
   const { t } = useTranslation();
-  const { isEnabled: isAtmosphereEnabled, setEnabled: setAtmosphereEnabled } = useAtmosphereStore();
+  const { isEnabled: isAtmosphereEnabled, setEnabled: setAtmosphereEnabled } = useAtmosphereStore(
+    useShallow((state) => ({
+      isEnabled: state.isEnabled,
+      setEnabled: state.setEnabled,
+    })),
+  );
   const [isAtmospherePopoverOpen, setIsAtmospherePopoverOpen] = useState(false);
 
   const handleAtmosphereClick = () => {
@@ -51,7 +57,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
       setAtmosphereEnabled(false);
       setIsAtmospherePopoverOpen(false);
     } else {
-      setIsAtmospherePopoverOpen(true);
+      setIsAtmospherePopoverOpen((prev) => !prev);
     }
   };
 
