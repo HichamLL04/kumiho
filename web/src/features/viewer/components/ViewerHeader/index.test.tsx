@@ -24,8 +24,9 @@ vi.mock("zustand/react/shallow", () => ({
 }));
 
 vi.mock("../AtmospherePopover", () => ({
-  AtmospherePopover: ({ onClose }: { onClose: () => void; triggerRef: unknown }) => (
+  AtmospherePopover: ({ id, onClose }: { id: string; onClose: () => void; triggerRef: unknown }) => (
     <div
+      id={id}
       data-testid="atmosphere-popover"
       role="dialog"
       aria-label="viewer.header.atmosphere_settings_dialog"
@@ -37,6 +38,7 @@ vi.mock("../AtmospherePopover", () => ({
 
 describe("ViewerHeader Atmosphere Toggle", () => {
   const mockSetEnabled = vi.fn();
+  const mockSetTimer = vi.fn();
   const mockedUseAtmosphereStore = vi.mocked(useAtmosphereStore) as MockAtmosphereStore;
 
   beforeEach(() => {
@@ -47,6 +49,7 @@ describe("ViewerHeader Atmosphere Toggle", () => {
     mockedUseAtmosphereStore.mockReturnValue({
       isEnabled,
       setEnabled: mockSetEnabled,
+      setTimer: mockSetTimer,
     });
 
     const props: ViewerHeaderProps = {
@@ -81,6 +84,9 @@ describe("ViewerHeader Atmosphere Toggle", () => {
 
     expect(screen.getByTestId("atmosphere-popover")).toBeInTheDocument();
     expect(screen.getByLabelText("viewer.header.atmosphere_settings_close")).toBeInTheDocument();
+    expect(screen.getByLabelText("viewer.header.atmosphere_settings_close")).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.getByLabelText("viewer.header.atmosphere_settings_close")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("viewer.header.atmosphere_settings_close")).toHaveAttribute("aria-controls");
   });
 
   it("분위기 음이 켜져 있을 때 버튼 클릭 시 즉시 종료", () => {
@@ -90,6 +96,7 @@ describe("ViewerHeader Atmosphere Toggle", () => {
     fireEvent.click(toggleBtn);
 
     expect(mockSetEnabled).toHaveBeenCalledWith(false);
+    expect(mockSetTimer).toHaveBeenCalledWith(null);
     expect(screen.queryByTestId("atmosphere-popover")).not.toBeInTheDocument();
   });
 

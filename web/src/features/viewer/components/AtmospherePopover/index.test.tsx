@@ -27,12 +27,14 @@ describe("AtmospherePopover", () => {
 
     render(
       <AtmospherePopover
+        id="atmosphere-popover"
         onClose={vi.fn()}
         triggerRef={triggerRef}
       />,
     );
 
     expect(screen.getByRole("dialog", { name: "viewer.header.atmosphere_settings_dialog" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "viewer.header.atmosphere_settings_dialog" })).toHaveAttribute("id", "atmosphere-popover");
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "First Control" })).toHaveFocus();
@@ -47,6 +49,7 @@ describe("AtmospherePopover", () => {
 
     const { unmount } = render(
       <AtmospherePopover
+        id="atmosphere-popover"
         onClose={vi.fn()}
         triggerRef={triggerRef}
       />,
@@ -70,6 +73,7 @@ describe("AtmospherePopover", () => {
 
     render(
       <AtmospherePopover
+        id="atmosphere-popover"
         onClose={onClose}
         triggerRef={triggerRef}
       />,

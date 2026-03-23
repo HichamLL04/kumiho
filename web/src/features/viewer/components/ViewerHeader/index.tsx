@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { ArrowLeft, Settings, Maximize, Minimize, Shield, Music, List, Sparkles } from "lucide-react";
@@ -44,18 +44,21 @@ interface ViewerHeaderProps {
 
 export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, onInteractionEnd }: ViewerHeaderProps) {
   const { t } = useTranslation();
-  const { isEnabled: isAtmosphereEnabled, setEnabled: setAtmosphereEnabled } = useAtmosphereStore(
+  const { isEnabled: isAtmosphereEnabled, setEnabled: setAtmosphereEnabled, setTimer: setAtmosphereTimer } = useAtmosphereStore(
     useShallow((state) => ({
       isEnabled: state.isEnabled,
       setEnabled: state.setEnabled,
+      setTimer: state.setTimer,
     })),
   );
   const atmosphereButtonRef = useRef<HTMLButtonElement>(null);
+  const atmospherePopoverId = useId();
   const [isAtmospherePopoverOpen, setIsAtmospherePopoverOpen] = useState(false);
 
   const handleAtmosphereClick = () => {
     if (isAtmosphereEnabled) {
       setAtmosphereEnabled(false);
+      setAtmosphereTimer(null);
       setIsAtmospherePopoverOpen(false);
     } else {
       setIsAtmospherePopoverOpen((prev) => !prev);
@@ -167,6 +170,9 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
           onClick={handleAtmosphereClick}
           title={atmosphereButtonLabel}
           aria-label={atmosphereButtonLabel}
+          aria-haspopup="dialog"
+          aria-expanded={isAtmospherePopoverOpen}
+          aria-controls={isAtmospherePopoverOpen ? atmospherePopoverId : undefined}
         >
           <Sparkles
             size={24}
@@ -178,6 +184,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
           <AtmospherePopover
             onClose={() => setIsAtmospherePopoverOpen(false)}
             triggerRef={atmosphereButtonRef}
+            id={atmospherePopoverId}
           />
         )}
 

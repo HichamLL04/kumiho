@@ -4,11 +4,12 @@ import { AtmosphereSettings } from "../../../../components/Atmosphere/Atmosphere
 import styles from "./AtmospherePopover.module.css";
 
 interface AtmospherePopoverProps {
+  id: string;
   onClose: () => void;
   triggerRef: RefObject<HTMLElement | null>;
 }
 
-export function AtmospherePopover({ onClose, triggerRef }: AtmospherePopoverProps) {
+export function AtmospherePopover({ id, onClose, triggerRef }: AtmospherePopoverProps) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -63,6 +64,7 @@ export function AtmospherePopover({ onClose, triggerRef }: AtmospherePopoverProp
 
   return (
     <div
+      id={id}
       className={styles.popover}
       ref={ref}
       role="dialog"
