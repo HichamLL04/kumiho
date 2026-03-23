@@ -29,16 +29,11 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
 
   const atmosphereSuppressed = Object.values(atmosphere.suppressedBy).some(Boolean);
 
-  // 타이머 잔여 시간
   const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     if (atmosphere.timerEndAt === null) {
-      const timeoutId = setTimeout(() => {
-        setTimerRemaining(null);
-      }, 0);
-
-      return () => clearTimeout(timeoutId);
+      return;
     }
 
     const timerEndAt = atmosphere.timerEndAt;
@@ -47,7 +42,6 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
       setTimerRemaining(Math.max(0, Math.ceil((timerEndAt - Date.now()) / (60 * 1000))));
     };
 
-    // 린트 에러(동기적 setState)를 방지하기 위해 비동기로 초기화 및 주기적 업데이트
     const timeoutId = setTimeout(update, 0);
     const intervalId = setInterval(update, 30000);
 

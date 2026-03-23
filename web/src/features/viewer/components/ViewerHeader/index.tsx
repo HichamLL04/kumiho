@@ -170,9 +170,9 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
           onClick={handleAtmosphereClick}
           title={atmosphereButtonLabel}
           aria-label={atmosphereButtonLabel}
-          aria-haspopup="dialog"
-          aria-expanded={isAtmospherePopoverOpen}
-          aria-controls={isAtmospherePopoverOpen ? atmospherePopoverId : undefined}
+          aria-haspopup={!isAtmosphereEnabled ? "dialog" : undefined}
+          aria-expanded={!isAtmosphereEnabled ? isAtmospherePopoverOpen : undefined}
+          aria-controls={!isAtmosphereEnabled && isAtmospherePopoverOpen ? atmospherePopoverId : undefined}
         >
           <Sparkles
             size={24}

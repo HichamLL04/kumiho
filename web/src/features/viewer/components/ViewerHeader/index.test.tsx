@@ -93,6 +93,10 @@ describe("ViewerHeader Atmosphere Toggle", () => {
     renderHeader(true);
 
     const toggleBtn = screen.getByLabelText("viewer.header.atmosphere_off");
+    expect(toggleBtn).not.toHaveAttribute("aria-haspopup");
+    expect(toggleBtn).not.toHaveAttribute("aria-expanded");
+    expect(toggleBtn).not.toHaveAttribute("aria-controls");
+
     fireEvent.click(toggleBtn);
 
     expect(mockSetEnabled).toHaveBeenCalledWith(false);
