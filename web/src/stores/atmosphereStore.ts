@@ -69,7 +69,6 @@ export const useAtmosphereStore = create<AtmosphereState>()(
         name: "kumiho-atmosphere-storage",
         // suppressedBy는 런타임 전용이므로 제외
         partialize: (state) => ({
-          isEnabled: state.isEnabled,
           selectedTrackId: state.selectedTrackId,
           volume: state.volume,
           timerMinutes: state.timerMinutes,
