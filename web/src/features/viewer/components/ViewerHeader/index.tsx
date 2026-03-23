@@ -85,6 +85,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
   const onZoomIn = zoomPdfOptions?.onZoomIn;
   const onZoomOut = zoomPdfOptions?.onZoomOut;
   const onZoomReset = zoomPdfOptions?.onZoomReset;
+  const showsAtmosphereDialogState = isAtmospherePopoverOpen || !isAtmosphereEnabled;
   const atmosphereButtonLabel = isAtmosphereEnabled
     ? t("viewer.header.atmosphere_off")
     : isAtmospherePopoverOpen
@@ -173,9 +174,9 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
           onClick={handleAtmosphereClick}
           title={atmosphereButtonLabel}
           aria-label={atmosphereButtonLabel}
-          aria-haspopup={!isAtmosphereEnabled ? "dialog" : undefined}
-          aria-expanded={!isAtmosphereEnabled ? isAtmospherePopoverOpen : undefined}
-          aria-controls={!isAtmosphereEnabled && isAtmospherePopoverOpen ? atmospherePopoverId : undefined}
+          aria-haspopup={showsAtmosphereDialogState ? "dialog" : undefined}
+          aria-expanded={showsAtmosphereDialogState ? isAtmospherePopoverOpen : undefined}
+          aria-controls={isAtmospherePopoverOpen ? atmospherePopoverId : undefined}
         >
           <Sparkles
             size={24}

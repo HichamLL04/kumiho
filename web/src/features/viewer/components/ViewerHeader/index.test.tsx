@@ -45,14 +45,16 @@ describe("ViewerHeader Atmosphere Toggle", () => {
     vi.clearAllMocks();
   });
 
-  function renderHeader(isEnabled = false) {
-    mockedUseAtmosphereStore.mockReturnValue({
+  function buildStoreState(isEnabled = false) {
+    return {
       isEnabled,
       setEnabled: mockSetEnabled,
       setTimer: mockSetTimer,
-    });
+    };
+  }
 
-    const props: ViewerHeaderProps = {
+  function buildProps(): ViewerHeaderProps {
+    return {
       state: {
         title: "Test Book",
         currentPage: 1,
@@ -72,6 +74,12 @@ describe("ViewerHeader Atmosphere Toggle", () => {
       onInteractionStart: vi.fn(),
       onInteractionEnd: vi.fn(),
     };
+  }
+
+  function renderHeader(isEnabled = false) {
+    mockedUseAtmosphereStore.mockReturnValue(buildStoreState(isEnabled));
+
+    const props = buildProps();
 
     return render(<ViewerHeader {...props} />);
   }
@@ -116,5 +124,23 @@ describe("ViewerHeader Atmosphere Toggle", () => {
     // 다시 눌러서 닫기
     fireEvent.click(screen.getByLabelText("viewer.header.atmosphere_settings_close"));
     expect(screen.queryByTestId("atmosphere-popover")).not.toBeInTheDocument();
+  });
+
+  it("팝오버가 열린 상태에서 분위기 음이 켜져도 dialog aria 상태를 유지함", () => {
+    const props = buildProps();
+    mockedUseAtmosphereStore.mockReturnValue(buildStoreState(false));
+
+    const { rerender } = render(<ViewerHeader {...props} />);
+
+    fireEvent.click(screen.getByLabelText("viewer.header.atmosphere_settings_open"));
+
+    mockedUseAtmosphereStore.mockReturnValue(buildStoreState(true));
+    rerender(<ViewerHeader {...props} />);
+
+    const toggleBtn = screen.getByLabelText("viewer.header.atmosphere_off");
+    expect(screen.getByTestId("atmosphere-popover")).toBeInTheDocument();
+    expect(toggleBtn).toHaveAttribute("aria-haspopup", "dialog");
+    expect(toggleBtn).toHaveAttribute("aria-expanded", "true");
+    expect(toggleBtn).toHaveAttribute("aria-controls");
   });
 });
