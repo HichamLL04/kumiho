@@ -11,6 +11,7 @@ export function AtmosphereProvider() {
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trackChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasInteractedRef = useRef(false);
 
   // 현재 선택된 트랙 정보 (존재하지 않으면 첫 번째 트랙으로 폴백)
   const currentTrack = AMBIENT_TRACKS.find((t) => t.id === selectedTrackId) || AMBIENT_TRACKS[0];
@@ -34,6 +35,17 @@ export function AtmosphereProvider() {
     return () => clearInterval(interval);
   }, [isEnabled, timerEndAt, setEnabled, setTimer]);
 
+  const ensureAudioElement = useCallback(() => {
+    if (!audioRef.current) {
+      const audio = new Audio();
+      audio.loop = true;
+      audio.crossOrigin = "anonymous";
+      audioRef.current = audio;
+    }
+
+    return audioRef.current;
+  }, []);
+
   // Web Audio Context 및 GainNode 초기화
   const initAudioContext = useCallback(() => {
     // 기능이 꺼져있거나 억제된 상태라면 초기화하지 않음
@@ -47,13 +59,7 @@ export function AtmosphereProvider() {
       audioContextRef.current = new AudioContextClass();
     }
     const ctx = audioContextRef.current;
-
-    if (!audioRef.current) {
-      const audio = new Audio();
-      audio.loop = true;
-      audio.crossOrigin = "anonymous";
-      audioRef.current = audio;
-    }
+    const audio = ensureAudioElement();
 
     if (!gainNodeRef.current) {
       const gain = ctx.createGain();
@@ -62,9 +68,9 @@ export function AtmosphereProvider() {
       gainNodeRef.current = gain;
     }
 
-    if (!sourceNodeRef.current && audioRef.current && gainNodeRef.current) {
+    if (!sourceNodeRef.current && gainNodeRef.current) {
       try {
-        const source = ctx.createMediaElementSource(audioRef.current);
+        const source = ctx.createMediaElementSource(audio);
         source.connect(gainNodeRef.current);
         sourceNodeRef.current = source;
       } catch (e) {
@@ -72,8 +78,8 @@ export function AtmosphereProvider() {
       }
     }
 
-    return { ctx, gain: gainNodeRef.current!, audio: audioRef.current! };
-  }, [isEnabled, isSuppressed]);
+    return { ctx, gain: gainNodeRef.current!, audio };
+  }, [ensureAudioElement, isEnabled, isSuppressed]);
 
   // 페이드 인/아웃 처리
   const fadeVolume = useCallback((targetVolume: number, duration: number) => {
@@ -128,6 +134,8 @@ export function AtmosphereProvider() {
     }
 
     const handleInteraction = () => {
+      hasInteractedRef.current = true;
+
       const initialized = initAudioContext();
       if (!initialized) return;
 
@@ -175,14 +183,30 @@ export function AtmosphereProvider() {
     if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
 
     if (shouldPlay) {
-      const initialized = initAudioContext();
-      if (initialized && currentTrack) {
-        const { audio, ctx } = initialized;
+      const audio = ensureAudioElement();
+      if (currentTrack) {
         const trackUrl = `/assets/ambient/${currentTrack.file}.opus`;
         const fullTrackUrl = window.location.origin + trackUrl;
+        const isTrackSwitchWhilePlaying = audio.src !== fullTrackUrl && audio.src !== "" && !audio.paused;
+
+        if (!isTrackSwitchWhilePlaying && audio.src !== fullTrackUrl) {
+          audio.src = trackUrl;
+          audio.load();
+        }
+
+        if (!hasInteractedRef.current) {
+          return;
+        }
+
+        const initialized = initAudioContext();
+        if (!initialized) {
+          return;
+        }
+
+        const { ctx } = initialized;
 
         // 다른 트랙으로 변경되는 경우 (전환 페이드 적용)
-        if (audio.src !== fullTrackUrl && audio.src !== "" && !audio.paused) {
+        if (isTrackSwitchWhilePlaying) {
           // 1. 현재 트랙 페이드 아웃 (0.5s)
           fadeVolume(0, 0.5);
           trackChangeTimeoutRef.current = setTimeout(() => {
@@ -198,14 +222,9 @@ export function AtmosphereProvider() {
               .catch((e: unknown) => {
                 console.warn("Track switch play failed (normal if not interacted):", e);
               });
-          }, 600);
+          }, 300);
         } else {
           // 초기 시작, 정지 상태에서 트랙 변경, 또는 동일 트랙
-          if (audio.src !== fullTrackUrl) {
-            audio.src = trackUrl;
-            audio.load();
-          }
-
           if (ctx.state === "suspended") void ctx.resume().catch(console.error);
           if (audio.paused) {
             audio
@@ -234,14 +253,23 @@ export function AtmosphereProvider() {
         if (!state.isEnabled || stillSuppressed) {
           audioRef.current?.pause();
         }
-      }, 600);
+      }, 500);
     }
 
     return () => {
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
       if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
     };
-  }, [isEnabled, isSuppressed, selectedTrackId, initAudioContext, fadeVolume, currentTrack, volume]);
+  }, [
+    isEnabled,
+    isSuppressed,
+    selectedTrackId,
+    ensureAudioElement,
+    initAudioContext,
+    fadeVolume,
+    currentTrack,
+    volume,
+  ]);
 
   return null; // 헤드리스 컴포넌트
 }

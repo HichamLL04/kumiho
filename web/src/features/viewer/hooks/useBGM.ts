@@ -35,12 +35,14 @@ export function useBGM({ volumeId, chapterId, isReady }: UseBGMParams): UseBGMRe
     // BGM이 존재하고, 재생 중이며, 뷰어가 준비된 경우에만 앰비언트 사운드 억제
     const isActuallyPlayingBgm = !!(bgmInfo?.exists && isBgmPlaying && isReady);
     setSuppressedBy("bgm", isActuallyPlayingBgm);
+  }, [bgmInfo?.exists, isBgmPlaying, isReady, setSuppressedBy]);
 
-    // 컴포넌트 언마운트 시(뷰어 종료 시) 무조건 억제 해제하여 앰비언트 사운드 복구
+  // 컴포넌트 언마운트 시(뷰어 종료 시) 무조건 억제 해제하여 앰비언트 사운드 복구
+  useEffect(() => {
     return () => {
       setSuppressedBy("bgm", false);
     };
-  }, [bgmInfo?.exists, isBgmPlaying, isReady, setSuppressedBy]);
+  }, [setSuppressedBy]);
 
   // 챕터별 BGM 정보 로드 (챕터 → 볼륨 순으로 시도)
   useEffect(() => {
