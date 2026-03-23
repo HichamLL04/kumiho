@@ -78,7 +78,7 @@
     "atmosphere_timer_60": "1시간",
     "atmosphere_timer_remaining": "{{minutes}}분 남음",
     "atmosphere_title": "독서 분위기",
-    "atmosphere_suppressed": "BGM 재생 중 일시정지됨",
+    "atmosphere_suppressed": "다른 오디오 재생 중이라 일시정지됨",
     "atmosphere_track_select": "앰비언트 트랙 선택",
     "atmosphere_volume": "앰비언트 볼륨"
   },

@@ -78,7 +78,7 @@
     "atmosphere_timer_60": "1 hour",
     "atmosphere_timer_remaining": "{{minutes}}m left",
     "atmosphere_title": "Reading Atmosphere",
-    "atmosphere_suppressed": "Paused while BGM is playing",
+    "atmosphere_suppressed": "Paused while other audio is playing",
     "atmosphere_track_select": "Select ambient track",
     "atmosphere_volume": "Ambient volume"
   },

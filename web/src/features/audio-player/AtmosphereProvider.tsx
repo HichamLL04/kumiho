@@ -130,18 +130,23 @@ export function AtmosphereProvider() {
       const { ctx, audio } = initialized;
       if (ctx.state === "suspended") void ctx.resume().catch(console.error);
 
-      if (audio.paused && audio.src) {
+      if (audio.paused) {
+        if (!audio.src) {
+          return;
+        }
+
         audio
           .play()
           .then(() => {
             fadeVolume(volumeRef.current, 0.5);
+            window.removeEventListener("click", handleInteraction);
+            window.removeEventListener("keydown", handleInteraction);
+            window.removeEventListener("touchstart", handleInteraction);
           })
           .catch((e: unknown) => console.warn("Interaction play failed:", e));
+        return;
       }
 
-      // 리스너 제거는 한 번만 수행되도록 여기서 처리하지 않고 cleanup에서 담당하거나
-      // 로직에 따라 한 번만 실행되게 변경 가능함.
-      // 원본 로직대로 리스너 제거를 추가함.
       window.removeEventListener("click", handleInteraction);
       window.removeEventListener("keydown", handleInteraction);
       window.removeEventListener("touchstart", handleInteraction);
