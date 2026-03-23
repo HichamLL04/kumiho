@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { ArrowLeft, Settings, Maximize, Minimize, Shield, Music, List, Sparkles } from "lucide-react";
@@ -54,6 +54,9 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
   const atmosphereButtonRef = useRef<HTMLButtonElement>(null);
   const atmospherePopoverId = useId();
   const [isAtmospherePopoverOpen, setIsAtmospherePopoverOpen] = useState(false);
+  const handleCloseAtmospherePopover = useCallback(() => {
+    setIsAtmospherePopoverOpen(false);
+  }, []);
 
   const handleAtmosphereClick = () => {
     if (isAtmosphereEnabled) {
@@ -182,7 +185,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
 
         {isAtmospherePopoverOpen && (
           <AtmospherePopover
-            onClose={() => setIsAtmospherePopoverOpen(false)}
+            onClose={handleCloseAtmospherePopover}
             triggerRef={atmosphereButtonRef}
             id={atmospherePopoverId}
           />
