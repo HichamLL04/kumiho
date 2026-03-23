@@ -665,6 +665,8 @@
       "settings": "Viewer Settings",
       "bgm_on": "BGM On",
       "bgm_off": "BGM Off",
+      "atmosphere_on": "Atmosphere On",
+      "atmosphere_off": "Atmosphere Off",
       "zoom_in": "Zoom In",
       "zoom_out": "Zoom Out",
       "zoom_reset": "Reset Zoom",
