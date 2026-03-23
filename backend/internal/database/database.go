@@ -361,10 +361,10 @@ func Migrate() error {
 		PRIMARY KEY (user_id, series_id)
 	);
 
-	-- 북마크 (특정 위치 저장용, 범용)
-	CREATE TABLE IF NOT EXISTS bookmarks (
-		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		-- 북마크 (특정 위치 저장용, 범용)
+		CREATE TABLE IF NOT EXISTS bookmarks (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
 		volume_id TEXT REFERENCES volumes(id) ON DELETE CASCADE,
 		chapter_id TEXT REFERENCES chapters(id) ON DELETE CASCADE,
@@ -373,9 +373,18 @@ func Migrate() error {
 		page_number INTEGER DEFAULT 0,
 		current_position INTEGER DEFAULT 0,
 		current_cfi TEXT,
-		current_time REAL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
+			current_time REAL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		-- 챕터 완료 기록
+		CREATE TABLE IF NOT EXISTS chapter_completions (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+			completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(user_id, chapter_id)
+		);
 
 	-- 사용자별 일일 활동 로그 (정확한 잔디 통계용)
 	CREATE TABLE IF NOT EXISTS daily_activity (
@@ -431,11 +440,13 @@ func Migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_user_bookmarks_user ON user_bookmarks(user_id);
 	CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
 	CREATE INDEX IF NOT EXISTS idx_user_series_settings_user ON user_series_settings(user_id);
-	CREATE INDEX IF NOT EXISTS idx_user_series_settings_series ON user_series_settings(series_id);
-	CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id);
-	CREATE INDEX IF NOT EXISTS idx_bookmarks_series ON bookmarks(series_id);
-	CREATE INDEX IF NOT EXISTS idx_bookmarks_chapter ON bookmarks(chapter_id);
-	`
+		CREATE INDEX IF NOT EXISTS idx_user_series_settings_series ON user_series_settings(series_id);
+		CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id);
+		CREATE INDEX IF NOT EXISTS idx_bookmarks_series ON bookmarks(series_id);
+		CREATE INDEX IF NOT EXISTS idx_bookmarks_chapter ON bookmarks(chapter_id);
+		CREATE INDEX IF NOT EXISTS idx_chapter_completions_user ON chapter_completions(user_id);
+		CREATE INDEX IF NOT EXISTS idx_chapter_completions_chapter ON chapter_completions(chapter_id);
+		`
 
 	if _, err := DB.Exec(schema); err != nil {
 		return err
