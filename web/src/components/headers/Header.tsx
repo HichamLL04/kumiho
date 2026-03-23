@@ -441,7 +441,13 @@ export function Header({ onMenuClick }: HeaderProps) {
                     <input
                       type="checkbox"
                       checked={atmosphere.isEnabled}
-                      onChange={(e) => atmosphere.setEnabled(e.target.checked)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        atmosphere.setEnabled(checked);
+                        if (!checked) {
+                          atmosphere.setTimer(null);
+                        }
+                      }}
                       aria-label={t("header.atmosphere_title")}
                     />
                     <span className={styles.slider} />

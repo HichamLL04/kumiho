@@ -3,7 +3,7 @@ import { useAtmosphereStore } from "../../stores/atmosphereStore";
 import { AMBIENT_TRACKS } from "../../constants/ambientTracks";
 
 const AMBIENT_FADE_SECONDS = 0.5;
-const AMBIENT_FADE_MS = 500;
+const AMBIENT_FADE_MS = AMBIENT_FADE_SECONDS * 1000;
 
 type AudioContextWithWebkit = typeof AudioContext & {
   webkitAudioContext?: typeof AudioContext;
