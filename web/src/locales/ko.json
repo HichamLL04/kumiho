@@ -66,7 +66,21 @@
     "settings": "설정",
     "logout": "로그아웃",
     "clear_search": "검색어 지우기",
-    "open_menu": "메뉴 열기"
+    "open_menu": "메뉴 열기",
+    "atmosphere_tracks": {
+      "rain": "빗소리",
+      "bonfire": "모닥불 소리"
+    },
+    "atmosphere_timer": "타이머",
+    "atmosphere_timer_off": "꺼짐",
+    "atmosphere_timer_15": "15분",
+    "atmosphere_timer_30": "30분",
+    "atmosphere_timer_60": "1시간",
+    "atmosphere_timer_remaining": "{{minutes}}분 남음",
+    "atmosphere_title": "독서 분위기",
+    "atmosphere_suppressed": "다른 오디오 재생 중이라 일시정지됨",
+    "atmosphere_track_select": "앰비언트 트랙 선택",
+    "atmosphere_volume": "앰비언트 볼륨"
   },
   "settings": {
     "title": "설정",

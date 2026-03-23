@@ -66,7 +66,21 @@
     "settings": "設定",
     "logout": "ログアウト",
     "clear_search": "検索ワードをクリア",
-    "open_menu": "メニューを開く"
+    "open_menu": "メニューを開く",
+    "atmosphere_tracks": {
+      "rain": "雨音",
+      "bonfire": "焚き火の音"
+    },
+    "atmosphere_timer": "タイマー",
+    "atmosphere_timer_off": "オフ",
+    "atmosphere_timer_15": "15分",
+    "atmosphere_timer_30": "30分",
+    "atmosphere_timer_60": "1時間",
+    "atmosphere_timer_remaining": "残り{{minutes}}分",
+    "atmosphere_title": "読書の雰囲気",
+    "atmosphere_suppressed": "他のオーディオ再生中のため一時停止中",
+    "atmosphere_track_select": "アンビエントトラック選択",
+    "atmosphere_volume": "アンビエント音量"
   },
   "settings": {
     "title": "設定",
