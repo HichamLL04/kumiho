@@ -33,12 +33,16 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
   const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
 
   useEffect(() => {
-    const update = () => {
-      if (atmosphere.timerEndAt === null) {
+    if (atmosphere.timerEndAt === null) {
+      const timeoutId = setTimeout(() => {
         setTimerRemaining(null);
-      } else {
-        setTimerRemaining(Math.max(0, Math.ceil((atmosphere.timerEndAt - Date.now()) / (60 * 1000))));
-      }
+      }, 0);
+
+      return () => clearTimeout(timeoutId);
+    }
+
+    const update = () => {
+      setTimerRemaining(Math.max(0, Math.ceil((atmosphere.timerEndAt - Date.now()) / (60 * 1000))));
     };
 
     // 린트 에러(동기적 setState)를 방지하기 위해 비동기로 초기화 및 주기적 업데이트

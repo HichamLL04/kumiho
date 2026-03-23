@@ -4,6 +4,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ViewerHeader } from "./index";
 import { useAtmosphereStore } from "../../../../stores/atmosphereStore";
 
+type ViewerHeaderProps = React.ComponentProps<typeof ViewerHeader>;
+type MockAtmosphereStore = ReturnType<typeof vi.fn>;
+
 // Mocks
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -16,7 +19,7 @@ vi.mock("../../../../stores/atmosphereStore", () => ({
 }));
 
 vi.mock("zustand/react/shallow", () => ({
-  useShallow: (fn: any) => fn,
+  useShallow: <T,>(fn: T) => fn,
 }));
 
 vi.mock("../AtmospherePopover", () => ({
@@ -29,20 +32,35 @@ vi.mock("../AtmospherePopover", () => ({
 
 describe("ViewerHeader Atmosphere Toggle", () => {
   const mockSetEnabled = vi.fn();
+  const mockedUseAtmosphereStore = vi.mocked(useAtmosphereStore) as MockAtmosphereStore;
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   function renderHeader(isEnabled = false) {
-    (useAtmosphereStore as any).mockReturnValue({
+    mockedUseAtmosphereStore.mockReturnValue({
       isEnabled,
       setEnabled: mockSetEnabled,
     });
 
-    const props: any = {
-      state: { title: "Test Book" },
-      actions: {},
+    const props: ViewerHeaderProps = {
+      state: {
+        title: "Test Book",
+        currentPage: 1,
+        totalPages: 10,
+        isUIVisible: true,
+        isIncognito: false,
+        isFullscreen: false,
+        isBgmPlaying: false,
+        bgmInfo: null,
+      },
+      actions: {
+        onBack: vi.fn(),
+        onToggleFullscreen: vi.fn(),
+        onToggleSettings: vi.fn(),
+        onToggleBgm: vi.fn(),
+      },
       onInteractionStart: vi.fn(),
       onInteractionEnd: vi.fn(),
     };
