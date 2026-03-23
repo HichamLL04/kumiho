@@ -2,16 +2,25 @@ import { useEffect, useRef, useCallback } from "react";
 import { useAtmosphereStore } from "../../stores/atmosphereStore";
 import { AMBIENT_TRACKS } from "../../constants/ambientTracks";
 
+const AMBIENT_FADE_SECONDS = 0.5;
+const AMBIENT_FADE_MS = 500;
+
+type AudioContextWithWebkit = typeof AudioContext & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
 export function AtmosphereProvider() {
   const { isEnabled, selectedTrackId, volume, suppressedBy, timerEndAt, setEnabled, setTimer } = useAtmosphereStore();
   const isSuppressed = Object.values(suppressedBy).some(Boolean);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
-  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const currentTrackIdRef = useRef<string | null>(null);
+  const decodedBufferCacheRef = useRef<Map<string, Promise<AudioBuffer> | AudioBuffer>>(new Map());
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trackChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInteractedRef = useRef(false);
+  const operationTokenRef = useRef(0);
 
   // 현재 선택된 트랙 정보 (존재하지 않으면 첫 번째 트랙으로 폴백)
   const currentTrack = AMBIENT_TRACKS.find((t) => t.id === selectedTrackId) || AMBIENT_TRACKS[0];
@@ -35,31 +44,18 @@ export function AtmosphereProvider() {
     return () => clearInterval(interval);
   }, [isEnabled, timerEndAt, setEnabled, setTimer]);
 
-  const ensureAudioElement = useCallback(() => {
-    if (!audioRef.current) {
-      const audio = new Audio();
-      audio.loop = true;
-      audio.crossOrigin = "anonymous";
-      audioRef.current = audio;
-    }
-
-    return audioRef.current;
-  }, []);
-
-  // Web Audio Context 및 GainNode 초기화
-  const initAudioContext = useCallback(() => {
-    // 기능이 꺼져있거나 억제된 상태라면 초기화하지 않음
-    if (!isEnabled || isSuppressed) {
-      return null;
-    }
-
+  const ensureAudioGraph = useCallback(() => {
     if (!audioContextRef.current) {
-      const AudioContextClass =
-        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioContextClass = (window.AudioContext ||
+        (window as unknown as AudioContextWithWebkit).webkitAudioContext) as typeof AudioContext | undefined;
+      if (!AudioContextClass) {
+        console.error("AudioContext is not available in this browser.");
+        return null;
+      }
       audioContextRef.current = new AudioContextClass();
     }
     const ctx = audioContextRef.current;
-    const audio = ensureAudioElement();
+    if (!ctx) return null;
 
     if (!gainNodeRef.current) {
       const gain = ctx.createGain();
@@ -68,18 +64,8 @@ export function AtmosphereProvider() {
       gainNodeRef.current = gain;
     }
 
-    if (!sourceNodeRef.current && gainNodeRef.current) {
-      try {
-        const source = ctx.createMediaElementSource(audio);
-        source.connect(gainNodeRef.current);
-        sourceNodeRef.current = source;
-      } catch (e) {
-        console.error("Failed to create MediaElementSource:", e);
-      }
-    }
-
-    return { ctx, gain: gainNodeRef.current!, audio };
-  }, [ensureAudioElement, isEnabled, isSuppressed]);
+    return { ctx, gain: gainNodeRef.current };
+  }, []);
 
   // 페이드 인/아웃 처리
   const fadeVolume = useCallback((targetVolume: number, duration: number) => {
@@ -103,15 +89,109 @@ export function AtmosphereProvider() {
     }
   }, []);
 
+  const stopCurrentSource = useCallback(() => {
+    const source = currentSourceRef.current;
+    if (!source) return;
+
+    source.onended = null;
+    try {
+      source.stop();
+    } catch {
+      // 이미 정지된 source는 무시
+    }
+    source.disconnect();
+    currentSourceRef.current = null;
+  }, []);
+
+  const stopAmbient = useCallback(
+    ({ fadeOut, token, clearTrack }: { fadeOut: boolean; token: number; clearTrack: boolean }) => {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+        fadeTimeoutRef.current = null;
+      }
+
+      if (!currentSourceRef.current) {
+        if (clearTrack) currentTrackIdRef.current = null;
+        return Promise.resolve();
+      }
+
+      if (!fadeOut) {
+        stopCurrentSource();
+        if (clearTrack) currentTrackIdRef.current = null;
+        return Promise.resolve();
+      }
+
+      fadeVolume(0, AMBIENT_FADE_SECONDS);
+
+      return new Promise<void>((resolve) => {
+        fadeTimeoutRef.current = setTimeout(() => {
+          fadeTimeoutRef.current = null;
+          if (token !== operationTokenRef.current) {
+            resolve();
+            return;
+          }
+          stopCurrentSource();
+          if (clearTrack) currentTrackIdRef.current = null;
+          resolve();
+        }, AMBIENT_FADE_MS);
+      });
+    },
+    [fadeVolume, stopCurrentSource],
+  );
+
+  const loadTrackBuffer = useCallback(async (trackId: string) => {
+    const cached = decodedBufferCacheRef.current.get(trackId);
+    if (cached instanceof AudioBuffer) {
+      return cached;
+    }
+    if (cached) {
+      return cached;
+    }
+
+    const track = AMBIENT_TRACKS.find((item) => item.id === trackId) || AMBIENT_TRACKS[0];
+    const loadingPromise = (async () => {
+      const graph = ensureAudioGraph();
+      if (!graph) {
+        throw new Error("Audio graph is not available");
+      }
+
+      const response = await fetch(`/assets/ambient/${track.file}.opus`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ambient track: ${track.file}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const decodedBuffer = await graph.ctx.decodeAudioData(arrayBuffer);
+      decodedBufferCacheRef.current.set(trackId, decodedBuffer);
+      return decodedBuffer;
+    })().catch((error: unknown) => {
+      decodedBufferCacheRef.current.delete(trackId);
+      throw error;
+    });
+
+    decodedBufferCacheRef.current.set(trackId, loadingPromise);
+    return loadingPromise;
+  }, [ensureAudioGraph]);
+
+  const createLoopingSource = useCallback((buffer: AudioBuffer) => {
+    const graph = ensureAudioGraph();
+    if (!graph) return null;
+
+    const source = graph.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(graph.gain);
+    return source;
+  }, [ensureAudioGraph]);
+
   // 컴포넌트 언마운트 시 오디오 및 타이머 확실히 정리
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-      }
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
       if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
+      stopCurrentSource();
+      gainNodeRef.current?.disconnect();
+      gainNodeRef.current = null;
       if (audioContextRef.current) {
         if (audioContextRef.current.state !== "closed") {
           audioContextRef.current.close().catch(console.error);
@@ -119,7 +199,7 @@ export function AtmosphereProvider() {
         audioContextRef.current = null;
       }
     };
-  }, []);
+  }, [stopCurrentSource]);
 
   // 볼륨 ref (interaction 리스너에서 최신 값 참조용 - 의존성 배열에서 volume 제거)
   const volumeRef = useRef(volume);
@@ -129,39 +209,58 @@ export function AtmosphereProvider() {
 
   // 첫 사용자 상호작용 시 오디오 컨텍스트 재개 (Autoplay 정책 대응)
   useEffect(() => {
-    if (!isEnabled || isSuppressed) {
+    if (!isEnabled || isSuppressed || hasInteractedRef.current) {
       return;
     }
 
-    const handleInteraction = () => {
-      hasInteractedRef.current = true;
-
-      const initialized = initAudioContext();
-      if (!initialized) return;
-
-      const { ctx, audio } = initialized;
-      if (ctx.state === "suspended") void ctx.resume().catch(console.error);
-
-      if (audio.paused) {
-        if (!audio.src) {
-          return;
-        }
-
-        audio
-          .play()
-          .then(() => {
-            fadeVolume(volumeRef.current, 0.5);
-            window.removeEventListener("click", handleInteraction);
-            window.removeEventListener("keydown", handleInteraction);
-            window.removeEventListener("touchstart", handleInteraction);
-          })
-          .catch((e: unknown) => console.warn("Interaction play failed:", e));
-        return;
-      }
-
+    const removeInteractionListeners = () => {
       window.removeEventListener("click", handleInteraction);
       window.removeEventListener("keydown", handleInteraction);
       window.removeEventListener("touchstart", handleInteraction);
+    };
+
+    const handleInteraction = () => {
+      hasInteractedRef.current = true;
+      removeInteractionListeners();
+
+      const token = ++operationTokenRef.current;
+      const startOnInteraction = async () => {
+        const state = useAtmosphereStore.getState();
+        const stillSuppressed = Object.values(state.suppressedBy).some(Boolean);
+        if (!state.isEnabled || stillSuppressed) return;
+
+        const graph = ensureAudioGraph();
+        if (!graph) return;
+
+        if (graph.ctx.state === "suspended") {
+          try {
+            await graph.ctx.resume();
+          } catch (error) {
+            console.warn("Failed to resume ambient audio context:", error);
+            return;
+          }
+        }
+
+        try {
+          const nextTrackId =
+            AMBIENT_TRACKS.find((track) => track.id === state.selectedTrackId)?.id ?? AMBIENT_TRACKS[0].id;
+          const buffer = await loadTrackBuffer(nextTrackId);
+          if (token !== operationTokenRef.current) return;
+
+          stopCurrentSource();
+          const source = createLoopingSource(buffer);
+          if (!source) return;
+
+          currentSourceRef.current = source;
+          currentTrackIdRef.current = nextTrackId;
+          source.start();
+          fadeVolume(volumeRef.current, AMBIENT_FADE_SECONDS);
+        } catch (error) {
+          console.warn("Ambient interaction play failed:", error);
+        }
+      };
+
+      void startOnInteraction();
     };
 
     window.addEventListener("click", handleInteraction);
@@ -169,107 +268,120 @@ export function AtmosphereProvider() {
     window.addEventListener("touchstart", handleInteraction);
 
     return () => {
-      window.removeEventListener("click", handleInteraction);
-      window.removeEventListener("keydown", handleInteraction);
-      window.removeEventListener("touchstart", handleInteraction);
+      removeInteractionListeners();
     };
-  }, [isEnabled, isSuppressed, initAudioContext, fadeVolume]);
+  }, [isEnabled, isSuppressed, ensureAudioGraph, loadTrackBuffer, createLoopingSource, stopCurrentSource, fadeVolume]);
 
   // 재생/일시정지 및 트랙 전환 제어
   useEffect(() => {
     const shouldPlay = isEnabled && !isSuppressed;
+    const token = ++operationTokenRef.current;
 
     // 이전 트랙 변경 타이머 정리
     if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
 
-    if (shouldPlay) {
-      const audio = ensureAudioElement();
-      if (currentTrack) {
-        const trackUrl = `/assets/ambient/${currentTrack.file}.opus`;
-        const fullTrackUrl = window.location.origin + trackUrl;
-        const isTrackSwitchWhilePlaying = audio.src !== fullTrackUrl && audio.src !== "" && !audio.paused;
+    const syncAmbientPlayback = async () => {
+      if (!shouldPlay) {
+        await stopAmbient({ fadeOut: true, token, clearTrack: true });
+        return;
+      }
 
-        if (!isTrackSwitchWhilePlaying && audio.src !== fullTrackUrl) {
-          audio.src = trackUrl;
-          audio.load();
-        }
+      if (!hasInteractedRef.current) {
+        return;
+      }
 
-        if (!hasInteractedRef.current) {
+      const graph = ensureAudioGraph();
+      if (!graph) {
+        return;
+      }
+
+      if (graph.ctx.state === "suspended") {
+        try {
+          await graph.ctx.resume();
+        } catch (error) {
+          console.warn("Failed to resume ambient audio context:", error);
           return;
-        }
-
-        const initialized = initAudioContext();
-        if (!initialized) {
-          return;
-        }
-
-        const { ctx } = initialized;
-
-        // 다른 트랙으로 변경되는 경우 (전환 페이드 적용)
-        if (isTrackSwitchWhilePlaying) {
-          // 1. 현재 트랙 페이드 아웃 (0.5s)
-          fadeVolume(0, 0.5);
-          trackChangeTimeoutRef.current = setTimeout(() => {
-            // 2. 소스 교체 및 로드
-            audio.src = trackUrl;
-            audio.load();
-            // 3. 새 트랙 재생 및 페이드 인 (0.5s)
-            audio
-              .play()
-              .then(() => {
-                fadeVolume(volume, 0.5);
-              })
-              .catch((e: unknown) => {
-                console.warn("Track switch play failed (normal if not interacted):", e);
-              });
-          }, 300);
-        } else {
-          // 초기 시작, 정지 상태에서 트랙 변경, 또는 동일 트랙
-          if (ctx.state === "suspended") void ctx.resume().catch(console.error);
-          if (audio.paused) {
-            audio
-              .play()
-              .then(() => {
-                // 처음 켜질 때 부드럽게 페이드 인 (0.5s)
-                fadeVolume(volume, 0.5);
-              })
-              .catch((e: unknown) => {
-                console.warn("Ambient initial play failed (normal if not interacted):", e);
-              });
-          } else {
-            // 이미 재생 중일 때 볼륨 변화가 있으면 즉각 반영 (지연 없음)
-            fadeVolume(volume, 0);
-          }
         }
       }
-    } else if (gainNodeRef.current) {
-      // 꺼질 때 페이드 아웃 후 정지 (AudioContext가 초기화된 경우에만)
-      fadeVolume(0, 0.5);
-      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-      fadeTimeoutRef.current = setTimeout(() => {
-        // 페이드 중 다시 켜졌을 수 있으므로 최신 상태 확인
-        const state = useAtmosphereStore.getState();
-        const stillSuppressed = Object.values(state.suppressedBy).some(Boolean);
-        if (!state.isEnabled || stillSuppressed) {
-          audioRef.current?.pause();
+
+      const isSameTrackPlaying = currentTrackIdRef.current === currentTrack.id && currentSourceRef.current;
+      if (isSameTrackPlaying) {
+        fadeVolume(volume, 0);
+        return;
+      }
+
+      try {
+        const buffer = await loadTrackBuffer(currentTrack.id);
+        if (token !== operationTokenRef.current) {
+          return;
         }
-      }, 500);
-    }
+
+        const hasExistingSource = !!currentSourceRef.current;
+        if (hasExistingSource) {
+          fadeVolume(0, AMBIENT_FADE_SECONDS);
+          trackChangeTimeoutRef.current = setTimeout(() => {
+            trackChangeTimeoutRef.current = null;
+
+            const startNextTrack = async () => {
+              if (token !== operationTokenRef.current) return;
+
+              stopCurrentSource();
+              const source = createLoopingSource(buffer);
+              if (!source) return;
+
+              currentSourceRef.current = source;
+              currentTrackIdRef.current = currentTrack.id;
+              source.start();
+              fadeVolume(volume, AMBIENT_FADE_SECONDS);
+            };
+
+            void startNextTrack();
+          }, AMBIENT_FADE_MS);
+          return;
+        }
+
+        stopCurrentSource();
+        const source = createLoopingSource(buffer);
+        if (!source) return;
+
+        currentSourceRef.current = source;
+        currentTrackIdRef.current = currentTrack.id;
+        source.start();
+        fadeVolume(volume, AMBIENT_FADE_SECONDS);
+      } catch (error) {
+        if (token !== operationTokenRef.current) return;
+        console.warn("Failed to start ambient track:", error);
+      }
+    };
+
+    void syncAmbientPlayback();
 
     return () => {
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-      if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
+      if (trackChangeTimeoutRef.current) {
+        clearTimeout(trackChangeTimeoutRef.current);
+        trackChangeTimeoutRef.current = null;
+      }
     };
-  }, [
-    isEnabled,
-    isSuppressed,
-    selectedTrackId,
-    ensureAudioElement,
-    initAudioContext,
-    fadeVolume,
-    currentTrack,
-    volume,
-  ]);
+  }, [isEnabled, isSuppressed, currentTrack, volume, ensureAudioGraph, loadTrackBuffer, createLoopingSource, stopCurrentSource, stopAmbient, fadeVolume]);
+
+  // 재생 중 볼륨은 즉시 반영
+  useEffect(() => {
+    if (!currentSourceRef.current || !isEnabled || isSuppressed) {
+      return;
+    }
+
+    fadeVolume(volume, 0);
+  }, [volume, isEnabled, isSuppressed, fadeVolume]);
+
+  // 억제/비활성화 중에 남아 있는 트랙 ID 정리
+  useEffect(() => {
+    if (!isEnabled || isSuppressed) {
+      if (!currentSourceRef.current) {
+        currentTrackIdRef.current = null;
+      }
+    }
+  }, [isEnabled, isSuppressed]);
 
   return null; // 헤드리스 컴포넌트
 }
