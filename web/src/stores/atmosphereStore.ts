@@ -72,7 +72,6 @@ export const useAtmosphereStore = create<AtmosphereState>()(
           selectedTrackId: state.selectedTrackId,
           volume: state.volume,
           timerMinutes: state.timerMinutes,
-          timerEndAt: state.timerEndAt,
         }),
         onRehydrateStorage: () => (state) => {
           if (!state) return;
