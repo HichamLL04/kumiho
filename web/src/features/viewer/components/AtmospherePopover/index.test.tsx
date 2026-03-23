@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AtmospherePopover } from "./index";
@@ -59,5 +59,24 @@ describe("AtmospherePopover", () => {
     unmount();
 
     expect(trigger).toHaveFocus();
+  });
+
+  it("트리거 버튼 클릭은 외부 클릭으로 처리하지 않는다", () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    const triggerRef = createRef<HTMLButtonElement>();
+    triggerRef.current = trigger;
+    const onClose = vi.fn();
+
+    render(
+      <AtmospherePopover
+        onClose={onClose}
+        triggerRef={triggerRef}
+      />,
+    );
+
+    fireEvent.mouseDown(trigger);
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

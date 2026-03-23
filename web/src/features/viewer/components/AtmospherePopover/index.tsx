@@ -17,7 +17,18 @@ export function AtmospherePopover({ onClose, triggerRef }: AtmospherePopoverProp
     const triggerElement = triggerRef.current;
 
     const handleClickOutside = (event: MouseEvent | PointerEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const popoverElement = ref.current;
+      const target = event.target as Node | null;
+
+      if (!target) {
+        return;
+      }
+
+      if (triggerElement && triggerElement.contains(target)) {
+        return;
+      }
+
+      if (popoverElement && !popoverElement.contains(target)) {
         onClose();
       }
     };
