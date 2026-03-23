@@ -41,9 +41,14 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
       }
     };
 
-    update();
-    const interval = setInterval(update, 30000);
-    return () => clearInterval(interval);
+    // 린트 에러(동기적 setState)를 방지하기 위해 비동기로 초기화 및 주기적 업데이트
+    const timeoutId = setTimeout(update, 0);
+    const intervalId = setInterval(update, 30000);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
   }, [atmosphere.timerEndAt]);
 
   return (
