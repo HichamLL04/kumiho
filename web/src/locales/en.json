@@ -632,7 +632,16 @@
         "reset_confirm_msg": "Reset thumbnail to default? This cannot be undone.",
         "reset_success": "Thumbnail reset.",
         "reset_failed": "Failed to reset thumbnail.",
+        "upload_success": "Thumbnail uploaded successfully.",
         "update_failed": "Failed to update series info."
+      }
+    }
+  },
+  "volume": {
+    "edit": {
+      "title": "Edit Volume Information",
+      "form": {
+        "volume_number": "Volume Number"
       }
     }
   },
