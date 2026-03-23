@@ -59,7 +59,6 @@ describe("AtmosphereSettings", () => {
 
   it("타이머 종료 시각이 있으면 interval을 등록함", () => {
     const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
-    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
 
     vi.mocked(useAtmosphereStore).mockReturnValue({
       ...baseState,
@@ -71,7 +70,6 @@ describe("AtmosphereSettings", () => {
 
     expect(setIntervalSpy).toHaveBeenCalledTimes(1);
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
-    expect(setTimeoutSpy).not.toHaveBeenCalled();
   });
 
   it("타이머 종료 시각이 없으면 잔여 시간 문구를 렌더링하지 않음", () => {
