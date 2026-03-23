@@ -365,14 +365,14 @@ func Migrate() error {
 		CREATE TABLE IF NOT EXISTS bookmarks (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
-		volume_id TEXT REFERENCES volumes(id) ON DELETE CASCADE,
-		chapter_id TEXT REFERENCES chapters(id) ON DELETE CASCADE,
-		title TEXT DEFAULT '',
-		description TEXT DEFAULT '',
-		page_number INTEGER DEFAULT 0,
-		current_position INTEGER DEFAULT 0,
-		current_cfi TEXT,
+			series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+			volume_id TEXT REFERENCES volumes(id) ON DELETE CASCADE,
+			chapter_id TEXT REFERENCES chapters(id) ON DELETE CASCADE,
+			title TEXT DEFAULT '',
+			description TEXT DEFAULT '',
+			page_number INTEGER DEFAULT 0,
+			current_position INTEGER DEFAULT 0,
+			current_cfi TEXT,
 			current_time REAL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
@@ -437,9 +437,9 @@ func Migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_volume_completions_user ON volume_completions(user_id);
 	CREATE INDEX IF NOT EXISTS idx_volume_completions_volume ON volume_completions(volume_id);
 	CREATE INDEX IF NOT EXISTS idx_user_libraries_user ON user_libraries(user_id);
-	CREATE INDEX IF NOT EXISTS idx_user_bookmarks_user ON user_bookmarks(user_id);
-	CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
-	CREATE INDEX IF NOT EXISTS idx_user_series_settings_user ON user_series_settings(user_id);
+		CREATE INDEX IF NOT EXISTS idx_user_bookmarks_user ON user_bookmarks(user_id);
+		CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
+		CREATE INDEX IF NOT EXISTS idx_user_series_settings_user ON user_series_settings(user_id);
 		CREATE INDEX IF NOT EXISTS idx_user_series_settings_series ON user_series_settings(series_id);
 		CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id);
 		CREATE INDEX IF NOT EXISTS idx_bookmarks_series ON bookmarks(series_id);
