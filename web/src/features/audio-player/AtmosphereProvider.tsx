@@ -123,6 +123,10 @@ export function AtmosphereProvider() {
 
   // 첫 사용자 상호작용 시 오디오 컨텍스트 재개 (Autoplay 정책 대응)
   useEffect(() => {
+    if (!isEnabled || isSuppressed) {
+      return;
+    }
+
     const handleInteraction = () => {
       const initialized = initAudioContext();
       if (!initialized) return;
@@ -161,7 +165,7 @@ export function AtmosphereProvider() {
       window.removeEventListener("keydown", handleInteraction);
       window.removeEventListener("touchstart", handleInteraction);
     };
-  }, [initAudioContext, fadeVolume]);
+  }, [isEnabled, isSuppressed, initAudioContext, fadeVolume]);
 
   // 재생/일시정지 및 트랙 전환 제어
   useEffect(() => {

@@ -28,12 +28,13 @@ export function AudioProvider() {
       (status) => {
         setSuppressedBy("audiobook", status === "playing");
       },
+      { fireImmediately: true },
     );
     return () => {
       unsub();
       setSuppressedBy("audiobook", false);
     };
-  }, [store, setSuppressedBy]);
+  }, [setSuppressedBy]);
 
   type SaveProgressSnapshot = {
     seriesId: string;
