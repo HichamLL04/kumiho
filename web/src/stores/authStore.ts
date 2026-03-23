@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import { authAPI } from "../api/client";
 import type { User } from "../types/user";
 import { useViewerStore } from "./viewerStore";
+import { useAtmosphereStore } from "./atmosphereStore";
 import { disconnectSSE } from "../hooks/useSSE";
 
 interface AuthState {
@@ -58,6 +59,7 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
         useViewerStore.getState().reset();
+        useAtmosphereStore.getState().reset();
         set({ user: null, isAuthenticated: false });
       },
 

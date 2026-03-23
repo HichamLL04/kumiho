@@ -69,14 +69,28 @@ export const useAtmosphereStore = create<AtmosphereState>()(
         name: "kumiho-atmosphere-storage",
         // suppressedBy는 런타임 전용이므로 제외
         partialize: (state) => ({
-          isEnabled: state.isEnabled,
           selectedTrackId: state.selectedTrackId,
           volume: state.volume,
-          timerMinutes: state.timerMinutes,
-          timerEndAt: state.timerEndAt,
         }),
         onRehydrateStorage: () => (state) => {
           if (!state) return;
+
+          const now = Date.now();
+          const hasLegacyEnabledState = state.isEnabled;
+          const hasInactiveTimerState = !state.isEnabled && (state.timerMinutes !== null || state.timerEndAt !== null);
+          const hasInvalidTimerState =
+            hasInactiveTimerState ||
+            (state.timerMinutes === null) !== (state.timerEndAt === null) ||
+            (state.timerEndAt !== null && state.timerEndAt <= now);
+
+          if (hasLegacyEnabledState || hasInvalidTimerState) {
+            useAtmosphereStore.setState({
+              isEnabled: false,
+              timerMinutes: null,
+              timerEndAt: null,
+            });
+          }
+
           // 저장된 selectedTrackId가 현재 트랙 목록에 없으면 첫 번째 트랙으로 교정
           if (state.selectedTrackId && !AMBIENT_TRACKS.some((t) => t.id === state.selectedTrackId)) {
             useAtmosphereStore.setState({ selectedTrackId: AMBIENT_TRACKS[0]?.id || "" });

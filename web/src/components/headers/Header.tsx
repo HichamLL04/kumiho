@@ -1,29 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  LogOut,
-  Menu,
-  Settings,
-  ChevronDown,
-  User,
-  Search,
-  X,
-  ChevronRight,
-  FileText,
-  Sparkles,
-  Timer,
-  Music,
-  Volume2,
-} from "lucide-react";
+import { LogOut, Menu, Settings, ChevronDown, User, Search, X, ChevronRight, FileText } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { seriesAPI, systemAPI } from "../../api/client";
 import { useSSE } from "../../hooks/useSSE";
-import { useAtmosphereStore } from "../../stores/atmosphereStore";
-import { useShallow } from "zustand/react/shallow";
-import { AMBIENT_TRACKS } from "../../constants/ambientTracks";
 import type { Series } from "../../types/series";
 import { ScanProgressBar } from "../ScanProgressBar";
+import { AtmosphereSettings } from "../Atmosphere/AtmosphereSettings";
 import styles from "./Header.module.css";
 
 interface HeaderProps {
@@ -46,21 +30,6 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [otherUserCount, setOtherUserCount] = useState(0);
   const [hasUpdate, setHasUpdate] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-  const atmosphere = useAtmosphereStore(
-    useShallow((s) => ({
-      isEnabled: s.isEnabled,
-      selectedTrackId: s.selectedTrackId,
-      volume: s.volume,
-      timerMinutes: s.timerMinutes,
-      timerEndAt: s.timerEndAt,
-      suppressedBy: s.suppressedBy,
-      setEnabled: s.setEnabled,
-      setSelectedTrackId: s.setSelectedTrackId,
-      setVolume: s.setVolume,
-      setTimer: s.setTimer,
-    })),
-  );
-  const atmosphereSuppressed = Object.values(atmosphere.suppressedBy).some(Boolean);
   const { subscribe } = useSSE();
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -69,22 +38,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   const MAX_VISIBLE_RESULTS = 5;
 
-  // 타이머 잔여 시간 (렌더 중 Date.now() 직접 호출 방지)
-  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
-  useEffect(() => {
-    if (!dropdownOpen || atmosphere.timerEndAt === null) return;
-
-    const update = () => {
-      setTimerRemaining(Math.max(0, Math.ceil((atmosphere.timerEndAt! - Date.now()) / (60 * 1000))));
-    };
-
-    const initialTimeout = setTimeout(update, 0);
-    const interval = setInterval(update, 30000);
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, [dropdownOpen, atmosphere.timerEndAt]);
+  // 타이머 관련 로직은 AtmosphereSettings로 이동됨
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -432,97 +386,7 @@ export function Header({ onMenuClick }: HeaderProps) {
               <div className={styles.dropdownDivider} />
 
               {/* 독서 분위기 (앰비언트 사운드) 설정 */}
-              <div className={styles.atmosphereSection}>
-                <div className={styles.atmosphereHeader}>
-                  <span className={styles.atmosphereTitle}>
-                    <Sparkles size={14} /> {t("header.atmosphere_title")}
-                  </span>
-                  <label className={styles.switch}>
-                    <input
-                      type="checkbox"
-                      checked={atmosphere.isEnabled}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        atmosphere.setEnabled(checked);
-                        if (!checked) {
-                          atmosphere.setTimer(null);
-                        }
-                      }}
-                      aria-label={t("header.atmosphere_title")}
-                    />
-                    <span className={styles.slider} />
-                  </label>
-                </div>
-
-                {atmosphere.isEnabled && (
-                  <div className={styles.atmosphereControls}>
-                    <div className={styles.atmosphereRow}>
-                      <Music size={14} />
-                      <select
-                        className={styles.atmosphereSelect}
-                        value={atmosphere.selectedTrackId}
-                        onChange={(e) => atmosphere.setSelectedTrackId(e.target.value)}
-                        aria-label={t("header.atmosphere_track_select")}
-                      >
-                        {AMBIENT_TRACKS.map((track) => (
-                          <option
-                            key={track.id}
-                            value={track.id}
-                          >
-                            {t(`header.atmosphere_tracks.${track.id}`)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className={styles.atmosphereRow}>
-                      <Timer size={14} />
-                      <select
-                        className={styles.timerSelect}
-                        value={atmosphere.timerMinutes || ""}
-                        aria-label={t("header.atmosphere_timer")}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          atmosphere.setTimer(val ? parseInt(val, 10) : null);
-                        }}
-                      >
-                        <option value="">{t("header.atmosphere_timer_off")}</option>
-                        <option value="15">{t("header.atmosphere_timer_15")}</option>
-                        <option value="30">{t("header.atmosphere_timer_30")}</option>
-                        <option value="60">{t("header.atmosphere_timer_60")}</option>
-                      </select>
-                      {atmosphere.timerEndAt !== null && timerRemaining !== null && timerRemaining > 0 && (
-                        <span className={styles.timerDisplay}>
-                          {t("header.atmosphere_timer_remaining", {
-                            minutes: timerRemaining,
-                          })}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className={styles.atmosphereRow}>
-                      <Volume2 size={14} />
-                      <div className={styles.atmosphereVolume}>
-                        <input
-                          type="range"
-                          className={styles.volumeSlider}
-                          min="0"
-                          max="1"
-                          step="0.01"
-                          value={atmosphere.volume}
-                          aria-label={t("header.atmosphere_volume")}
-                          aria-valuetext={`${Math.round(atmosphere.volume * 100)}%`}
-                          onChange={(e) => atmosphere.setVolume(parseFloat(e.target.value))}
-                        />
-                      </div>
-                    </div>
-
-                    {atmosphereSuppressed && (
-                      <div className={styles.suppressedNotice}>{t("header.atmosphere_suppressed")}</div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <AtmosphereSettings />
 
               <div className={styles.dropdownDivider} />
 
