@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { ArrowLeft, Settings, Maximize, Minimize, Shield, Music, List, Sparkles } from "lucide-react";
@@ -50,6 +50,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
       setEnabled: state.setEnabled,
     })),
   );
+  const atmosphereButtonRef = useRef<HTMLButtonElement>(null);
   const [isAtmospherePopoverOpen, setIsAtmospherePopoverOpen] = useState(false);
 
   const handleAtmosphereClick = () => {
@@ -78,6 +79,11 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
   const onZoomIn = zoomPdfOptions?.onZoomIn;
   const onZoomOut = zoomPdfOptions?.onZoomOut;
   const onZoomReset = zoomPdfOptions?.onZoomReset;
+  const atmosphereButtonLabel = isAtmosphereEnabled
+    ? t("viewer.header.atmosphere_off")
+    : isAtmospherePopoverOpen
+      ? t("viewer.header.atmosphere_settings_close")
+      : t("viewer.header.atmosphere_settings_open");
   return (
     <header
       className={`${styles.viewerHeader} ${!isUIVisible ? styles.hidden : ""}`}
@@ -156,10 +162,11 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
         {/* Atmosphere Toggle */}
         <button
           type="button"
+          ref={atmosphereButtonRef}
           className={`${styles.headerActionBtn} ${styles.atmosphereButton} ${!isAtmosphereEnabled ? styles.muted : ""}`}
           onClick={handleAtmosphereClick}
-          title={isAtmosphereEnabled ? t("viewer.header.atmosphere_off") : t("viewer.header.atmosphere_on")}
-          aria-label={isAtmosphereEnabled ? t("viewer.header.atmosphere_off") : t("viewer.header.atmosphere_on")}
+          title={atmosphereButtonLabel}
+          aria-label={atmosphereButtonLabel}
         >
           <Sparkles
             size={24}
@@ -167,7 +174,12 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
           />
         </button>
 
-        {isAtmospherePopoverOpen && <AtmospherePopover onClose={() => setIsAtmospherePopoverOpen(false)} />}
+        {isAtmospherePopoverOpen && (
+          <AtmospherePopover
+            onClose={() => setIsAtmospherePopoverOpen(false)}
+            triggerRef={atmosphereButtonRef}
+          />
+        )}
 
         <button
           type="button"

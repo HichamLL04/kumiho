@@ -1,15 +1,21 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
+import { useTranslation } from "react-i18next";
 import { AtmosphereSettings } from "../../../../components/Atmosphere/AtmosphereSettings";
 import styles from "./AtmospherePopover.module.css";
 
 interface AtmospherePopoverProps {
   onClose: () => void;
+  triggerRef: RefObject<HTMLElement | null>;
 }
 
-export function AtmospherePopover({ onClose }: AtmospherePopoverProps) {
+export function AtmospherePopover({ onClose, triggerRef }: AtmospherePopoverProps) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const triggerElement = triggerRef.current;
+
     const handleClickOutside = (event: MouseEvent | PointerEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) {
         onClose();
@@ -27,19 +33,29 @@ export function AtmospherePopover({ onClose }: AtmospherePopoverProps) {
       }
     }
 
+    const firstFocusable = ref.current?.querySelector<HTMLElement>(
+      "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+    );
+    firstFocusable?.focus();
+
     document.addEventListener("mousedown", handleClickOutside, { capture: true });
     window.addEventListener("keydown", handleKeyDown, { capture: true });
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside, { capture: true });
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
+
+      const restoreTarget = triggerElement ?? previousActiveElement;
+      restoreTarget?.focus();
     };
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   return (
     <div
       className={styles.popover}
       ref={ref}
+      role="dialog"
+      aria-label={t("viewer.header.atmosphere_settings_dialog")}
     >
       <AtmosphereSettings showTitle={true} />
     </div>

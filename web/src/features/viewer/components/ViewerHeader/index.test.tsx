@@ -1,10 +1,11 @@
+import type { ComponentProps } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ViewerHeader } from "./index";
 import { useAtmosphereStore } from "../../../../stores/atmosphereStore";
 
-type ViewerHeaderProps = React.ComponentProps<typeof ViewerHeader>;
+type ViewerHeaderProps = ComponentProps<typeof ViewerHeader>;
 type MockAtmosphereStore = ReturnType<typeof vi.fn>;
 
 // Mocks
@@ -23,8 +24,12 @@ vi.mock("zustand/react/shallow", () => ({
 }));
 
 vi.mock("../AtmospherePopover", () => ({
-  AtmospherePopover: ({ onClose }: { onClose: () => void }) => (
-    <div data-testid="atmosphere-popover">
+  AtmospherePopover: ({ onClose }: { onClose: () => void; triggerRef: unknown }) => (
+    <div
+      data-testid="atmosphere-popover"
+      role="dialog"
+      aria-label="viewer.header.atmosphere_settings_dialog"
+    >
       <button onClick={onClose}>Close</button>
     </div>
   ),
@@ -71,10 +76,11 @@ describe("ViewerHeader Atmosphere Toggle", () => {
   it("분위기 음이 꺼져 있을 때 버튼 클릭 시 팝오버 오픈", () => {
     renderHeader(false);
 
-    const toggleBtn = screen.getByLabelText("viewer.header.atmosphere_on");
+    const toggleBtn = screen.getByLabelText("viewer.header.atmosphere_settings_open");
     fireEvent.click(toggleBtn);
 
     expect(screen.getByTestId("atmosphere-popover")).toBeInTheDocument();
+    expect(screen.getByLabelText("viewer.header.atmosphere_settings_close")).toBeInTheDocument();
   });
 
   it("분위기 음이 켜져 있을 때 버튼 클릭 시 즉시 종료", () => {
@@ -90,14 +96,14 @@ describe("ViewerHeader Atmosphere Toggle", () => {
   it("팝오버가 열린 상태에서 다시 버튼을 누르면 팝오버 닫힘 (OFF 상태)", () => {
     renderHeader(false);
 
-    const toggleBtn = screen.getByLabelText("viewer.header.atmosphere_on");
+    const toggleBtn = screen.getByLabelText("viewer.header.atmosphere_settings_open");
 
     // 열기
     fireEvent.click(toggleBtn);
     expect(screen.getByTestId("atmosphere-popover")).toBeInTheDocument();
 
     // 다시 눌러서 닫기
-    fireEvent.click(toggleBtn);
+    fireEvent.click(screen.getByLabelText("viewer.header.atmosphere_settings_close"));
     expect(screen.queryByTestId("atmosphere-popover")).not.toBeInTheDocument();
   });
 });
