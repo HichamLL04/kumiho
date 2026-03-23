@@ -633,7 +633,16 @@
         "reset_confirm_msg": "썸네일을 초기화하시겠습니까? (기본 이미지로 돌아갑니다)",
         "reset_success": "썸네일이 초기화되었습니다.",
         "reset_failed": "썸네일 초기화에 실패했습니다.",
+        "upload_success": "썸네일이 업로드되었습니다.",
         "update_failed": "시리즈 정보 수정에 실패했습니다."
+      }
+    }
+  },
+  "volume": {
+    "edit": {
+      "title": "볼륨 정보 수정",
+      "form": {
+        "volume_number": "권 번호"
       }
     }
   },

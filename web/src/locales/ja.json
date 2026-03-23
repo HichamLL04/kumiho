@@ -633,7 +633,16 @@
         "reset_confirm_msg": "サムネイルを初期化しますか？ (デフォルトに戻ります)",
         "reset_success": "サムネイルがリセットされました。",
         "reset_failed": "リセットに失敗しました。",
+        "upload_success": "サムネイルがアップロードされました。",
         "update_failed": "シリーズ情報の更新に失敗しました。"
+      }
+    }
+  },
+  "volume": {
+    "edit": {
+      "title": "巻情報の修正",
+      "form": {
+        "volume_number": "巻数"
       }
     }
   },
