@@ -19,11 +19,25 @@ export function AtmosphereProvider() {
   const decodedBufferCacheRef = useRef<Map<string, Promise<AudioBuffer> | AudioBuffer>>(new Map());
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trackChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackChangeResolveRef = useRef<(() => void) | null>(null);
   const hasInteractedRef = useRef(false);
   const operationTokenRef = useRef(0);
 
   const invalidatePendingOperations = useCallback(() => {
     operationTokenRef.current += 1;
+  }, []);
+
+  const clearTrackChangeWait = useCallback(() => {
+    if (trackChangeTimeoutRef.current) {
+      clearTimeout(trackChangeTimeoutRef.current);
+      trackChangeTimeoutRef.current = null;
+    }
+
+    if (trackChangeResolveRef.current) {
+      const resolve = trackChangeResolveRef.current;
+      trackChangeResolveRef.current = null;
+      resolve();
+    }
   }, []);
 
   // 현재 선택된 트랙 정보 (존재하지 않으면 첫 번째 트랙으로 폴백)
@@ -115,8 +129,7 @@ export function AtmosphereProvider() {
       }
 
       if (trackChangeTimeoutRef.current) {
-        clearTimeout(trackChangeTimeoutRef.current);
-        trackChangeTimeoutRef.current = null;
+        clearTrackChangeWait();
       }
 
       if (!currentSourceRef.current) {
@@ -145,7 +158,7 @@ export function AtmosphereProvider() {
         }, AMBIENT_FADE_MS);
       });
     },
-    [fadeVolume, stopCurrentSource],
+    [clearTrackChangeWait, fadeVolume, stopCurrentSource],
   );
 
   const loadTrackBuffer = useCallback(async (trackId: string) => {
@@ -198,7 +211,7 @@ export function AtmosphereProvider() {
     return () => {
       invalidatePendingOperations();
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-      if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
+      clearTrackChangeWait();
       stopCurrentSource();
       gainNodeRef.current?.disconnect();
       gainNodeRef.current = null;
@@ -209,7 +222,7 @@ export function AtmosphereProvider() {
         audioContextRef.current = null;
       }
     };
-  }, [invalidatePendingOperations, stopCurrentSource]);
+  }, [clearTrackChangeWait, invalidatePendingOperations, stopCurrentSource]);
 
   // 볼륨 ref (interaction 리스너에서 최신 값 참조용 - 의존성 배열에서 volume 제거)
   const volumeRef = useRef(volume);
@@ -327,8 +340,10 @@ export function AtmosphereProvider() {
         if (currentSourceRef.current) {
           fadeVolume(0, AMBIENT_FADE_SECONDS);
           await new Promise<void>((resolve) => {
+            trackChangeResolveRef.current = resolve;
             trackChangeTimeoutRef.current = setTimeout(() => {
               trackChangeTimeoutRef.current = null;
+              trackChangeResolveRef.current = null;
               resolve();
             }, AMBIENT_FADE_MS);
           });
@@ -354,7 +369,7 @@ export function AtmosphereProvider() {
     return () => {
       invalidatePendingOperations();
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-      if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
+      clearTrackChangeWait();
     };
   }, [
     isEnabled,
@@ -367,6 +382,7 @@ export function AtmosphereProvider() {
     stopCurrentSource,
     stopAmbient,
     fadeVolume,
+    clearTrackChangeWait,
     invalidatePendingOperations,
   ]);
 
