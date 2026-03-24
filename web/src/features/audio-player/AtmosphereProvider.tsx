@@ -18,7 +18,6 @@ export function AtmosphereProvider() {
   const currentTrackIdRef = useRef<string | null>(null);
   const decodedBufferCacheRef = useRef<Map<string, Promise<AudioBuffer> | AudioBuffer>>(new Map());
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const trackChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInteractedRef = useRef(false);
   const operationTokenRef = useRef(0);
 
@@ -188,7 +187,6 @@ export function AtmosphereProvider() {
   useEffect(() => {
     return () => {
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-      if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
       stopCurrentSource();
       gainNodeRef.current?.disconnect();
       gainNodeRef.current = null;
@@ -277,9 +275,6 @@ export function AtmosphereProvider() {
     const shouldPlay = isEnabled && !isSuppressed;
     const token = ++operationTokenRef.current;
 
-    // 이전 트랙 변경 타이머 정리
-    if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
-
     const syncAmbientPlayback = async () => {
       if (!shouldPlay) {
         await stopAmbient({ fadeOut: true, token, clearTrack: true });
@@ -316,28 +311,14 @@ export function AtmosphereProvider() {
           return;
         }
 
-        const hasExistingSource = !!currentSourceRef.current;
-        if (hasExistingSource) {
+        // 이전 소스가 있으면 페이드아웃 후 교체
+        if (currentSourceRef.current) {
           fadeVolume(0, AMBIENT_FADE_SECONDS);
-          trackChangeTimeoutRef.current = setTimeout(() => {
-            trackChangeTimeoutRef.current = null;
-
-            const startNextTrack = async () => {
-              if (token !== operationTokenRef.current) return;
-
-              stopCurrentSource();
-              const source = createLoopingSource(buffer);
-              if (!source) return;
-
-              currentSourceRef.current = source;
-              currentTrackIdRef.current = currentTrack.id;
-              source.start();
-              fadeVolume(volume, AMBIENT_FADE_SECONDS);
-            };
-
-            void startNextTrack();
-          }, AMBIENT_FADE_MS);
-          return;
+          await new Promise((resolve) => {
+            fadeTimeoutRef.current = setTimeout(resolve, AMBIENT_FADE_MS);
+          });
+          fadeTimeoutRef.current = null;
+          if (token !== operationTokenRef.current) return;
         }
 
         stopCurrentSource();
@@ -358,10 +339,6 @@ export function AtmosphereProvider() {
 
     return () => {
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-      if (trackChangeTimeoutRef.current) {
-        clearTimeout(trackChangeTimeoutRef.current);
-        trackChangeTimeoutRef.current = null;
-      }
     };
   }, [isEnabled, isSuppressed, currentTrack, volume, ensureAudioGraph, loadTrackBuffer, createLoopingSource, stopCurrentSource, stopAmbient, fadeVolume]);
 
