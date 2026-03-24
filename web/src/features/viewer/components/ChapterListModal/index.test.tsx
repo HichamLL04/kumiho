@@ -41,7 +41,7 @@ describe("ChapterListModal", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "시리즈 목록" });
     expect(dialog).toBeInTheDocument();
-    expect(screen.getByLabelText("common.close")).toHaveFocus();
+    expect(screen.getByLabelText("닫기")).toHaveFocus();
   });
 
   it("ESC와 오버레이 클릭으로 닫힌다", async () => {

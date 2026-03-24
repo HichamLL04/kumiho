@@ -251,7 +251,7 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
             ref={closeButtonRef}
             className={styles.closeBtn}
             onClick={onClose}
-            aria-label={t("common.close")}
+            aria-label={t("common.close", { defaultValue: "닫기" })}
           >
             <X size={24} />
           </button>
