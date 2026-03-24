@@ -256,7 +256,7 @@ export function useViewerNavigation({
   const handleBack = useCallback(() => {
     saveProgress();
     if (viewerFrom) {
-      navigate(viewerFrom);
+      navigate(viewerFrom, { replace: true });
     } else {
       navigate(-1);
     }

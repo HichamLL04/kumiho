@@ -683,7 +683,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
   const handleBack = useCallback(() => {
     if (viewerFrom) {
-      navigate(viewerFrom);
+      navigate(viewerFrom, { replace: true });
       return;
     }
     navigate("/");
@@ -999,7 +999,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
 
   const handleTerminatedConfirm = useCallback(() => {
     if (viewerFrom) {
-      navigate(viewerFrom);
+      navigate(viewerFrom, { replace: true });
       return;
     }
     navigate("/");

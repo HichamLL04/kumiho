@@ -406,7 +406,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   // 세션 종료 핸들러
   const handleTerminatedConfirm = useCallback(() => {
     if (viewerFrom) {
-      navigate(viewerFrom);
+      navigate(viewerFrom, { replace: true });
       return;
     }
     navigate("/");
