@@ -155,7 +155,7 @@ export function AtmosphereProvider() {
         throw new Error("Audio graph is not available");
       }
 
-      const response = await fetch(`/assets/ambient/${track.file}.opus`);
+      const response = await fetch(`/assets/ambient/${track.file}.m4a`);
       if (!response.ok) {
         throw new Error(`Failed to fetch ambient track: ${track.file}`);
       }
