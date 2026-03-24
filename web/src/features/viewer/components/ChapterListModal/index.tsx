@@ -70,6 +70,9 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
       }
     } catch (error) {
       console.error("Failed to load chapter list:", error);
+      setVolumes([]);
+      setAllChapters([]);
+      setExpandedVolumeIds(new Set());
     } finally {
       setIsLoading(false);
     }
@@ -211,11 +214,8 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
           onClick={() => toggleVolume(volume.id)}
           aria-expanded={isExpanded}
         >
-          <Folder
-            size={18}
-            className={styles.volumeIcon}
-          />
-          <span className={styles.volumeTitle}>{volume.title}</span>
+          <Folder size={18} />
+          <span>{volume.title}</span>
           {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
         </button>
         {isExpanded && (
