@@ -58,27 +58,10 @@
   flex-shrink: 0;
 }
 
-.headerSettings {
-  background: none;
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s;
-}
-
-.headerSettings:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   position: relative;
 }
 
@@ -141,7 +124,6 @@
 
 .bgmButton,
 .atmosphereButton {
-  margin-left: 0.5rem;
   transition: opacity 0.2s ease;
 }
 

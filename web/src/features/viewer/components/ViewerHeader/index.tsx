@@ -44,7 +44,11 @@ interface ViewerHeaderProps {
 
 export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, onInteractionEnd }: ViewerHeaderProps) {
   const { t } = useTranslation();
-  const { isEnabled: isAtmosphereEnabled, setEnabled: setAtmosphereEnabled, setTimer: setAtmosphereTimer } = useAtmosphereStore(
+  const {
+    isEnabled: isAtmosphereEnabled,
+    setEnabled: setAtmosphereEnabled,
+    setTimer: setAtmosphereTimer,
+  } = useAtmosphereStore(
     useShallow((state) => ({
       isEnabled: state.isEnabled,
       setEnabled: state.setEnabled,
@@ -194,7 +198,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
 
         <button
           type="button"
-          className={styles.headerSettings}
+          className={styles.headerActionBtn}
           onClick={onToggleSettings}
           aria-label={t("viewer.header.settings")}
         >
