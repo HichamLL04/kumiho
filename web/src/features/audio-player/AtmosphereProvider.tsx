@@ -18,6 +18,7 @@ export function AtmosphereProvider() {
   const currentTrackIdRef = useRef<string | null>(null);
   const decodedBufferCacheRef = useRef<Map<string, Promise<AudioBuffer> | AudioBuffer>>(new Map());
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeResolveRef = useRef<(() => void) | null>(null);
   const trackChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trackChangeResolveRef = useRef<(() => void) | null>(null);
   const hasInteractedRef = useRef(false);
@@ -36,6 +37,19 @@ export function AtmosphereProvider() {
     if (trackChangeResolveRef.current) {
       const resolve = trackChangeResolveRef.current;
       trackChangeResolveRef.current = null;
+      resolve();
+    }
+  }, []);
+
+  const clearFadeOutWait = useCallback(() => {
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current);
+      fadeTimeoutRef.current = null;
+    }
+
+    if (fadeResolveRef.current) {
+      const resolve = fadeResolveRef.current;
+      fadeResolveRef.current = null;
       resolve();
     }
   }, []);
@@ -123,10 +137,7 @@ export function AtmosphereProvider() {
 
   const stopAmbient = useCallback(
     ({ fadeOut, token, clearTrack }: { fadeOut: boolean; token: number; clearTrack: boolean }) => {
-      if (fadeTimeoutRef.current) {
-        clearTimeout(fadeTimeoutRef.current);
-        fadeTimeoutRef.current = null;
-      }
+      clearFadeOutWait();
 
       if (trackChangeTimeoutRef.current) {
         clearTrackChangeWait();
@@ -146,8 +157,10 @@ export function AtmosphereProvider() {
       fadeVolume(0, AMBIENT_FADE_SECONDS);
 
       return new Promise<void>((resolve) => {
+        fadeResolveRef.current = resolve;
         fadeTimeoutRef.current = setTimeout(() => {
           fadeTimeoutRef.current = null;
+          fadeResolveRef.current = null;
           if (token !== operationTokenRef.current) {
             resolve();
             return;
@@ -158,7 +171,7 @@ export function AtmosphereProvider() {
         }, AMBIENT_FADE_MS);
       });
     },
-    [clearTrackChangeWait, fadeVolume, stopCurrentSource],
+    [clearFadeOutWait, clearTrackChangeWait, fadeVolume, stopCurrentSource],
   );
 
   const loadTrackBuffer = useCallback(async (trackId: string) => {
@@ -210,7 +223,7 @@ export function AtmosphereProvider() {
   useEffect(() => {
     return () => {
       invalidatePendingOperations();
-      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+      clearFadeOutWait();
       clearTrackChangeWait();
       stopCurrentSource();
       gainNodeRef.current?.disconnect();
@@ -222,7 +235,7 @@ export function AtmosphereProvider() {
         audioContextRef.current = null;
       }
     };
-  }, [clearTrackChangeWait, invalidatePendingOperations, stopCurrentSource]);
+  }, [clearFadeOutWait, clearTrackChangeWait, invalidatePendingOperations, stopCurrentSource]);
 
   // 볼륨 ref (interaction 리스너에서 최신 값 참조용 - 의존성 배열에서 volume 제거)
   const volumeRef = useRef(volume);
@@ -368,7 +381,7 @@ export function AtmosphereProvider() {
 
     return () => {
       invalidatePendingOperations();
-      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+      clearFadeOutWait();
       clearTrackChangeWait();
     };
   }, [
@@ -381,6 +394,7 @@ export function AtmosphereProvider() {
     createLoopingSource,
     stopCurrentSource,
     stopAmbient,
+    clearFadeOutWait,
     fadeVolume,
     clearTrackChangeWait,
     invalidatePendingOperations,
