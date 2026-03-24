@@ -10,3 +10,4 @@ export { ViewerContent } from "./ViewerContent";
 export { SyncConfirmModal } from "./SyncConfirmModal";
 export { PageTransition } from "./PageTransition";
 export { PdfTOC } from "./PdfTOC";
+export { ChapterListModal } from "./ChapterListModal";

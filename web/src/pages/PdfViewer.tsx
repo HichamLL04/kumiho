@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type React from "react";
 import { ViewerSettings as ViewerSettingsModal } from "../components/viewer/ViewerSettings";
-import { ViewerHeader, ViewerFooter, PageJumpModal, SyncConfirmModal } from "../features/viewer";
+import { ViewerHeader, ViewerFooter, PageJumpModal, SyncConfirmModal, ChapterListModal } from "../features/viewer";
 import { AlertModal } from "../components/modals/AlertModal";
 import { PdfChapterViewer, type PDFOutlineItem } from "../features/viewer/components/PdfChapterViewer";
 import { PdfTOC } from "../features/viewer/components/PdfTOC";
@@ -12,6 +12,7 @@ import styles from "./PdfViewer.module.css";
 
 interface PdfViewerProps {
   chapterTitle: string;
+  seriesId: string;
   chapterId: string;
   currentPage: number;
   totalPages: number;
@@ -64,6 +65,10 @@ interface PdfViewerProps {
   onPageJumpClick: () => void;
   onReadingModeChange: (mode: ReadingMode) => void;
   onTogglePageOffset: () => void;
+  isChapterListOpen: boolean;
+  onToggleChapterList: () => void;
+  onCloseChapterList: () => void;
+  onChapterNavigate: (id: string) => void;
   onCloseSettings: () => void;
   onClosePageJump: () => void;
   onPageJump: (page: number) => void;
@@ -77,6 +82,7 @@ interface PdfViewerProps {
 
 export function PdfViewer({
   chapterTitle,
+  seriesId,
   chapterId,
   currentPage,
   totalPages,
@@ -109,6 +115,10 @@ export function PdfViewer({
   onPageJumpClick,
   onReadingModeChange,
   onTogglePageOffset,
+  isChapterListOpen,
+  onToggleChapterList,
+  onCloseChapterList,
+  onChapterNavigate,
   onCloseSettings,
   onClosePageJump,
   onPageJump,
@@ -246,6 +256,7 @@ export function PdfViewer({
         onPageJumpClick={onPageJumpClick}
         onReadingModeChange={onReadingModeChange}
         onTogglePageOffset={onTogglePageOffset}
+        onToggleChapterList={onToggleChapterList}
         tocMarkers={tocMarkers}
         onMarkerJump={handleMarkerJump}
         onInteractionStart={onInteractionStart}
@@ -264,6 +275,14 @@ export function PdfViewer({
         totalPages={totalPages}
         onClose={onClosePageJump}
         onJump={onPageJump}
+      />
+
+      <ChapterListModal
+        seriesId={seriesId}
+        currentChapterId={chapterId}
+        isOpen={isChapterListOpen}
+        onClose={onCloseChapterList}
+        onNavigate={onChapterNavigate}
       />
 
       <SyncConfirmModal

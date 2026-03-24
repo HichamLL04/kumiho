@@ -92,4 +92,19 @@ describe("ViewerFooter", () => {
     expect(onMarkerJump).toHaveBeenCalledWith(expect.objectContaining({ id: "m1", page: 20, label: "Part A" }));
     expect(props.onGoToPage).not.toHaveBeenCalled();
   });
+
+  it("onToggleChapterList 이 있으면 시리즈 목록 버튼을 렌더링하고 클릭을 전달한다", () => {
+    const onToggleChapterList = vi.fn();
+
+    renderFooter({
+      onToggleChapterList,
+    });
+
+    const chapterListButton = screen.getByRole("button", { name: "시리즈 목록" });
+    expect(chapterListButton).toBeInTheDocument();
+
+    fireEvent.click(chapterListButton);
+
+    expect(onToggleChapterList).toHaveBeenCalledTimes(1);
+  });
 });

@@ -40,6 +40,16 @@ interface UseVerticalScrollReturn {
 const RESTORE_TOLERANCE = 4;
 const READY_STABILIZE_DELAY = 250;
 const MAX_RESTORE_ATTEMPTS = 40;
+const WHEEL_COOLDOWN = 150; // ms
+
+// 민감도별 100% 도달에 필요한 휠 클릭 횟수 (이후 1회 더 클릭하면 이동)
+// sensitivity 임계값은 ViewerTab.tsx의 PULL_PRESETS와 대응:
+//   high(1.2) -> 1클릭, medium(1.0) -> 2클릭, low(0.8) -> 4클릭
+const SENSITIVITY_THRESHOLDS = [
+  { minSensitivity: 1.1, clicks: 1 }, // high: 총 2회
+  { minSensitivity: 0.9, clicks: 2 }, // medium: 총 3회
+] as const;
+const DEFAULT_WHEEL_CLICKS = 4; // low: 총 5회
 
 export function useVerticalScroll({
   readingMode,
@@ -76,6 +86,7 @@ export function useVerticalScroll({
   const effectiveViewStatus = viewStatus ?? (readingMode === "vertical" ? "hydrating" : "ready");
   const pullOffsetRef = useRef(0);
   const isNavigatingRef = useRef(false);
+  const rafIdRef = useRef<number | null>(null);
   const internalViewerContentRef = useRef<HTMLDivElement>(null);
   const resolvedViewerContentRef = viewerContentRef ?? internalViewerContentRef;
   const startYRef = useRef<number | null>(null);
@@ -84,6 +95,9 @@ export function useVerticalScroll({
   const readyAtRef = useRef(0);
   const currentPageRef = useRef(currentPage);
   const imageLoadingRef = useRef(imageLoading);
+  const lastWheelTimeRef = useRef(0);
+  const safePullThreshold = Number.isFinite(pullThreshold) && pullThreshold > 0 ? pullThreshold : null;
+  const safePullSensitivity = Number.isFinite(pullSensitivity) ? Math.max(0.1, Math.min(pullSensitivity, 1.2)) : 1.0;
 
   // 현재 페이지 상태를 Ref에 동기화 (스크롤 이벤트 핸들러에서 최신 값을 참조하기 위함)
   useEffect(() => {
@@ -244,109 +258,117 @@ export function useVerticalScroll({
 
   useEffect(() => {
     if (readingMode !== "vertical" || isLoading || effectiveViewStatus !== "ready") return;
+    if (safePullThreshold === null) return;
 
     const content = resolvedViewerContentRef.current;
     if (!content) return;
+    const maxPull = 180;
 
-    // 민감(high) 모드: 점진적 당김 대신 2단계 스냅 방식
-    // 1단계: 경계에서 스크롤 → 인디케이터 100% 표시 (고정)
-    // 2단계: 같은 방향 스크롤 → 회차 이동 / 반대 방향 → 인디케이터 해제
-    const isSnapMode = pullSensitivity >= 0.8;
-
-    let handleWheel = (e: WheelEvent) => {
+    // 마우스 휠 조작 로직 (이산 단계 방식)
+    // 민감도 설정에 따라 휠 횟수 제어:
+    // Sensitive(1.2) -> 1번 클릭으로 100% (총 2번이면 이동)
+    // Normal(1.0) -> 2번 클릭으로 100% (총 3번이면 이동)
+    // Dull(0.8) -> 4번 클릭으로 100% (총 5번이면 이동)
+    const handleWheel = (e: WheelEvent) => {
       if (isNavigatingRef.current) return;
 
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+
+      const now = Date.now();
       const isAtTop = content.scrollTop <= 0;
       const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
 
-      if (isSnapMode) {
-        const currentPull = pullOffsetRef.current;
+      const clicksToReach100 =
+        SENSITIVITY_THRESHOLDS.find((t) => safePullSensitivity >= t.minSensitivity)?.clicks ?? DEFAULT_WHEEL_CLICKS;
+      const step = safePullThreshold / clicksToReach100;
+      const currentPull = pullOffsetRef.current;
+      const isReverseRelease = (currentPull > 0 && e.deltaY > 0) || (currentPull < 0 && e.deltaY < 0);
+      const isSnappedPull = Math.abs(currentPull) >= safePullThreshold;
 
-        // 인디케이터가 표시 중인 경우 (prev)
+      // 쿨다운 체크 (트랙패드 등에서의 과도한 이벤트 방지)
+      if (now - lastWheelTimeRef.current < WHEEL_COOLDOWN && !isReverseRelease && !isSnappedPull) {
+        if (isAtTop && e.deltaY < 0 && prevChapterId) e.preventDefault();
+        if (isAtBottom && e.deltaY > 0 && nextChapterId) e.preventDefault();
+        return;
+      }
+
+      // 1. 이미 100%에 도달해 스냅된 상태에서의 처리 (이동 또는 해제)
+      if (Math.abs(currentPull) >= safePullThreshold) {
+        e.preventDefault();
+
         if (currentPull > 0) {
-          e.preventDefault();
+          // 위로 당겨진 상태 (이전 회차)
           if (e.deltaY < 0 && prevChapterId) {
-            // 같은 방향(위) → 회차 이동
+            // 같은 방향(위)
             isNavigatingRef.current = true;
             pullOffsetRef.current = 0;
             setPullOffset(0);
             void navigateToChapter(prevChapterId, { preventComplete: true });
           } else if (e.deltaY > 0) {
-            // 반대 방향(아래) → 해제
+            // 반대 방향(아래) → 즉시 해제
+            lastWheelTimeRef.current = now;
             pullOffsetRef.current = 0;
             setPullOffset(0);
           }
-          return;
-        }
-
-        // 인디케이터가 표시 중인 경우 (next)
-        if (currentPull < 0) {
-          e.preventDefault();
+        } else if (currentPull < 0) {
+          // 아래로 당겨진 상태 (다음 회차)
           if (e.deltaY > 0 && nextChapterId) {
-            // 같은 방향(아래) → 회차 이동
+            // 같은 방향(아래)
             isNavigatingRef.current = true;
             pullOffsetRef.current = 0;
             setPullOffset(0);
             void navigateToChapter(nextChapterId);
           } else if (e.deltaY < 0) {
-            // 반대 방향(위) → 해제
+            // 반대 방향(위) → 즉시 해제
+            lastWheelTimeRef.current = now;
             pullOffsetRef.current = 0;
             setPullOffset(0);
           }
-          return;
-        }
-
-        // 인디케이터 미표시 → 경계에서 첫 스크롤 시 100% 스냅
-        if (isAtTop && e.deltaY < 0 && prevChapterId) {
-          e.preventDefault();
-          pullOffsetRef.current = pullThreshold;
-          setPullOffset(pullThreshold);
-        } else if (isAtBottom && e.deltaY > 0 && nextChapterId) {
-          e.preventDefault();
-          pullOffsetRef.current = -pullThreshold;
-          setPullOffset(-pullThreshold);
         }
         return;
       }
 
-      // 일반 모드(low/medium): 기존 점진적 당김
+      // 2. 게이지를 채우는 단계 (0 -> 100%)
       if (isAtTop && e.deltaY < 0 && prevChapterId) {
         e.preventDefault();
+        lastWheelTimeRef.current = now;
+
         setPullOffset((prev) => {
-          const newOffset = Math.max(0, prev - e.deltaY * pullSensitivity);
+          const newOffset = Math.min(safePullThreshold, prev + step);
           pullOffsetRef.current = newOffset;
-          if (newOffset >= pullThreshold) {
-            isNavigatingRef.current = true;
-            void navigateToChapter(prevChapterId, { preventComplete: true });
-            return 0;
-          }
           return newOffset;
         });
       } else if (isAtBottom && e.deltaY > 0 && nextChapterId) {
         e.preventDefault();
+        lastWheelTimeRef.current = now;
+
         setPullOffset((prev) => {
-          const newOffset = Math.min(0, prev - e.deltaY * pullSensitivity);
+          const newOffset = Math.max(-safePullThreshold, prev - step);
           pullOffsetRef.current = newOffset;
-          if (Math.abs(newOffset) >= pullThreshold) {
-            isNavigatingRef.current = true;
-            void navigateToChapter(nextChapterId);
-            return 0;
-          }
           return newOffset;
         });
-      } else {
-        setPullOffset((current) => {
-          if (current !== 0) {
-            pullOffsetRef.current = 0;
-            return 0;
-          }
-          return current;
-        });
+      } else if (currentPull !== 0) {
+        // 경계가 아니더라도 이미 당겨진 상태면 반대 방향 스크롤 시 즉시 해제
+        if ((currentPull > 0 && e.deltaY > 0) || (currentPull < 0 && e.deltaY < 0)) {
+          e.preventDefault();
+          lastWheelTimeRef.current = now;
+          pullOffsetRef.current = 0;
+          setPullOffset(0);
+        }
       }
     };
 
     const handleTouchStart = (e: TouchEvent) => {
       if (isNavigatingRef.current) return;
+
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+
       startYRef.current = e.touches[0].clientY;
       lastYRef.current = e.touches[0].clientY;
       setIsTouching(true);
@@ -364,23 +386,24 @@ export function useVerticalScroll({
 
       if ((isAtTop && diff > 0 && prevChapterId) || pullOffsetRef.current > 0) {
         setPullOffset((prev) => {
-          const maxPull = 180;
-          const safeSensitivity = Math.max(0.1, Math.min(pullSensitivity, 1.0));
-          const resistance = safeSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
+          const resistance = safePullSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
           const newOffset = Math.max(0, Math.min(prev + diff * resistance, maxPull));
           pullOffsetRef.current = newOffset;
           return newOffset;
         });
-        if (content.scrollTop <= 0 && pullOffsetRef.current > 0) e.preventDefault();
+        if (e.cancelable && content.scrollTop <= 0 && pullOffsetRef.current > 0) {
+          e.preventDefault();
+        }
       } else if ((isAtBottom && diff < 0 && nextChapterId) || pullOffsetRef.current < 0) {
         setPullOffset((prev) => {
-          const maxPull = 180;
-          const resistance = pullSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
+          const resistance = safePullSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
           const newOffset = Math.min(0, Math.max(prev + diff * resistance, -maxPull));
           pullOffsetRef.current = newOffset;
           return newOffset;
         });
-        if (isAtBottom && pullOffsetRef.current < 0) e.preventDefault();
+        if (e.cancelable && isAtBottom && pullOffsetRef.current < 0) {
+          e.preventDefault();
+        }
       } else {
         setPullOffset((current) => {
           if (current !== 0) {
@@ -396,56 +419,47 @@ export function useVerticalScroll({
       if (isNavigatingRef.current) return;
 
       const currentOffset = pullOffsetRef.current;
-
-      if (currentOffset >= pullThreshold && prevChapterId) {
-        isNavigatingRef.current = true;
-        void navigateToChapter(prevChapterId, { preventComplete: true });
-      } else if (currentOffset <= -pullThreshold && nextChapterId) {
-        isNavigatingRef.current = true;
-        void navigateToChapter(nextChapterId);
-      }
-
-      setPullOffset(0);
-      pullOffsetRef.current = 0;
       startYRef.current = null;
       lastYRef.current = null;
       setIsTouching(false);
-    };
 
-    let rafId: number | null = null;
-    const runDecay = () => {
-      if (startYRef.current !== null) {
-        rafId = requestAnimationFrame(runDecay);
-        return;
-      }
-
-      setPullOffset((prev) => {
-        if (Math.abs(prev) < 1) {
+      // 이미 당겨진 상태에서 손을 뗐을 때 임계값을 넘었으면 이동
+      if (Math.abs(currentOffset) >= safePullThreshold) {
+        if (currentOffset > 0 && prevChapterId) {
+          isNavigatingRef.current = true;
           pullOffsetRef.current = 0;
-          rafId = null;
-          return 0;
+          setPullOffset(0);
+          void navigateToChapter(prevChapterId, { preventComplete: true });
+        } else if (currentOffset < 0 && nextChapterId) {
+          isNavigatingRef.current = true;
+          pullOffsetRef.current = 0;
+          setPullOffset(0);
+          void navigateToChapter(nextChapterId);
         }
-        const newVal = prev * 0.8;
-        pullOffsetRef.current = newVal;
-        rafId = requestAnimationFrame(runDecay);
-        return newVal;
-      });
-    };
-
-    const startDecay = () => {
-      if (rafId === null && pullOffsetRef.current !== 0) {
-        rafId = requestAnimationFrame(runDecay);
+      } else if (currentOffset !== 0) {
+        // 임계값을 넘지 않았으면 점진적으로 원복 (모바일 기존 동작)
+        const decay = () => {
+          if (pullOffsetRef.current === 0) {
+            rafIdRef.current = null;
+            return;
+          }
+          const factor = 0.82; // 복귀 속도
+          const newVal = pullOffsetRef.current * factor;
+          if (Math.abs(newVal) < 1) {
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+            rafIdRef.current = null;
+          } else {
+            pullOffsetRef.current = newVal;
+            setPullOffset(newVal);
+            rafIdRef.current = requestAnimationFrame(decay);
+          }
+        };
+        rafIdRef.current = requestAnimationFrame(decay);
       }
     };
 
-    const originalHandleWheel = handleWheel;
-    handleWheel = (e: WheelEvent) => {
-      originalHandleWheel(e);
-      // 스냅 모드에서는 decay 불필요 (인디케이터가 100% 고정되므로)
-      if (!isSnapMode) {
-        startDecay();
-      }
-    };
+    // 모바일 터치에서는 decay로 자연스럽게 원복하고, 휠 입력 시에는 새 입력이 decay를 중단함
 
     content.addEventListener("wheel", handleWheel, { passive: false });
     content.addEventListener("touchstart", handleTouchStart, { passive: true });
@@ -459,8 +473,9 @@ export function useVerticalScroll({
       content.removeEventListener("touchmove", handleTouchMove);
       content.removeEventListener("touchend", handleTouchEnd);
       content.removeEventListener("touchcancel", handleTouchEnd);
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
       }
       isNavigatingRef.current = false;
     };
@@ -470,15 +485,20 @@ export function useVerticalScroll({
     navigate,
     nextChapterId,
     prevChapterId,
-    pullSensitivity,
-    pullThreshold,
     readingMode,
     resolvedViewerContentRef,
     navigateToChapter,
     effectiveViewStatus,
+    safePullSensitivity,
+    safePullThreshold,
   ]);
 
   useEffect(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    lastWheelTimeRef.current = 0;
     pullOffsetRef.current = 0;
     isNavigatingRef.current = false;
     isInternalScrollRef.current = false;

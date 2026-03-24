@@ -1,12 +1,13 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from "react-router-dom";
 import { TextViewerRoute } from "./TextViewerRoute";
 import { useViewerStore } from "../stores/viewerStore";
 
 const chapterGetTextMock = vi.fn();
 const chapterGetProgressMock = vi.fn();
 const seriesUpdateViewerSettingsMock = vi.fn();
+const useViewerSyncMock = vi.fn();
 
 vi.mock("../api/client", () => ({
   chapterAPI: {
@@ -23,6 +24,16 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
   }),
+}));
+
+vi.mock("../components/modals/AlertModal", () => ({
+  AlertModal: ({
+    isOpen,
+    onConfirm,
+  }: {
+    isOpen: boolean;
+    onConfirm: () => void;
+  }) => (isOpen ? <button type="button" data-testid="terminated-confirm" onClick={onConfirm} /> : null),
 }));
 
 vi.mock("../features/viewer", () => ({
@@ -61,6 +72,7 @@ vi.mock("../features/viewer", () => ({
   SyncConfirmModal: () => null,
   ChapterNavHint: () => null,
   PullIndicator: () => null,
+  ChapterListModal: () => null,
 }));
 
 vi.mock("../stores/fullscreenSwitchStore", () => ({
@@ -68,12 +80,7 @@ vi.mock("../stores/fullscreenSwitchStore", () => ({
 }));
 
 vi.mock("../hooks/useViewerSync", () => ({
-  useViewerSync: () => ({
-    terminatedInfo: {
-      isOpen: false,
-      reason: "",
-    },
-  }),
+  useViewerSync: (...args: unknown[]) => useViewerSyncMock(...args),
 }));
 
 vi.mock("../hooks/useReadingTime", () => ({
@@ -90,6 +97,13 @@ describe("TextViewerRoute", () => {
     chapterGetProgressMock.mockReset();
     seriesUpdateViewerSettingsMock.mockReset();
     seriesUpdateViewerSettingsMock.mockResolvedValue(undefined);
+    useViewerSyncMock.mockReset();
+    useViewerSyncMock.mockReturnValue({
+      terminatedInfo: {
+        isOpen: false,
+        reason: "",
+      },
+    });
     const doc = document as Document & {
       caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
       caretRangeFromPoint?: (x: number, y: number) => Range | null;
@@ -680,5 +694,77 @@ describe("TextViewerRoute", () => {
     });
 
     expect(useViewerStore.getState().currentPage).toBe(7);
+  });
+
+  it("세션 종료 확인 시 viewerFrom으로 replace 이동한다", async () => {
+    useViewerSyncMock.mockReturnValue({
+      terminatedInfo: {
+        isOpen: true,
+        reason: "session ended",
+      },
+    });
+    chapterGetTextMock.mockResolvedValue({
+      data: {
+        content: "종료 확인 텍스트",
+      },
+    });
+    chapterGetProgressMock.mockResolvedValue({
+      data: {
+        progress: null,
+      },
+    });
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/viewer/:chapterId",
+          element: (
+            <TextViewerRoute
+              loaderData={{
+                chapter: {
+                  id: "chapter-1",
+                  volume_id: "volume-1",
+                  title: "테스트 챕터",
+                  chapter_number: 1,
+                  page_count: 1,
+                },
+                isLoading: false,
+                error: null,
+                seriesId: "series-1",
+                volumeId: "volume-1",
+                pageMeta: [],
+                pageMetaMap: new Map(),
+                isInitialScrollingRef: { current: false },
+              }}
+            />
+          ),
+        },
+        {
+          path: "/series/1",
+          element: <div data-testid="series-page">series page</div>,
+        },
+      ],
+      {
+        initialEntries: [{ pathname: "/viewer/chapter-1", state: { from: "/series/1" } }],
+      },
+    );
+
+    render(
+      <RouterProvider router={router} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("terminated-confirm")).toBeInTheDocument();
+    });
+
+    act(() => {
+      screen.getByTestId("terminated-confirm").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("series-page")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/series/1");
+      expect(router.state.historyAction).toBe("REPLACE");
+    });
   });
 });

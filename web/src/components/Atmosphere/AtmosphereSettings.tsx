@@ -55,7 +55,7 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
 
   return (
     <div className={styles.atmosphereSection}>
-      <div className={styles.atmosphereHeader}>
+      <div className={`${styles.atmosphereHeader} ${atmosphere.isEnabled ? styles.hasControls : ""}`}>
         {showTitle && (
           <span className={styles.atmosphereTitle}>
             <Sparkles size={14} /> {t("header.atmosphere_title")}
@@ -118,12 +118,12 @@ export function AtmosphereSettings({ showTitle = true }: AtmosphereSettingsProps
             {atmosphere.timerEndAt !== null &&
               timerSnapshot?.timerEndAt === atmosphere.timerEndAt &&
               timerSnapshot.remaining > 0 && (
-              <span className={styles.timerDisplay}>
-                {t("header.atmosphere_timer_remaining", {
-                  minutes: timerSnapshot.remaining,
-                })}
-              </span>
-            )}
+                <span className={styles.timerDisplay}>
+                  {t("header.atmosphere_timer_remaining", {
+                    minutes: timerSnapshot.remaining,
+                  })}
+                </span>
+              )}
           </div>
 
           <div className={styles.atmosphereRow}>

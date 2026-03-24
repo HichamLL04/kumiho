@@ -44,7 +44,11 @@ interface ViewerHeaderProps {
 
 export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, onInteractionEnd }: ViewerHeaderProps) {
   const { t } = useTranslation();
-  const { isEnabled: isAtmosphereEnabled, setEnabled: setAtmosphereEnabled, setTimer: setAtmosphereTimer } = useAtmosphereStore(
+  const {
+    isEnabled: isAtmosphereEnabled,
+    setEnabled: setAtmosphereEnabled,
+    setTimer: setAtmosphereTimer,
+  } = useAtmosphereStore(
     useShallow((state) => ({
       isEnabled: state.isEnabled,
       setEnabled: state.setEnabled,
@@ -68,7 +72,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
     }
   };
 
-  const { title, currentPage, totalPages, isUIVisible, isIncognito, isFullscreen, isBgmPlaying, bgmInfo } = state;
+  const { title, isUIVisible, isIncognito, isFullscreen, isBgmPlaying, bgmInfo } = state;
 
   const { onBack, onToggleFullscreen, onToggleSettings, onToggleBgm } = actions;
 
@@ -112,7 +116,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
             className={styles.incognitoIcon}
           />
         )}
-        {title} - {currentPage} / {totalPages}
+        {title}
       </div>
       <div className={styles.headerActions}>
         {showZoomControls && onZoomIn && onZoomOut && onZoomReset && (
@@ -194,7 +198,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
 
         <button
           type="button"
-          className={styles.headerSettings}
+          className={styles.headerActionBtn}
           onClick={onToggleSettings}
           aria-label={t("viewer.header.settings")}
         >
