@@ -853,7 +853,7 @@ export function ViewerTab() {
                         id="custom_sensitivity"
                         step="0.1"
                         min="0"
-                        max="1"
+                        max="1.2"
                         value={settings.pullSensitivity}
                         onChange={(e) =>
                           handleSettingChange("viewer_pull_sensitivity", e.target.value, (v) =>

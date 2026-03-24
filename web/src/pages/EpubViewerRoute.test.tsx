@@ -10,6 +10,7 @@ const mockSetGlobalProgress = vi.fn();
 const mockSetIncognito = vi.fn();
 const mockReset = vi.fn();
 const epubProgressUpdateMock = vi.fn();
+const useViewerSyncMock = vi.fn();
 let latestViewerProps:
   | {
       onInitializationComplete: () => void;
@@ -85,7 +86,13 @@ vi.mock("../stores/epubViewerStore", () => ({
 }));
 
 vi.mock("../components/modals/AlertModal", () => ({
-  AlertModal: () => null,
+  AlertModal: ({
+    isOpen,
+    onConfirm,
+  }: {
+    isOpen: boolean;
+    onConfirm: () => void;
+  }) => (isOpen ? <button type="button" data-testid="terminated-confirm" onClick={onConfirm} /> : null),
 }));
 
 vi.mock("../components/common/LoadingSpinner", () => ({
@@ -181,12 +188,7 @@ vi.mock("../features/viewer/hooks/usePreventBrowserZoom", () => ({
 }));
 
 vi.mock("../hooks/useViewerSync", () => ({
-  useViewerSync: () => ({
-    terminatedInfo: {
-      isOpen: false,
-      reason: "",
-    },
-  }),
+  useViewerSync: (...args: unknown[]) => useViewerSyncMock(...args),
 }));
 
 globalThis.URL.createObjectURL = vi.fn(() => "blob:epub");
@@ -201,7 +203,14 @@ describe("EpubViewerRoute", () => {
     mockSetIncognito.mockReset();
     mockReset.mockReset();
     epubProgressUpdateMock.mockReset();
+    useViewerSyncMock.mockReset();
     latestViewerProps = null;
+    useViewerSyncMock.mockReturnValue({
+      terminatedInfo: {
+        isOpen: false,
+        reason: "",
+      },
+    });
 
     epubProgressGetMock.mockResolvedValue({
       data: {
@@ -513,5 +522,61 @@ describe("EpubViewerRoute", () => {
     });
 
     expect(epubProgressUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("세션 종료 확인 시 viewerFrom으로 replace 이동한다", async () => {
+    useViewerSyncMock.mockReturnValue({
+      terminatedInfo: {
+        isOpen: true,
+        reason: "session ended",
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={[{ pathname: "/viewer/chapter-1", state: { from: "/series/1" } }]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+          <Route
+            path="/series/1"
+            element={<div data-testid="series-page">series page</div>}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("terminated-confirm")).toBeInTheDocument();
+    });
+
+    act(() => {
+      screen.getByTestId("terminated-confirm").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("series-page")).toBeInTheDocument();
+    });
   });
 });
