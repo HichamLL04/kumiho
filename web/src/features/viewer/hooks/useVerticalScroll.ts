@@ -283,9 +283,11 @@ export function useVerticalScroll({
         SENSITIVITY_THRESHOLDS.find((t) => pullSensitivity >= t.minSensitivity)?.clicks ?? DEFAULT_WHEEL_CLICKS;
       const step = pullThreshold / clicksToReach100;
       const currentPull = pullOffsetRef.current;
+      const isReverseRelease = (currentPull > 0 && e.deltaY > 0) || (currentPull < 0 && e.deltaY < 0);
+      const isSnappedPull = Math.abs(currentPull) >= pullThreshold;
 
       // 쿨다운 체크 (트랙패드 등에서의 과도한 이벤트 방지)
-      if (now - lastWheelTimeRef.current < WHEEL_COOLDOWN) {
+      if (now - lastWheelTimeRef.current < WHEEL_COOLDOWN && !isReverseRelease && !isSnappedPull) {
         if (isAtTop && e.deltaY < 0 && prevChapterId) e.preventDefault();
         if (isAtBottom && e.deltaY > 0 && nextChapterId) e.preventDefault();
         return;

@@ -257,5 +257,70 @@ describe("useVerticalScroll", () => {
 
       expect(mocks.navigateMock).toHaveBeenCalledWith(expect.stringContaining("next-ch"), expect.anything());
     });
+
+    it("allows reverse wheel input to clear pull offset during cooldown", async () => {
+      const isInitialScrollingRef = { current: false };
+      const mockContent = {
+        scrollTop: 0,
+        clientHeight: 1000,
+        scrollHeight: 5000,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as HTMLDivElement;
+
+      const viewerContentRef = { current: mockContent };
+
+      const { result } = renderHook(() =>
+        useVerticalScroll({
+          readingMode: "vertical",
+          isLoading: false,
+          currentPage: 1,
+          totalPages: 20,
+          nextChapterId: "next-ch",
+          prevChapterId: "prev-ch",
+          pullThreshold: 100,
+          pullSensitivity: 1.0,
+          saveProgress: async () => {},
+          handleVolumeCompletion: mocks.handleVolumeCompletionMock,
+          chapterId: "chapter-1",
+          isInitialScrollingRef,
+          viewStatus: "ready",
+          viewerContentRef: viewerContentRef as unknown as React.MutableRefObject<HTMLDivElement | null>,
+        }),
+      );
+
+      await act(async () => {});
+
+      const wheelHandler = (vi
+        .mocked(mockContent.addEventListener)
+        .mock.calls.find((call) => call[0] === "wheel")?.[1] || (() => {})) as (e: WheelEvent) => void;
+
+      const pullEvent = {
+        deltaY: -100,
+        preventDefault: vi.fn(),
+      } as unknown as WheelEvent;
+
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+
+      await act(async () => {
+        wheelHandler(pullEvent);
+      });
+
+      expect(result.current.pullOffset).toBe(50);
+
+      const releaseEvent = {
+        deltaY: 100,
+        preventDefault: vi.fn(),
+      } as unknown as WheelEvent;
+
+      await act(async () => {
+        wheelHandler(releaseEvent);
+      });
+
+      expect(releaseEvent.preventDefault).toHaveBeenCalled();
+      expect(result.current.pullOffset).toBe(0);
+    });
   });
 });
