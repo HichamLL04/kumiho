@@ -18,8 +18,13 @@ export function AtmosphereProvider() {
   const currentTrackIdRef = useRef<string | null>(null);
   const decodedBufferCacheRef = useRef<Map<string, Promise<AudioBuffer> | AudioBuffer>>(new Map());
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInteractedRef = useRef(false);
   const operationTokenRef = useRef(0);
+
+  const invalidatePendingOperations = useCallback(() => {
+    operationTokenRef.current += 1;
+  }, []);
 
   // 현재 선택된 트랙 정보 (존재하지 않으면 첫 번째 트랙으로 폴백)
   const currentTrack = AMBIENT_TRACKS.find((t) => t.id === selectedTrackId) || AMBIENT_TRACKS[0];
@@ -109,6 +114,11 @@ export function AtmosphereProvider() {
         fadeTimeoutRef.current = null;
       }
 
+      if (trackChangeTimeoutRef.current) {
+        clearTimeout(trackChangeTimeoutRef.current);
+        trackChangeTimeoutRef.current = null;
+      }
+
       if (!currentSourceRef.current) {
         if (clearTrack) currentTrackIdRef.current = null;
         return Promise.resolve();
@@ -186,7 +196,9 @@ export function AtmosphereProvider() {
   // 컴포넌트 언마운트 시 오디오 및 타이머 확실히 정리
   useEffect(() => {
     return () => {
+      invalidatePendingOperations();
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+      if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
       stopCurrentSource();
       gainNodeRef.current?.disconnect();
       gainNodeRef.current = null;
@@ -197,7 +209,7 @@ export function AtmosphereProvider() {
         audioContextRef.current = null;
       }
     };
-  }, [stopCurrentSource]);
+  }, [invalidatePendingOperations, stopCurrentSource]);
 
   // 볼륨 ref (interaction 리스너에서 최신 값 참조용 - 의존성 배열에서 volume 제거)
   const volumeRef = useRef(volume);
@@ -314,8 +326,11 @@ export function AtmosphereProvider() {
         // 이전 소스가 있으면 페이드아웃 후 교체
         if (currentSourceRef.current) {
           fadeVolume(0, AMBIENT_FADE_SECONDS);
-          await new Promise((resolve) => {
-            setTimeout(resolve, AMBIENT_FADE_MS);
+          await new Promise<void>((resolve) => {
+            trackChangeTimeoutRef.current = setTimeout(() => {
+              trackChangeTimeoutRef.current = null;
+              resolve();
+            }, AMBIENT_FADE_MS);
           });
           if (token !== operationTokenRef.current) return;
         }
@@ -337,9 +352,23 @@ export function AtmosphereProvider() {
     void syncAmbientPlayback();
 
     return () => {
+      invalidatePendingOperations();
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+      if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
     };
-  }, [isEnabled, isSuppressed, currentTrack, volume, ensureAudioGraph, loadTrackBuffer, createLoopingSource, stopCurrentSource, stopAmbient, fadeVolume]);
+  }, [
+    isEnabled,
+    isSuppressed,
+    currentTrack,
+    volume,
+    ensureAudioGraph,
+    loadTrackBuffer,
+    createLoopingSource,
+    stopCurrentSource,
+    stopAmbient,
+    fadeVolume,
+    invalidatePendingOperations,
+  ]);
 
   // 재생 중 볼륨은 즉시 반영
   useEffect(() => {
