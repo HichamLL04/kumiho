@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useId, type CSSProperties, type JSX, type MouseEvent } from "react";
+import { useEffect, useState, useCallback, useRef, useId, useMemo, type CSSProperties, type JSX, type MouseEvent } from "react";
 import { X, ChevronRight, ChevronDown, Folder } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { seriesAPI } from "../../../../api/client";
@@ -95,8 +95,10 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
 
   // ESC 키로 닫기
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
+      if (e.key === "Escape") {
         onClose();
       }
     };
@@ -142,41 +144,46 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
     });
   };
 
-  const chapterByVolumeId = new Map<string, Chapter[]>();
-  const rootChapters: Chapter[] = [];
+  const { rootChapters, volumeTree } = useMemo(() => {
+    const chapterByVolumeId = new Map<string, Chapter[]>();
+    const nextRootChapters: Chapter[] = [];
 
-  allChapters.forEach((chapter) => {
-    if (!chapter.volume_id) {
-      rootChapters.push(chapter);
-      return;
-    }
+    allChapters.forEach((chapter) => {
+      if (!chapter.volume_id) {
+        nextRootChapters.push(chapter);
+        return;
+      }
 
-    const volumeChapters = chapterByVolumeId.get(chapter.volume_id) ?? [];
-    volumeChapters.push(chapter);
-    chapterByVolumeId.set(chapter.volume_id, volumeChapters);
-  });
+      const volumeChapters = chapterByVolumeId.get(chapter.volume_id) ?? [];
+      volumeChapters.push(chapter);
+      chapterByVolumeId.set(chapter.volume_id, volumeChapters);
+    });
 
-  const childVolumeByParentId = new Map<string, Volume[]>();
-  const rootVolumes: Volume[] = [];
+    const childVolumeByParentId = new Map<string, Volume[]>();
+    const rootVolumes: Volume[] = [];
 
-  volumes.forEach((volume) => {
-    if (!volume.parent_id) {
-      rootVolumes.push(volume);
-      return;
-    }
+    volumes.forEach((volume) => {
+      if (!volume.parent_id) {
+        rootVolumes.push(volume);
+        return;
+      }
 
-    const childVolumes = childVolumeByParentId.get(volume.parent_id) ?? [];
-    childVolumes.push(volume);
-    childVolumeByParentId.set(volume.parent_id, childVolumes);
-  });
+      const childVolumes = childVolumeByParentId.get(volume.parent_id) ?? [];
+      childVolumes.push(volume);
+      childVolumeByParentId.set(volume.parent_id, childVolumes);
+    });
 
-  const buildVolumeTree = (volume: Volume): VolumeTreeNode => ({
-    volume,
-    chapters: chapterByVolumeId.get(volume.id) ?? [],
-    children: (childVolumeByParentId.get(volume.id) ?? []).map(buildVolumeTree),
-  });
+    const buildVolumeTree = (volume: Volume): VolumeTreeNode => ({
+      volume,
+      chapters: chapterByVolumeId.get(volume.id) ?? [],
+      children: (childVolumeByParentId.get(volume.id) ?? []).map(buildVolumeTree),
+    });
 
-  const volumeTree = rootVolumes.map(buildVolumeTree);
+    return {
+      rootChapters: nextRootChapters,
+      volumeTree: rootVolumes.map(buildVolumeTree),
+    };
+  }, [allChapters, volumes]);
 
   const renderChapterButton = (chapter: Chapter) => (
     <button

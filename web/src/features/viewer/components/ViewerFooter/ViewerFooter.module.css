@@ -45,7 +45,6 @@
   justify-content: center;
   transition: background-color 0.2s;
   font-size: 14px;
-  outline: none;
 }
 
 .navBtn:focus-visible {
@@ -88,7 +87,6 @@
   align-items: center;
   touch-action: none;
   user-select: none;
-  outline: none;
 }
 
 .progressBarInteractive:focus-visible {
@@ -207,7 +205,6 @@
   background: rgba(0, 0, 0, 0.5);
   border: 0;
   color: inherit;
-  outline: none;
 }
 
 .pageInfoClickable:focus-visible {
