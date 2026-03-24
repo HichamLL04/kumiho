@@ -29,10 +29,14 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const requestIdRef = useRef(0);
   const titleId = useId();
 
   const loadData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+
     if (!seriesId) {
+      if (requestId !== requestIdRef.current) return;
       setVolumes([]);
       setAllChapters([]);
       setExpandedVolumeIds(new Set());
@@ -42,6 +46,8 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
     setIsLoading(true);
     try {
       const [volRes, chapRes] = await Promise.all([seriesAPI.getVolumes(seriesId), seriesAPI.getChapters(seriesId)]);
+      if (requestId !== requestIdRef.current) return;
+
       const loadedVolumes: Volume[] = volRes.data.volumes || [];
       const loadedChapters: Chapter[] = chapRes.data.chapters || [];
 
@@ -69,19 +75,29 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
         setExpandedVolumeIds(new Set());
       }
     } catch (error) {
+      if (requestId !== requestIdRef.current) return;
       console.error("Failed to load chapter list:", error);
       setVolumes([]);
       setAllChapters([]);
       setExpandedVolumeIds(new Set());
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [seriesId, currentChapterId]);
 
   useEffect(() => {
-    if (isOpen) {
-      loadData();
+    if (!isOpen) {
+      requestIdRef.current += 1;
+      return;
     }
+
+    void loadData();
+
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [isOpen, loadData]);
 
   useEffect(() => {
@@ -192,6 +208,7 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
 
   const renderChapterButton = (chapter: Chapter) => (
     <button
+      type="button"
       key={chapter.id}
       className={`${styles.chapterBtn} ${chapter.id === currentChapterId ? styles.activeChapter : ""}`}
       onClick={() => handleChapterClick(chapter.id)}
@@ -212,6 +229,7 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
         style={{ "--volume-depth": depth } as CSSProperties}
       >
         <button
+          type="button"
           className={styles.volumeHeader}
           onClick={() => toggleVolume(volume.id)}
           aria-expanded={isExpanded}
@@ -248,6 +266,7 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
         <header className={styles.modalHeader}>
           <h2 id={titleId}>{t("viewer.chapter_list.title", { defaultValue: "시리즈 목록" })}</h2>
           <button
+            type="button"
             ref={closeButtonRef}
             className={styles.closeBtn}
             onClick={onClose}

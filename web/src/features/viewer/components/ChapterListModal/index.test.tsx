@@ -7,6 +7,14 @@ import styles from "./ChapterListModal.module.css";
 const getVolumesMock = vi.fn();
 const getChaptersMock = vi.fn();
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 vi.mock("../../../../api/client", () => ({
   seriesAPI: {
     getVolumes: (...args: unknown[]) => getVolumesMock(...args),
@@ -144,5 +152,64 @@ describe("ChapterListModal", () => {
 
     expect(onNavigate).toHaveBeenCalledWith("c1");
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("늦게 도착한 이전 요청이 최신 목록 상태를 덮어쓰지 않는다", async () => {
+    const firstVolumesDeferred = createDeferred<{ data: { volumes: { id: string; title: string; parent_id?: string }[] } }>();
+    const firstChaptersDeferred = createDeferred<{ data: { chapters: { id: string; title: string; volume_id?: string }[] } }>();
+
+    getVolumesMock.mockImplementation((seriesId: string) => {
+      if (seriesId === "series-1") return firstVolumesDeferred.promise;
+      return Promise.resolve({
+        data: {
+          volumes: [{ id: "v2", title: "2권", parent_id: undefined }],
+        },
+      });
+    });
+    getChaptersMock.mockImplementation((seriesId: string) => {
+      if (seriesId === "series-1") return firstChaptersDeferred.promise;
+      return Promise.resolve({
+        data: {
+          chapters: [{ id: "c2", title: "2화", volume_id: "v2" }],
+        },
+      });
+    });
+
+    const { rerender } = render(
+      <ChapterListModal
+        seriesId="series-1"
+        isOpen
+        onClose={vi.fn()}
+        onNavigate={vi.fn()}
+      />,
+    );
+
+    rerender(
+      <ChapterListModal
+        seriesId="series-2"
+        isOpen
+        onClose={vi.fn()}
+        onNavigate={vi.fn()}
+      />,
+    );
+
+    const latestVolumeButton = await screen.findByRole("button", { name: /2권/i });
+    expect(latestVolumeButton).toBeInTheDocument();
+
+    firstVolumesDeferred.resolve({
+      data: {
+        volumes: [{ id: "v1", title: "1권", parent_id: undefined }],
+      },
+    });
+    firstChaptersDeferred.resolve({
+      data: {
+        chapters: [{ id: "c1", title: "1화", volume_id: "v1" }],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /2권/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /1권/i })).not.toBeInTheDocument();
   });
 });
