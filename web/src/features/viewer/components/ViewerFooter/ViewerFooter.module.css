@@ -23,7 +23,7 @@
 .footerControls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .navBtn {
@@ -38,10 +38,24 @@
   justify-content: center;
   transition: background-color 0.2s;
   font-size: 14px;
+  outline: none;
+}
+
+.navBtn:focus {
+  outline: none !important;
+}
+
+.navBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .navBtn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: none;
+}
+
+.navBtn:hover:not(:disabled) svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
 .navBtn:disabled {
@@ -72,6 +86,17 @@
   align-items: center;
   touch-action: none;
   user-select: none;
+  outline: none;
+}
+
+.progressBarInteractive:focus {
+  outline: none !important;
+}
+
+.progressBarInteractive:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
 .progressBarTrack {
@@ -142,7 +167,7 @@
 }
 
 .progressMarker:focus {
-  outline: none;
+  outline: none !important;
 }
 
 .progressTooltip {
@@ -188,16 +213,30 @@
   background: rgba(0, 0, 0, 0.5);
   border: 0;
   color: inherit;
+  outline: none;
+}
+
+.pageInfoClickable:focus {
+  outline: none !important;
+}
+
+.pageInfoClickable:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .pageInfoClickable:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: none;
+}
+
+.pageInfoClickable:hover {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
 .footerToggles {
   display: flex;
-  gap: 8px;
-  margin-left: 8px;
+  gap: 4px;
+  margin-left: 4px;
 }
 
 .toggleBtn {
@@ -209,10 +248,24 @@
   border-radius: 4px;
   font-size: 12px;
   transition: all 0.2s;
+  outline: none;
+}
+
+.toggleBtn:focus {
+  outline: none !important;
+}
+
+.toggleBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .toggleBtn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: none;
+}
+
+.toggleBtn:hover {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
 .toggleBtn.active {

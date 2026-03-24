@@ -35,10 +35,24 @@
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s;
+  outline: none;
+}
+
+.headerBack:focus {
+  outline: none !important;
 }
 
 .headerBack:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: none;
+}
+
+.headerBack:hover svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+}
+
+.headerBack:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .headerTitle {
@@ -76,10 +90,24 @@
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s;
+  outline: none;
+}
+
+.headerActionBtn:focus {
+  outline: none !important;
 }
 
 .headerActionBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: none;
+}
+
+.headerActionBtn:hover svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+}
+
+.headerActionBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .zoomControls {
@@ -102,6 +130,7 @@
   background: transparent;
   border-radius: 999px;
   height: 30px;
+  outline: none;
 }
 
 .zoomBtn {
@@ -117,9 +146,25 @@
   font-variant-numeric: tabular-nums;
 }
 
+.zoomBtn:focus,
+.zoomPercent:focus {
+  outline: none !important;
+}
+
 .zoomBtn:hover,
 .zoomPercent:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: none;
+}
+
+.zoomBtn:hover svg,
+.zoomPercent:hover svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+}
+
+.zoomBtn:focus-visible,
+.zoomPercent:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .bgmButton,
