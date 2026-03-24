@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from "react-router-dom";
 import { PdfViewerRoute } from "./PdfViewerRoute";
 import { useViewerStore } from "../stores/viewerStore";
 
@@ -200,38 +200,43 @@ describe("PdfViewerRoute", () => {
       },
     });
 
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/viewer/:chapterId",
+          element: (
+            <PdfViewerRoute
+              loaderData={{
+                chapter: {
+                  id: "chapter-7",
+                  volume_id: "volume-1",
+                  title: "PDF 챕터",
+                  chapter_number: 1,
+                  page_count: 20,
+                },
+                isLoading: false,
+                error: null,
+                seriesId: "series-1",
+                volumeId: "volume-1",
+                pageMeta: [],
+                pageMetaMap: new Map(),
+                isInitialScrollingRef: { current: false },
+              }}
+            />
+          ),
+        },
+        {
+          path: "/series/1",
+          element: <div data-testid="series-page">series page</div>,
+        },
+      ],
+      {
+        initialEntries: [{ pathname: "/viewer/chapter-7", state: { from: "/series/1" } }],
+      },
+    );
+
     render(
-      <MemoryRouter initialEntries={[{ pathname: "/viewer/chapter-7", state: { from: "/series/1" } }]}>
-        <Routes>
-          <Route
-            path="/viewer/:chapterId"
-            element={
-              <PdfViewerRoute
-                loaderData={{
-                  chapter: {
-                    id: "chapter-7",
-                    volume_id: "volume-1",
-                    title: "PDF 챕터",
-                    chapter_number: 1,
-                    page_count: 20,
-                  },
-                  isLoading: false,
-                  error: null,
-                  seriesId: "series-1",
-                  volumeId: "volume-1",
-                  pageMeta: [],
-                  pageMetaMap: new Map(),
-                  isInitialScrollingRef: { current: false },
-                }}
-              />
-            }
-          />
-          <Route
-            path="/series/1"
-            element={<div data-testid="series-page">series page</div>}
-          />
-        </Routes>
-      </MemoryRouter>,
+      <RouterProvider router={router} />,
     );
 
     act(() => {
@@ -240,6 +245,8 @@ describe("PdfViewerRoute", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("series-page")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/series/1");
+      expect(router.state.historyAction).toBe("REPLACE");
     });
   });
 });

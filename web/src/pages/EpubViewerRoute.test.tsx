@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from "react-router-dom";
 import { EpubViewerRoute } from "./EpubViewerRoute";
 
 const epubProgressGetMock = vi.fn();
@@ -532,39 +532,44 @@ describe("EpubViewerRoute", () => {
       },
     });
 
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/viewer/:chapterId",
+          element: (
+            <EpubViewerRoute
+              loaderData={{
+                chapter: {
+                  id: "chapter-1",
+                  volume_id: "volume-1",
+                  title: "EPUB 챕터",
+                  chapter_number: 1,
+                  page_count: 1,
+                },
+                isLoading: false,
+                error: null,
+                seriesId: "series-1",
+                volumeId: "volume-1",
+                pageMeta: [],
+                pageMetaMap: new Map(),
+                isInitialScrollingRef: { current: false },
+                setViewStatus: vi.fn(),
+              }}
+            />
+          ),
+        },
+        {
+          path: "/series/1",
+          element: <div data-testid="series-page">series page</div>,
+        },
+      ],
+      {
+        initialEntries: [{ pathname: "/viewer/chapter-1", state: { from: "/series/1" } }],
+      },
+    );
+
     render(
-      <MemoryRouter initialEntries={[{ pathname: "/viewer/chapter-1", state: { from: "/series/1" } }]}>
-        <Routes>
-          <Route
-            path="/viewer/:chapterId"
-            element={
-              <EpubViewerRoute
-                loaderData={{
-                  chapter: {
-                    id: "chapter-1",
-                    volume_id: "volume-1",
-                    title: "EPUB 챕터",
-                    chapter_number: 1,
-                    page_count: 1,
-                  },
-                  isLoading: false,
-                  error: null,
-                  seriesId: "series-1",
-                  volumeId: "volume-1",
-                  pageMeta: [],
-                  pageMetaMap: new Map(),
-                  isInitialScrollingRef: { current: false },
-                  setViewStatus: vi.fn(),
-                }}
-              />
-            }
-          />
-          <Route
-            path="/series/1"
-            element={<div data-testid="series-page">series page</div>}
-          />
-        </Routes>
-      </MemoryRouter>,
+      <RouterProvider router={router} />,
     );
 
     await waitFor(() => {
@@ -577,6 +582,8 @@ describe("EpubViewerRoute", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("series-page")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/series/1");
+      expect(router.state.historyAction).toBe("REPLACE");
     });
   });
 });

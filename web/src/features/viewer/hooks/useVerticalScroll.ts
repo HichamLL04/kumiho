@@ -498,6 +498,7 @@ export function useVerticalScroll({
       cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
     }
+    lastWheelTimeRef.current = 0;
     pullOffsetRef.current = 0;
     isNavigatingRef.current = false;
     isInternalScrollRef.current = false;
