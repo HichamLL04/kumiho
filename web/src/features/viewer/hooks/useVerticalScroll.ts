@@ -96,6 +96,8 @@ export function useVerticalScroll({
   const currentPageRef = useRef(currentPage);
   const imageLoadingRef = useRef(imageLoading);
   const lastWheelTimeRef = useRef(0);
+  const safePullThreshold = Number.isFinite(pullThreshold) && pullThreshold > 0 ? pullThreshold : null;
+  const safePullSensitivity = Number.isFinite(pullSensitivity) ? Math.max(0.1, Math.min(pullSensitivity, 1.2)) : 1.0;
 
   // 현재 페이지 상태를 Ref에 동기화 (스크롤 이벤트 핸들러에서 최신 값을 참조하기 위함)
   useEffect(() => {
@@ -256,11 +258,11 @@ export function useVerticalScroll({
 
   useEffect(() => {
     if (readingMode !== "vertical" || isLoading || effectiveViewStatus !== "ready") return;
+    if (safePullThreshold === null) return;
 
     const content = resolvedViewerContentRef.current;
     if (!content) return;
     const maxPull = 180;
-    const safeSensitivity = Math.max(0.1, Math.min(pullSensitivity, 1.2));
 
     // 마우스 휠 조작 로직 (이산 단계 방식)
     // 민감도 설정에 따라 휠 횟수 제어:
@@ -280,11 +282,11 @@ export function useVerticalScroll({
       const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
 
       const clicksToReach100 =
-        SENSITIVITY_THRESHOLDS.find((t) => pullSensitivity >= t.minSensitivity)?.clicks ?? DEFAULT_WHEEL_CLICKS;
-      const step = pullThreshold / clicksToReach100;
+        SENSITIVITY_THRESHOLDS.find((t) => safePullSensitivity >= t.minSensitivity)?.clicks ?? DEFAULT_WHEEL_CLICKS;
+      const step = safePullThreshold / clicksToReach100;
       const currentPull = pullOffsetRef.current;
       const isReverseRelease = (currentPull > 0 && e.deltaY > 0) || (currentPull < 0 && e.deltaY < 0);
-      const isSnappedPull = Math.abs(currentPull) >= pullThreshold;
+      const isSnappedPull = Math.abs(currentPull) >= safePullThreshold;
 
       // 쿨다운 체크 (트랙패드 등에서의 과도한 이벤트 방지)
       if (now - lastWheelTimeRef.current < WHEEL_COOLDOWN && !isReverseRelease && !isSnappedPull) {
@@ -294,7 +296,7 @@ export function useVerticalScroll({
       }
 
       // 1. 이미 100%에 도달해 스냅된 상태에서의 처리 (이동 또는 해제)
-      if (Math.abs(currentPull) >= pullThreshold) {
+      if (Math.abs(currentPull) >= safePullThreshold) {
         e.preventDefault();
 
         if (currentPull > 0) {
@@ -335,7 +337,7 @@ export function useVerticalScroll({
         lastWheelTimeRef.current = now;
 
         setPullOffset((prev) => {
-          const newOffset = Math.min(pullThreshold, prev + step);
+          const newOffset = Math.min(safePullThreshold, prev + step);
           pullOffsetRef.current = newOffset;
           return newOffset;
         });
@@ -344,7 +346,7 @@ export function useVerticalScroll({
         lastWheelTimeRef.current = now;
 
         setPullOffset((prev) => {
-          const newOffset = Math.max(-pullThreshold, prev - step);
+          const newOffset = Math.max(-safePullThreshold, prev - step);
           pullOffsetRef.current = newOffset;
           return newOffset;
         });
@@ -384,7 +386,7 @@ export function useVerticalScroll({
 
       if ((isAtTop && diff > 0 && prevChapterId) || pullOffsetRef.current > 0) {
         setPullOffset((prev) => {
-          const resistance = safeSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
+          const resistance = safePullSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
           const newOffset = Math.max(0, Math.min(prev + diff * resistance, maxPull));
           pullOffsetRef.current = newOffset;
           return newOffset;
@@ -394,7 +396,7 @@ export function useVerticalScroll({
         }
       } else if ((isAtBottom && diff < 0 && nextChapterId) || pullOffsetRef.current < 0) {
         setPullOffset((prev) => {
-          const resistance = safeSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
+          const resistance = safePullSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
           const newOffset = Math.min(0, Math.max(prev + diff * resistance, -maxPull));
           pullOffsetRef.current = newOffset;
           return newOffset;
@@ -422,7 +424,7 @@ export function useVerticalScroll({
       setIsTouching(false);
 
       // 이미 당겨진 상태에서 손을 뗐을 때 임계값을 넘었으면 이동
-      if (Math.abs(currentOffset) >= pullThreshold) {
+      if (Math.abs(currentOffset) >= safePullThreshold) {
         if (currentOffset > 0 && prevChapterId) {
           isNavigatingRef.current = true;
           pullOffsetRef.current = 0;
@@ -483,12 +485,12 @@ export function useVerticalScroll({
     navigate,
     nextChapterId,
     prevChapterId,
-    pullSensitivity,
-    pullThreshold,
     readingMode,
     resolvedViewerContentRef,
     navigateToChapter,
     effectiveViewStatus,
+    safePullSensitivity,
+    safePullThreshold,
   ]);
 
   useEffect(() => {
