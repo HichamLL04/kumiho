@@ -315,9 +315,8 @@ export function AtmosphereProvider() {
         if (currentSourceRef.current) {
           fadeVolume(0, AMBIENT_FADE_SECONDS);
           await new Promise((resolve) => {
-            fadeTimeoutRef.current = setTimeout(resolve, AMBIENT_FADE_MS);
+            setTimeout(resolve, AMBIENT_FADE_MS);
           });
-          fadeTimeoutRef.current = null;
           if (token !== operationTokenRef.current) return;
         }
 
