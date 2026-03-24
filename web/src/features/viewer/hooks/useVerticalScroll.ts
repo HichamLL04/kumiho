@@ -43,11 +43,13 @@ const MAX_RESTORE_ATTEMPTS = 40;
 const WHEEL_COOLDOWN = 150; // ms
 
 // 민감도별 100% 도달에 필요한 휠 클릭 횟수 (이후 1회 더 클릭하면 이동)
-const WHEEL_CLICKS_TO_100 = {
-  HIGH: 1, // 총 2회
-  MEDIUM: 2, // 총 3회
-  LOW: 4, // 총 5회
-} as const;
+// sensitivity 임계값은 ViewerTab.tsx의 PULL_PRESETS와 대응:
+//   high(1.2) -> 1클릭, medium(1.0) -> 2클릭, low(0.8) -> 4클릭
+const SENSITIVITY_THRESHOLDS = [
+  { minSensitivity: 1.1, clicks: 1 }, // high: 총 2회
+  { minSensitivity: 0.9, clicks: 2 }, // medium: 총 3회
+] as const;
+const DEFAULT_WHEEL_CLICKS = 4; // low: 총 5회
 
 export function useVerticalScroll({
   readingMode,
@@ -278,11 +280,8 @@ export function useVerticalScroll({
       const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
 
       const clicksToReach100 =
-        pullSensitivity >= 1.1
-          ? WHEEL_CLICKS_TO_100.HIGH
-          : pullSensitivity >= 1.0
-            ? WHEEL_CLICKS_TO_100.MEDIUM
-            : WHEEL_CLICKS_TO_100.LOW;
+        SENSITIVITY_THRESHOLDS.find((t) => pullSensitivity >= t.minSensitivity)?.clicks ??
+        DEFAULT_WHEEL_CLICKS;
       const step = pullThreshold / clicksToReach100;
       const currentPull = pullOffsetRef.current;
 

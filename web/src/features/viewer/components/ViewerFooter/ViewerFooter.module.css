@@ -41,10 +41,6 @@
   outline: none;
 }
 
-.navBtn:focus {
-  outline: none !important;
-}
-
 .navBtn:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.5);
   outline-offset: 2px;
@@ -87,10 +83,6 @@
   touch-action: none;
   user-select: none;
   outline: none;
-}
-
-.progressBarInteractive:focus {
-  outline: none !important;
 }
 
 .progressBarInteractive:focus-visible {
@@ -166,10 +158,6 @@
   border-radius: 3px;
 }
 
-.progressMarker:focus {
-  outline: none !important;
-}
-
 .progressTooltip {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -216,10 +204,6 @@
   outline: none;
 }
 
-.pageInfoClickable:focus {
-  outline: none !important;
-}
-
 .pageInfoClickable:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.5);
   outline-offset: 2px;
@@ -227,9 +211,6 @@
 
 .pageInfoClickable:hover {
   background: none;
-}
-
-.pageInfoClickable:hover {
   filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
@@ -251,10 +232,6 @@
   outline: none;
 }
 
-.toggleBtn:focus {
-  outline: none !important;
-}
-
 .toggleBtn:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.5);
   outline-offset: 2px;
@@ -262,9 +239,6 @@
 
 .toggleBtn:hover {
   background: none;
-}
-
-.toggleBtn:hover {
   filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 

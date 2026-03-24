@@ -38,10 +38,6 @@
   outline: none;
 }
 
-.headerBack:focus {
-  outline: none !important;
-}
-
 .headerBack:hover {
   background: none;
 }
@@ -93,10 +89,6 @@
   outline: none;
 }
 
-.headerActionBtn:focus {
-  outline: none !important;
-}
-
 .headerActionBtn:hover {
   background: none;
 }
@@ -144,11 +136,6 @@
   padding: 0 10px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-}
-
-.zoomBtn:focus,
-.zoomPercent:focus {
-  outline: none !important;
 }
 
 .zoomBtn:hover,
