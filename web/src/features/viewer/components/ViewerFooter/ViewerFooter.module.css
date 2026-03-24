@@ -26,10 +26,11 @@
   gap: 4px;
 }
 
-.footerActions,
-.navGroupLeft,
-.navGroupRight {
-  display: contents;
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
 }
 
 .navBtn {
@@ -222,7 +223,6 @@
 .footerToggles {
   display: flex;
   gap: 4px;
-  margin-left: 4px;
 }
 
 .toggleBtn {
@@ -260,30 +260,33 @@
   .footerControls {
     display: grid;
     grid-template-areas:
-      "navL progress navR"
-      "info . actions";
-    grid-template-columns: auto 1fr auto;
+      "prev progress progress progress next"
+      "first info actions actions last";
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 12px 8px;
   }
 
-  .navGroupLeft {
-    grid-area: navL;
-    display: flex;
-    gap: 4px;
-    justify-content: flex-start;
+  .firstPageBtn {
+    grid-area: first;
   }
 
-  .navGroupRight {
-    grid-area: navR;
-    display: flex;
-    gap: 4px;
-    justify-content: flex-end;
+  .prevPageBtn {
+    grid-area: prev;
+  }
+
+  .nextPageBtn {
+    grid-area: next;
+  }
+
+  .lastPageBtn {
+    grid-area: last;
   }
 
   .pageSliderContainer {
     grid-area: progress;
     width: 100%;
+    min-width: 0;
   }
 
   .progressBarWrap {
@@ -301,6 +304,7 @@
     align-items: center;
     justify-content: flex-end;
     gap: 12px;
+    margin-left: 0;
   }
 
   /* 시리즈 목록 아이콘 */
@@ -315,6 +319,7 @@
     text-align: left;
     font-size: 13px;
     font-weight: 600;
+    justify-content: flex-start;
   }
 
   .footerToggles {

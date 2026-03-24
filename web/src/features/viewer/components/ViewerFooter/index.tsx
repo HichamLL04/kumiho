@@ -164,26 +164,24 @@ export function ViewerFooter({
       onMouseLeave={onInteractionEnd}
     >
       <div className={styles.footerControls}>
-        <div className={styles.navGroupLeft}>
-          <button
-            type="button"
-            className={styles.navBtn}
-            onClick={() => onGoToPage(1)}
-            disabled={currentPage === 1}
-            aria-label="첫 페이지로 이동"
-          >
-            <ChevronsLeft size={20} />
-          </button>
-          <button
-            type="button"
-            className={styles.navBtn}
-            onClick={onPrev}
-            disabled={currentPage === 1}
-            aria-label="이전 페이지로 이동"
-          >
-            <ChevronLeft size={20} />
-          </button>
-        </div>
+        <button
+          type="button"
+          className={`${styles.navBtn} ${styles.firstPageBtn}`}
+          onClick={() => onGoToPage(1)}
+          disabled={currentPage === 1}
+          aria-label="첫 페이지로 이동"
+        >
+          <ChevronsLeft size={20} />
+        </button>
+        <button
+          type="button"
+          className={`${styles.navBtn} ${styles.prevPageBtn}`}
+          onClick={onPrev}
+          disabled={currentPage === 1}
+          aria-label="이전 페이지로 이동"
+        >
+          <ChevronLeft size={20} />
+        </button>
 
         <div className={styles.pageSliderContainer}>
           <div className={styles.progressBarWrap}>
@@ -287,26 +285,24 @@ export function ViewerFooter({
           </button>
         </div>
 
-        <div className={styles.navGroupRight}>
-          <button
-            type="button"
-            className={styles.navBtn}
-            onClick={onNext}
-            disabled={currentPage >= totalPages && !nextChapterId}
-            aria-label="다음 페이지로 이동"
-          >
-            <ChevronRight size={20} />
-          </button>
-          <button
-            type="button"
-            className={styles.navBtn}
-            onClick={() => onGoToPage(totalPages)}
-            disabled={currentPage >= totalPages}
-            aria-label="마지막 페이지로 이동"
-          >
-            <ChevronsRight size={20} />
-          </button>
-        </div>
+        <button
+          type="button"
+          className={`${styles.navBtn} ${styles.nextPageBtn}`}
+          onClick={onNext}
+          disabled={currentPage >= totalPages && !nextChapterId}
+          aria-label="다음 페이지로 이동"
+        >
+          <ChevronRight size={20} />
+        </button>
+        <button
+          type="button"
+          className={`${styles.navBtn} ${styles.lastPageBtn}`}
+          onClick={() => onGoToPage(totalPages)}
+          disabled={currentPage >= totalPages}
+          aria-label="마지막 페이지로 이동"
+        >
+          <ChevronsRight size={20} />
+        </button>
 
         <div className={styles.footerActions}>
           {/* 토글 버튼 (태블릿/데스크탑) */}

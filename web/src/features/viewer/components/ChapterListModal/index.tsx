@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, type CSSProperties, type JSX } from "react";
+import { useEffect, useState, useCallback, useRef, useId, type CSSProperties, type JSX, type MouseEvent } from "react";
 import { X, ChevronRight, ChevronDown, Folder } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { seriesAPI } from "../../../../api/client";
@@ -27,6 +27,9 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
   const [expandedVolumeIds, setExpandedVolumeIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
 
   const loadData = useCallback(async () => {
     if (!seriesId) {
@@ -78,6 +81,18 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
     }
   }, [isOpen, loadData]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+
+    return () => {
+      previouslyFocusedRef.current?.focus();
+      previouslyFocusedRef.current = null;
+    };
+  }, [isOpen]);
+
   // ESC 키로 닫기
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -104,7 +119,7 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
   }, [isOpen, isLoading, currentChapterId]);
 
   // 바깥 클릭으로 닫기
-  const handleOverlayClick = (e: React.MouseEvent) => {
+  const handleOverlayClick = (e: MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       onClose();
     }
@@ -177,14 +192,11 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
   const renderVolumeNode = (node: VolumeTreeNode, depth = 0): JSX.Element => {
     const { volume, chapters, children } = node;
     const isExpanded = expandedVolumeIds.has(volume.id);
-    const isCurrentVolume =
-      chapters.some((chapter) => chapter.id === currentChapterId) ||
-      children.some((child) => expandedVolumeIds.has(child.volume.id));
 
     return (
       <div
         key={volume.id}
-        className={`${styles.volumeItem} ${isCurrentVolume ? styles.activeVolume : ""} ${isExpanded ? styles.isExpanded : ""}`}
+        className={`${styles.volumeItem} ${isExpanded ? styles.isExpanded : ""}`}
         style={{ "--volume-depth": depth } as CSSProperties}
       >
         <button
@@ -220,10 +232,14 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
         className={styles.modalContent}
         ref={containerRef}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
       >
         <header className={styles.modalHeader}>
-          <h2>{t("viewer.chapter_list.title", { defaultValue: "시리즈 목록" })}</h2>
+          <h2 id={titleId}>{t("viewer.chapter_list.title", { defaultValue: "시리즈 목록" })}</h2>
           <button
+            ref={closeButtonRef}
             className={styles.closeBtn}
             onClick={onClose}
             aria-label={t("common.close")}
