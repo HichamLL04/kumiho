@@ -72,7 +72,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
     }
   };
 
-  const { title, currentPage, totalPages, isUIVisible, isIncognito, isFullscreen, isBgmPlaying, bgmInfo } = state;
+  const { title, isUIVisible, isIncognito, isFullscreen, isBgmPlaying, bgmInfo } = state;
 
   const { onBack, onToggleFullscreen, onToggleSettings, onToggleBgm } = actions;
 
@@ -116,7 +116,7 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
             className={styles.incognitoIcon}
           />
         )}
-        {title} - {currentPage} / {totalPages}
+        {title}
       </div>
       <div className={styles.headerActions}>
         {showZoomControls && onZoomIn && onZoomOut && onZoomReset && (
