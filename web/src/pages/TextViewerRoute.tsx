@@ -1677,7 +1677,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           onPageJumpClick={() => setShowPageJump(true)}
           onReadingModeChange={handleReadingModeChange}
           onTogglePageOffset={togglePageOffset}
-          onToggleChapterList={() => setIsChapterListOpen(!isChapterListOpen)}
+          onToggleChapterList={() => setIsChapterListOpen(true)}
           onInteractionStart={handleInteractionStart}
           onInteractionEnd={handleInteractionEnd}
         />

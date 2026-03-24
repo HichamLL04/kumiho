@@ -67,6 +67,7 @@ interface PdfViewerProps {
   onTogglePageOffset: () => void;
   isChapterListOpen: boolean;
   onToggleChapterList: () => void;
+  onCloseChapterList: () => void;
   onChapterNavigate: (id: string) => void;
   onCloseSettings: () => void;
   onClosePageJump: () => void;
@@ -116,6 +117,7 @@ export function PdfViewer({
   onTogglePageOffset,
   isChapterListOpen,
   onToggleChapterList,
+  onCloseChapterList,
   onChapterNavigate,
   onCloseSettings,
   onClosePageJump,
@@ -279,7 +281,7 @@ export function PdfViewer({
         seriesId={seriesId}
         currentChapterId={chapterId}
         isOpen={isChapterListOpen}
-        onClose={onToggleChapterList}
+        onClose={onCloseChapterList}
         onNavigate={onChapterNavigate}
       />
 

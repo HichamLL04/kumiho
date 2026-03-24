@@ -383,7 +383,8 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
         onReadingModeChange={setReadingMode}
         onTogglePageOffset={togglePageOffset}
         isChapterListOpen={isChapterListOpen}
-        onToggleChapterList={() => setIsChapterListOpen(!isChapterListOpen)}
+        onToggleChapterList={() => setIsChapterListOpen(true)}
+        onCloseChapterList={() => setIsChapterListOpen(false)}
         onChapterNavigate={(id) => {
           const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: effectiveIncognito });
           navigate(`/viewer/${id}`, { state: viewerState, replace: true });
