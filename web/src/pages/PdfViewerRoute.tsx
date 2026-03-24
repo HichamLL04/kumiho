@@ -24,6 +24,7 @@ import type { ViewerAnimationHandles, PageMeta } from "../features/viewer/types"
 import { PdfViewer } from "./PdfViewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 import type { SubPage } from "../stores/viewerStore";
+import { buildViewerRouteState } from "../utils/viewerRouteState";
 
 interface PdfViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
@@ -122,6 +123,7 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
 
   const animationRef = useRef<ViewerAnimationHandles>(null);
   const [showPageJump, setShowPageJump] = useState(false);
+  const [isChapterListOpen, setIsChapterListOpen] = useState(false);
   const [showTOC, setShowTOC] = useState(false);
   const [tocItems, setTocItems] = useState<PDFOutlineItem[]>([]);
   const [zoomScale, setZoomScale] = useState(1);
@@ -221,14 +223,7 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [
-    currentPage,
-    isDocumentLoadedForChapter,
-    isRestoreSettled,
-    loaderData,
-    restoreTargetPage,
-    routeChapterId,
-  ]);
+  }, [currentPage, isDocumentLoadedForChapter, isRestoreSettled, loaderData, restoreTargetPage, routeChapterId]);
 
   const handleOutlineLoad = useCallback((outline: PDFOutlineItem[]) => {
     setTocItems(outline);
@@ -338,6 +333,7 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
     <>
       <PdfViewer
         chapterTitle={chapter?.title || ""}
+        seriesId={seriesId || ""}
         chapterId={chapterId}
         currentPage={currentPage}
         totalPages={totalPages}
@@ -386,6 +382,12 @@ export function PdfViewerRoute({ loaderData }: PdfViewerRouteProps) {
         onPageJumpClick={() => setShowPageJump(true)}
         onReadingModeChange={setReadingMode}
         onTogglePageOffset={togglePageOffset}
+        isChapterListOpen={isChapterListOpen}
+        onToggleChapterList={() => setIsChapterListOpen(!isChapterListOpen)}
+        onChapterNavigate={(id) => {
+          const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: effectiveIncognito });
+          navigate(`/viewer/${id}`, { state: viewerState, replace: true });
+        }}
         onCloseSettings={closeSettings}
         onClosePageJump={() => setShowPageJump(false)}
         onPageJump={goToPage}

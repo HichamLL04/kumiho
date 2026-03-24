@@ -209,7 +209,7 @@ describe("useVerticalScroll", () => {
           nextChapterId: "next-ch",
           prevChapterId: "prev-ch",
           pullThreshold: 50,
-          pullSensitivity: 1,
+          pullSensitivity: 1.2,
           saveProgress: async () => {},
           handleVolumeCompletion: mocks.handleVolumeCompletionMock,
           chapterId: "chapter-1",
@@ -229,14 +229,21 @@ describe("useVerticalScroll", () => {
         preventDefault: vi.fn(),
       } as unknown as WheelEvent;
 
-      // 스냅 모드(pullSensitivity >= 0.8): 첫 스크롤은 인디케이터 표시
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+
+      // high 민감도(pullSensitivity = 1.2): 1번으로 100% 도달, 2번째에 이동
       await act(async () => {
         wheelHandler(event);
       });
 
       expect(event.preventDefault).toHaveBeenCalled();
 
-      // 두 번째 같은 방향 스크롤로 회차 이동
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+
       const event2 = {
         deltaY: 100,
         preventDefault: vi.fn(),
@@ -245,6 +252,8 @@ describe("useVerticalScroll", () => {
       await act(async () => {
         wheelHandler(event2);
       });
+
+      expect(event2.preventDefault).toHaveBeenCalled();
 
       expect(mocks.navigateMock).toHaveBeenCalledWith(expect.stringContaining("next-ch"), expect.anything());
     });

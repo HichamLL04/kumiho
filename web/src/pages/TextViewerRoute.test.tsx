@@ -61,6 +61,7 @@ vi.mock("../features/viewer", () => ({
   SyncConfirmModal: () => null,
   ChapterNavHint: () => null,
   PullIndicator: () => null,
+  ChapterListModal: () => null,
 }));
 
 vi.mock("../stores/fullscreenSwitchStore", () => ({

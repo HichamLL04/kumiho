@@ -255,8 +255,12 @@ export function useViewerNavigation({
   // 뒤로가기
   const handleBack = useCallback(() => {
     saveProgress();
-    navigate(-1);
-  }, [saveProgress, navigate]);
+    if (viewerFrom) {
+      navigate(viewerFrom);
+    } else {
+      navigate(-1);
+    }
+  }, [saveProgress, navigate, viewerFrom]);
 
   // 클릭 핸들러
 

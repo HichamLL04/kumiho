@@ -18,6 +18,7 @@ import {
   SyncConfirmModal,
   ChapterNavHint,
   PullIndicator,
+  ChapterListModal,
 } from "../features/viewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
@@ -324,6 +325,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   const [text, setText] = useState("");
   const [isLoadingText, setIsLoadingText] = useState(true);
   const [showPageJump, setShowPageJump] = useState(false);
+  const [isChapterListOpen, setIsChapterListOpen] = useState(false);
   const [restoreAnchor, setRestoreAnchor] = useState<SavedTextAnchor | null>(null);
   const [settledRestoreChapterId, setSettledRestoreChapterId] = useState<string | null>(null);
   const [currentOffsetX, setCurrentOffsetX] = useState(0);
@@ -1675,6 +1677,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           onPageJumpClick={() => setShowPageJump(true)}
           onReadingModeChange={handleReadingModeChange}
           onTogglePageOffset={togglePageOffset}
+          onToggleChapterList={() => setIsChapterListOpen(!isChapterListOpen)}
           onInteractionStart={handleInteractionStart}
           onInteractionEnd={handleInteractionEnd}
         />
@@ -1782,6 +1785,17 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         title={t("viewer.alert.session_terminated")}
         message={terminatedInfo.reason}
         onConfirm={handleTerminatedConfirm}
+      />
+
+      <ChapterListModal
+        seriesId={seriesId || ""}
+        currentChapterId={chapterId}
+        isOpen={isChapterListOpen}
+        onClose={() => setIsChapterListOpen(false)}
+        onNavigate={(id) => {
+          const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: effectiveIncognito });
+          navigate(`/viewer/${id}`, { state: viewerState, replace: true });
+        }}
       />
     </div>
   );

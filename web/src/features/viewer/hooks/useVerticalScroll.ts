@@ -267,7 +267,7 @@ export function useVerticalScroll({
     // Sensitive(1.2) -> 1번 클릭으로 100% (총 2번이면 이동)
     // Normal(1.0) -> 2번 클릭으로 100% (총 3번이면 이동)
     // Dull(0.8) -> 4번 클릭으로 100% (총 5번이면 이동)
-    let handleWheel = (e: WheelEvent) => {
+    const handleWheel = (e: WheelEvent) => {
       if (isNavigatingRef.current) return;
 
       if (rafIdRef.current) {
@@ -280,8 +280,7 @@ export function useVerticalScroll({
       const isAtBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
 
       const clicksToReach100 =
-        SENSITIVITY_THRESHOLDS.find((t) => pullSensitivity >= t.minSensitivity)?.clicks ??
-        DEFAULT_WHEEL_CLICKS;
+        SENSITIVITY_THRESHOLDS.find((t) => pullSensitivity >= t.minSensitivity)?.clicks ?? DEFAULT_WHEEL_CLICKS;
       const step = pullThreshold / clicksToReach100;
       const currentPull = pullOffsetRef.current;
 
