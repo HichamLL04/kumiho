@@ -84,6 +84,7 @@ export function useVerticalScroll({
   const effectiveViewStatus = viewStatus ?? (readingMode === "vertical" ? "hydrating" : "ready");
   const pullOffsetRef = useRef(0);
   const isNavigatingRef = useRef(false);
+  const rafIdRef = useRef<number | null>(null);
   const internalViewerContentRef = useRef<HTMLDivElement>(null);
   const resolvedViewerContentRef = viewerContentRef ?? internalViewerContentRef;
   const startYRef = useRef<number | null>(null);
@@ -256,6 +257,8 @@ export function useVerticalScroll({
 
     const content = resolvedViewerContentRef.current;
     if (!content) return;
+    const maxPull = 180;
+    const safeSensitivity = Math.max(0.1, Math.min(pullSensitivity, 1.2));
 
     // 마우스 휠 조작 로직 (이산 단계 방식)
     // 민감도 설정에 따라 휠 횟수 제어:
@@ -264,6 +267,11 @@ export function useVerticalScroll({
     // Dull(0.8) -> 4번 클릭으로 100% (총 5번이면 이동)
     let handleWheel = (e: WheelEvent) => {
       if (isNavigatingRef.current) return;
+
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
 
       const now = Date.now();
       const isAtTop = content.scrollTop <= 0;
@@ -353,6 +361,12 @@ export function useVerticalScroll({
 
     const handleTouchStart = (e: TouchEvent) => {
       if (isNavigatingRef.current) return;
+
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+
       startYRef.current = e.touches[0].clientY;
       lastYRef.current = e.touches[0].clientY;
       setIsTouching(true);
@@ -370,23 +384,24 @@ export function useVerticalScroll({
 
       if ((isAtTop && diff > 0 && prevChapterId) || pullOffsetRef.current > 0) {
         setPullOffset((prev) => {
-          const maxPull = 180;
-          const safeSensitivity = Math.max(0.1, Math.min(pullSensitivity, 1.0));
           const resistance = safeSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
           const newOffset = Math.max(0, Math.min(prev + diff * resistance, maxPull));
           pullOffsetRef.current = newOffset;
           return newOffset;
         });
-        if (content.scrollTop <= 0 && pullOffsetRef.current > 0) e.preventDefault();
+        if (e.cancelable && content.scrollTop <= 0 && pullOffsetRef.current > 0) {
+          e.preventDefault();
+        }
       } else if ((isAtBottom && diff < 0 && nextChapterId) || pullOffsetRef.current < 0) {
         setPullOffset((prev) => {
-          const maxPull = 180;
-          const resistance = pullSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
+          const resistance = safeSensitivity * (1 - Math.abs(prev) / (maxPull * 2));
           const newOffset = Math.min(0, Math.max(prev + diff * resistance, -maxPull));
           pullOffsetRef.current = newOffset;
           return newOffset;
         });
-        if (isAtBottom && pullOffsetRef.current < 0) e.preventDefault();
+        if (e.cancelable && isAtBottom && pullOffsetRef.current < 0) {
+          e.preventDefault();
+        }
       } else {
         setPullOffset((current) => {
           if (current !== 0) {
@@ -402,27 +417,47 @@ export function useVerticalScroll({
       if (isNavigatingRef.current) return;
 
       const currentOffset = pullOffsetRef.current;
-
-      // 이미 당겨진 상태에서 손을 뗐을 때 임계값을 넘었으면 이동
-      if (currentOffset >= pullThreshold && prevChapterId) {
-        isNavigatingRef.current = true;
-        void navigateToChapter(prevChapterId, { preventComplete: true });
-        setPullOffset(0);
-        pullOffsetRef.current = 0;
-      } else if (currentOffset <= -pullThreshold && nextChapterId) {
-        isNavigatingRef.current = true;
-        void navigateToChapter(nextChapterId);
-        setPullOffset(0);
-        pullOffsetRef.current = 0;
-      }
-
-      // 임계값을 넘지 않았으면 0으로 초기화하지 않고 그대로 유지 (사용자 요청)
       startYRef.current = null;
       lastYRef.current = null;
       setIsTouching(false);
+
+      // 이미 당겨진 상태에서 손을 뗐을 때 임계값을 넘었으면 이동
+      if (Math.abs(currentOffset) >= pullThreshold) {
+        if (currentOffset > 0 && prevChapterId) {
+          isNavigatingRef.current = true;
+          pullOffsetRef.current = 0;
+          setPullOffset(0);
+          void navigateToChapter(prevChapterId, { preventComplete: true });
+        } else if (currentOffset < 0 && nextChapterId) {
+          isNavigatingRef.current = true;
+          pullOffsetRef.current = 0;
+          setPullOffset(0);
+          void navigateToChapter(nextChapterId);
+        }
+      } else if (currentOffset !== 0) {
+        // 임계값을 넘지 않았으면 점진적으로 원복 (모바일 기존 동작)
+        const decay = () => {
+          if (pullOffsetRef.current === 0) {
+            rafIdRef.current = null;
+            return;
+          }
+          const factor = 0.82; // 복귀 속도
+          const newVal = pullOffsetRef.current * factor;
+          if (Math.abs(newVal) < 1) {
+            pullOffsetRef.current = 0;
+            setPullOffset(0);
+            rafIdRef.current = null;
+          } else {
+            pullOffsetRef.current = newVal;
+            setPullOffset(newVal);
+            rafIdRef.current = requestAnimationFrame(decay);
+          }
+        };
+        rafIdRef.current = requestAnimationFrame(decay);
+      }
     };
 
-    // decay 로직을 제거하여 스크롤 중지 시에도 상태가 유지되도록 함
+    // 모바일 터치에서는 decay로 자연스럽게 원복하고, 휠 입력 시에는 새 입력이 decay를 중단함
 
     content.addEventListener("wheel", handleWheel, { passive: false });
     content.addEventListener("touchstart", handleTouchStart, { passive: true });
@@ -436,7 +471,10 @@ export function useVerticalScroll({
       content.removeEventListener("touchmove", handleTouchMove);
       content.removeEventListener("touchend", handleTouchEnd);
       content.removeEventListener("touchcancel", handleTouchEnd);
-      // rafId 관련 정리 제거 (decay 제거됨)
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
       isNavigatingRef.current = false;
     };
   }, [
@@ -454,6 +492,10 @@ export function useVerticalScroll({
   ]);
 
   useEffect(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
     pullOffsetRef.current = 0;
     isNavigatingRef.current = false;
     isInternalScrollRef.current = false;
