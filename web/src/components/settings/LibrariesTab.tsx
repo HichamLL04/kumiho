@@ -510,9 +510,12 @@ export function LibrariesTab() {
     }
   };
 
-  const fetchLibraries = useCallback(async () => {
-    await storeFetchLibraries();
-  }, [storeFetchLibraries]);
+  const fetchLibraries = useCallback(
+    async (showLoading = true) => {
+      await storeFetchLibraries(showLoading);
+    },
+    [storeFetchLibraries],
+  );
 
   useEffect(() => {
     fetchLibraries();
@@ -523,7 +526,7 @@ export function LibrariesTab() {
     if (!hasScanningLibrary) return;
 
     const interval = setInterval(() => {
-      fetchLibraries();
+      fetchLibraries(false);
     }, 3000);
 
     return () => clearInterval(interval);

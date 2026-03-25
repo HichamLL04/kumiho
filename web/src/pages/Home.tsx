@@ -56,6 +56,7 @@ export function HomePage() {
 
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isFirstMount = useRef(true);
 
   const loadData = useCallback(
     async (options: { isInitial?: boolean } = {}) => {
@@ -193,8 +194,10 @@ export function HomePage() {
     chapterExtensionCacheRef.current.clear();
     volumeExtensionCacheRef.current.clear();
     seriesExtensionCacheRef.current.clear();
+    const initial = isFirstMount.current;
+    isFirstMount.current = false;
     const timer = window.setTimeout(() => {
-      void loadData({ isInitial: true });
+      void loadData({ isInitial: initial });
     }, 0);
     return () => {
       window.clearTimeout(timer);

@@ -28,42 +28,51 @@ export function LibraryPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const loadSequenceRef = useRef(0);
+  const lastFetchedIdRef = useRef<string | null>(null);
 
   const user = useAuthStore((state) => state.user);
 
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const loadData = useCallback(async () => {
-    if (!id) return;
-    const currentLoad = ++loadSequenceRef.current;
-    setIsLoading(true);
-
-    try {
-      const response = await libraryAPI.get(id);
-      if (currentLoad !== loadSequenceRef.current) return;
-      setLibrary(response.data);
-
-      const seriesResponse = await libraryAPI.getSeries(id);
-      const loadedSeries: Series[] = seriesResponse.data.series || [];
-      if (currentLoad !== loadSequenceRef.current) return;
-      setSeriesList(loadedSeries);
-
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Failed to load library data:", error);
-      if (currentLoad === loadSequenceRef.current) {
-        setIsLoading(false);
+  const loadData = useCallback(
+    async (isInitial = false) => {
+      if (!id) return;
+      const currentLoad = ++loadSequenceRef.current;
+      if (isInitial) {
+        setIsLoading(true);
       }
-    }
-  }, [id]);
+
+      try {
+        const response = await libraryAPI.get(id);
+        if (currentLoad !== loadSequenceRef.current) return;
+        setLibrary(response.data);
+
+        const seriesResponse = await libraryAPI.getSeries(id);
+        const loadedSeries: Series[] = seriesResponse.data.series || [];
+        if (currentLoad !== loadSequenceRef.current) return;
+        setSeriesList(loadedSeries);
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Failed to load library data:", error);
+        if (currentLoad === loadSequenceRef.current) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [id],
+  );
 
   useEffect(() => {
     if (id) {
+      const isInitial = lastFetchedIdRef.current !== id;
+      lastFetchedIdRef.current = id;
+
       const timer = window.setTimeout(() => {
-        void loadData();
+        void loadData(isInitial);
       }, 0);
-      fetchLibraries();
+      fetchLibraries(isInitial);
       // ID가 바뀌면 사이드바 닫기 (선택적)
       setSidebarOpen(false);
       return () => {
