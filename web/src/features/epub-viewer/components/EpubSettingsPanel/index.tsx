@@ -83,13 +83,11 @@ export function EpubSettingsPanel({
           </label>
           <div
             className={styles.buttonGroup}
-            role="radiogroup"
             aria-labelledby="spread-label"
           >
             <button
               type="button"
-              role="radio"
-              aria-checked={settings.spread === "none"}
+              aria-pressed={settings.spread === "none"}
               className={`${styles.optionBtn} ${settings.spread === "none" ? styles.active : ""}`}
               onClick={() => onSpreadChange("none")}
               disabled={isTypographyControlLimited || settings.renderMode === "comic"}
@@ -100,8 +98,7 @@ export function EpubSettingsPanel({
             </button>
             <button
               type="button"
-              role="radio"
-              aria-checked={settings.spread === "auto"}
+              aria-pressed={settings.spread === "auto"}
               className={`${styles.optionBtn} ${settings.spread === "auto" ? styles.active : ""}`}
               onClick={() => onSpreadChange("auto")}
               disabled={isTypographyControlLimited || settings.renderMode === "comic"}
