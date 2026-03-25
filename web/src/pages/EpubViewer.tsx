@@ -73,6 +73,8 @@ interface EpubViewerProps {
   onSpreadChange: (spread: "auto" | "none") => void;
   onReachedEndNext?: () => void;
   isEndNavigationReady?: boolean;
+  onReachedStartPrev?: () => void;
+  isStartNavigationReady?: boolean;
   onInitializationComplete?: () => void;
   onInteractionStart?: () => void;
   onInteractionEnd?: () => void;
@@ -123,6 +125,8 @@ export function EpubViewer({
   onSpreadChange,
   onReachedEndNext,
   isEndNavigationReady = true,
+  onReachedStartPrev,
+  isStartNavigationReady = true,
   onInitializationComplete,
   onInteractionStart,
   onInteractionEnd,
@@ -209,9 +213,14 @@ export function EpubViewer({
   }, [isAtLastPage, currentPage, totalPages, onReachedEndNext, isEndNavigationReady, clearPendingProgress]);
 
   const handlePrev = useCallback(() => {
+    if (isAtFirstPage) {
+      if (!isStartNavigationReady) return;
+      onReachedStartPrev?.();
+      return;
+    }
     clearPendingProgress();
     viewerRef.current?.prev();
-  }, [clearPendingProgress]);
+  }, [isAtFirstPage, isStartNavigationReady, onReachedStartPrev, clearPendingProgress]);
 
   const handleTOCJump = useCallback(
     (href: string) => {
@@ -655,7 +664,7 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={handlePrev}
-              disabled={isAtFirstPage}
+              disabled={isAtFirstPage && (!onReachedStartPrev || !isStartNavigationReady)}
               aria-label={t("epub_viewer.footer.prev_page")}
             >
               <ChevronLeft size={20} />

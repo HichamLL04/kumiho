@@ -28,6 +28,32 @@ const toPositionRatio = (position: number, total: number): number => {
   return Math.max(0, Math.min(1, position / (total - 1)));
 };
 
+// epub.js의 atEnd는 일부 EPUB에서 섹션 단위로 true가 될 수 있어 직접 위치 기준으로 안정화한다.
+// currentPosition은 0-indexed (0 ~ totalPositions-1)
+function isLocationAtEnd(location: {
+  currentPosition: number;
+  totalPositions: number;
+  globalRatio: number;
+  chapterPage: number;
+  chapterTotal: number;
+  atEnd?: boolean;
+}): boolean {
+  // totalPositions === 1인 단일 위치 EPUB은 globalRatio로 판단 (항상 true 방지)
+  if (Number.isFinite(location.totalPositions) && location.totalPositions > 1) {
+    return location.currentPosition >= location.totalPositions - 1;
+  }
+
+  if (Number.isFinite(location.globalRatio)) {
+    return location.globalRatio >= 0.995;
+  }
+
+  if (location.chapterTotal > 0) {
+    return location.chapterPage >= location.chapterTotal;
+  }
+
+  return location.atEnd ?? false;
+}
+
 export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const { chapterId: routeChapterId } = useParams<{ chapterId: string }>();
   const { t } = useTranslation();
@@ -93,7 +119,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
   const initFallbackTimerRef = useRef<number | null>(null);
-  const { nextChapterId, isAdjacentResolved } = useAdjacentChapters({
+  const { nextChapterId, prevChapterId, isAdjacentResolved } = useAdjacentChapters({
     volumeId,
     chapterId,
     seriesId,
@@ -554,7 +580,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     }) => {
       setCurrentCFI(location.cfi);
       setIsAtFirstPage(location.atStart ?? false);
-      setIsAtLastPage(location.atEnd ?? false);
+      setIsAtLastPage(isLocationAtEnd(location));
 
       // isInitializingRef.current 사용으로 stale closure 방지
       if (isInitializingRef.current) {
@@ -791,6 +817,15 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     handleReachedSeriesEnd();
   }, [nextChapterId, navigate, handleReachedSeriesEnd, viewerFrom, routeIsIncognito]);
 
+  const handlePrevAtStart = useCallback(() => {
+    if (prevChapterId) {
+      startChapterSwitching(isDocumentFullscreen());
+      navigate(`/viewer/${prevChapterId}`, {
+        state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
+      });
+    }
+  }, [prevChapterId, navigate, viewerFrom, routeIsIncognito]);
+
   const handleTerminatedConfirm = useCallback(() => {
     if (viewerFrom) {
       navigate(viewerFrom, { replace: true });
@@ -879,6 +914,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           onSpreadChange={handleSpreadChange}
           onReachedEndNext={handleNextAtEnd}
           isEndNavigationReady={isAdjacentResolved}
+          onReachedStartPrev={prevChapterId ? handlePrevAtStart : undefined}
+          isStartNavigationReady={isAdjacentResolved}
           onInteractionStart={handleInteractionStart}
           onInteractionEnd={handleInteractionEnd}
         />
