@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
+	"github.com/gofiber/fiber/v2"
 )
 
 func TestValidateNoNestedLibraryPaths(t *testing.T) {
@@ -50,5 +53,50 @@ func TestValidateNoNestedLibraryPaths(t *testing.T) {
 				t.Fatalf("validateNoNestedLibraryPaths() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateLibraryPathsResolvesSymlinks(t *testing.T) {
+	targetDir := t.TempDir()
+	linkPath := filepath.Join(t.TempDir(), "linked-library")
+	if err := os.Symlink(targetDir, linkPath); err != nil {
+		t.Fatalf("os.Symlink() error = %v", err)
+	}
+
+	paths, err := validateLibraryPaths([]string{linkPath}, func(path string) (bool, error) {
+		if path != targetDir {
+			t.Fatalf("checkExists path = %q, want %q", path, targetDir)
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("validateLibraryPaths() error = %v", err)
+	}
+
+	if len(paths) != 1 || paths[0] != targetDir {
+		t.Fatalf("normalized paths = %v, want [%q]", paths, targetDir)
+	}
+}
+
+func TestValidateLibraryPathsRejectsResolvedDuplicates(t *testing.T) {
+	targetDir := t.TempDir()
+	linkPath := filepath.Join(t.TempDir(), "linked-library")
+	if err := os.Symlink(targetDir, linkPath); err != nil {
+		t.Fatalf("os.Symlink() error = %v", err)
+	}
+
+	_, err := validateLibraryPaths([]string{targetDir, linkPath}, func(string) (bool, error) {
+		return false, nil
+	})
+	if err == nil {
+		t.Fatal("validateLibraryPaths() error = nil, want duplicate path error")
+	}
+
+	fiberErr, ok := err.(*fiber.Error)
+	if !ok {
+		t.Fatalf("error type = %T, want *fiber.Error", err)
+	}
+	if fiberErr.Code != fiber.StatusBadRequest {
+		t.Fatalf("error code = %d, want %d", fiberErr.Code, fiber.StatusBadRequest)
 	}
 }

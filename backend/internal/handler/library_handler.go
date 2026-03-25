@@ -72,35 +72,48 @@ func validateLibraryPaths(paths []string, checkExists func(string) (bool, error)
 		}
 
 		cleanPath := filepath.Clean(path)
-		if !filepath.IsAbs(cleanPath) {
-			return nil, fiber.NewError(fiber.StatusBadRequest, "only absolute paths are allowed: "+cleanPath)
+		absPath, err := filepath.Abs(cleanPath)
+		if err != nil {
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to normalize path: "+cleanPath)
+		}
+		if !filepath.IsAbs(absPath) {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "only absolute paths are allowed: "+absPath)
 		}
 
-		if _, ok := seen[cleanPath]; ok {
-			return nil, fiber.NewError(fiber.StatusBadRequest, "duplicate path is not allowed: "+cleanPath)
-		}
-		seen[cleanPath] = struct{}{}
-
-		info, err := os.Stat(cleanPath)
+		info, err := os.Stat(absPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return nil, fiber.NewError(fiber.StatusBadRequest, "path does not exist: "+cleanPath)
+				return nil, fiber.NewError(fiber.StatusBadRequest, "path does not exist: "+absPath)
 			}
-			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to access path: "+cleanPath)
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to access path: "+absPath)
 		}
 		if !info.IsDir() {
-			return nil, fiber.NewError(fiber.StatusBadRequest, "path is not a directory: "+cleanPath)
+			return nil, fiber.NewError(fiber.StatusBadRequest, "path is not a directory: "+absPath)
 		}
 
-		exists, err := checkExists(cleanPath)
+		resolvedPath, err := filepath.EvalSymlinks(absPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fiber.NewError(fiber.StatusBadRequest, "path does not exist: "+absPath)
+			}
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to resolve path: "+absPath)
+		}
+		resolvedPath = filepath.Clean(resolvedPath)
+
+		if _, ok := seen[resolvedPath]; ok {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "duplicate path is not allowed: "+resolvedPath)
+		}
+		seen[resolvedPath] = struct{}{}
+
+		exists, err := checkExists(resolvedPath)
 		if err != nil {
 			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to check existing library")
 		}
 		if exists {
-			return nil, fiber.NewError(fiber.StatusConflict, "path already belongs to another library: "+cleanPath)
+			return nil, fiber.NewError(fiber.StatusConflict, "path already belongs to another library: "+resolvedPath)
 		}
 
-		normalizedPaths = append(normalizedPaths, cleanPath)
+		normalizedPaths = append(normalizedPaths, resolvedPath)
 	}
 
 	return normalizedPaths, nil

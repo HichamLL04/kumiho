@@ -90,6 +90,14 @@ func isExcluded(name string, patterns []string) bool {
 	return false
 }
 
+func scanProgressDetail(entryName, path string) string {
+	rootName := filepath.Base(filepath.Dir(path))
+	if rootName == "." || rootName == string(os.PathSeparator) || rootName == "" || rootName == entryName {
+		return entryName
+	}
+	return fmt.Sprintf("%s (%s)", entryName, rootName)
+}
+
 type Scanner struct {
 	libraryRepo *repository.LibraryRepository
 	seriesRepo  *repository.SeriesRepository
@@ -428,7 +436,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 				}
 
 				// 초기 진행 상태 업데이트 (시리즈 시작)
-				updateProgress(path)
+				updateProgress(scanProgressDetail(entry.Name(), path))
 
 				seriesResult, err := s.processSeries(
 					scanCtx,
@@ -492,7 +500,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					}
 				}
 
-				updateProgress(path)
+				updateProgress(scanProgressDetail(entry.Name(), path))
 
 				seriesResult, err := s.processArchiveAsSeries(
 					scanCtx,
