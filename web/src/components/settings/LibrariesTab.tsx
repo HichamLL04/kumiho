@@ -409,7 +409,7 @@ export function LibrariesTab() {
     default_view_mode: string;
     default_read_direction: string;
     default_page_transition: string;
-    default_epub_spread?: string;
+    default_epub_spread: string;
     library_type: LibraryType;
     scan_excludes: string;
   }>({
@@ -547,6 +547,7 @@ export function LibrariesTab() {
         default_view_mode: "single",
         default_read_direction: "ltr",
         default_page_transition: "slide",
+        default_epub_spread: "none",
         library_type: "comic",
         scan_excludes: "",
       });

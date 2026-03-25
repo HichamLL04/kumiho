@@ -83,6 +83,7 @@ export function EpubSettingsPanel({
               type="button"
               className={`${styles.optionBtn} ${settings.spread === "none" ? styles.active : ""}`}
               onClick={() => onSpreadChange("none")}
+              disabled={isTypographyControlLimited || settings.renderMode === "comic"}
               title={t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
               aria-label={t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
             >
@@ -92,12 +93,16 @@ export function EpubSettingsPanel({
               type="button"
               className={`${styles.optionBtn} ${settings.spread === "auto" ? styles.active : ""}`}
               onClick={() => onSpreadChange("auto")}
+              disabled={isTypographyControlLimited || settings.renderMode === "comic"}
               title={t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
               aria-label={t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
             >
               {t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
             </button>
           </div>
+          {(isTypographyControlLimited || settings.renderMode === "comic") && (
+            <p className={styles.helperText}>{t("epub_viewer.settings.render_mode.typography_limited")}</p>
+          )}
         </div>
 
         {/* 글꼴 (최상단, 드롭다운) */}
