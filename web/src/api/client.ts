@@ -138,7 +138,7 @@ export const libraryAPI = {
   get: (id: string) => api.get(`/libraries/${id}`),
   create: (data: {
     name: string;
-    path: string;
+    paths: string[];
     default_view_mode?: string;
     default_read_direction?: string;
     default_page_transition?: string;
@@ -154,6 +154,7 @@ export const libraryAPI = {
     id: string,
     data: {
       name?: string;
+      paths?: string[];
       default_view_mode?: string;
       default_read_direction?: string;
       default_page_transition?: string;
@@ -433,6 +434,14 @@ export const statsAPI = {
   getPersonal: () => api.get("/stats/personal").then((res) => res.data),
   heartbeat: (seriesId: string, seconds: number, chapterId?: string) =>
     api.post("/stats/heartbeat", { series_id: seriesId, seconds, chapter_id: chapterId }),
+};
+
+// Filesystem API
+export const filesystemAPI = {
+  browse: (path = "/") =>
+    api.get<{ current: string; parent: string | null; directories: { name: string; path: string }[] }>(
+      `/filesystem?path=${encodeURIComponent(path)}`,
+    ),
 };
 
 // EPUB API

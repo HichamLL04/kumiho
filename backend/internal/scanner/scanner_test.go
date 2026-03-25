@@ -50,7 +50,7 @@ func TestScanLibraryBumpsSeriesUpdatedAtWhenNewChapterIsAdded(t *testing.T) {
 
 	library := &model.Library{
 		Name:        "테스트 라이브러리",
-		Path:        libraryPath,
+		Paths:       []string{libraryPath},
 		LibraryType: "book",
 	}
 	if err := libraryRepo.Create(nil, library); err != nil {

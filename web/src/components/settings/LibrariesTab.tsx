@@ -5,6 +5,7 @@ import {
   Plus,
   RefreshCw,
   FolderOpen,
+  Search,
   Settings,
   GripVertical,
   Eye,
@@ -16,6 +17,9 @@ import {
   Book as BookIcon,
   BookOpen,
   Image,
+  X,
+  ChevronRight,
+  ArrowUp,
 } from "lucide-react";
 import {
   DndContext,
@@ -34,7 +38,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { libraryAPI } from "../../api/client";
+import { libraryAPI, filesystemAPI } from "../../api/client";
 import { useLibraryStore, type Library } from "../../stores/libraryStore";
 import type { LibraryType } from "../../types/series";
 import { useScanStore } from "../../stores/scanStore";
@@ -54,6 +58,7 @@ interface SortableItemProps {
   editingLibrary: Library | null;
   setEditingLibrary: (lib: Library | null) => void;
   handleUpdateLibrary: (id: string, data: Partial<Library>) => void;
+  openBrowse: (target: { type: "create" | "edit"; index: number }, initialPath?: string) => void;
 }
 
 function SortableLibraryItem({
@@ -65,6 +70,7 @@ function SortableLibraryItem({
   editingLibrary,
   setEditingLibrary,
   handleUpdateLibrary,
+  openBrowse,
 }: SortableItemProps) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lib.id });
@@ -121,7 +127,7 @@ function SortableLibraryItem({
                 </span>
               )}
             </div>
-            <p className={styles.libraryPath}>{lib.path}</p>
+            <p className={styles.libraryPath}>{(lib.paths || []).join(", ")}</p>
             <div className={styles.libraryMeta}>
               {!isSystem && (
                 <>
@@ -215,6 +221,43 @@ function SortableLibraryItem({
             </div>
             {!isSystem && (
               <>
+                <div className={styles.flexFull}>
+                  <label className={styles.fieldLabel}>{t("settings.libraries.paths_label")}</label>
+                  <div className={styles.pathToolbar}>
+                    <button
+                      type="button"
+                      onClick={() => openBrowse({ type: "edit", index: (editingLibrary.paths || []).length }, "/")}
+                      className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
+                    >
+                      <Plus size={14} /> {t("settings.libraries.add_path")}
+                    </button>
+                  </div>
+                  {(editingLibrary.paths || []).map((p, i) => (
+                    <div key={i} className={styles.pathRow}>
+                      <button
+                        type="button"
+                        onClick={() => openBrowse({ type: "edit", index: i }, p || "/")}
+                        className={styles.pathValueButton}
+                        title={p || t("settings.libraries.browse")}
+                      >
+                        <Folder size={16} />
+                        <span>{p || t("settings.libraries.path_empty")}</span>
+                      </button>
+                      {(editingLibrary.paths || []).length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newPaths = (editingLibrary.paths || []).filter((_, idx) => idx !== i);
+                            setEditingLibrary({ ...editingLibrary, paths: newPaths });
+                          }}
+                          className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent} ${styles.btnDanger}`}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
                 <div className={styles.flexOne}>
                   <label className={styles.fieldLabel}>{t("settings.libraries.item.edit.type_label")}</label>
                   <select
@@ -348,7 +391,7 @@ export function LibrariesTab() {
 
   const [newLibrary, setNewLibrary] = useState<{
     name: string;
-    path: string;
+    paths: string[];
     default_view_mode: string;
     default_read_direction: string;
     default_page_transition: string;
@@ -356,13 +399,22 @@ export function LibrariesTab() {
     scan_excludes: string;
   }>({
     name: "",
-    path: "",
+    paths: [],
     default_view_mode: "single",
     default_read_direction: "ltr",
     default_page_transition: "slide",
     library_type: "comic",
     scan_excludes: "",
   });
+
+  // 디렉토리 브라우저 모달 상태
+  const [isBrowseOpen, setIsBrowseOpen] = useState(false);
+  const [browseTarget, setBrowseTarget] = useState<{ type: "create" | "edit"; index: number }>({ type: "create", index: 0 });
+  const [browsePath, setBrowsePath] = useState("/");
+  const [browseParent, setBrowseParent] = useState<string | null>(null);
+  const [browseDirs, setBrowseDirs] = useState<{ name: string; path: string }[]>([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseInput, setBrowseInput] = useState("/");
 
   // Global Settings state
   const [scanInterval, setScanInterval] = useState("0");
@@ -452,23 +504,24 @@ export function LibrariesTab() {
   }, [libraries, fetchLibraries]);
 
   const handleCreateLibrary = async () => {
-    if (!newLibrary.name || !newLibrary.path) {
+    const validPaths = newLibrary.paths.filter((p) => p.trim() !== "");
+    if (!newLibrary.name || validPaths.length === 0) {
       setStatus({ type: "error", message: t("settings.libraries.toast.empty_fields") });
       return;
     }
 
     try {
-      await libraryAPI.create(newLibrary);
+      await libraryAPI.create({ ...newLibrary, paths: validPaths });
       startPolling();
       setStatus({ type: "success", message: t("settings.libraries.toast.created") });
       setIsCreating(false);
       setNewLibrary({
         name: "",
-        path: "",
+        paths: [],
         default_view_mode: "single",
         default_read_direction: "ltr",
         default_page_transition: "slide",
-        library_type: "book",
+        library_type: "comic",
         scan_excludes: "",
       });
       fetchLibraries();
@@ -477,6 +530,57 @@ export function LibrariesTab() {
       const err = error as { response?: { data?: { error?: string } } };
       setStatus({ type: "error", message: err.response?.data?.error || t("settings.libraries.toast.create_failed") });
     }
+  };
+
+  const openBrowse = async (target: { type: "create" | "edit"; index: number }, initialPath?: string) => {
+    setBrowseTarget(target);
+    setBrowseLoading(true);
+    setIsBrowseOpen(true);
+    try {
+      const res = await filesystemAPI.browse(initialPath || "/");
+      setBrowsePath(res.data.current);
+      setBrowseInput(res.data.current);
+      setBrowseParent(res.data.parent);
+      setBrowseDirs(res.data.directories || []);
+    } catch {
+      setBrowseDirs([]);
+    } finally {
+      setBrowseLoading(false);
+    }
+  };
+
+  const navigateBrowse = async (path: string) => {
+    setBrowseLoading(true);
+    try {
+      const res = await filesystemAPI.browse(path);
+      setBrowsePath(res.data.current);
+      setBrowseInput(res.data.current);
+      setBrowseParent(res.data.parent);
+      setBrowseDirs(res.data.directories || []);
+    } catch {
+      setBrowseDirs([]);
+    } finally {
+      setBrowseLoading(false);
+    }
+  };
+
+  const selectBrowsePath = () => {
+    if (browseTarget.type === "create") {
+      const newPaths = [...newLibrary.paths];
+      newPaths[browseTarget.index] = browsePath;
+      setNewLibrary({ ...newLibrary, paths: newPaths });
+    } else if (browseTarget.type === "edit" && editingLibrary) {
+      const newPaths = [...(editingLibrary.paths || [])];
+      newPaths[browseTarget.index] = browsePath;
+      setEditingLibrary({ ...editingLibrary, paths: newPaths });
+    }
+    setIsBrowseOpen(false);
+  };
+
+  const handleBrowseSubmit = async () => {
+    const nextPath = browseInput.trim();
+    if (!nextPath) return;
+    await navigateBrowse(nextPath);
   };
 
   const handleUpdateLibrary = async (id: string, data: Partial<Library>) => {
@@ -626,10 +730,9 @@ export function LibrariesTab() {
           <div className={commonStyles.sectionContent}>
             <div className={commonStyles.settingsItem}>
               <div className={commonStyles.itemInfo}>
-                <label>{t("settings.libraries.path_label")}</label>
-                <p>{t("settings.libraries.path_desc")}</p>
+                <label>{t("settings.libraries.name_label")}</label>
               </div>
-              <div className={`${commonStyles.itemControl} ${styles.inputGroup}`}>
+              <div className={commonStyles.itemControl}>
                 <input
                   type="text"
                   placeholder={t("settings.libraries.name_placeholder")}
@@ -637,13 +740,49 @@ export function LibrariesTab() {
                   onChange={(e) => setNewLibrary({ ...newLibrary, name: e.target.value })}
                   className={commonStyles.settingsInput}
                 />
-                <input
-                  type="text"
-                  placeholder={t("settings.libraries.path_placeholder")}
-                  value={newLibrary.path}
-                  onChange={(e) => setNewLibrary({ ...newLibrary, path: e.target.value })}
-                  className={commonStyles.settingsInput}
-                />
+              </div>
+            </div>
+            <div className={commonStyles.settingsItem}>
+              <div className={commonStyles.itemInfo}>
+                <label>{t("settings.libraries.paths_label")}</label>
+                <p>{t("settings.libraries.paths_desc")}</p>
+              </div>
+              <div className={commonStyles.itemControl}>
+                <div className={styles.pathToolbar}>
+                  <button
+                    type="button"
+                    onClick={() => openBrowse({ type: "create", index: newLibrary.paths.length }, "/")}
+                    className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
+                  >
+                    <Plus size={14} /> {t("settings.libraries.add_path")}
+                  </button>
+                </div>
+                {newLibrary.paths.map((p, i) => (
+                  <div key={i} className={styles.pathRow}>
+                    <button
+                      type="button"
+                      onClick={() => openBrowse({ type: "create", index: i }, p || "/")}
+                      className={styles.pathValueButton}
+                      title={p || t("settings.libraries.browse")}
+                    >
+                      <Folder size={16} />
+                      <span>{p || t("settings.libraries.path_empty")}</span>
+                    </button>
+                    {newLibrary.paths.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newPaths = newLibrary.paths.filter((_, idx) => idx !== i);
+                          setNewLibrary({ ...newLibrary, paths: newPaths });
+                        }}
+                        className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent} ${styles.btnDanger}`}
+                        title={t("settings.libraries.remove_path")}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
             <div className={commonStyles.settingsItem}>
@@ -850,6 +989,7 @@ export function LibrariesTab() {
                     onScan={handleScanLibrary}
                     onDelete={handleDeleteLibrary}
                     onToggleVisibility={handleToggleVisibility}
+                    openBrowse={openBrowse}
                   />
                 ))}
               </SortableContext>
@@ -874,6 +1014,85 @@ export function LibrariesTab() {
           setLibraryToDelete(null);
         }}
       />
+
+      {/* 디렉토리 브라우저 모달 */}
+      {isBrowseOpen && (
+        <div className={styles.browseOverlay} onClick={() => setIsBrowseOpen(false)}>
+          <div className={styles.browseModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.browseHeader}>
+              <h3>{t("settings.libraries.browse_title")}</h3>
+              <button onClick={() => setIsBrowseOpen(false)} className={styles.browseClose}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className={styles.browseInputRow}>
+              <input
+                type="text"
+                value={browseInput}
+                onChange={(e) => setBrowseInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleBrowseSubmit();
+                  }
+                }}
+                className={`${commonStyles.settingsInput} ${styles.browseInput}`}
+                placeholder={t("settings.libraries.browse_input_placeholder")}
+              />
+              <button
+                type="button"
+                onClick={() => void handleBrowseSubmit()}
+                className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
+                title={t("settings.libraries.browse_go")}
+              >
+                <Search size={16} />
+              </button>
+            </div>
+            <div className={styles.browseCurrent}>
+              <Folder size={16} />
+              <span>{browsePath}</span>
+              {browseParent && (
+                <button onClick={() => navigateBrowse(browseParent)} className={styles.browseUp} title={t("settings.libraries.browse_up")}>
+                  <ArrowUp size={16} />
+                </button>
+              )}
+            </div>
+            <div className={styles.browseList}>
+              {browseLoading ? (
+                <div className={styles.browseLoading}>Loading...</div>
+              ) : browseDirs.length === 0 ? (
+                <div className={styles.browseEmpty}>{t("settings.libraries.browse_empty")}</div>
+              ) : (
+                browseDirs.map((dir) => (
+                  <button
+                    key={dir.path}
+                    className={styles.browseItem}
+                    onClick={() => navigateBrowse(dir.path)}
+                  >
+                    <Folder size={16} />
+                    <span>{dir.name}</span>
+                    <ChevronRight size={14} />
+                  </button>
+                ))
+              )}
+            </div>
+            <div className={styles.browseActions}>
+              <button
+                onClick={() => setIsBrowseOpen(false)}
+                className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={selectBrowsePath}
+                className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnPrimary}`}
+              >
+                {t("settings.libraries.browse_select")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
