@@ -14,6 +14,8 @@ import {
   Square,
   Headphones,
   Book as BookIcon,
+  BookOpen,
+  Image,
 } from "lucide-react";
 import {
   DndContext,
@@ -102,6 +104,14 @@ function SortableLibraryItem({
                   {lib.library_type === "audiobook" ? (
                     <>
                       <Headphones size={12} /> {t("settings.libraries.type_audiobook")}
+                    </>
+                  ) : lib.library_type === "comic" ? (
+                    <>
+                      <Image size={12} /> {t("settings.libraries.type_comic")}
+                    </>
+                  ) : lib.library_type === "novel" ? (
+                    <>
+                      <BookOpen size={12} /> {t("settings.libraries.type_novel")}
                     </>
                   ) : (
                     <>
@@ -210,10 +220,12 @@ function SortableLibraryItem({
                   <select
                     value={editingLibrary.library_type || "book"}
                     onChange={(e) =>
-                      setEditingLibrary({ ...editingLibrary, library_type: e.target.value as "book" | "audiobook" })
+                      setEditingLibrary({ ...editingLibrary, library_type: e.target.value as LibraryType })
                     }
                     className={commonStyles.settingsSelect}
                   >
+                    <option value="comic">{t("settings.libraries.type_comic")}</option>
+                    <option value="novel">{t("settings.libraries.type_novel")}</option>
                     <option value="book">{t("settings.libraries.type_book")}</option>
                     <option value="audiobook">{t("settings.libraries.type_audiobook")}</option>
                   </select>
@@ -348,7 +360,7 @@ export function LibrariesTab() {
     default_view_mode: "single",
     default_read_direction: "ltr",
     default_page_transition: "slide",
-    library_type: "book",
+    library_type: "comic",
     scan_excludes: "",
   });
 
@@ -645,6 +657,8 @@ export function LibrariesTab() {
                   onChange={(e) => setNewLibrary({ ...newLibrary, library_type: e.target.value as LibraryType })}
                   className={commonStyles.settingsSelect}
                 >
+                  <option value="comic">{t("settings.libraries.type_comic")}</option>
+                  <option value="novel">{t("settings.libraries.type_novel")}</option>
                   <option value="book">{t("settings.libraries.type_book")}</option>
                   <option value="audiobook">{t("settings.libraries.type_audiobook")}</option>
                 </select>

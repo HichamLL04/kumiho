@@ -55,7 +55,7 @@ func normalizeLibraryType(value string) (string, bool) {
 		return "book", true
 	}
 	switch normalized {
-	case "book", "audiobook":
+	case "book", "audiobook", "comic", "novel":
 		return normalized, true
 	default:
 		return "", false
