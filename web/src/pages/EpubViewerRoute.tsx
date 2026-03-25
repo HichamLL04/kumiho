@@ -14,6 +14,7 @@ import {
   useAdjacentChapters,
   useExitFullscreenOnViewerUnmount,
   useRestoreFullscreenAfterChapterSwitch,
+  useBGM,
 } from "../features/viewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 import { useViewerSync } from "../hooks/useViewerSync";
@@ -74,6 +75,14 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const chapterId = chapter?.id || "";
   const [isInitializing, setIsInitializing] = useState(true);
   const [showSeriesEndModal, setShowSeriesEndModal] = useState(false);
+  const [isChapterListOpen, setIsChapterListOpen] = useState(false);
+
+  // BGM
+  const { bgmInfo, isBgmPlaying, setIsBgmPlaying, audioRef } = useBGM({
+    volumeId: volumeId || null,
+    chapterId,
+    isReady: !isInitializing,
+  });
 
   const {
     currentPage,
@@ -889,6 +898,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           height: "100%",
         }}
       >
+        {bgmInfo?.exists && bgmInfo.url && (
+          <audio
+            ref={audioRef}
+            src={bgmInfo.url}
+            playsInline
+          />
+        )}
         <EpubViewer
           key={chapterId}
           chapterTitle={chapter?.title || ""}
@@ -934,6 +950,19 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           isStartNavigationReady={isAdjacentResolved}
           nextChapterTitle={nextChapterTitle}
           prevChapterTitle={prevChapterTitle}
+          bgmInfo={bgmInfo}
+          isBgmPlaying={isBgmPlaying}
+          onToggleBgm={() => setIsBgmPlaying((prev) => !prev)}
+          seriesId={seriesId || ""}
+          isChapterListOpen={isChapterListOpen}
+          onOpenChapterList={() => setIsChapterListOpen(true)}
+          onCloseChapterList={() => setIsChapterListOpen(false)}
+          onChapterNavigate={(id) => {
+            navigate(`/viewer/${id}`, {
+              state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
+              replace: true,
+            });
+          }}
           onInteractionStart={handleInteractionStart}
           onInteractionEnd={handleInteractionEnd}
         />

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect, useMemo, type MouseEvent } from "react";
+import { useRef, useCallback, useState, useEffect, useMemo, useId, type MouseEvent } from "react";
 import { isOldIOSSafari } from "../utils/browserDetect";
 import { useTranslation } from "react-i18next";
 import {
@@ -12,8 +12,15 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Music,
+  Sparkles,
+  LayoutGrid,
 } from "lucide-react";
 import type { EpubFontFamily, EpubRenderMode, EpubViewerSettings, EpubTheme } from "../stores/epubViewerStore";
+import type { BGMInfo } from "../features/viewer/types";
+import { useAtmosphereStore } from "../stores/atmosphereStore";
+import { AtmospherePopover } from "../features/viewer/components/AtmospherePopover";
+import { ChapterListModal } from "../features/viewer/components";
 import {
   EpubChapterViewer,
   type EpubTOCItem,
@@ -78,6 +85,14 @@ interface EpubViewerProps {
   isStartNavigationReady?: boolean;
   nextChapterTitle?: string | null;
   prevChapterTitle?: string | null;
+  bgmInfo?: BGMInfo | null;
+  isBgmPlaying?: boolean;
+  onToggleBgm?: () => void;
+  seriesId?: string;
+  isChapterListOpen?: boolean;
+  onOpenChapterList?: () => void;
+  onCloseChapterList?: () => void;
+  onChapterNavigate?: (chapterId: string) => void;
   onInitializationComplete?: () => void;
   onInteractionStart?: () => void;
   onInteractionEnd?: () => void;
@@ -132,6 +147,14 @@ export function EpubViewer({
   isStartNavigationReady = true,
   nextChapterTitle,
   prevChapterTitle,
+  bgmInfo,
+  isBgmPlaying = true,
+  onToggleBgm,
+  seriesId,
+  isChapterListOpen = false,
+  onOpenChapterList,
+  onCloseChapterList,
+  onChapterNavigate,
   onInitializationComplete,
   onInteractionStart,
   onInteractionEnd,
@@ -161,6 +184,30 @@ export function EpubViewer({
       }
     };
   }, []);
+
+  // Atmosphere
+  const isAtmosphereEnabled = useAtmosphereStore((state) => state.isEnabled);
+  const setAtmosphereEnabled = useAtmosphereStore((state) => state.setEnabled);
+  const atmosphereButtonRef = useRef<HTMLButtonElement>(null);
+  const atmospherePopoverId = useId();
+  const [isAtmospherePopoverOpen, setIsAtmospherePopoverOpen] = useState(false);
+  const handleCloseAtmospherePopover = useCallback(() => {
+    setIsAtmospherePopoverOpen(false);
+  }, []);
+  const handleAtmosphereClick = useCallback(() => {
+    if (isAtmosphereEnabled) {
+      setAtmosphereEnabled(false);
+      setIsAtmospherePopoverOpen(false);
+    } else {
+      setIsAtmospherePopoverOpen((prev) => !prev);
+    }
+  }, [isAtmosphereEnabled, setAtmosphereEnabled]);
+  const showsAtmosphereDialogState = isAtmospherePopoverOpen || !isAtmosphereEnabled;
+  const atmosphereButtonLabel = isAtmosphereEnabled
+    ? t("viewer.header.atmosphere_off")
+    : isAtmospherePopoverOpen
+      ? t("viewer.header.atmosphere_settings_close")
+      : t("viewer.header.atmosphere_settings_open");
 
   const getZoneRatio = useCallback((clientX: number, element: HTMLElement | null): number => {
     const rect = element?.getBoundingClientRect();
@@ -625,6 +672,31 @@ export function EpubViewer({
           >
             <List size={24} />
           </button>
+
+          {/* 앰비언트 사운드 */}
+          <button
+            ref={atmosphereButtonRef}
+            className={`${styles.iconBtn} ${!isAtmosphereEnabled ? styles.muted : ""}`}
+            onClick={handleAtmosphereClick}
+            title={atmosphereButtonLabel}
+            aria-label={atmosphereButtonLabel}
+            aria-haspopup={showsAtmosphereDialogState ? "dialog" : undefined}
+            aria-expanded={showsAtmosphereDialogState ? isAtmospherePopoverOpen : undefined}
+            aria-controls={isAtmospherePopoverOpen ? atmospherePopoverId : undefined}
+          >
+            <Sparkles
+              size={24}
+              fill={isAtmosphereEnabled ? "currentColor" : "none"}
+            />
+          </button>
+          {isAtmospherePopoverOpen && (
+            <AtmospherePopover
+              onClose={handleCloseAtmospherePopover}
+              triggerRef={atmosphereButtonRef}
+              id={atmospherePopoverId}
+            />
+          )}
+
           <button
             className={`${styles.iconBtn} ${isSettingsOpen ? styles.active : ""}`}
             onClick={onToggleSettings}
@@ -633,6 +705,18 @@ export function EpubViewer({
           >
             <Settings size={24} />
           </button>
+
+          {/* BGM */}
+          {bgmInfo?.exists && (
+            <button
+              className={`${styles.iconBtn} ${!isBgmPlaying ? styles.muted : ""}`}
+              onClick={onToggleBgm}
+              title={isBgmPlaying ? t("viewer.header.bgm_off") : t("viewer.header.bgm_on")}
+              aria-label={isBgmPlaying ? t("viewer.header.bgm_off") : t("viewer.header.bgm_on")}
+            >
+              <Music size={24} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -734,6 +818,17 @@ export function EpubViewer({
         title={prevChapterTitle || ""}
         show={showPrevHint && !!prevChapterTitle}
       />
+
+      {/* 시리즈 목록 모달 */}
+      {seriesId && (
+        <ChapterListModal
+          seriesId={seriesId}
+          currentChapterId={chapterId}
+          isOpen={isChapterListOpen}
+          onClose={onCloseChapterList ?? (() => {})}
+          onNavigate={onChapterNavigate ?? (() => {})}
+        />
+      )}
 
       {/* 푸터 */}
       {settings.flow === "paginated" && (
@@ -886,6 +981,18 @@ export function EpubViewer({
                 {settings.spread === "auto" ? t("epub_viewer.footer.pages_2") : t("epub_viewer.footer.pages_1")}
               </button>
             </div>
+
+            {/* 시리즈 목록 */}
+            {seriesId && onOpenChapterList && (
+              <button
+                className={styles.navBtn}
+                onClick={onOpenChapterList}
+                title={t("viewer.footer.chapter_list")}
+                aria-label={t("viewer.footer.chapter_list")}
+              >
+                <LayoutGrid size={20} />
+              </button>
+            )}
           </div>
         </footer>
       )}
