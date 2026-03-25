@@ -69,7 +69,7 @@ export function HomePage() {
 
       try {
         // 라이브러리 목록도 전역 스토어에서 갱신
-        await fetchLibraries();
+        await fetchLibraries(options.isInitial);
 
         // 병렬로 데이터 요청
         const [progressRes, settingsRes, likedResOrNull] = await Promise.all([
