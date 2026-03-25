@@ -34,6 +34,7 @@ describe("EpubSettingsPanel", () => {
         onWheelDirectionChange={vi.fn()}
         onKeyboardDirectionChange={vi.fn()}
         onClickDirectionChange={vi.fn()}
+        onSpreadChange={vi.fn()}
         onClose={onClose}
       />,
     );

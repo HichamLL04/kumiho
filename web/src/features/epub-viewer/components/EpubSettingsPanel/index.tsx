@@ -10,6 +10,7 @@ interface EpubSettingsPanelProps {
   onLineHeightChange: (height: number) => void;
   onThemeChange: (theme: EpubTheme) => void;
   onRenderModeChange: (mode: EpubRenderMode) => void;
+  onSpreadChange: (spread: "auto" | "none") => void;
   onWheelDirectionChange: (direction: "down" | "up") => void;
   onKeyboardDirectionChange: (direction: "right" | "left") => void;
   onClickDirectionChange: (direction: "right" | "left") => void;
@@ -24,6 +25,7 @@ export function EpubSettingsPanel({
   onLineHeightChange,
   onThemeChange,
   onRenderModeChange,
+  onSpreadChange,
   onWheelDirectionChange,
   onKeyboardDirectionChange,
   onClickDirectionChange,
@@ -69,6 +71,33 @@ export function EpubSettingsPanel({
             <option value="book">{t("epub_viewer.settings.render_mode.book")}</option>
             <option value="comic">{t("epub_viewer.settings.render_mode.comic")}</option>
           </select>
+        </div>
+
+        {/* 페이지 모드 */}
+        <div className={styles.section}>
+          <label className={styles.label}>
+            {t("epub_viewer.settings.spread.label", { defaultValue: "페이지 모드" })}
+          </label>
+          <div className={styles.buttonGroup}>
+            <button
+              type="button"
+              className={`${styles.optionBtn} ${settings.spread === "none" ? styles.active : ""}`}
+              onClick={() => onSpreadChange("none")}
+              title={t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
+              aria-label={t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
+            >
+              {t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
+            </button>
+            <button
+              type="button"
+              className={`${styles.optionBtn} ${settings.spread === "auto" ? styles.active : ""}`}
+              onClick={() => onSpreadChange("auto")}
+              title={t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
+              aria-label={t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
+            >
+              {t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
+            </button>
+          </div>
         </div>
 
         {/* 글꼴 (최상단, 드롭다운) */}

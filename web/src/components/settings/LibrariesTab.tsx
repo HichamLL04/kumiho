@@ -233,7 +233,10 @@ function SortableLibraryItem({
                     </button>
                   </div>
                   {(editingLibrary.paths || []).map((p, i) => (
-                    <div key={i} className={styles.pathRow}>
+                    <div
+                      key={i}
+                      className={styles.pathRow}
+                    >
                       <button
                         type="button"
                         onClick={() => openBrowse({ type: "edit", index: i }, p || "/")}
@@ -281,7 +284,14 @@ function SortableLibraryItem({
                       <label className={styles.fieldLabel}>{t("settings.libraries.item.edit.view_mode_label")}</label>
                       <select
                         value={editingLibrary.default_view_mode}
-                        onChange={(e) => setEditingLibrary({ ...editingLibrary, default_view_mode: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingLibrary({
+                            ...editingLibrary,
+                            default_view_mode: val,
+                            default_epub_spread: val === "double" ? "auto" : "none",
+                          });
+                        }}
                         className={commonStyles.settingsSelect}
                       >
                         <option value="single">{t("settings.viewer.mode.single")}</option>
@@ -399,6 +409,7 @@ export function LibrariesTab() {
     default_view_mode: string;
     default_read_direction: string;
     default_page_transition: string;
+    default_epub_spread?: string;
     library_type: LibraryType;
     scan_excludes: string;
   }>({
@@ -407,13 +418,17 @@ export function LibrariesTab() {
     default_view_mode: "single",
     default_read_direction: "ltr",
     default_page_transition: "slide",
+    default_epub_spread: "none",
     library_type: "comic",
     scan_excludes: "",
   });
 
   // 디렉토리 브라우저 모달 상태
   const [isBrowseOpen, setIsBrowseOpen] = useState(false);
-  const [browseTarget, setBrowseTarget] = useState<{ type: "create" | "edit"; index: number }>({ type: "create", index: 0 });
+  const [browseTarget, setBrowseTarget] = useState<{ type: "create" | "edit"; index: number }>({
+    type: "create",
+    index: 0,
+  });
   const [browsePath, setBrowsePath] = useState("/");
   const [browseParent, setBrowseParent] = useState<string | null>(null);
   const [browseQuickPaths, setBrowseQuickPaths] = useState<{ name: string; path: string }[]>([]);
@@ -430,7 +445,8 @@ export function LibrariesTab() {
   const [scanPerformanceLevel, setScanPerformanceLevel] = useState("2");
   const [updatedSeriesPeriod, setUpdatedSeriesPeriod] = useState("7");
   const validNewLibraryPaths = newLibrary.paths.filter((p) => p.trim() !== "");
-  const canProceedCreateStepOne = newLibrary.name.trim() !== "" && validNewLibraryPaths.length > 0 && !!newLibrary.library_type;
+  const canProceedCreateStepOne =
+    newLibrary.name.trim() !== "" && validNewLibraryPaths.length > 0 && !!newLibrary.library_type;
 
   // Load global settings
   useEffect(() => {
@@ -594,13 +610,13 @@ export function LibrariesTab() {
       "[tabindex]:not([tabindex='-1'])",
     ].join(", ");
 
-    const focusableElements = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>(focusableSelectors),
-    ).filter((element) => {
-      if (element.getAttribute("aria-hidden") === "true") return false;
-      if (element.tabIndex < 0) return false;
-      return !element.hasAttribute("disabled");
-    });
+    const focusableElements = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(focusableSelectors)).filter(
+      (element) => {
+        if (element.getAttribute("aria-hidden") === "true") return false;
+        if (element.tabIndex < 0) return false;
+        return !element.hasAttribute("disabled");
+      },
+    );
 
     if (focusableElements.length === 0) return;
 
@@ -816,152 +832,170 @@ export function LibrariesTab() {
             >
               {createStep === 1 ? (
                 <>
-                <div className={commonStyles.settingsItem}>
-                  <div className={commonStyles.itemInfo}>
-                    <label>{t("settings.libraries.name_label")}</label>
-                  </div>
-                  <div className={commonStyles.itemControl}>
-                    <input
-                      type="text"
-                      placeholder={t("settings.libraries.name_placeholder")}
-                      value={newLibrary.name}
-                      onChange={(e) => setNewLibrary({ ...newLibrary, name: e.target.value })}
-                      className={commonStyles.settingsInput}
-                    />
-                  </div>
-                </div>
-                <div className={commonStyles.settingsItem}>
-                  <div className={commonStyles.itemInfo}>
-                    <label>{t("settings.libraries.paths_label")}</label>
-                    <p>{t("settings.libraries.paths_desc")}</p>
-                  </div>
-                  <div className={commonStyles.itemControl}>
-                    <div className={styles.pathToolbar}>
-                      <button
-                        type="button"
-                        onClick={() => openBrowse({ type: "create", index: newLibrary.paths.length }, "/")}
-                        className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
-                      >
-                        <Plus size={14} /> {t("settings.libraries.add_path")}
-                      </button>
+                  <div className={commonStyles.settingsItem}>
+                    <div className={commonStyles.itemInfo}>
+                      <label>{t("settings.libraries.name_label")}</label>
                     </div>
-                    {newLibrary.paths.map((p, i) => (
-                      <div key={i} className={styles.pathRow}>
+                    <div className={commonStyles.itemControl}>
+                      <input
+                        type="text"
+                        placeholder={t("settings.libraries.name_placeholder")}
+                        value={newLibrary.name}
+                        onChange={(e) => setNewLibrary({ ...newLibrary, name: e.target.value })}
+                        className={commonStyles.settingsInput}
+                      />
+                    </div>
+                  </div>
+                  <div className={commonStyles.settingsItem}>
+                    <div className={commonStyles.itemInfo}>
+                      <label>{t("settings.libraries.paths_label")}</label>
+                      <p>{t("settings.libraries.paths_desc")}</p>
+                    </div>
+                    <div className={commonStyles.itemControl}>
+                      <div className={styles.pathToolbar}>
                         <button
                           type="button"
-                          onClick={() => openBrowse({ type: "create", index: i }, p || "/")}
-                          className={styles.pathValueButton}
-                          title={p || t("settings.libraries.browse")}
+                          onClick={() => openBrowse({ type: "create", index: newLibrary.paths.length }, "/")}
+                          className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
                         >
-                          <Folder size={16} />
-                          <span>{p || t("settings.libraries.path_empty")}</span>
+                          <Plus size={14} /> {t("settings.libraries.add_path")}
                         </button>
-                        {newLibrary.paths.length > 1 && (
+                      </div>
+                      {newLibrary.paths.map((p, i) => (
+                        <div
+                          key={i}
+                          className={styles.pathRow}
+                        >
                           <button
                             type="button"
-                            onClick={() => {
-                              const newPaths = newLibrary.paths.filter((_, idx) => idx !== i);
-                              setNewLibrary({ ...newLibrary, paths: newPaths });
-                            }}
-                            className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent} ${styles.btnDanger}`}
-                            title={t("settings.libraries.remove_path")}
-                            aria-label={t("settings.libraries.remove_path")}
+                            onClick={() => openBrowse({ type: "create", index: i }, p || "/")}
+                            className={styles.pathValueButton}
+                            title={p || t("settings.libraries.browse")}
                           >
-                            <X size={16} />
+                            <Folder size={16} />
+                            <span>{p || t("settings.libraries.path_empty")}</span>
                           </button>
-                        )}
-                      </div>
-                    ))}
+                          {newLibrary.paths.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newPaths = newLibrary.paths.filter((_, idx) => idx !== i);
+                                setNewLibrary({ ...newLibrary, paths: newPaths });
+                              }}
+                              className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent} ${styles.btnDanger}`}
+                              title={t("settings.libraries.remove_path")}
+                              aria-label={t("settings.libraries.remove_path")}
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className={commonStyles.settingsItem}>
-                  <div className={commonStyles.itemInfo}>
-                    <label>{t("settings.libraries.type_label")}</label>
-                    <p>{t("settings.libraries.type_desc")}</p>
+                  <div className={commonStyles.settingsItem}>
+                    <div className={commonStyles.itemInfo}>
+                      <label>{t("settings.libraries.type_label")}</label>
+                      <p>{t("settings.libraries.type_desc")}</p>
+                    </div>
+                    <div className={commonStyles.itemControl}>
+                      <select
+                        value={newLibrary.library_type}
+                        onChange={(e) => setNewLibrary({ ...newLibrary, library_type: e.target.value as LibraryType })}
+                        className={commonStyles.settingsSelect}
+                      >
+                        <option value="comic">{t("settings.libraries.type_comic")}</option>
+                        <option value="novel">{t("settings.libraries.type_novel")}</option>
+                        <option value="book">{t("settings.libraries.type_book")}</option>
+                        <option value="audiobook">{t("settings.libraries.type_audiobook")}</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className={commonStyles.itemControl}>
-                    <select
-                      value={newLibrary.library_type}
-                      onChange={(e) => setNewLibrary({ ...newLibrary, library_type: e.target.value as LibraryType })}
-                      className={commonStyles.settingsSelect}
-                    >
-                      <option value="comic">{t("settings.libraries.type_comic")}</option>
-                      <option value="novel">{t("settings.libraries.type_novel")}</option>
-                      <option value="book">{t("settings.libraries.type_book")}</option>
-                      <option value="audiobook">{t("settings.libraries.type_audiobook")}</option>
-                    </select>
-                  </div>
-                </div>
                 </>
               ) : (
                 <>
-                {newLibrary.library_type !== "audiobook" && (
+                  {newLibrary.library_type !== "audiobook" && (
+                    <div className={commonStyles.settingsItem}>
+                      <div className={commonStyles.itemInfo}>
+                        <label>{t("settings.libraries.view_mode_label")}</label>
+                        <p>{t("settings.libraries.view_mode_desc")}</p>
+                      </div>
+                      <div className={`${commonStyles.itemControl} ${styles.selectGroup}`}>
+                        <select
+                          value={newLibrary.default_view_mode}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNewLibrary({
+                              ...newLibrary,
+                              default_view_mode: val,
+                              default_epub_spread: val === "double" ? "auto" : "none",
+                            });
+                          }}
+                          className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
+                        >
+                          <option value="single">{t("settings.viewer.mode.single")}</option>
+                          <option value="double">{t("settings.viewer.mode.double")}</option>
+                          <option value="vertical">{t("settings.viewer.mode.vertical")}</option>
+                        </select>
+                        <select
+                          value={newLibrary.default_read_direction}
+                          onChange={(e) => setNewLibrary({ ...newLibrary, default_read_direction: e.target.value })}
+                          className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
+                        >
+                          <option value="ltr">{t("settings.viewer.direction.ltr")}</option>
+                          <option value="rtl">{t("settings.viewer.direction.rtl")}</option>
+                        </select>
+                        <select
+                          value={newLibrary.default_page_transition}
+                          onChange={(e) => setNewLibrary({ ...newLibrary, default_page_transition: e.target.value })}
+                          className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
+                        >
+                          <option value="slide">{t("viewer.settings.page_transition.slide")}</option>
+                          <option value="fade">{t("viewer.settings.page_transition.fade")}</option>
+                          <option value="none">{t("viewer.settings.page_transition.none")}</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                   <div className={commonStyles.settingsItem}>
                     <div className={commonStyles.itemInfo}>
-                      <label>{t("settings.libraries.view_mode_label")}</label>
-                      <p>{t("settings.libraries.view_mode_desc")}</p>
+                      <label>{t("settings.libraries.excludes_label")}</label>
+                      <p className={styles.multilineHelp}>{t("settings.libraries.excludes_desc")}</p>
                     </div>
-                    <div className={`${commonStyles.itemControl} ${styles.selectGroup}`}>
-                      <select
-                        value={newLibrary.default_view_mode}
-                        onChange={(e) => setNewLibrary({ ...newLibrary, default_view_mode: e.target.value })}
-                        className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
-                      >
-                        <option value="single">{t("settings.viewer.mode.single")}</option>
-                        <option value="double">{t("settings.viewer.mode.double")}</option>
-                        <option value="vertical">{t("settings.viewer.mode.vertical")}</option>
-                      </select>
-                      <select
-                        value={newLibrary.default_read_direction}
-                        onChange={(e) => setNewLibrary({ ...newLibrary, default_read_direction: e.target.value })}
-                        className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
-                      >
-                        <option value="ltr">{t("settings.viewer.direction.ltr")}</option>
-                        <option value="rtl">{t("settings.viewer.direction.rtl")}</option>
-                      </select>
-                      <select
-                        value={newLibrary.default_page_transition}
-                        onChange={(e) => setNewLibrary({ ...newLibrary, default_page_transition: e.target.value })}
-                        className={`${commonStyles.settingsSelect} ${styles.flexOne}`}
-                      >
-                        <option value="slide">{t("viewer.settings.page_transition.slide")}</option>
-                        <option value="fade">{t("viewer.settings.page_transition.fade")}</option>
-                        <option value="none">{t("viewer.settings.page_transition.none")}</option>
-                      </select>
+                    <div className={commonStyles.itemControl}>
+                      <input
+                        type="text"
+                        placeholder={t("settings.libraries.excludes_placeholder")}
+                        value={newLibrary.scan_excludes}
+                        onChange={(e) => setNewLibrary({ ...newLibrary, scan_excludes: e.target.value })}
+                        className={commonStyles.settingsInput}
+                      />
                     </div>
                   </div>
-                )}
-                <div className={commonStyles.settingsItem}>
-                  <div className={commonStyles.itemInfo}>
-                    <label>{t("settings.libraries.excludes_label")}</label>
-                    <p className={styles.multilineHelp}>{t("settings.libraries.excludes_desc")}</p>
-                  </div>
-                  <div className={commonStyles.itemControl}>
-                    <input
-                      type="text"
-                      placeholder={t("settings.libraries.excludes_placeholder")}
-                      value={newLibrary.scan_excludes}
-                      onChange={(e) => setNewLibrary({ ...newLibrary, scan_excludes: e.target.value })}
-                      className={commonStyles.settingsInput}
-                    />
-                  </div>
-                </div>
                 </>
               )}
             </div>
             <div className={styles.createFooter}>
               <div className={styles.stepIndicator}>
                 <div className={styles.stepIndicatorInner}>
-                  <div className={`${styles.stepConnectorProgress} ${createStep === 2 ? styles.stepConnectorProgressActive : ""}`} />
-                  <div className={`${styles.stepMarker} ${createStep === 2 ? styles.stepMarkerStepTwo : styles.stepMarkerStepOne}`} />
+                  <div
+                    className={`${styles.stepConnectorProgress} ${createStep === 2 ? styles.stepConnectorProgressActive : ""}`}
+                  />
+                  <div
+                    className={`${styles.stepMarker} ${createStep === 2 ? styles.stepMarkerStepTwo : styles.stepMarkerStepOne}`}
+                  />
                   <div className={styles.stepItem}>
-                    <div className={`${styles.stepNumber} ${createStep === 1 ? styles.stepNumberActive : styles.stepNumberInactive}`}>
+                    <div
+                      className={`${styles.stepNumber} ${createStep === 1 ? styles.stepNumberActive : styles.stepNumberInactive}`}
+                    >
                       1
                     </div>
                   </div>
                   <div className={styles.stepConnector} />
                   <div className={styles.stepItem}>
-                    <div className={`${styles.stepNumber} ${createStep === 2 ? styles.stepNumberActive : styles.stepNumberInactive}`}>
+                    <div
+                      className={`${styles.stepNumber} ${createStep === 2 ? styles.stepNumberActive : styles.stepNumberInactive}`}
+                    >
                       2
                     </div>
                   </div>
@@ -1153,7 +1187,10 @@ export function LibrariesTab() {
 
       {/* 디렉토리 브라우저 모달 */}
       {isBrowseOpen && (
-        <div className={styles.browseOverlay} onClick={closeBrowse}>
+        <div
+          className={styles.browseOverlay}
+          onClick={closeBrowse}
+        >
           <div
             className={styles.browseModal}
             onClick={(e) => e.stopPropagation()}

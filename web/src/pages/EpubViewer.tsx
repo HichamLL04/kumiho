@@ -570,6 +570,7 @@ export function EpubViewer({
               onLineHeightChange={onLineHeightChange}
               onThemeChange={onThemeChange}
               onRenderModeChange={onRenderModeChange}
+              onSpreadChange={onSpreadChange}
               onWheelDirectionChange={onWheelDirectionChange}
               onKeyboardDirectionChange={onKeyboardDirectionChange}
               onClickDirectionChange={onClickDirectionChange}
