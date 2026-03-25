@@ -1,7 +1,7 @@
 // 뷰어 하단 컨트롤 바 컴포넌트
 
 import { useCallback, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, LayoutGrid } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import styles from "./ViewerFooter.module.css";
 import type { ReadingMode } from "../../../../stores/viewerStore";
@@ -26,6 +26,7 @@ interface ViewerFooterProps {
   onPageJumpClick: () => void;
   onReadingModeChange: (mode: ReadingMode) => void;
   onTogglePageOffset: () => void;
+  onToggleChapterList?: () => void;
   tocMarkers?: ViewerFooterMarker[];
   onMarkerJump?: (marker: ViewerFooterMarker) => void;
   onInteractionStart?: () => void;
@@ -45,6 +46,7 @@ export function ViewerFooter({
   onPageJumpClick,
   onReadingModeChange,
   onTogglePageOffset,
+  onToggleChapterList,
   tocMarkers = [],
   onMarkerJump,
   onInteractionStart,
@@ -164,7 +166,7 @@ export function ViewerFooter({
       <div className={styles.footerControls}>
         <button
           type="button"
-          className={styles.navBtn}
+          className={`${styles.navBtn} ${styles.firstPageBtn}`}
           onClick={() => onGoToPage(1)}
           disabled={currentPage === 1}
           aria-label="첫 페이지로 이동"
@@ -173,7 +175,7 @@ export function ViewerFooter({
         </button>
         <button
           type="button"
-          className={styles.navBtn}
+          className={`${styles.navBtn} ${styles.prevPageBtn}`}
           onClick={onPrev}
           disabled={currentPage === 1}
           aria-label="이전 페이지로 이동"
@@ -270,21 +272,22 @@ export function ViewerFooter({
               )}
             </div>
           </div>
-          <div className={styles.pageInfo}>
-            <button
-              type="button"
-              className={styles.pageInfoClickable}
-              onClick={onPageJumpClick}
-              aria-label="페이지 직접 입력"
-            >
-              {currentPage} / {totalPages}
-            </button>
-          </div>
+        </div>
+
+        <div className={styles.pageInfo}>
+          <button
+            type="button"
+            className={styles.pageInfoClickable}
+            onClick={onPageJumpClick}
+            aria-label="페이지 직접 입력"
+          >
+            {currentPage} / {totalPages}
+          </button>
         </div>
 
         <button
           type="button"
-          className={styles.navBtn}
+          className={`${styles.navBtn} ${styles.nextPageBtn}`}
           onClick={onNext}
           disabled={currentPage >= totalPages && !nextChapterId}
           aria-label="다음 페이지로 이동"
@@ -293,7 +296,7 @@ export function ViewerFooter({
         </button>
         <button
           type="button"
-          className={styles.navBtn}
+          className={`${styles.navBtn} ${styles.lastPageBtn}`}
           onClick={() => onGoToPage(totalPages)}
           disabled={currentPage >= totalPages}
           aria-label="마지막 페이지로 이동"
@@ -301,20 +304,34 @@ export function ViewerFooter({
           <ChevronsRight size={20} />
         </button>
 
-        {/* 토글 버튼 (태블릿/데스크탑) */}
-        <div className={styles.footerToggles}>
-          <button
-            className={`${styles.toggleBtn} ${readingMode === "double" ? styles.active : ""}`}
-            onClick={handleModeToggle}
-          >
-            {readingMode === "double" ? t("viewer.footer.pages_2") : t("viewer.footer.pages_1")}
-          </button>
-          <button
-            className={`${styles.toggleBtn} ${pageOffset === 1 ? styles.active : ""}`}
-            onClick={onTogglePageOffset}
-          >
-            {t("viewer.footer.offset")} {pageOffset === 1 ? "+1" : "0"}
-          </button>
+        <div className={styles.footerActions}>
+          {/* 토글 버튼 (태블릿/데스크탑) */}
+          <div className={styles.footerToggles}>
+            <button
+              className={`${styles.toggleBtn} ${readingMode === "double" ? styles.active : ""}`}
+              onClick={handleModeToggle}
+            >
+              {readingMode === "double" ? t("viewer.footer.pages_2") : t("viewer.footer.pages_1")}
+            </button>
+            <button
+              className={`${styles.toggleBtn} ${pageOffset === 1 ? styles.active : ""}`}
+              onClick={onTogglePageOffset}
+            >
+              {t("viewer.footer.offset")} {pageOffset === 1 ? "+1" : "0"}
+            </button>
+          </div>
+
+          {onToggleChapterList && (
+            <button
+              type="button"
+              className={`${styles.navBtn} ${styles.chapterListBtn}`}
+              onClick={onToggleChapterList}
+              title={t("viewer.footer.chapter_list", { defaultValue: "시리즈 목록" })}
+              aria-label={t("viewer.footer.chapter_list", { defaultValue: "시리즈 목록" })}
+            >
+              <LayoutGrid size={20} />
+            </button>
+          )}
         </div>
       </div>
     </footer>

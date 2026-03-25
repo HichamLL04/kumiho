@@ -31,9 +31,9 @@ interface SettingsData {
 }
 
 const PULL_PRESETS = {
-  low: { threshold: 120, sensitivity: 0.4 },
-  medium: { threshold: 100, sensitivity: 0.6 },
-  high: { threshold: 80, sensitivity: 0.8 },
+  low: { threshold: 100, sensitivity: 0.8 },
+  medium: { threshold: 80, sensitivity: 1.0 },
+  high: { threshold: 60, sensitivity: 1.2 },
 } as const;
 
 // 민감도 레벨 판별 함수 (부동소수점 오차 고려)
@@ -327,184 +327,190 @@ export function ViewerTab() {
           <div className={styles.sectionContent}>
             <h4 className={localStyles.subsectionTitle}>{t("settings.viewer.subsections.display")}</h4>
             <div className={localStyles.subsectionGroup}>
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="viewer_reading_mode">{t("settings.viewer.global.reading_mode_label")}</label>
-                <p>{t("settings.viewer.global.reading_mode_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="viewer_reading_mode">{t("settings.viewer.global.reading_mode_label")}</label>
+                  <p>{t("settings.viewer.global.reading_mode_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="viewer_reading_mode"
+                    value={settings.readingMode}
+                    onChange={(e) =>
+                      handleSettingChange("viewer_reading_mode", e.target.value, (v) =>
+                        setReadingMode(v as ReadingMode),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="single">{t("settings.viewer.mode.single")}</option>
+                    <option value="double">{t("settings.viewer.mode.double")}</option>
+                    <option value="vertical">{t("settings.viewer.mode.vertical")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="viewer_reading_mode"
-                  value={settings.readingMode}
-                  onChange={(e) =>
-                    handleSettingChange("viewer_reading_mode", e.target.value, (v) => setReadingMode(v as ReadingMode))
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="single">{t("settings.viewer.mode.single")}</option>
-                  <option value="double">{t("settings.viewer.mode.double")}</option>
-                  <option value="vertical">{t("settings.viewer.mode.vertical")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="viewer_reading_direction">{t("settings.viewer.global.reading_direction_label")}</label>
-                <p>{t("settings.viewer.global.reading_direction_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="viewer_reading_direction">
+                    {t("settings.viewer.global.reading_direction_label")}
+                  </label>
+                  <p>{t("settings.viewer.global.reading_direction_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="viewer_reading_direction"
+                    value={settings.readingDirection}
+                    onChange={(e) =>
+                      handleSettingChange("viewer_reading_direction", e.target.value, (v) =>
+                        setReadingDirection(v as ReadingDirection),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="ltr">{t("settings.viewer.direction.ltr")}</option>
+                    <option value="rtl">{t("settings.viewer.direction.rtl")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="viewer_reading_direction"
-                  value={settings.readingDirection}
-                  onChange={(e) =>
-                    handleSettingChange("viewer_reading_direction", e.target.value, (v) =>
-                      setReadingDirection(v as ReadingDirection),
-                    )
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="ltr">{t("settings.viewer.direction.ltr")}</option>
-                  <option value="rtl">{t("settings.viewer.direction.rtl")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="viewer_fit_mode">{t("settings.viewer.global.fit_mode_label")}</label>
-                <p>{t("settings.viewer.global.fit_mode_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="viewer_fit_mode">{t("settings.viewer.global.fit_mode_label")}</label>
+                  <p>{t("settings.viewer.global.fit_mode_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="viewer_fit_mode"
+                    value={settings.fitMode}
+                    onChange={(e) =>
+                      handleSettingChange("viewer_fit_mode", e.target.value, (v) => setFitMode(v as FitMode))
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="screen">{t("settings.viewer.fit.screen")}</option>
+                    <option value="width">{t("settings.viewer.fit.width")}</option>
+                    <option value="height">{t("settings.viewer.fit.height")}</option>
+                    <option value="original">{t("settings.viewer.fit.original")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="viewer_fit_mode"
-                  value={settings.fitMode}
-                  onChange={(e) =>
-                    handleSettingChange("viewer_fit_mode", e.target.value, (v) => setFitMode(v as FitMode))
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="screen">{t("settings.viewer.fit.screen")}</option>
-                  <option value="width">{t("settings.viewer.fit.width")}</option>
-                  <option value="height">{t("settings.viewer.fit.height")}</option>
-                  <option value="original">{t("settings.viewer.fit.original")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="viewer_page_transition">{t("viewer.settings.page_transition.label")}</label>
-                <p>{t("viewer.settings.page_transition.desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="viewer_page_transition">{t("viewer.settings.page_transition.label")}</label>
+                  <p>{t("viewer.settings.page_transition.desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="viewer_page_transition"
+                    value={settings.pageTransition}
+                    onChange={(e) =>
+                      handleSettingChange("viewer_page_transition", e.target.value, (v) =>
+                        setPageTransition(v as "slide" | "fade" | "none"),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="slide">{t("viewer.settings.page_transition.slide")}</option>
+                    <option value="fade">{t("viewer.settings.page_transition.fade")}</option>
+                    <option value="none">{t("viewer.settings.page_transition.none")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="viewer_page_transition"
-                  value={settings.pageTransition}
-                  onChange={(e) =>
-                    handleSettingChange("viewer_page_transition", e.target.value, (v) =>
-                      setPageTransition(v as "slide" | "fade" | "none"),
-                    )
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="slide">{t("viewer.settings.page_transition.slide")}</option>
-                  <option value="fade">{t("viewer.settings.page_transition.fade")}</option>
-                  <option value="none">{t("viewer.settings.page_transition.none")}</option>
-                </select>
-              </div>
-            </div>
             </div>
 
             <h4 className={localStyles.subsectionTitle}>{t("settings.viewer.subsections.input")}</h4>
             <div className={localStyles.subsectionGroup}>
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="viewer_click_direction">{t("settings.viewer.global.click_direction_label")}</label>
-                <p>{t("settings.viewer.global.click_direction_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="viewer_click_direction">{t("settings.viewer.global.click_direction_label")}</label>
+                  <p>{t("settings.viewer.global.click_direction_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="viewer_click_direction"
+                    value={settings.clickDirection}
+                    onChange={(e) =>
+                      handleSettingChange("viewer_click_direction", e.target.value, (v) =>
+                        setClickDirection(v as ReadingDirection),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="ltr">{t("settings.viewer.click.right")}</option>
+                    <option value="rtl">{t("settings.viewer.click.left")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="viewer_click_direction"
-                  value={settings.clickDirection}
-                  onChange={(e) =>
-                    handleSettingChange("viewer_click_direction", e.target.value, (v) =>
-                      setClickDirection(v as ReadingDirection),
-                    )
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="ltr">{t("settings.viewer.click.right")}</option>
-                  <option value="rtl">{t("settings.viewer.click.left")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="viewer_keyboard_direction">
-                  {t("settings.viewer.global.keyboard_direction_label")}
-                </label>
-                <p>{t("settings.viewer.global.keyboard_direction_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="viewer_keyboard_direction">
+                    {t("settings.viewer.global.keyboard_direction_label")}
+                  </label>
+                  <p>{t("settings.viewer.global.keyboard_direction_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="viewer_keyboard_direction"
+                    value={settings.keyboardDirection}
+                    onChange={(e) =>
+                      handleSettingChange("viewer_keyboard_direction", e.target.value, (v) =>
+                        setKeyboardDirection(v as ReadingDirection),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="ltr">{t("settings.viewer.keyboard.right")}</option>
+                    <option value="rtl">{t("settings.viewer.keyboard.left")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="viewer_keyboard_direction"
-                  value={settings.keyboardDirection}
-                  onChange={(e) =>
-                    handleSettingChange("viewer_keyboard_direction", e.target.value, (v) =>
-                      setKeyboardDirection(v as ReadingDirection),
-                    )
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="ltr">{t("settings.viewer.keyboard.right")}</option>
-                  <option value="rtl">{t("settings.viewer.keyboard.left")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="viewer_wheel_direction">{t("settings.viewer.global.wheel_direction_label")}</label>
-                <p>{t("settings.viewer.global.wheel_direction_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="viewer_wheel_direction">{t("settings.viewer.global.wheel_direction_label")}</label>
+                  <p>{t("settings.viewer.global.wheel_direction_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="viewer_wheel_direction"
+                    value={settings.wheelDirection}
+                    onChange={(e) =>
+                      handleSettingChange("viewer_wheel_direction", e.target.value, (v) =>
+                        setWheelDirection(v as "down" | "up"),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="down">{t("viewer.settings.wheel_direction.down")}</option>
+                    <option value="up">{t("viewer.settings.wheel_direction.up")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="viewer_wheel_direction"
-                  value={settings.wheelDirection}
-                  onChange={(e) =>
-                    handleSettingChange("viewer_wheel_direction", e.target.value, (v) =>
-                      setWheelDirection(v as "down" | "up"),
-                    )
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="down">{t("viewer.settings.wheel_direction.down")}</option>
-                  <option value="up">{t("viewer.settings.wheel_direction.up")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="swipe_direction">{t("settings.general.swipe.label")}</label>
-                <p>{t("settings.general.swipe.desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="swipe_direction">{t("settings.general.swipe.label")}</label>
+                  <p>{t("settings.general.swipe.desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="swipe_direction"
+                    value={settings.swipeDirection}
+                    onChange={(e) =>
+                      handleSettingChange("swipe_direction", e.target.value, (v) =>
+                        setSwipeDirection(v as ReadingDirection),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="ltr">{t("settings.general.swipe.ltr")}</option>
+                    <option value="rtl">{t("settings.general.swipe.rtl")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="swipe_direction"
-                  value={settings.swipeDirection}
-                  onChange={(e) =>
-                    handleSettingChange("swipe_direction", e.target.value, (v) => setSwipeDirection(v as ReadingDirection))
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="ltr">{t("settings.general.swipe.ltr")}</option>
-                  <option value="rtl">{t("settings.general.swipe.rtl")}</option>
-                </select>
-              </div>
-            </div>
             </div>
           </div>
         </section>
@@ -528,157 +534,165 @@ export function ViewerTab() {
           <div className={styles.sectionContent}>
             <h4 className={localStyles.subsectionTitle}>{t("settings.viewer.subsections.display")}</h4>
             <div className={localStyles.subsectionGroup}>
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="epub_render_mode">{t("settings.viewer.epub.render_mode_label")}</label>
-                <p>{t("settings.viewer.epub.render_mode_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="epub_render_mode">{t("settings.viewer.epub.render_mode_label")}</label>
+                  <p>{t("settings.viewer.epub.render_mode_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="epub_render_mode"
+                    value={epubRenderMode}
+                    onChange={(e) =>
+                      handleSettingChange("epub_render_mode", e.target.value, (v) =>
+                        setEpubRenderMode(v as "auto" | "book" | "comic"),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="auto">{t("epub_viewer.settings.render_mode.auto")}</option>
+                    <option value="book">{t("epub_viewer.settings.render_mode.book")}</option>
+                    <option value="comic">{t("epub_viewer.settings.render_mode.comic")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="epub_render_mode"
-                  value={epubRenderMode}
-                  onChange={(e) =>
-                    handleSettingChange("epub_render_mode", e.target.value, (v) =>
-                      setEpubRenderMode(v as "auto" | "book" | "comic"),
-                    )
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="auto">{t("epub_viewer.settings.render_mode.auto")}</option>
-                  <option value="book">{t("epub_viewer.settings.render_mode.book")}</option>
-                  <option value="comic">{t("epub_viewer.settings.render_mode.comic")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="epub_spread">{t("settings.viewer.epub.spread_label")}</label>
-                <p>{t("settings.viewer.epub.spread_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="epub_spread">{t("settings.viewer.epub.spread_label")}</label>
+                  <p>{t("settings.viewer.epub.spread_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="epub_spread"
+                    value={epubSpread}
+                    onChange={(e) =>
+                      handleSettingChange("epub_spread", e.target.value, (v) => setEpubSpread(v as "auto" | "none"))
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="auto">{t("settings.viewer.epub.spread_auto")}</option>
+                    <option value="none">{t("settings.viewer.epub.spread_none")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="epub_spread"
-                  value={epubSpread}
-                  onChange={(e) =>
-                    handleSettingChange("epub_spread", e.target.value, (v) => setEpubSpread(v as "auto" | "none"))
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="auto">{t("settings.viewer.epub.spread_auto")}</option>
-                  <option value="none">{t("settings.viewer.epub.spread_none")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="epub_theme">{t("settings.viewer.epub.theme_label")}</label>
-                <p>{t("settings.viewer.epub.theme_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="epub_theme">{t("settings.viewer.epub.theme_label")}</label>
+                  <p>{t("settings.viewer.epub.theme_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="epub_theme"
+                    value={epubTheme}
+                    onChange={(e) =>
+                      handleSettingChange("epub_theme", e.target.value, (v) =>
+                        setEpubTheme(v as "light" | "dark" | "sepia"),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="light">{t("epub_viewer.settings.theme.light")}</option>
+                    <option value="dark">{t("epub_viewer.settings.theme.dark")}</option>
+                    <option value="sepia">{t("epub_viewer.settings.theme.sepia")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="epub_theme"
-                  value={epubTheme}
-                  onChange={(e) =>
-                    handleSettingChange("epub_theme", e.target.value, (v) => setEpubTheme(v as "light" | "dark" | "sepia"))
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="light">{t("epub_viewer.settings.theme.light")}</option>
-                  <option value="dark">{t("epub_viewer.settings.theme.dark")}</option>
-                  <option value="sepia">{t("epub_viewer.settings.theme.sepia")}</option>
-                </select>
-              </div>
-            </div>
             </div>
 
             <h4 className={localStyles.subsectionTitle}>{t("settings.viewer.subsections.input")}</h4>
             <div className={localStyles.subsectionGroup}>
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="epub_click_direction">{t("settings.viewer.epub.click_direction_label")}</label>
-                <p>{t("settings.viewer.epub.click_direction_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="epub_click_direction">{t("settings.viewer.epub.click_direction_label")}</label>
+                  <p>{t("settings.viewer.epub.click_direction_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="epub_click_direction"
+                    value={epubClickDirection}
+                    onChange={(e) =>
+                      handleSettingChange("epub_click_direction", e.target.value, (v) =>
+                        setEpubClickDirection(v as "right" | "left"),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="right">{t("epub_viewer.settings.input_controls.click_right")}</option>
+                    <option value="left">{t("epub_viewer.settings.input_controls.click_left")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="epub_click_direction"
-                  value={epubClickDirection}
-                  onChange={(e) =>
-                    handleSettingChange("epub_click_direction", e.target.value, (v) => setEpubClickDirection(v as "right" | "left"))
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="right">{t("epub_viewer.settings.input_controls.click_right")}</option>
-                  <option value="left">{t("epub_viewer.settings.input_controls.click_left")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="epub_keyboard_direction">{t("settings.viewer.epub.keyboard_direction_label")}</label>
-                <p>{t("settings.viewer.epub.keyboard_direction_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="epub_keyboard_direction">{t("settings.viewer.epub.keyboard_direction_label")}</label>
+                  <p>{t("settings.viewer.epub.keyboard_direction_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="epub_keyboard_direction"
+                    value={epubKeyboardDirection}
+                    onChange={(e) =>
+                      handleSettingChange("epub_keyboard_direction", e.target.value, (v) =>
+                        setEpubKeyboardDirection(v as "right" | "left"),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="right">{t("epub_viewer.settings.input_controls.keyboard_right")}</option>
+                    <option value="left">{t("epub_viewer.settings.input_controls.keyboard_left")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="epub_keyboard_direction"
-                  value={epubKeyboardDirection}
-                  onChange={(e) =>
-                    handleSettingChange("epub_keyboard_direction", e.target.value, (v) =>
-                      setEpubKeyboardDirection(v as "right" | "left"),
-                    )
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="right">{t("epub_viewer.settings.input_controls.keyboard_right")}</option>
-                  <option value="left">{t("epub_viewer.settings.input_controls.keyboard_left")}</option>
-                </select>
-              </div>
-            </div>
 
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="epub_wheel_direction">{t("settings.viewer.epub.wheel_direction_label")}</label>
-                <p>{t("settings.viewer.epub.wheel_direction_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="epub_wheel_direction">{t("settings.viewer.epub.wheel_direction_label")}</label>
+                  <p>{t("settings.viewer.epub.wheel_direction_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="epub_wheel_direction"
+                    value={epubWheelDirection}
+                    onChange={(e) =>
+                      handleSettingChange("epub_wheel_direction", e.target.value, (v) =>
+                        setEpubWheelDirection(v as "down" | "up"),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="down">{t("epub_viewer.settings.input_controls.wheel_down")}</option>
+                    <option value="up">{t("epub_viewer.settings.input_controls.wheel_up")}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="epub_wheel_direction"
-                  value={epubWheelDirection}
-                  onChange={(e) =>
-                    handleSettingChange("epub_wheel_direction", e.target.value, (v) => setEpubWheelDirection(v as "down" | "up"))
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="down">{t("epub_viewer.settings.input_controls.wheel_down")}</option>
-                  <option value="up">{t("epub_viewer.settings.input_controls.wheel_up")}</option>
-                </select>
-              </div>
-            </div>
             </div>
 
             <h4 className={localStyles.subsectionTitle}>{t("settings.viewer.subsections.metadata")}</h4>
             <div className={localStyles.subsectionGroup}>
-            <div className={styles.settingsItem}>
-              <div className={styles.itemInfo}>
-                <label htmlFor="epub_title_override">{t("settings.viewer.epub.title_override_label")}</label>
-                <p>{t("settings.viewer.epub.title_override_desc")}</p>
+              <div className={styles.settingsItem}>
+                <div className={styles.itemInfo}>
+                  <label htmlFor="epub_title_override">{t("settings.viewer.epub.title_override_label")}</label>
+                  <p>{t("settings.viewer.epub.title_override_desc")}</p>
+                </div>
+                <div className={styles.itemControl}>
+                  <select
+                    id="epub_title_override"
+                    value={epubTitleOverride ? "true" : "false"}
+                    onChange={(e) =>
+                      handleSettingChange("epub_title_override", e.target.value, (v) =>
+                        setEpubTitleOverride(v === "true"),
+                      )
+                    }
+                    className={styles.settingsSelect}
+                  >
+                    <option value="true">{t("common.on", { defaultValue: "켜기" })}</option>
+                    <option value="false">{t("common.off", { defaultValue: "끄기" })}</option>
+                  </select>
+                </div>
               </div>
-              <div className={styles.itemControl}>
-                <select
-                  id="epub_title_override"
-                  value={epubTitleOverride ? "true" : "false"}
-                  onChange={(e) =>
-                    handleSettingChange("epub_title_override", e.target.value, (v) => setEpubTitleOverride(v === "true"))
-                  }
-                  className={styles.settingsSelect}
-                >
-                  <option value="true">{t("common.on", { defaultValue: "켜기" })}</option>
-                  <option value="false">{t("common.off", { defaultValue: "끄기" })}</option>
-                </select>
-              </div>
-            </div>
             </div>
           </div>
         </section>
@@ -839,7 +853,7 @@ export function ViewerTab() {
                         id="custom_sensitivity"
                         step="0.1"
                         min="0"
-                        max="1"
+                        max="1.2"
                         value={settings.pullSensitivity}
                         onChange={(e) =>
                           handleSettingChange("viewer_pull_sensitivity", e.target.value, (v) =>

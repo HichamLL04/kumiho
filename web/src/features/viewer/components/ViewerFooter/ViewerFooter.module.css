@@ -23,7 +23,14 @@
 .footerControls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
 }
 
 .navBtn {
@@ -40,8 +47,17 @@
   font-size: 14px;
 }
 
+.navBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
 .navBtn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: none;
+}
+
+.navBtn:hover:not(:disabled) svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
 .navBtn:disabled {
@@ -53,7 +69,6 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
 .progressBarWrap {
@@ -72,6 +87,12 @@
   align-items: center;
   touch-action: none;
   user-select: none;
+}
+
+.progressBarInteractive:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
 .progressBarTrack {
@@ -141,10 +162,6 @@
   border-radius: 3px;
 }
 
-.progressMarker:focus {
-  outline: none;
-}
-
 .progressTooltip {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -190,14 +207,19 @@
   color: inherit;
 }
 
+.pageInfoClickable:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
 .pageInfoClickable:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: none;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
 .footerToggles {
   display: flex;
-  gap: 8px;
-  margin-left: 8px;
+  gap: 4px;
 }
 
 .toggleBtn {
@@ -209,10 +231,17 @@
   border-radius: 4px;
   font-size: 12px;
   transition: all 0.2s;
+  outline: none;
+}
+
+.toggleBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .toggleBtn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: none;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
 .toggleBtn.active {
@@ -221,7 +250,85 @@
 }
 
 @media (max-width: 768px) {
+  .viewerFooter {
+    padding: 12px 16px 20px;
+  }
+
+  .footerControls {
+    display: grid;
+    grid-template-areas:
+      "prev progress progress progress next"
+      "first info actions actions last";
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 12px 8px;
+  }
+
+  .firstPageBtn {
+    grid-area: first;
+  }
+
+  .prevPageBtn {
+    grid-area: prev;
+  }
+
+  .nextPageBtn {
+    grid-area: next;
+  }
+
+  .lastPageBtn {
+    grid-area: last;
+  }
+
+  .pageSliderContainer {
+    grid-area: progress;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .progressBarWrap {
+    height: 20px;
+  }
+
+  .navBtn {
+    display: flex;
+    padding: 6px;
+  }
+
+  .footerActions {
+    grid-area: actions;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-left: 0;
+  }
+
+  /* 시리즈 목록 아이콘 */
+  .chapterListBtn {
+    display: flex !important;
+    padding: 8px;
+  }
+
+  .pageInfo {
+    grid-area: info;
+    min-width: 60px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+    justify-content: flex-start;
+  }
+
   .footerToggles {
-    display: none;
+    display: flex;
+    gap: 8px;
+  }
+
+  .toggleBtn {
+    padding: 8px 10px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
   }
 }

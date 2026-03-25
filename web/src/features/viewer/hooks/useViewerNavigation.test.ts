@@ -85,6 +85,36 @@ describe("useViewerNavigation fullscreen switching", () => {
       state: { from: "/series/1" },
     });
   });
+
+  it("uses replace navigation when returning to viewerFrom", async () => {
+    const { result } = renderHook(() =>
+      useViewerNavigation({
+        currentPage: 3,
+        totalPages: 10,
+        readingMode: "single",
+        readingDirection: "ltr",
+        keyboardDirection: "ltr",
+        pageOffset: 0,
+        pageMetaMap: new Map(),
+        subPage: null,
+        setSubPage: vi.fn(),
+        nextChapterId: null,
+        prevChapterId: null,
+        saveProgress: mocks.saveProgressMock,
+        isSettingsOpen: false,
+        closeSettings: vi.fn(),
+        handleToggleFullscreen: vi.fn(),
+        currentChapterId: "chapter-1",
+      }),
+    );
+
+    act(() => {
+      result.current.handleBack();
+    });
+
+    expect(mocks.saveProgressMock).toHaveBeenCalledTimes(1);
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/series/1", { replace: true });
+  });
 });
 
 describe("useViewerNavigation split-page flow", () => {

@@ -793,7 +793,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
   const handleTerminatedConfirm = useCallback(() => {
     if (viewerFrom) {
-      navigate(viewerFrom);
+      navigate(viewerFrom, { replace: true });
       return;
     }
     navigate("/");

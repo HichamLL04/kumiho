@@ -18,9 +18,41 @@ export function AtmosphereProvider() {
   const currentTrackIdRef = useRef<string | null>(null);
   const decodedBufferCacheRef = useRef<Map<string, Promise<AudioBuffer> | AudioBuffer>>(new Map());
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeResolveRef = useRef<(() => void) | null>(null);
   const trackChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackChangeResolveRef = useRef<(() => void) | null>(null);
   const hasInteractedRef = useRef(false);
   const operationTokenRef = useRef(0);
+
+  const invalidatePendingOperations = useCallback(() => {
+    operationTokenRef.current += 1;
+  }, []);
+
+  const clearTrackChangeWait = useCallback(() => {
+    if (trackChangeTimeoutRef.current) {
+      clearTimeout(trackChangeTimeoutRef.current);
+      trackChangeTimeoutRef.current = null;
+    }
+
+    if (trackChangeResolveRef.current) {
+      const resolve = trackChangeResolveRef.current;
+      trackChangeResolveRef.current = null;
+      resolve();
+    }
+  }, []);
+
+  const clearFadeOutWait = useCallback(() => {
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current);
+      fadeTimeoutRef.current = null;
+    }
+
+    if (fadeResolveRef.current) {
+      const resolve = fadeResolveRef.current;
+      fadeResolveRef.current = null;
+      resolve();
+    }
+  }, []);
 
   // 현재 선택된 트랙 정보 (존재하지 않으면 첫 번째 트랙으로 폴백)
   const currentTrack = AMBIENT_TRACKS.find((t) => t.id === selectedTrackId) || AMBIENT_TRACKS[0];
@@ -105,9 +137,10 @@ export function AtmosphereProvider() {
 
   const stopAmbient = useCallback(
     ({ fadeOut, token, clearTrack }: { fadeOut: boolean; token: number; clearTrack: boolean }) => {
-      if (fadeTimeoutRef.current) {
-        clearTimeout(fadeTimeoutRef.current);
-        fadeTimeoutRef.current = null;
+      clearFadeOutWait();
+
+      if (trackChangeTimeoutRef.current) {
+        clearTrackChangeWait();
       }
 
       if (!currentSourceRef.current) {
@@ -124,8 +157,10 @@ export function AtmosphereProvider() {
       fadeVolume(0, AMBIENT_FADE_SECONDS);
 
       return new Promise<void>((resolve) => {
+        fadeResolveRef.current = resolve;
         fadeTimeoutRef.current = setTimeout(() => {
           fadeTimeoutRef.current = null;
+          fadeResolveRef.current = null;
           if (token !== operationTokenRef.current) {
             resolve();
             return;
@@ -136,7 +171,7 @@ export function AtmosphereProvider() {
         }, AMBIENT_FADE_MS);
       });
     },
-    [fadeVolume, stopCurrentSource],
+    [clearFadeOutWait, clearTrackChangeWait, fadeVolume, stopCurrentSource],
   );
 
   const loadTrackBuffer = useCallback(async (trackId: string) => {
@@ -155,7 +190,7 @@ export function AtmosphereProvider() {
         throw new Error("Audio graph is not available");
       }
 
-      const response = await fetch(`/assets/ambient/${track.file}.opus`);
+      const response = await fetch(`/assets/ambient/${track.file}.m4a`);
       if (!response.ok) {
         throw new Error(`Failed to fetch ambient track: ${track.file}`);
       }
@@ -187,8 +222,9 @@ export function AtmosphereProvider() {
   // 컴포넌트 언마운트 시 오디오 및 타이머 확실히 정리
   useEffect(() => {
     return () => {
-      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-      if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
+      invalidatePendingOperations();
+      clearFadeOutWait();
+      clearTrackChangeWait();
       stopCurrentSource();
       gainNodeRef.current?.disconnect();
       gainNodeRef.current = null;
@@ -199,7 +235,7 @@ export function AtmosphereProvider() {
         audioContextRef.current = null;
       }
     };
-  }, [stopCurrentSource]);
+  }, [clearFadeOutWait, clearTrackChangeWait, invalidatePendingOperations, stopCurrentSource]);
 
   // 볼륨 ref (interaction 리스너에서 최신 값 참조용 - 의존성 배열에서 volume 제거)
   const volumeRef = useRef(volume);
@@ -277,9 +313,6 @@ export function AtmosphereProvider() {
     const shouldPlay = isEnabled && !isSuppressed;
     const token = ++operationTokenRef.current;
 
-    // 이전 트랙 변경 타이머 정리
-    if (trackChangeTimeoutRef.current) clearTimeout(trackChangeTimeoutRef.current);
-
     const syncAmbientPlayback = async () => {
       if (!shouldPlay) {
         await stopAmbient({ fadeOut: true, token, clearTrack: true });
@@ -316,28 +349,18 @@ export function AtmosphereProvider() {
           return;
         }
 
-        const hasExistingSource = !!currentSourceRef.current;
-        if (hasExistingSource) {
+        // 이전 소스가 있으면 페이드아웃 후 교체
+        if (currentSourceRef.current) {
           fadeVolume(0, AMBIENT_FADE_SECONDS);
-          trackChangeTimeoutRef.current = setTimeout(() => {
-            trackChangeTimeoutRef.current = null;
-
-            const startNextTrack = async () => {
-              if (token !== operationTokenRef.current) return;
-
-              stopCurrentSource();
-              const source = createLoopingSource(buffer);
-              if (!source) return;
-
-              currentSourceRef.current = source;
-              currentTrackIdRef.current = currentTrack.id;
-              source.start();
-              fadeVolume(volume, AMBIENT_FADE_SECONDS);
-            };
-
-            void startNextTrack();
-          }, AMBIENT_FADE_MS);
-          return;
+          await new Promise<void>((resolve) => {
+            trackChangeResolveRef.current = resolve;
+            trackChangeTimeoutRef.current = setTimeout(() => {
+              trackChangeTimeoutRef.current = null;
+              trackChangeResolveRef.current = null;
+              resolve();
+            }, AMBIENT_FADE_MS);
+          });
+          if (token !== operationTokenRef.current) return;
         }
 
         stopCurrentSource();
@@ -357,13 +380,25 @@ export function AtmosphereProvider() {
     void syncAmbientPlayback();
 
     return () => {
-      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-      if (trackChangeTimeoutRef.current) {
-        clearTimeout(trackChangeTimeoutRef.current);
-        trackChangeTimeoutRef.current = null;
-      }
+      invalidatePendingOperations();
+      clearFadeOutWait();
+      clearTrackChangeWait();
     };
-  }, [isEnabled, isSuppressed, currentTrack, volume, ensureAudioGraph, loadTrackBuffer, createLoopingSource, stopCurrentSource, stopAmbient, fadeVolume]);
+  }, [
+    isEnabled,
+    isSuppressed,
+    currentTrack,
+    volume,
+    ensureAudioGraph,
+    loadTrackBuffer,
+    createLoopingSource,
+    stopCurrentSource,
+    stopAmbient,
+    clearFadeOutWait,
+    fadeVolume,
+    clearTrackChangeWait,
+    invalidatePendingOperations,
+  ]);
 
   // 재생 중 볼륨은 즉시 반영
   useEffect(() => {

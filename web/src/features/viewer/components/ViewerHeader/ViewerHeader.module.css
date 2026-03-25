@@ -8,7 +8,7 @@
   height: 56px;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 8px;
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent);
   color: white;
   z-index: 10;
@@ -28,8 +28,8 @@
   border: none;
   color: white;
   cursor: pointer;
-  padding: 8px;
-  margin-right: 12px;
+  padding: 6px;
+  margin-right: 8px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -38,7 +38,16 @@
 }
 
 .headerBack:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: none;
+}
+
+.headerBack:hover svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+}
+
+.headerBack:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .headerTitle {
@@ -58,27 +67,10 @@
   flex-shrink: 0;
 }
 
-.headerSettings {
-  background: none;
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s;
-}
-
-.headerSettings:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   position: relative;
 }
 
@@ -87,7 +79,7 @@
   border: none;
   color: white;
   cursor: pointer;
-  padding: 8px;
+  padding: 6px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -96,7 +88,16 @@
 }
 
 .headerActionBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: none;
+}
+
+.headerActionBtn:hover svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+}
+
+.headerActionBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .zoomControls {
@@ -136,12 +137,22 @@
 
 .zoomBtn:hover,
 .zoomPercent:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: none;
+}
+
+.zoomBtn:hover svg,
+.zoomPercent:hover svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+}
+
+.zoomBtn:focus-visible,
+.zoomPercent:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
 }
 
 .bgmButton,
 .atmosphereButton {
-  margin-left: 0.5rem;
   transition: opacity 0.2s ease;
 }
 

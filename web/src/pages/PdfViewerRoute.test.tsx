@@ -1,10 +1,11 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from "react-router-dom";
 import { PdfViewerRoute } from "./PdfViewerRoute";
 import { useViewerStore } from "../stores/viewerStore";
 
 const useProgressSyncMock = vi.fn();
+const useViewerSyncMock = vi.fn();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -13,16 +14,26 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../components/modals/AlertModal", () => ({
-  AlertModal: () => null,
+  AlertModal: ({
+    isOpen,
+    onConfirm,
+  }: {
+    isOpen: boolean;
+    onConfirm: () => void;
+  }) => (isOpen ? <button type="button" data-testid="terminated-confirm" onClick={onConfirm} /> : null),
 }));
 
 vi.mock("./PdfViewer", () => ({
   PdfViewer: ({
     onDocumentLoad,
     onPageChange,
+    terminatedInfo,
+    onConfirmTerminated,
   }: {
     onDocumentLoad: (pages: number) => void;
     onPageChange: (page: number) => void;
+    terminatedInfo: { isOpen: boolean };
+    onConfirmTerminated: () => void;
   }) => (
     <div>
       <button
@@ -40,6 +51,13 @@ vi.mock("./PdfViewer", () => ({
         data-testid="pdf-page-7"
         onClick={() => onPageChange(7)}
       />
+      {terminatedInfo.isOpen && (
+        <button
+          type="button"
+          data-testid="terminated-confirm"
+          onClick={onConfirmTerminated}
+        />
+      )}
     </div>
   ),
 }));
@@ -67,12 +85,7 @@ vi.mock("../features/viewer", () => ({
 }));
 
 vi.mock("../hooks/useViewerSync", () => ({
-  useViewerSync: () => ({
-    terminatedInfo: {
-      isOpen: false,
-      reason: "",
-    },
-  }),
+  useViewerSync: (...args: unknown[]) => useViewerSyncMock(...args),
 }));
 
 vi.mock("../hooks/useReadingTime", () => ({
@@ -99,6 +112,13 @@ describe("PdfViewerRoute", () => {
       serverProgress: null,
       handleConfirmSync: vi.fn(),
       handleCloseModal: vi.fn(),
+    });
+    useViewerSyncMock.mockReset();
+    useViewerSyncMock.mockReturnValue({
+      terminatedInfo: {
+        isOpen: false,
+        reason: "",
+      },
     });
     useViewerStore.setState({
       currentPage: 1,
@@ -169,6 +189,64 @@ describe("PdfViewerRoute", () => {
           isRestoreSettled: true,
         }),
       );
+    });
+  });
+
+  it("세션 종료 확인 시 viewerFrom으로 replace 이동한다", async () => {
+    useViewerSyncMock.mockReturnValue({
+      terminatedInfo: {
+        isOpen: true,
+        reason: "session ended",
+      },
+    });
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/viewer/:chapterId",
+          element: (
+            <PdfViewerRoute
+              loaderData={{
+                chapter: {
+                  id: "chapter-7",
+                  volume_id: "volume-1",
+                  title: "PDF 챕터",
+                  chapter_number: 1,
+                  page_count: 20,
+                },
+                isLoading: false,
+                error: null,
+                seriesId: "series-1",
+                volumeId: "volume-1",
+                pageMeta: [],
+                pageMetaMap: new Map(),
+                isInitialScrollingRef: { current: false },
+              }}
+            />
+          ),
+        },
+        {
+          path: "/series/1",
+          element: <div data-testid="series-page">series page</div>,
+        },
+      ],
+      {
+        initialEntries: [{ pathname: "/viewer/chapter-7", state: { from: "/series/1" } }],
+      },
+    );
+
+    render(
+      <RouterProvider router={router} />,
+    );
+
+    act(() => {
+      screen.getByTestId("terminated-confirm").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("series-page")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/series/1");
+      expect(router.state.historyAction).toBe("REPLACE");
     });
   });
 });

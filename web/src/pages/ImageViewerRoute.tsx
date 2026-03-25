@@ -8,6 +8,8 @@ import { seriesAPI } from "../api/client";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
 import { ViewerSettings as ViewerSettingsModal } from "../components/viewer/ViewerSettings";
 
+import { buildViewerRouteState } from "../utils/viewerRouteState";
+
 // Feature imports
 import {
   useBGM,
@@ -30,6 +32,7 @@ import {
   useExitFullscreenOnViewerUnmount,
   useVerticalRestoreLayout,
   VERTICAL_MAX_WIDTH,
+  ChapterListModal,
 } from "../features/viewer";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { useReadingTime } from "../hooks/useReadingTime";
@@ -347,6 +350,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   const uiShownTimeRef = useRef<number>(0);
   const isInteractingRef = useRef(false);
   const [showPageJump, setShowPageJump] = useState(false);
+  const [isChapterListOpen, setIsChapterListOpen] = useState(false);
   const [showSeriesEndModal, setShowSeriesEndModal] = useState(false);
   const handleReachedSeriesEnd = useCallback(() => {
     if (isAdjacentResolved) {
@@ -402,7 +406,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   // 세션 종료 핸들러
   const handleTerminatedConfirm = useCallback(() => {
     if (viewerFrom) {
-      navigate(viewerFrom);
+      navigate(viewerFrom, { replace: true });
       return;
     }
     navigate("/");
@@ -618,14 +622,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
             className={`${styles.viewerContent} ${styles[`mode${settings.readingMode.charAt(0).toUpperCase() + settings.readingMode.slice(1)}`]} ${styles[`direction${settings.readingDirection.charAt(0).toUpperCase() + settings.readingDirection.slice(1)}`]} ${settings.readingMode === "vertical" && viewStatus !== "ready" ? styles.viewerContentHidden : ""}`}
             style={{
               background: settings.backgroundColor,
-              transform:
-                settings.readingMode === "vertical"
-                  ? `translateY(${pullOffset * 0.3}px)`
-                  : "none",
-              transition:
-                !isTouching && pullOffset === 0
-                  ? "transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)"
-                  : "none",
+              transform: settings.readingMode === "vertical" ? `translateY(${pullOffset * 0.3}px)` : "none",
+              transition: !isTouching && pullOffset === 0 ? "transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)" : "none",
               willChange: "transform",
             }}
           >
@@ -674,8 +672,21 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
             onPageJumpClick={() => setShowPageJump(true)}
             onReadingModeChange={handleReadingModeChange}
             onTogglePageOffset={togglePageOffset}
+            onToggleChapterList={() => setIsChapterListOpen(true)}
             onInteractionStart={handleInteractionStart}
             onInteractionEnd={handleInteractionEnd}
+          />
+
+          {/* 시리즈 목록 드로어 */}
+          <ChapterListModal
+            seriesId={seriesId || ""}
+            currentChapterId={chapterId}
+            isOpen={isChapterListOpen}
+            onClose={() => setIsChapterListOpen(false)}
+            onNavigate={(id) => {
+              const viewerState = buildViewerRouteState({ from: viewerFrom, isIncognito: effectiveIncognito });
+              navigate(`/viewer/${id}`, { state: viewerState, replace: true });
+            }}
           />
 
           {/* 설정 모달 */}
