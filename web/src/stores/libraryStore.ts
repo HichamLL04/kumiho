@@ -29,6 +29,7 @@ interface LibraryState {
   isLoading: boolean;
   error: string | null;
   refreshKey: number;
+  fetchRequestId: number;
   fetchLibraries: (showLoading?: boolean) => Promise<void>;
   setLibraries: (libraries: Library[]) => void;
   triggerRefresh: () => void;
@@ -40,21 +41,40 @@ export const useLibraryStore = create<LibraryState>((set) => ({
   isLoading: false,
   error: null,
   refreshKey: 0,
+  fetchRequestId: 0,
   fetchLibraries: async (showLoading = true) => {
-    if (showLoading) {
-      set({ isLoading: true, error: null });
-    } else {
-      set({ error: null });
-    }
+    let currentRequestId = 0;
+    set((state) => {
+      currentRequestId = state.fetchRequestId + 1;
+      return {
+        fetchRequestId: currentRequestId,
+        isLoading: showLoading ? true : state.isLoading,
+        error: null,
+      };
+    });
+
     try {
       const response = await libraryAPI.getAll();
-      set({ libraries: response.data.libraries || [], isLoading: false });
+      set((state) => {
+        if (state.fetchRequestId === currentRequestId) {
+          return {
+            libraries: response.data.libraries || [],
+            isLoading: false,
+          };
+        }
+        return {};
+      });
     } catch (error: unknown) {
       console.error("Failed to fetch libraries:", error);
       const errorMessage = error instanceof Error ? error.message : "라이브러리 목록을 가져오는 데 실패했습니다.";
-      set({
-        isLoading: false,
-        error: errorMessage,
+      set((state) => {
+        if (state.fetchRequestId === currentRequestId) {
+          return {
+            isLoading: false,
+            error: errorMessage,
+          };
+        }
+        return {};
       });
     }
   },
