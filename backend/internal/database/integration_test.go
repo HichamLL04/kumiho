@@ -39,9 +39,13 @@ func seedLibraryAndChapter(t *testing.T) (seriesID, volumeID, chapterID string) 
 		t.Fatalf("begin transaction error = %v", err)
 	}
 
-	if _, err := tx.Exec(`INSERT INTO libraries (id, name, path) VALUES ('test-lib', 'Test Library', '/tmp/test')`); err != nil {
+	if _, err := tx.Exec(`INSERT INTO libraries (id, name) VALUES ('test-lib', 'Test Library')`); err != nil {
 		_ = tx.Rollback()
 		t.Fatalf("seed library error = %v", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO library_paths (id, library_id, path, sort_order) VALUES ('test-lib-path-1', 'test-lib', '/tmp/test', 0)`); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("seed library path error = %v", err)
 	}
 	if _, err := tx.Exec(`INSERT INTO series (id, library_id, title, path) VALUES (?, 'test-lib', 'Test Series', '/tmp/test/series')`, seriesID); err != nil {
 		_ = tx.Rollback()

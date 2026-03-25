@@ -90,6 +90,14 @@ func isExcluded(name string, patterns []string) bool {
 	return false
 }
 
+func scanProgressDetail(entryName, path string) string {
+	rootName := filepath.Base(filepath.Dir(path))
+	if rootName == "." || rootName == string(os.PathSeparator) || rootName == "" || rootName == entryName {
+		return entryName
+	}
+	return fmt.Sprintf("%s (%s)", entryName, rootName)
+}
+
 type Scanner struct {
 	libraryRepo *repository.LibraryRepository
 	seriesRepo  *repository.SeriesRepository
@@ -110,7 +118,9 @@ type Scanner struct {
 	schedulerStop   chan struct{}
 	watcher         *fsnotify.Watcher
 	watcherStop     chan struct{}
-	watchedLibs     sync.Map // map[string]string (libraryID -> path)
+	watchedLibs     sync.Map // map[string][]string (libraryID -> paths)
+	watchRefMu      sync.Mutex
+	watchRefs       map[string]int // map[watchedPath]refCount
 
 	// 폴링 폴백 (WSL/네트워크 드라이브 대비)
 	fallbackTicker *time.Ticker
@@ -208,6 +218,7 @@ func NewScanner(
 		config:             cfg, // Config 초기화
 		maxConcurrentScans: maxConcurrent,
 		semaphore:          make(chan struct{}, maxConcurrent),
+		watchRefs:          make(map[string]int),
 	}
 }
 
@@ -317,15 +328,35 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 		existingMap[existingList[i].Path] = &existingList[i]
 	}
 
-	// 2. 디스크 탐색
-	entries, err := os.ReadDir(library.Path)
-	if err != nil {
-		return nil, err
+	// 2. 디스크 탐색 (멀티 경로 순회)
+	var allEntries []struct {
+		entry    fs.DirEntry
+		basePath string
+	}
+	readFailed := false
+	if len(library.Paths) == 0 {
+		readFailed = true
+		result.Errors = append(result.Errors, "library has no paths configured")
+	} else {
+		for _, rootPath := range library.Paths {
+			entries, err := os.ReadDir(rootPath)
+			if err != nil {
+				readFailed = true
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to read %s: %v", rootPath, err))
+				continue
+			}
+			for _, entry := range entries {
+				allEntries = append(allEntries, struct {
+					entry    fs.DirEntry
+					basePath string
+				}{entry, rootPath})
+			}
+		}
 	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	errChan := make(chan error, len(entries))
+	errChan := make(chan error, len(allEntries))
 
 	// 처리된 시리즈 Path 추적 (나중에 삭제할 것 식별용)
 	processedPaths := make(map[string]bool)
@@ -336,11 +367,11 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	// 처리할 항목 수 계산 (진행률 표시용)
 	var totalItems int
 	var processedItems int32 // atomic 연산용
-	for _, entry := range entries {
-		if isExcluded(entry.Name(), excludePatterns) {
+	for _, ae := range allEntries {
+		if isExcluded(ae.entry.Name(), excludePatterns) {
 			continue
 		}
-		if entry.IsDir() || isArchive(entry.Name()) {
+		if ae.entry.IsDir() || isArchive(ae.entry.Name()) {
 			totalItems++
 		}
 	}
@@ -352,7 +383,10 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	// 시리즈 레벨 동시성 제어
 	seriesSemaphore := make(chan struct{}, perf.SeriesConcurrent)
 
-	for _, entry := range entries {
+	for _, ae := range allEntries {
+		entry := ae.entry
+		basePath := ae.basePath
+
 		// 컨텍스트 취소 확인
 		select {
 		case <-scanCtx.Done():
@@ -364,7 +398,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 			continue
 		}
 
-		entryPath := filepath.Join(library.Path, entry.Name())
+		entryPath := filepath.Join(basePath, entry.Name())
 
 		if entry.IsDir() {
 			// 폴더 → 시리즈로 처리
@@ -396,19 +430,16 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					if totalItems > 0 {
 						percent = int((float64(current) / float64(totalItems)) * 100)
 					}
-					// 현재 시리즈 처리 전이므로, processedItems는 아직 증가하지 않았음.
-					// 하지만 사용자 경험상 현재 처리 중인 항목의 %는 "이전까지 완료된 개수 / 전체 개수"로 보는 게 자연스러울 수 있음.
-					// 또는 processedItems를 증가시키기 전이니 현재값 그대로 쓰면 됨.
 					if updateErr := s.libraryRepo.UpdateScanProgress(nil, library.ID, detail, percent); updateErr != nil {
 						log.Printf("Failed to update progress for library %s: %v", library.ID, updateErr)
 					}
 				}
 
 				// 초기 진행 상태 업데이트 (시리즈 시작)
-				updateProgress(entry.Name())
+				updateProgress(scanProgressDetail(entry.Name(), path))
 
 				seriesResult, err := s.processSeries(
-					ctx,
+					scanCtx,
 					library.ID,
 					path,
 					entry.Name(),
@@ -469,7 +500,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					}
 				}
 
-				updateProgress(entry.Name())
+				updateProgress(scanProgressDetail(entry.Name(), path))
 
 				seriesResult, err := s.processArchiveAsSeries(
 					scanCtx,
@@ -505,11 +536,16 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 		result.Errors = append(result.Errors, err.Error())
 	}
 
-	// 3. 디스크에 없는 DB 시리즈 삭제
-	for path, series := range existingMap {
-		if !processedPaths[path] {
-			if err := s.seriesRepo.Delete(nil, series.ID); err != nil {
-				result.Errors = append(result.Errors, err.Error())
+	// 일부 루트 경로 읽기에 실패한 경우 삭제를 건너뛴다.
+	if readFailed {
+		result.Errors = append(result.Errors, "skipped deleted-series cleanup because one or more library roots could not be read")
+	} else {
+		// 3. 디스크에 없는 DB 시리즈 삭제
+		for path, series := range existingMap {
+			if !processedPaths[path] {
+				if err := s.seriesRepo.Delete(nil, series.ID); err != nil {
+					result.Errors = append(result.Errors, err.Error())
+				}
 			}
 		}
 	}
@@ -517,7 +553,14 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	// 완료 결과 요약 업데이트
 	status := "IDLE"
 	summary := "스캔 완료"
-	if strings.HasPrefix(library.Path, "/mnt/") {
+	hasWSLPath := false
+	for _, p := range library.Paths {
+		if strings.HasPrefix(p, "/mnt/") {
+			hasWSLPath = true
+			break
+		}
+	}
+	if hasWSLPath {
 		summary += " (WSL/NTFS: 실시간 감시 제한적)"
 	}
 	if len(result.Errors) > 0 {
@@ -644,12 +687,14 @@ func (s *Scanner) StartWatcher() error {
 
 	for _, lib := range libraries {
 		if lib.Type == "LOCAL" {
-			log.Printf("Starting watch for library %s: %s", lib.Name, lib.Path)
-			if err := s.addWatchRecursive(watcher, lib.Path); err != nil {
-				log.Printf("Failed to watch %s: %v", lib.Path, err)
-				continue
+			for _, p := range lib.Paths {
+				log.Printf("Starting watch for library %s: %s", lib.Name, p)
+				if err := s.addWatchRecursive(watcher, p); err != nil {
+					log.Printf("Failed to watch %s: %v", p, err)
+					continue
+				}
 			}
-			s.watchedLibs.Store(lib.ID, lib.Path)
+			s.watchedLibs.Store(lib.ID, lib.Paths)
 		}
 	}
 
@@ -708,22 +753,25 @@ func (s *Scanner) StartWatcher() error {
 					// 해당 파일이 속한 라이브러리 찾기
 					s.watchedLibs.Range(func(key, value any) bool {
 						libID, _ := key.(string)
-						libPath, _ := value.(string)
+						libPaths, _ := value.([]string)
 
-						if strings.HasPrefix(event.Name, libPath) {
-							log.Printf("[SCANNER] Event match for library (ID:%s, Path:%s): %s %s", libID, libPath, event.Name, event.Op)
+						for _, libPath := range libPaths {
+							if event.Name == libPath || strings.HasPrefix(event.Name, libPath+string(os.PathSeparator)) {
+								log.Printf("[SCANNER] Event match for library (ID:%s, Path:%s): %s %s", libID, libPath, event.Name, event.Op)
 
-							// 새 디렉토리가 생성되거나 이동되어 들어오면 감시 목록에 추가
-							if event.Op&(fsnotify.Create|fsnotify.Rename) != 0 {
-								info, err := os.Stat(event.Name)
-								if err == nil && info.IsDir() {
-									log.Printf("[SCANNER] New directory detected, adding recursively: %s", event.Name)
-									if err := s.addWatchRecursive(watcher, event.Name); err != nil {
-										log.Printf("Failed to add watch recursive for %s: %v", event.Name, err)
+								// 새 디렉토리가 생성되거나 이동되어 들어오면 감시 목록에 추가
+								if event.Op&(fsnotify.Create|fsnotify.Rename) != 0 {
+									info, err := os.Stat(event.Name)
+									if err == nil && info.IsDir() {
+										log.Printf("[SCANNER] New directory detected, adding recursively: %s", event.Name)
+										if err := s.addWatchRecursive(watcher, event.Name); err != nil {
+											log.Printf("Failed to add watch recursive for %s: %v", event.Name, err)
+										}
 									}
 								}
+								triggerScan(libID)
+								break
 							}
-							triggerScan(libID)
 						}
 						return true
 					})
@@ -745,9 +793,28 @@ func (s *Scanner) StartWatcher() error {
 
 // AddLibraryWatch 새 라이브러리 감시 추가
 func (s *Scanner) AddLibraryWatch(libID, path string) error {
-	s.watchedLibs.Store(libID, path)
+	// 기존 경로 목록을 복사한 뒤 중복 없이 새 경로를 추가한다.
+	var paths []string
+	seen := make(map[string]struct{})
+	if existing, ok := s.watchedLibs.Load(libID); ok {
+		if ep, ok := existing.([]string); ok {
+			paths = make([]string, 0, len(ep)+1)
+			for _, existingPath := range ep {
+				if _, ok := seen[existingPath]; ok {
+					continue
+				}
+				seen[existingPath] = struct{}{}
+				paths = append(paths, existingPath)
+			}
+		}
+	}
+	if _, ok := seen[path]; !ok {
+		paths = append(paths, path)
+	}
+	s.watchedLibs.Store(libID, paths)
+
 	if s.watcher != nil {
-		log.Printf("Dynamically adding watch for library %s", path)
+		log.Printf("Dynamically adding watch for library %s: %s", libID, path)
 		return s.addWatchRecursive(s.watcher, path)
 	}
 	return nil
@@ -755,11 +822,19 @@ func (s *Scanner) AddLibraryWatch(libID, path string) error {
 
 // RemoveLibraryWatch 라이브러리 감시 제거
 func (s *Scanner) RemoveLibraryWatch(libID string) {
-	if path, ok := s.watchedLibs.LoadAndDelete(libID); ok {
+	if paths, ok := s.watchedLibs.LoadAndDelete(libID); ok {
 		if s.watcher != nil {
-			log.Printf("Removing watch for library %s", path)
-			if p, ok := path.(string); ok {
-				_ = s.watcher.Remove(p)
+			if ps, ok := paths.([]string); ok {
+				watchList := s.watcher.WatchList()
+				for _, p := range ps {
+					for _, watchedPath := range watchList {
+						if pathMatchesRoot(watchedPath, p) {
+							if err := s.releaseWatchedPath(s.watcher, watchedPath); err != nil {
+								log.Printf("Failed to remove watch for library %s: %s (%v)", libID, watchedPath, err)
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -783,6 +858,9 @@ func (s *Scanner) stopWatcherLocked() {
 		_ = s.watcher.Close()
 		s.watcher = nil
 	}
+	s.watchRefMu.Lock()
+	s.watchRefs = make(map[string]int)
+	s.watchRefMu.Unlock()
 	s.stopFallbackPollingLocked()
 }
 
@@ -810,11 +888,18 @@ func (s *Scanner) startFallbackPollingLocked() {
 			case <-ticker.C:
 				s.watchedLibs.Range(func(key, value any) bool {
 					libID, _ := key.(string)
-					libPath, _ := value.(string)
+					libPaths, _ := value.([]string)
 
-					// /mnt/ 로 시작하는 경로는 WSL 환경에서 Windows 파일 시스템일 가능성이 큼
-					if strings.HasPrefix(libPath, "/mnt/") {
-						log.Printf("[SCANNER] Fallback poll triggering for limited filesystem: %s", libPath)
+					// /mnt/ 로 시작하는 경로가 하나라도 있으면 WSL 환경 폴백 폴링
+					hasWSL := false
+					for _, p := range libPaths {
+						if strings.HasPrefix(p, "/mnt/") {
+							hasWSL = true
+							break
+						}
+					}
+					if hasWSL {
+						log.Printf("[SCANNER] Fallback poll triggering for limited filesystem: library %s", libID)
 						lib, err := s.libraryRepo.FindByID(nil, libID)
 						if err == nil && lib != nil {
 							go func(targetLib *model.Library) {
@@ -855,10 +940,52 @@ func (s *Scanner) addWatchRecursive(watcher *fsnotify.Watcher, path string) erro
 			if strings.HasPrefix(d.Name(), ".") && p != path {
 				return filepath.SkipDir
 			}
-			return watcher.Add(p)
+			return s.retainWatchedPath(watcher, p)
 		}
 		return nil
 	})
+}
+
+func pathMatchesRoot(path, root string) bool {
+	return path == root || strings.HasPrefix(path, root+string(os.PathSeparator))
+}
+
+func (s *Scanner) retainWatchedPath(watcher *fsnotify.Watcher, path string) error {
+	s.watchRefMu.Lock()
+	defer s.watchRefMu.Unlock()
+
+	if s.watchRefs == nil {
+		s.watchRefs = make(map[string]int)
+	}
+
+	if count := s.watchRefs[path]; count > 0 {
+		s.watchRefs[path] = count + 1
+		return nil
+	}
+
+	if err := watcher.Add(path); err != nil {
+		return err
+	}
+	s.watchRefs[path] = 1
+	return nil
+}
+
+func (s *Scanner) releaseWatchedPath(watcher *fsnotify.Watcher, path string) error {
+	s.watchRefMu.Lock()
+	defer s.watchRefMu.Unlock()
+
+	if s.watchRefs == nil {
+		return nil
+	}
+
+	count := s.watchRefs[path]
+	if count <= 1 {
+		delete(s.watchRefs, path)
+		return watcher.Remove(path)
+	}
+
+	s.watchRefs[path] = count - 1
+	return nil
 }
 
 // processArchiveAsSeries 루트 레벨의 아카이브 파일을 단일 볼륨 시리즈로 처리
