@@ -340,6 +340,7 @@
       "browse": "参照",
       "browse_title": "フォルダを参照",
       "browse_up": "上のフォルダ",
+      "browse_loading": "フォルダを読み込み中...",
       "browse_empty": "サブフォルダが見つかりません。",
       "browse_select": "このフォルダを選択",
       "browse_quick_paths": "クイックパス",

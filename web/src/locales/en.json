@@ -340,6 +340,7 @@
       "browse": "Browse",
       "browse_title": "Browse Folders",
       "browse_up": "Parent Folder",
+      "browse_loading": "Loading folders...",
       "browse_empty": "No subfolders found.",
       "browse_select": "Select This Folder",
       "browse_quick_paths": "Quick Paths",

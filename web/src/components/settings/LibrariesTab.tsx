@@ -1192,7 +1192,7 @@ export function LibrariesTab() {
             </div>
             <div className={styles.browseList}>
               {browseLoading ? (
-                <div className={styles.browseLoading}>Loading...</div>
+                <div className={styles.browseLoading}>{t("settings.libraries.browse_loading")}</div>
               ) : browseDirs.length === 0 ? (
                 <div className={styles.browseEmpty}>{t("settings.libraries.browse_empty")}</div>
               ) : (

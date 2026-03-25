@@ -340,6 +340,7 @@
       "browse": "찾아보기",
       "browse_title": "폴더 찾아보기",
       "browse_up": "상위 폴더",
+      "browse_loading": "폴더를 불러오는 중...",
       "browse_empty": "하위 폴더가 없습니다.",
       "browse_select": "이 폴더 선택",
       "browse_quick_paths": "빠른 경로",
