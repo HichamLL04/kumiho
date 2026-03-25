@@ -22,6 +22,7 @@ import {
 import type { EpubChapterViewerHandles } from "../features/epub-viewer/components/EpubChapterViewer";
 import { EpubSettingsPanel } from "../features/epub-viewer/components/EpubSettingsPanel";
 import { EpubTOC } from "../features/epub-viewer/components/EpubTOC";
+import { ChapterNavHint } from "../features/viewer/components/ChapterNavHint";
 import styles from "./EpubViewer.module.css";
 
 interface EpubViewerProps {
@@ -75,6 +76,8 @@ interface EpubViewerProps {
   isEndNavigationReady?: boolean;
   onReachedStartPrev?: () => void;
   isStartNavigationReady?: boolean;
+  nextChapterTitle?: string | null;
+  prevChapterTitle?: string | null;
   onInitializationComplete?: () => void;
   onInteractionStart?: () => void;
   onInteractionEnd?: () => void;
@@ -127,6 +130,8 @@ export function EpubViewer({
   isEndNavigationReady = true,
   onReachedStartPrev,
   isStartNavigationReady = true,
+  nextChapterTitle,
+  prevChapterTitle,
   onInitializationComplete,
   onInteractionStart,
   onInteractionEnd,
@@ -143,6 +148,19 @@ export function EpubViewer({
   const [pendingProgressRatio, setPendingProgressRatio] = useState<number | null>(null);
   const [chapterPageDisplay, setChapterPageDisplay] = useState(1);
   const [chapterTotalDisplay, setChapterTotalDisplay] = useState(1);
+  const [nextHintTriggeredChapterId, setNextHintTriggeredChapterId] = useState<string | null>(null);
+  const [prevHintTriggeredChapterId, setPrevHintTriggeredChapterId] = useState<string | null>(null);
+  const hintTimeoutRef = useRef<number | null>(null);
+  const showNextHint = nextHintTriggeredChapterId === chapterId;
+  const showPrevHint = prevHintTriggeredChapterId === chapterId;
+
+  useEffect(() => {
+    return () => {
+      if (hintTimeoutRef.current !== null) {
+        window.clearTimeout(hintTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const getZoneRatio = useCallback((clientX: number, element: HTMLElement | null): number => {
     const rect = element?.getBoundingClientRect();
@@ -201,26 +219,87 @@ export function EpubViewer({
     [onLocationChange],
   );
 
+  const clearHintTimeout = useCallback(() => {
+    if (hintTimeoutRef.current !== null) {
+      window.clearTimeout(hintTimeoutRef.current);
+      hintTimeoutRef.current = null;
+    }
+  }, []);
+
   const handleNext = useCallback(() => {
     const isAtEnd = isAtLastPage || (totalPages > 0 && currentPage >= totalPages);
     if (isAtEnd) {
       if (!isEndNavigationReady) return;
+      if (showNextHint && onReachedEndNext) {
+        // 두 번째 클릭: 실제 이동
+        clearHintTimeout();
+        setNextHintTriggeredChapterId(null);
+        onReachedEndNext();
+        return;
+      }
+      if (onReachedEndNext && nextChapterTitle) {
+        // 첫 번째 클릭: 힌트 표시
+        clearHintTimeout();
+        setPrevHintTriggeredChapterId(null);
+        setNextHintTriggeredChapterId(chapterId);
+        hintTimeoutRef.current = window.setTimeout(() => {
+          setNextHintTriggeredChapterId(null);
+          hintTimeoutRef.current = null;
+        }, 3000);
+        return;
+      }
       onReachedEndNext?.();
       return;
     }
+    // 페이지 이동 시 힌트 초기화
+    if (showNextHint || showPrevHint) {
+      clearHintTimeout();
+      setNextHintTriggeredChapterId(null);
+      setPrevHintTriggeredChapterId(null);
+    }
     clearPendingProgress();
     viewerRef.current?.next();
-  }, [isAtLastPage, currentPage, totalPages, onReachedEndNext, isEndNavigationReady, clearPendingProgress]);
+  }, [
+    isAtLastPage, currentPage, totalPages, onReachedEndNext, isEndNavigationReady,
+    showNextHint, showPrevHint, nextChapterTitle, chapterId, clearPendingProgress, clearHintTimeout,
+  ]);
 
   const handlePrev = useCallback(() => {
     if (isAtFirstPage) {
       if (!isStartNavigationReady) return;
+      if (showPrevHint && onReachedStartPrev) {
+        // 두 번째 클릭: 실제 이동
+        clearHintTimeout();
+        setPrevHintTriggeredChapterId(null);
+        onReachedStartPrev();
+        return;
+      }
+      if (onReachedStartPrev && prevChapterTitle) {
+        // 첫 번째 클릭: 힌트 표시
+        clearHintTimeout();
+        setNextHintTriggeredChapterId(null);
+        setPrevHintTriggeredChapterId(chapterId);
+        hintTimeoutRef.current = window.setTimeout(() => {
+          setPrevHintTriggeredChapterId(null);
+          hintTimeoutRef.current = null;
+        }, 3000);
+        return;
+      }
       onReachedStartPrev?.();
       return;
     }
+    // 페이지 이동 시 힌트 초기화
+    if (showNextHint || showPrevHint) {
+      clearHintTimeout();
+      setNextHintTriggeredChapterId(null);
+      setPrevHintTriggeredChapterId(null);
+    }
     clearPendingProgress();
     viewerRef.current?.prev();
-  }, [isAtFirstPage, isStartNavigationReady, onReachedStartPrev, clearPendingProgress]);
+  }, [
+    isAtFirstPage, isStartNavigationReady, onReachedStartPrev,
+    showPrevHint, showNextHint, prevChapterTitle, chapterId, clearPendingProgress, clearHintTimeout,
+  ]);
 
   const handleTOCJump = useCallback(
     (href: string) => {
@@ -643,6 +722,18 @@ export function EpubViewer({
           onRenderLayoutChange={setEffectiveLayout}
         />
       </main>
+
+      {/* 챕터 이동 힌트 */}
+      <ChapterNavHint
+        type="next"
+        title={nextChapterTitle || ""}
+        show={showNextHint && !!nextChapterTitle}
+      />
+      <ChapterNavHint
+        type="prev"
+        title={prevChapterTitle || ""}
+        show={showPrevHint && !!prevChapterTitle}
+      />
 
       {/* 푸터 */}
       {settings.flow === "paginated" && (

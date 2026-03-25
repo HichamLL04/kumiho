@@ -452,9 +452,17 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           const adjustedTotal = Math.ceil((scrollWidth - 3) / delta);
           const newTotal = adjustedTotal > 0 ? adjustedTotal : 1;
           if (newTotal < chapterTotal) {
+            // 스프레드 모드에서 epub.js가 총 페이지를 과대계산할 경우 비례 축소한다
+            // (단순 clamp 시 여러 스프레드가 같은 페이지 번호를 표시하는 버그 방지)
+            const originalTotal = chapterTotal;
             chapterTotal = newTotal;
+            chapterPage = Math.max(
+              1,
+              Math.min(Math.ceil((chapterPage * newTotal) / originalTotal), newTotal),
+            );
+          } else {
+            chapterPage = Math.max(1, Math.min(chapterPage, chapterTotal));
           }
-          chapterPage = Math.max(1, Math.min(chapterPage, chapterTotal));
         }
       }
 
@@ -1255,7 +1263,39 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
               }
             }
           }
-          withNavigation(() => renditionRef.current!.prev());
+          // 섹션 경계를 넘는 prev()는 이전 섹션의 끝이 아닌 중간 위치로 이동하는
+          // epub.js 버그가 있어, 섹션 변경 감지 후 마지막 페이지로 스크롤을 보정한다.
+          const beforeIndex = (
+            renditionRef.current.currentLocation() as unknown as EpubjsLocation
+          )?.start?.index;
+          withNavigation(async () => {
+            await renditionRef.current!.prev();
+
+            const afterLoc =
+              renditionRef.current!.currentLocation() as unknown as EpubjsLocation;
+            const afterIndex = afterLoc?.start?.index;
+            if (
+              beforeIndex !== undefined &&
+              afterIndex !== undefined &&
+              beforeIndex !== afterIndex
+            ) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const mgr = (renditionRef.current as any).manager;
+              if (mgr?.isPaginated && mgr.container) {
+                const d = mgr.settings?.direction;
+                const sw = mgr.container.scrollWidth;
+                const cw = mgr.container.clientWidth;
+                const dt = mgr.layout?.delta || cw;
+                if (d === "rtl") {
+                  mgr.container.scrollLeft = 0;
+                } else {
+                  const maxScroll = Math.max(0, sw - cw);
+                  mgr.container.scrollLeft = Math.floor(maxScroll / dt) * dt;
+                }
+                mgr.updateOffset?.();
+              }
+            }
+          });
         },
         goToCFI: (cfi: string) => {
           if (!renditionRef.current) return;

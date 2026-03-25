@@ -38,9 +38,21 @@ function isLocationAtEnd(location: {
   chapterTotal: number;
   atEnd?: boolean;
 }): boolean {
-  // totalPositions === 1인 단일 위치 EPUB은 globalRatio로 판단 (항상 true 방지)
   if (Number.isFinite(location.totalPositions) && location.totalPositions > 1) {
-    return location.currentPosition >= location.totalPositions - 1;
+    // 단일 페이지 모드의 마지막 위치
+    if (location.currentPosition >= location.totalPositions - 1) {
+      return true;
+    }
+    // 스프레드 모드: 마지막 스프레드의 왼쪽 페이지 CFI는 totalPositions-2
+    // chapterPage >= chapterTotal 조건으로 단일 페이지 모드의 직전 위치와 구분한다
+    if (
+      location.currentPosition >= location.totalPositions - 2 &&
+      location.chapterTotal > 0 &&
+      location.chapterPage >= location.chapterTotal
+    ) {
+      return true;
+    }
+    return false;
   }
 
   if (Number.isFinite(location.globalRatio)) {
@@ -119,7 +131,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
   const initFallbackTimerRef = useRef<number | null>(null);
-  const { nextChapterId, prevChapterId, isAdjacentResolved } = useAdjacentChapters({
+  const { nextChapterId, prevChapterId, nextChapterTitle, prevChapterTitle, isAdjacentResolved } = useAdjacentChapters({
     volumeId,
     chapterId,
     seriesId,
@@ -916,6 +928,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           isEndNavigationReady={isAdjacentResolved}
           onReachedStartPrev={prevChapterId ? handlePrevAtStart : undefined}
           isStartNavigationReady={isAdjacentResolved}
+          nextChapterTitle={nextChapterTitle}
+          prevChapterTitle={prevChapterTitle}
           onInteractionStart={handleInteractionStart}
           onInteractionEnd={handleInteractionEnd}
         />

@@ -55,7 +55,7 @@ export function LibraryPage() {
       } catch (error) {
         console.error("Failed to load library data:", error);
       } finally {
-        if (isInitial && currentLoad === loadSequenceRef.current) {
+        if (currentLoad === loadSequenceRef.current) {
           setIsLoading(false);
         }
       }
