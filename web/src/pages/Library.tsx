@@ -52,11 +52,10 @@ export function LibraryPage() {
         const loadedSeries: Series[] = seriesResponse.data.series || [];
         if (currentLoad !== loadSequenceRef.current) return;
         setSeriesList(loadedSeries);
-
-        setIsLoading(false);
       } catch (error) {
         console.error("Failed to load library data:", error);
-        if (currentLoad === loadSequenceRef.current) {
+      } finally {
+        if (isInitial && currentLoad === loadSequenceRef.current) {
           setIsLoading(false);
         }
       }

@@ -521,8 +521,9 @@ export function LibrariesTab() {
     fetchLibraries();
   }, [fetchLibraries]);
 
+  const hasScanningLibrary = libraries.some((l) => l.scan_status === "SCANNING");
+
   useEffect(() => {
-    const hasScanningLibrary = libraries.some((l) => l.scan_status === "SCANNING");
     if (!hasScanningLibrary) return;
 
     let timeoutId: number;
@@ -542,7 +543,7 @@ export function LibrariesTab() {
       isMounted = false;
       window.clearTimeout(timeoutId);
     };
-  }, [libraries, fetchLibraries]);
+  }, [hasScanningLibrary, fetchLibraries]);
 
   const handleCreateLibrary = async () => {
     if (!newLibrary.name || validNewLibraryPaths.length === 0) {
