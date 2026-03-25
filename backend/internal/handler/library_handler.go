@@ -62,6 +62,42 @@ func normalizeLibraryType(value string) (string, bool) {
 	}
 }
 
+func validateLibraryPaths(paths []string, checkExists func(string) (bool, error)) error {
+	seen := make(map[string]struct{}, len(paths))
+	for _, rawPath := range paths {
+		path := strings.TrimSpace(rawPath)
+		if path == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "empty path is not allowed")
+		}
+
+		if _, ok := seen[path]; ok {
+			return fiber.NewError(fiber.StatusBadRequest, "duplicate path is not allowed: "+path)
+		}
+		seen[path] = struct{}{}
+
+		info, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fiber.NewError(fiber.StatusBadRequest, "path does not exist: "+path)
+			}
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to access path: "+path)
+		}
+		if !info.IsDir() {
+			return fiber.NewError(fiber.StatusBadRequest, "path is not a directory: "+path)
+		}
+
+		exists, err := checkExists(path)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to check existing library")
+		}
+		if exists {
+			return fiber.NewError(fiber.StatusConflict, "path already belongs to another library: "+path)
+		}
+	}
+
+	return nil
+}
+
 // List 모든 라이브러리 목록
 // GET /api/v1/libraries
 func (h *LibraryHandler) List(c *fiber.Ctx) error {
@@ -137,31 +173,21 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		})
 	}
 
-	// 각 경로 검증
-	for _, p := range req.Paths {
-		if p == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "empty path is not allowed",
-			})
-		}
-		// 경로 존재 여부 확인
-		if _, err := os.Stat(p); os.IsNotExist(err) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "path does not exist: " + p,
-			})
-		}
-		// 중복 경로 확인
-		existing, err := h.libraryRepo.FindByPath(nil, p)
+	if err := validateLibraryPaths(req.Paths, func(path string) (bool, error) {
+		existing, err := h.libraryRepo.FindByPath(nil, path)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "failed to check existing library",
+			return false, err
+		}
+		return existing != nil, nil
+	}); err != nil {
+		if fiberErr, ok := err.(*fiber.Error); ok {
+			return c.Status(fiberErr.Code).JSON(fiber.Map{
+				"error": fiberErr.Message,
 			})
 		}
-		if existing != nil {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "path already belongs to another library: " + p,
-			})
-		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to validate library paths",
+		})
 	}
 
 	// 유효성 검사
@@ -517,17 +543,17 @@ type UpdateLibraryRequest struct {
 	Name                         string   `json:"name"`
 	Paths                        []string `json:"paths,omitempty"`
 	DefaultViewMode              string   `json:"default_view_mode"`
-	DefaultReadDirection         string  `json:"default_read_direction"`
-	DefaultPageTransition        string  `json:"default_page_transition"`
-	DefaultEpubRenderMode        string  `json:"default_epub_render_mode"`
-	DefaultEpubTheme             string  `json:"default_epub_theme"`
-	DefaultEpubSpread            string  `json:"default_epub_spread"`
-	DefaultEpubWheelDirection    string  `json:"default_epub_wheel_direction"`
-	DefaultEpubKeyboardDirection string  `json:"default_epub_keyboard_direction"`
-	DefaultEpubClickDirection    string  `json:"default_epub_click_direction"`
-	LibraryType                  string  `json:"library_type"`
-	IsVisible                    *bool   `json:"is_visible"` // Optional, pointer to distinguish false vs missing
-	ScanExcludes                 *string `json:"scan_excludes"`
+	DefaultReadDirection         string   `json:"default_read_direction"`
+	DefaultPageTransition        string   `json:"default_page_transition"`
+	DefaultEpubRenderMode        string   `json:"default_epub_render_mode"`
+	DefaultEpubTheme             string   `json:"default_epub_theme"`
+	DefaultEpubSpread            string   `json:"default_epub_spread"`
+	DefaultEpubWheelDirection    string   `json:"default_epub_wheel_direction"`
+	DefaultEpubKeyboardDirection string   `json:"default_epub_keyboard_direction"`
+	DefaultEpubClickDirection    string   `json:"default_epub_click_direction"`
+	LibraryType                  string   `json:"library_type"`
+	IsVisible                    *bool    `json:"is_visible"` // Optional, pointer to distinguish false vs missing
+	ScanExcludes                 *string  `json:"scan_excludes"`
 }
 
 // Update 라이브러리 수정
@@ -584,28 +610,17 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 
 		// 경로 변경
 		if len(req.Paths) > 0 {
-			for _, p := range req.Paths {
-				if p == "" {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "empty path is not allowed",
+			if err := validateLibraryPaths(req.Paths, func(path string) (bool, error) {
+				return h.libraryRepo.PathExists(nil, path, library.ID)
+			}); err != nil {
+				if fiberErr, ok := err.(*fiber.Error); ok {
+					return c.Status(fiberErr.Code).JSON(fiber.Map{
+						"error": fiberErr.Message,
 					})
 				}
-				if _, err := os.Stat(p); os.IsNotExist(err) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "path does not exist: " + p,
-					})
-				}
-				exists, err := h.libraryRepo.PathExists(nil, p, library.ID)
-				if err != nil {
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-						"error": "failed to check path",
-					})
-				}
-				if exists {
-					return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-						"error": "path already belongs to another library: " + p,
-					})
-				}
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "failed to validate paths",
+				})
 			}
 			if err := h.libraryRepo.UpdatePaths(nil, library.ID, req.Paths); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

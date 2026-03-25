@@ -770,14 +770,24 @@ func (s *Scanner) StartWatcher() error {
 
 // AddLibraryWatch 새 라이브러리 감시 추가
 func (s *Scanner) AddLibraryWatch(libID, path string) error {
-	// 기존 경로 목록에 추가
+	// 기존 경로 목록을 복사한 뒤 중복 없이 새 경로를 추가한다.
 	var paths []string
+	seen := make(map[string]struct{})
 	if existing, ok := s.watchedLibs.Load(libID); ok {
 		if ep, ok := existing.([]string); ok {
-			paths = ep
+			paths = make([]string, 0, len(ep)+1)
+			for _, existingPath := range ep {
+				if _, ok := seen[existingPath]; ok {
+					continue
+				}
+				seen[existingPath] = struct{}{}
+				paths = append(paths, existingPath)
+			}
 		}
 	}
-	paths = append(paths, path)
+	if _, ok := seen[path]; !ok {
+		paths = append(paths, path)
+	}
 	s.watchedLibs.Store(libID, paths)
 
 	if s.watcher != nil {

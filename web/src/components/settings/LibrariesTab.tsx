@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Trash2,
@@ -251,6 +251,8 @@ function SortableLibraryItem({
                             setEditingLibrary({ ...editingLibrary, paths: newPaths });
                           }}
                           className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent} ${styles.btnDanger}`}
+                          title={t("settings.libraries.remove_path")}
+                          aria-label={t("settings.libraries.remove_path")}
                         >
                           <X size={16} />
                         </button>
@@ -418,6 +420,8 @@ export function LibrariesTab() {
   const [browseDirs, setBrowseDirs] = useState<{ name: string; path: string }[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseInput, setBrowseInput] = useState("/");
+  const browseCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const browseTriggerRef = useRef<HTMLElement | null>(null);
 
   // Global Settings state
   const [scanInterval, setScanInterval] = useState("0");
@@ -538,6 +542,9 @@ export function LibrariesTab() {
   };
 
   const openBrowse = async (target: { type: "create" | "edit"; index: number }, initialPath?: string) => {
+    if (document.activeElement instanceof HTMLElement) {
+      browseTriggerRef.current = document.activeElement;
+    }
     setBrowseTarget(target);
     setBrowseLoading(true);
     setIsBrowseOpen(true);
@@ -555,6 +562,29 @@ export function LibrariesTab() {
       setBrowseLoading(false);
     }
   };
+
+  const closeBrowse = useCallback(() => {
+    setIsBrowseOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isBrowseOpen) {
+      browseTriggerRef.current?.focus();
+      return;
+    }
+
+    browseCloseButtonRef.current?.focus();
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeBrowse();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [closeBrowse, isBrowseOpen]);
 
   const navigateBrowse = async (path: string) => {
     setBrowseLoading(true);
@@ -795,6 +825,7 @@ export function LibrariesTab() {
                             }}
                             className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent} ${styles.btnDanger}`}
                             title={t("settings.libraries.remove_path")}
+                            aria-label={t("settings.libraries.remove_path")}
                           >
                             <X size={16} />
                           </button>
@@ -1082,11 +1113,23 @@ export function LibrariesTab() {
 
       {/* 디렉토리 브라우저 모달 */}
       {isBrowseOpen && (
-        <div className={styles.browseOverlay} onClick={() => setIsBrowseOpen(false)}>
-          <div className={styles.browseModal} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.browseOverlay} onClick={closeBrowse}>
+          <div
+            className={styles.browseModal}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="library-browse-title"
+          >
             <div className={styles.browseHeader}>
-              <h3>{t("settings.libraries.browse_title")}</h3>
-              <button onClick={() => setIsBrowseOpen(false)} className={styles.browseClose}>
+              <h3 id="library-browse-title">{t("settings.libraries.browse_title")}</h3>
+              <button
+                ref={browseCloseButtonRef}
+                onClick={closeBrowse}
+                className={styles.browseClose}
+                type="button"
+                aria-label={t("common.close")}
+              >
                 <X size={18} />
               </button>
             </div>
@@ -1109,6 +1152,7 @@ export function LibrariesTab() {
                 onClick={() => void handleBrowseSubmit()}
                 className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
                 title={t("settings.libraries.browse_go")}
+                aria-label={t("settings.libraries.browse_go")}
               >
                 <Search size={16} />
               </button>
@@ -1135,7 +1179,13 @@ export function LibrariesTab() {
               <Folder size={16} />
               <span>{browsePath}</span>
               {browseParent && (
-                <button onClick={() => navigateBrowse(browseParent)} className={styles.browseUp} title={t("settings.libraries.browse_up")}>
+                <button
+                  onClick={() => navigateBrowse(browseParent)}
+                  className={styles.browseUp}
+                  title={t("settings.libraries.browse_up")}
+                  aria-label={t("settings.libraries.browse_up")}
+                  type="button"
+                >
                   <ArrowUp size={16} />
                 </button>
               )}
@@ -1161,14 +1211,16 @@ export function LibrariesTab() {
             </div>
             <div className={styles.browseActions}>
               <button
-                onClick={() => setIsBrowseOpen(false)}
+                onClick={closeBrowse}
                 className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
+                type="button"
               >
                 {t("common.cancel")}
               </button>
               <button
                 onClick={selectBrowsePath}
                 className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnPrimary}`}
+                type="button"
               >
                 {t("settings.libraries.browse_select")}
               </button>

@@ -37,11 +37,16 @@ func (r *LibraryRepository) loadLibraryPaths(db database.Queryer, libraryID stri
 		}
 		paths = append(paths, path)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return paths, nil
 }
 
 // scanLibraryRow 공통 라이브러리 행 스캔 로직
-func scanLibraryRow(scanner interface{ Scan(dest ...interface{}) error }) (*model.Library, error) {
+func scanLibraryRow(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*model.Library, error) {
 	var lib model.Library
 	var lastScanned sql.NullTime
 	var viewMode, readDirection, pageTransition, libType, scanStatus, scanResult, scanExcludes, libraryType sql.NullString
@@ -144,6 +149,48 @@ const librarySelectColumns = `id, name, default_view_mode, default_read_directio
 	default_epub_wheel_direction, default_epub_keyboard_direction, default_epub_click_direction,
 	sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes, library_type`
 
+func (r *LibraryRepository) replaceLibraryPaths(q database.Queryer, libraryID string, paths []string) error {
+	if _, err := q.Exec(`DELETE FROM library_paths WHERE library_id = ?`, libraryID); err != nil {
+		return fmt.Errorf("delete old paths: %w", err)
+	}
+
+	for i, path := range paths {
+		_, err := q.Exec(
+			`INSERT INTO library_paths (id, library_id, path, sort_order) VALUES (?, ?, ?, ?)`,
+			uuid.New().String(), libraryID, path, i,
+		)
+		if err != nil {
+			return fmt.Errorf("insert path %q: %w", path, err)
+		}
+	}
+
+	return nil
+}
+
+func (r *LibraryRepository) withTransaction(db database.Queryer, fn func(tx database.Queryer) error) error {
+	switch q := database.GetQueryer(db).(type) {
+	case *sql.Tx:
+		return fn(q)
+	case *sql.DB:
+		tx, err := q.Begin()
+		if err != nil {
+			return fmt.Errorf("begin transaction: %w", err)
+		}
+		if err := fn(tx); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return fmt.Errorf("rollback transaction after error (%v): %w", rbErr, err)
+			}
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
+		}
+		return nil
+	default:
+		return fn(q)
+	}
+}
+
 // Create 새 라이브러리 생성
 func (r *LibraryRepository) Create(db database.Queryer, library *model.Library) error {
 	db = database.GetQueryer(db)
@@ -164,42 +211,33 @@ func (r *LibraryRepository) Create(db database.Queryer, library *model.Library) 
 		library.SortOrder = 0
 	}
 
-	_, err = db.Exec(
-		`INSERT INTO libraries (
-			id, name, default_view_mode, default_read_direction, default_page_transition,
-			default_epub_render_mode, default_epub_theme, default_epub_spread, default_epub_wheel_direction,
-			default_epub_keyboard_direction, default_epub_click_direction,
-			sort_order, created_at, updated_at, type, library_type, is_visible, scan_excludes
-		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOCAL', ?, 1, ?)`,
-		library.ID, library.Name, library.DefaultViewMode, library.DefaultReadDirection, library.DefaultPageTransition,
-		library.DefaultEpubRenderMode, library.DefaultEpubTheme, library.DefaultEpubSpread, library.DefaultEpubWheelDir,
-		library.DefaultEpubKeyboardDir, library.DefaultEpubClickDir,
-		library.SortOrder, library.CreatedAt, library.UpdatedAt, library.LibraryType, library.ScanExcludes,
-	)
-	if err != nil {
-		return err
-	}
-
-	// library_paths에 경로 삽입
-	for i, path := range library.Paths {
-		_, err := db.Exec(
-			`INSERT INTO library_paths (id, library_id, path, sort_order) VALUES (?, ?, ?, ?)`,
-			uuid.New().String(), library.ID, path, i,
+	return r.withTransaction(db, func(tx database.Queryer) error {
+		_, err = tx.Exec(
+			`INSERT INTO libraries (
+				id, name, default_view_mode, default_read_direction, default_page_transition,
+				default_epub_render_mode, default_epub_theme, default_epub_spread, default_epub_wheel_direction,
+				default_epub_keyboard_direction, default_epub_click_direction,
+				sort_order, created_at, updated_at, type, library_type, is_visible, scan_excludes
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOCAL', ?, 1, ?)`,
+			library.ID, library.Name, library.DefaultViewMode, library.DefaultReadDirection, library.DefaultPageTransition,
+			library.DefaultEpubRenderMode, library.DefaultEpubTheme, library.DefaultEpubSpread, library.DefaultEpubWheelDir,
+			library.DefaultEpubKeyboardDir, library.DefaultEpubClickDir,
+			library.SortOrder, library.CreatedAt, library.UpdatedAt, library.LibraryType, library.ScanExcludes,
 		)
 		if err != nil {
-			return fmt.Errorf("insert library path %q: %w", path, err)
+			return err
 		}
-	}
 
-	return nil
+		return r.replaceLibraryPaths(tx, library.ID, library.Paths)
+	})
 }
 
 // FindAll 모든 라이브러리 조회
 func (r *LibraryRepository) FindAll(db database.Queryer) ([]model.Library, error) {
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
-		`SELECT `+librarySelectColumns+` FROM libraries ORDER BY sort_order ASC, name ASC`,
+		`SELECT ` + librarySelectColumns + ` FROM libraries ORDER BY sort_order ASC, name ASC`,
 	)
 	if err != nil {
 		return nil, err
@@ -320,25 +358,9 @@ func (r *LibraryRepository) Update(db database.Queryer, library *model.Library) 
 
 // UpdatePaths 라이브러리 경로 목록을 교체 (기존 경로 삭제 후 새로 삽입)
 func (r *LibraryRepository) UpdatePaths(db database.Queryer, libraryID string, paths []string) error {
-	db = database.GetQueryer(db)
-
-	// 기존 경로 삭제
-	if _, err := db.Exec(`DELETE FROM library_paths WHERE library_id = ?`, libraryID); err != nil {
-		return fmt.Errorf("delete old paths: %w", err)
-	}
-
-	// 새 경로 삽입
-	for i, path := range paths {
-		_, err := db.Exec(
-			`INSERT INTO library_paths (id, library_id, path, sort_order) VALUES (?, ?, ?, ?)`,
-			uuid.New().String(), libraryID, path, i,
-		)
-		if err != nil {
-			return fmt.Errorf("insert path %q: %w", path, err)
-		}
-	}
-
-	return nil
+	return r.withTransaction(db, func(tx database.Queryer) error {
+		return r.replaceLibraryPaths(tx, libraryID, paths)
+	})
 }
 
 // PathExists 특정 경로가 이미 다른 라이브러리에서 사용 중인지 확인
