@@ -439,7 +439,7 @@ export const statsAPI = {
 // Filesystem API
 export const filesystemAPI = {
   browse: (path = "/") =>
-    api.get<{ current: string; parent: string | null; directories: { name: string; path: string }[] }>(
+    api.get<{ current: string; parent: string | null; quick_paths: { name: string; path: string }[]; directories: { name: string; path: string }[] }>(
       `/filesystem?path=${encodeURIComponent(path)}`,
     ),
 };

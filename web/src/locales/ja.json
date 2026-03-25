@@ -342,6 +342,7 @@
       "browse_up": "上のフォルダ",
       "browse_empty": "サブフォルダが見つかりません。",
       "browse_select": "このフォルダを選択",
+      "browse_quick_paths": "クイックパス",
       "browse_input_placeholder": "パスを入力または貼り付けしてください。例: /mnt/c/workspace/media",
       "browse_go": "このパスへ移動",
       "path_empty": "フォルダを選択してください",
@@ -358,7 +359,7 @@
       "view_mode_label": "デフォルトビューアー設定",
       "view_mode_desc": "このライブラリのデフォルト表示モードを設定します。",
       "excludes_label": "スキャン除外設定",
-      "excludes_desc": "スキャン時に無視するファイルやフォルダ名を設定します。(カンマ区切り)",
+      "excludes_desc": "スキャン時に無視するファイルやフォルダ名を設定します。(カンマ区切り)\nデフォルト除外: @eaDir, #recycle, .DS_Store, Thumbs.db, .git, .idea",
       "excludes_placeholder": "例: .DS_Store, #recycle, @eaDir",
       "scan": {
         "title": "スキャン設定",

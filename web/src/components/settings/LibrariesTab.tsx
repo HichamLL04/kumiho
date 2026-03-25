@@ -379,6 +379,7 @@ export function LibrariesTab() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [libraryToDelete, setLibraryToDelete] = useState<Library | null>(null);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
+  const [createStepDirection, setCreateStepDirection] = useState<"forward" | "backward">("forward");
 
   const user = useAuthStore((state) => state.user);
   const { startPolling, stopPolling } = useScanStore();
@@ -413,6 +414,7 @@ export function LibrariesTab() {
   const [browseTarget, setBrowseTarget] = useState<{ type: "create" | "edit"; index: number }>({ type: "create", index: 0 });
   const [browsePath, setBrowsePath] = useState("/");
   const [browseParent, setBrowseParent] = useState<string | null>(null);
+  const [browseQuickPaths, setBrowseQuickPaths] = useState<{ name: string; path: string }[]>([]);
   const [browseDirs, setBrowseDirs] = useState<{ name: string; path: string }[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseInput, setBrowseInput] = useState("/");
@@ -544,8 +546,10 @@ export function LibrariesTab() {
       setBrowsePath(res.data.current);
       setBrowseInput(res.data.current);
       setBrowseParent(res.data.parent);
+      setBrowseQuickPaths(res.data.quick_paths || []);
       setBrowseDirs(res.data.directories || []);
     } catch {
+      setBrowseQuickPaths([]);
       setBrowseDirs([]);
     } finally {
       setBrowseLoading(false);
@@ -559,8 +563,10 @@ export function LibrariesTab() {
       setBrowsePath(res.data.current);
       setBrowseInput(res.data.current);
       setBrowseParent(res.data.parent);
+      setBrowseQuickPaths(res.data.quick_paths || []);
       setBrowseDirs(res.data.directories || []);
     } catch {
+      setBrowseQuickPaths([]);
       setBrowseDirs([]);
     } finally {
       setBrowseLoading(false);
@@ -734,8 +740,12 @@ export function LibrariesTab() {
             <h3>{t("settings.libraries.add_title")}</h3>
           </div>
           <div className={commonStyles.sectionContent}>
-            {createStep === 1 ? (
-              <>
+            <div
+              key={createStep}
+              className={`${styles.createStepPanel} ${createStepDirection === "forward" ? styles.createStepForward : styles.createStepBackward}`}
+            >
+              {createStep === 1 ? (
+                <>
                 <div className={commonStyles.settingsItem}>
                   <div className={commonStyles.itemInfo}>
                     <label>{t("settings.libraries.name_label")}</label>
@@ -811,9 +821,9 @@ export function LibrariesTab() {
                     </select>
                   </div>
                 </div>
-              </>
-            ) : (
-              <>
+                </>
+              ) : (
+                <>
                 {newLibrary.library_type !== "audiobook" && (
                   <div className={commonStyles.settingsItem}>
                     <div className={commonStyles.itemInfo}>
@@ -853,7 +863,7 @@ export function LibrariesTab() {
                 <div className={commonStyles.settingsItem}>
                   <div className={commonStyles.itemInfo}>
                     <label>{t("settings.libraries.excludes_label")}</label>
-                    <p>{t("settings.libraries.excludes_desc")}</p>
+                    <p className={styles.multilineHelp}>{t("settings.libraries.excludes_desc")}</p>
                   </div>
                   <div className={commonStyles.itemControl}>
                     <input
@@ -865,17 +875,20 @@ export function LibrariesTab() {
                     />
                   </div>
                 </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
             <div className={styles.createFooter}>
               <div className={styles.stepIndicator}>
                 <div className={styles.stepIndicatorInner}>
+                  <div className={`${styles.stepConnectorProgress} ${createStep === 2 ? styles.stepConnectorProgressActive : ""}`} />
+                  <div className={`${styles.stepMarker} ${createStep === 2 ? styles.stepMarkerStepTwo : styles.stepMarkerStepOne}`} />
                   <div className={styles.stepItem}>
                     <div className={`${styles.stepNumber} ${createStep === 1 ? styles.stepNumberActive : styles.stepNumberInactive}`}>
                       1
                     </div>
                   </div>
-                  <div className={`${styles.stepConnector} ${createStep === 2 ? styles.stepConnectorActive : ""}`} />
+                  <div className={styles.stepConnector} />
                   <div className={styles.stepItem}>
                     <div className={`${styles.stepNumber} ${createStep === 2 ? styles.stepNumberActive : styles.stepNumberInactive}`}>
                       2
@@ -887,10 +900,12 @@ export function LibrariesTab() {
                 <button
                   onClick={() => {
                     if (createStep === 2) {
+                      setCreateStepDirection("backward");
                       setCreateStep(1);
                       return;
                     }
                     setIsCreating(false);
+                    setCreateStepDirection("forward");
                     setCreateStep(1);
                   }}
                   className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnTransparent}`}
@@ -899,7 +914,10 @@ export function LibrariesTab() {
                 </button>
                 {createStep === 1 ? (
                   <button
-                    onClick={() => setCreateStep(2)}
+                    onClick={() => {
+                      setCreateStepDirection("forward");
+                      setCreateStep(2);
+                    }}
                     disabled={!canProceedCreateStepOne}
                     className={`${commonStyles.settingsSelect} ${styles.btnAuto} ${styles.btnPrimary}`}
                   >
@@ -1095,6 +1113,24 @@ export function LibrariesTab() {
                 <Search size={16} />
               </button>
             </div>
+            {browseQuickPaths.length > 0 && (
+              <div className={styles.browseQuickSection}>
+                <div className={styles.browseQuickHeader}>{t("settings.libraries.browse_quick_paths")}</div>
+                <div className={styles.browseQuickList}>
+                  {browseQuickPaths.map((quickPath) => (
+                    <button
+                      key={quickPath.path}
+                      type="button"
+                      className={styles.browseQuickItem}
+                      onClick={() => navigateBrowse(quickPath.path)}
+                    >
+                      <Folder size={14} />
+                      <span>{quickPath.path}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className={styles.browseCurrent}>
               <Folder size={16} />
               <span>{browsePath}</span>

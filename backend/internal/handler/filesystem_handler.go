@@ -23,6 +23,51 @@ type DirectoryEntry struct {
 	Path string `json:"path"`
 }
 
+func shouldSkipDirectory(name string) bool {
+	hiddenPrefixes := []string{".", "@", "#"}
+	for _, prefix := range hiddenPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func listQuickPaths() []DirectoryEntry {
+	rootEntries, err := os.ReadDir("/")
+	if err != nil {
+		return nil
+	}
+
+	systemDirs := map[string]bool{
+		"bin": true, "boot": true, "dev": true, "etc": true, "lib": true, "lib64": true,
+		"proc": true, "root": true, "run": true, "sbin": true, "srv": true, "sys": true,
+		"tmp": true, "usr": true, "var": true, "lost+found": true,
+		"bin.usr-is-merged": true, "lib.usr-is-merged": true,
+	}
+
+	var quickPaths []DirectoryEntry
+	for _, entry := range rootEntries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if shouldSkipDirectory(name) || systemDirs[name] {
+			continue
+		}
+		quickPaths = append(quickPaths, DirectoryEntry{
+			Name: name,
+			Path: filepath.Join("/", name),
+		})
+	}
+
+	sort.Slice(quickPaths, func(i, j int) bool {
+		return strings.ToLower(quickPaths[i].Name) < strings.ToLower(quickPaths[j].Name)
+	})
+
+	return quickPaths
+}
+
 // Browse 디렉토리 목록 조회
 // GET /api/v1/filesystem?path=/
 func (h *FilesystemHandler) Browse(c *fiber.Ctx) error {
@@ -66,25 +111,13 @@ func (h *FilesystemHandler) Browse(c *fiber.Ctx) error {
 		})
 	}
 
-	// 숨김 폴더/시스템 폴더 제외 목록
-	hiddenPrefixes := []string{".", "@", "#"}
-
 	var dirs []DirectoryEntry
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		name := entry.Name()
-
-		// 숨김/시스템 폴더 건너뛰기
-		skip := false
-		for _, prefix := range hiddenPrefixes {
-			if strings.HasPrefix(name, prefix) {
-				skip = true
-				break
-			}
-		}
-		if skip {
+		if shouldSkipDirectory(name) {
 			continue
 		}
 
@@ -108,6 +141,7 @@ func (h *FilesystemHandler) Browse(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"current":     dirPath,
 		"parent":      parent,
+		"quick_paths": listQuickPaths(),
 		"directories": dirs,
 	})
 }

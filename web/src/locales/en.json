@@ -342,6 +342,7 @@
       "browse_up": "Parent Folder",
       "browse_empty": "No subfolders found.",
       "browse_select": "Select This Folder",
+      "browse_quick_paths": "Quick Paths",
       "browse_input_placeholder": "Enter or paste a path. e.g. /mnt/c/workspace/media",
       "browse_go": "Go to path",
       "path_empty": "Select a folder",
@@ -358,7 +359,7 @@
       "view_mode_label": "Default View Settings",
       "view_mode_desc": "Set the default viewing mode for this library.",
       "excludes_label": "Scan Exclusions",
-      "excludes_desc": "Set file or folder names to ignore during scan. (comma separated)",
+      "excludes_desc": "Set file or folder names to ignore during scan. (comma separated)\nDefault exclusions: @eaDir, #recycle, .DS_Store, Thumbs.db, .git, .idea",
       "excludes_placeholder": "e.g. .DS_Store, #recycle, @eaDir",
       "scan": {
         "title": "Scan Settings",
