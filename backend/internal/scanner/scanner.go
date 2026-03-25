@@ -111,6 +111,8 @@ type Scanner struct {
 	watcher         *fsnotify.Watcher
 	watcherStop     chan struct{}
 	watchedLibs     sync.Map // map[string][]string (libraryID -> paths)
+	watchRefMu      sync.Mutex
+	watchRefs       map[string]int // map[watchedPath]refCount
 
 	// 폴링 폴백 (WSL/네트워크 드라이브 대비)
 	fallbackTicker *time.Ticker
@@ -208,6 +210,7 @@ func NewScanner(
 		config:             cfg, // Config 초기화
 		maxConcurrentScans: maxConcurrent,
 		semaphore:          make(chan struct{}, maxConcurrent),
+		watchRefs:          make(map[string]int),
 	}
 }
 
@@ -816,14 +819,11 @@ func (s *Scanner) RemoveLibraryWatch(libID string) {
 			if ps, ok := paths.([]string); ok {
 				watchList := s.watcher.WatchList()
 				for _, p := range ps {
-					log.Printf("Removing watch for library %s: %s", libID, p)
-					_ = s.watcher.Remove(p)
-
-					prefix := p + string(os.PathSeparator)
 					for _, watchedPath := range watchList {
-						if watchedPath == p || strings.HasPrefix(watchedPath, prefix) {
-							log.Printf("Removing nested watch for library %s: %s", libID, watchedPath)
-							_ = s.watcher.Remove(watchedPath)
+						if pathMatchesRoot(watchedPath, p) {
+							if err := s.releaseWatchedPath(s.watcher, watchedPath); err != nil {
+								log.Printf("Failed to remove watch for library %s: %s (%v)", libID, watchedPath, err)
+							}
 						}
 					}
 				}
@@ -850,6 +850,9 @@ func (s *Scanner) stopWatcherLocked() {
 		_ = s.watcher.Close()
 		s.watcher = nil
 	}
+	s.watchRefMu.Lock()
+	s.watchRefs = make(map[string]int)
+	s.watchRefMu.Unlock()
 	s.stopFallbackPollingLocked()
 }
 
@@ -929,10 +932,52 @@ func (s *Scanner) addWatchRecursive(watcher *fsnotify.Watcher, path string) erro
 			if strings.HasPrefix(d.Name(), ".") && p != path {
 				return filepath.SkipDir
 			}
-			return watcher.Add(p)
+			return s.retainWatchedPath(watcher, p)
 		}
 		return nil
 	})
+}
+
+func pathMatchesRoot(path, root string) bool {
+	return path == root || strings.HasPrefix(path, root+string(os.PathSeparator))
+}
+
+func (s *Scanner) retainWatchedPath(watcher *fsnotify.Watcher, path string) error {
+	s.watchRefMu.Lock()
+	defer s.watchRefMu.Unlock()
+
+	if s.watchRefs == nil {
+		s.watchRefs = make(map[string]int)
+	}
+
+	if count := s.watchRefs[path]; count > 0 {
+		s.watchRefs[path] = count + 1
+		return nil
+	}
+
+	if err := watcher.Add(path); err != nil {
+		return err
+	}
+	s.watchRefs[path] = 1
+	return nil
+}
+
+func (s *Scanner) releaseWatchedPath(watcher *fsnotify.Watcher, path string) error {
+	s.watchRefMu.Lock()
+	defer s.watchRefMu.Unlock()
+
+	if s.watchRefs == nil {
+		return nil
+	}
+
+	count := s.watchRefs[path]
+	if count <= 1 {
+		delete(s.watchRefs, path)
+		return watcher.Remove(path)
+	}
+
+	s.watchRefs[path] = count - 1
+	return nil
 }
 
 // processArchiveAsSeries 루트 레벨의 아카이브 파일을 단일 볼륨 시리즈로 처리

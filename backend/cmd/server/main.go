@@ -172,7 +172,7 @@ func main() {
 	users.Delete("/:userId/sessions/:sessionId", authMiddleware.MasterOnly(), authHandler.RevokeSessionByAdmin)
 
 	// 파일시스템 브라우저 (MASTER only)
-	protected.Get("/filesystem", filesystemHandler.Browse)
+	protected.Get("/filesystem", authMiddleware.MasterOnly(), filesystemHandler.Browse)
 
 	// 라이브러리
 	libraries := protected.Group("/libraries")
