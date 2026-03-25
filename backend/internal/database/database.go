@@ -1623,11 +1623,16 @@ func migrateMultiFolderPaths() error {
 			if err := rows.Scan(&libID, &libPath); err != nil {
 				return fmt.Errorf("scan library path: %w", err)
 			}
-			// 이미 존재하면 무시
-			_, _ = DB.Exec(
+			// 이미 존재하면 무시하되, 실행 오류는 마이그레이션 실패로 처리
+			if _, err := DB.Exec(
 				`INSERT OR IGNORE INTO library_paths (id, library_id, path, sort_order) VALUES (?, ?, ?, 0)`,
 				"lp-"+libID, libID, libPath,
-			)
+			); err != nil {
+				return fmt.Errorf("insert library_path for library %s: %w", libID, err)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate existing library paths: %w", err)
 		}
 	}
 
