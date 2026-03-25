@@ -410,6 +410,17 @@ func (r *LibraryRepository) Update(db database.Queryer, library *model.Library) 
 	return err
 }
 
+func (r *LibraryRepository) UpdateWithPaths(db database.Queryer, library *model.Library, paths *[]string) error {
+	return r.withTransaction(db, func(tx database.Queryer) error {
+		if paths != nil {
+			if err := r.replaceLibraryPaths(tx, library.ID, *paths); err != nil {
+				return err
+			}
+		}
+		return r.Update(tx, library)
+	})
+}
+
 // UpdatePaths 라이브러리 경로 목록을 교체 (기존 경로 삭제 후 새로 삽입)
 func (r *LibraryRepository) UpdatePaths(db database.Queryer, libraryID string, paths []string) error {
 	return r.withTransaction(db, func(tx database.Queryer) error {

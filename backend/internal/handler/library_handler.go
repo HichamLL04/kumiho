@@ -106,6 +106,39 @@ func validateLibraryPaths(paths []string, checkExists func(string) (bool, error)
 	return normalizedPaths, nil
 }
 
+func areNestedLibraryPaths(pathA, pathB string) bool {
+	if pathA == pathB {
+		return false
+	}
+	return strings.HasPrefix(pathA, pathB+string(os.PathSeparator)) ||
+		strings.HasPrefix(pathB, pathA+string(os.PathSeparator))
+}
+
+func validateNoNestedLibraryPaths(paths []string, libraries []model.Library, excludeLibraryID string) error {
+	for i := 0; i < len(paths); i++ {
+		for j := i + 1; j < len(paths); j++ {
+			if areNestedLibraryPaths(paths[i], paths[j]) {
+				return fiber.NewError(fiber.StatusBadRequest, "nested library paths are not allowed: "+paths[i]+" and "+paths[j])
+			}
+		}
+	}
+
+	for _, lib := range libraries {
+		if lib.ID == excludeLibraryID {
+			continue
+		}
+		for _, existingPath := range lib.Paths {
+			for _, path := range paths {
+				if areNestedLibraryPaths(path, existingPath) {
+					return fiber.NewError(fiber.StatusBadRequest, "nested library paths are not allowed: "+path+" and "+existingPath)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // List 모든 라이브러리 목록
 // GET /api/v1/libraries
 func (h *LibraryHandler) List(c *fiber.Ctx) error {
@@ -196,6 +229,22 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to validate library paths",
+		})
+	}
+	libraries, err := h.libraryRepo.FindAll(nil)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to check existing libraries",
+		})
+	}
+	if err := validateNoNestedLibraryPaths(normalizedPaths, libraries, ""); err != nil {
+		if fiberErr, ok := err.(*fiber.Error); ok {
+			return c.Status(fiberErr.Code).JSON(fiber.Map{
+				"error": fiberErr.Message,
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to validate nested library paths",
 		})
 	}
 	req.Paths = normalizedPaths
@@ -614,8 +663,11 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		}
 	} else {
 		// 일반 라이브러리 수정
+		pendingLibrary := *library
+		var pendingPaths *[]string
+
 		if req.Name != "" {
-			library.Name = req.Name
+			pendingLibrary.Name = req.Name
 		}
 
 		// 경로 변경
@@ -639,20 +691,31 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 					"error": "failed to validate paths",
 				})
 			}
-			req.Paths = &normalizedPaths
-			if err := h.libraryRepo.UpdatePaths(nil, library.ID, *req.Paths); err != nil {
+			libraries, err := h.libraryRepo.FindAll(nil)
+			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "failed to update paths",
+					"error": "failed to check existing libraries",
 				})
 			}
-			library.Paths = *req.Paths
+			if err := validateNoNestedLibraryPaths(normalizedPaths, libraries, library.ID); err != nil {
+				if fiberErr, ok := err.(*fiber.Error); ok {
+					return c.Status(fiberErr.Code).JSON(fiber.Map{
+						"error": fiberErr.Message,
+					})
+				}
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "failed to validate nested library paths",
+				})
+			}
+			pendingPaths = &normalizedPaths
+			pendingLibrary.Paths = normalizedPaths
 			pathsChanged = true
 		}
 
 		if req.DefaultViewMode != "" {
 			switch req.DefaultViewMode {
 			case "single", "double", "vertical":
-				library.DefaultViewMode = req.DefaultViewMode
+				pendingLibrary.DefaultViewMode = req.DefaultViewMode
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_view_mode",
@@ -662,7 +725,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultReadDirection != "" {
 			switch req.DefaultReadDirection {
 			case "ltr", "rtl":
-				library.DefaultReadDirection = req.DefaultReadDirection
+				pendingLibrary.DefaultReadDirection = req.DefaultReadDirection
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_read_direction",
@@ -672,7 +735,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultPageTransition != "" {
 			switch req.DefaultPageTransition {
 			case "none", "fade", "slide":
-				library.DefaultPageTransition = req.DefaultPageTransition
+				pendingLibrary.DefaultPageTransition = req.DefaultPageTransition
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_page_transition",
@@ -682,7 +745,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubRenderMode != "" {
 			switch req.DefaultEpubRenderMode {
 			case "auto", "book", "comic":
-				library.DefaultEpubRenderMode = req.DefaultEpubRenderMode
+				pendingLibrary.DefaultEpubRenderMode = req.DefaultEpubRenderMode
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_render_mode",
@@ -692,7 +755,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubTheme != "" {
 			switch req.DefaultEpubTheme {
 			case "light", "dark", "sepia":
-				library.DefaultEpubTheme = req.DefaultEpubTheme
+				pendingLibrary.DefaultEpubTheme = req.DefaultEpubTheme
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_theme",
@@ -702,7 +765,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubSpread != "" {
 			switch req.DefaultEpubSpread {
 			case "auto", "none":
-				library.DefaultEpubSpread = req.DefaultEpubSpread
+				pendingLibrary.DefaultEpubSpread = req.DefaultEpubSpread
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_spread",
@@ -712,7 +775,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubWheelDirection != "" {
 			switch req.DefaultEpubWheelDirection {
 			case "down", "up":
-				library.DefaultEpubWheelDir = req.DefaultEpubWheelDirection
+				pendingLibrary.DefaultEpubWheelDir = req.DefaultEpubWheelDirection
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_wheel_direction",
@@ -722,7 +785,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubKeyboardDirection != "" {
 			switch req.DefaultEpubKeyboardDirection {
 			case "right", "left":
-				library.DefaultEpubKeyboardDir = req.DefaultEpubKeyboardDirection
+				pendingLibrary.DefaultEpubKeyboardDir = req.DefaultEpubKeyboardDirection
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_keyboard_direction",
@@ -732,7 +795,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubClickDirection != "" {
 			switch req.DefaultEpubClickDirection {
 			case "right", "left":
-				library.DefaultEpubClickDir = req.DefaultEpubClickDirection
+				pendingLibrary.DefaultEpubClickDir = req.DefaultEpubClickDirection
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_click_direction",
@@ -746,10 +809,10 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 					"error": "invalid library_type",
 				})
 			}
-			library.LibraryType = libraryType
+			pendingLibrary.LibraryType = libraryType
 		}
 		if req.IsVisible != nil {
-			library.IsVisible = *req.IsVisible
+			pendingLibrary.IsVisible = *req.IsVisible
 		}
 		if req.ScanExcludes != nil {
 			if *req.ScanExcludes != "" {
@@ -760,14 +823,23 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 					})
 				}
 			}
-			library.ScanExcludes = *req.ScanExcludes
+			pendingLibrary.ScanExcludes = *req.ScanExcludes
 		}
+
+		if err := h.libraryRepo.UpdateWithPaths(nil, &pendingLibrary, pendingPaths); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to update library",
+			})
+		}
+		*library = pendingLibrary
 	}
 
-	if err := h.libraryRepo.Update(nil, library); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to update library",
-		})
+	if library.Type == "SYSTEM" {
+		if err := h.libraryRepo.Update(nil, library); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to update library",
+			})
+		}
 	}
 
 	if library.Type == "LOCAL" && pathsChanged {

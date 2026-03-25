@@ -422,6 +422,7 @@ export function LibrariesTab() {
   const [browseInput, setBrowseInput] = useState("/");
   const browseCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const browseTriggerRef = useRef<HTMLElement | null>(null);
+  const browseRequestIdRef = useRef(0);
 
   // Global Settings state
   const [scanInterval, setScanInterval] = useState("0");
@@ -541,30 +542,39 @@ export function LibrariesTab() {
     }
   };
 
-  const openBrowse = async (target: { type: "create" | "edit"; index: number }, initialPath?: string) => {
-    const fallbackPath = initialPath || "/";
-    if (document.activeElement instanceof HTMLElement) {
-      browseTriggerRef.current = document.activeElement;
-    }
-    setBrowseTarget(target);
+  const loadBrowsePath = useCallback(async (path: string) => {
+    const requestId = ++browseRequestIdRef.current;
     setBrowseLoading(true);
-    setIsBrowseOpen(true);
     try {
-      const res = await filesystemAPI.browse(fallbackPath);
+      const res = await filesystemAPI.browse(path);
+      if (requestId !== browseRequestIdRef.current) return;
       setBrowsePath(res.data.current);
       setBrowseInput(res.data.current);
       setBrowseParent(res.data.parent);
       setBrowseQuickPaths(res.data.quick_paths || []);
       setBrowseDirs(res.data.directories || []);
     } catch {
-      setBrowsePath(fallbackPath);
-      setBrowseInput(fallbackPath);
+      if (requestId !== browseRequestIdRef.current) return;
+      setBrowsePath(path);
+      setBrowseInput(path);
       setBrowseParent(null);
       setBrowseQuickPaths([]);
       setBrowseDirs([]);
     } finally {
-      setBrowseLoading(false);
+      if (requestId === browseRequestIdRef.current) {
+        setBrowseLoading(false);
+      }
     }
+  }, []);
+
+  const openBrowse = async (target: { type: "create" | "edit"; index: number }, initialPath?: string) => {
+    const fallbackPath = initialPath || "/";
+    if (document.activeElement instanceof HTMLElement) {
+      browseTriggerRef.current = document.activeElement;
+    }
+    setBrowseTarget(target);
+    setIsBrowseOpen(true);
+    await loadBrowsePath(fallbackPath);
   };
 
   const closeBrowse = useCallback(() => {
@@ -591,23 +601,7 @@ export function LibrariesTab() {
   }, [closeBrowse, isBrowseOpen]);
 
   const navigateBrowse = async (path: string) => {
-    setBrowseLoading(true);
-    try {
-      const res = await filesystemAPI.browse(path);
-      setBrowsePath(res.data.current);
-      setBrowseInput(res.data.current);
-      setBrowseParent(res.data.parent);
-      setBrowseQuickPaths(res.data.quick_paths || []);
-      setBrowseDirs(res.data.directories || []);
-    } catch {
-      setBrowsePath(path);
-      setBrowseInput(path);
-      setBrowseParent(null);
-      setBrowseQuickPaths([]);
-      setBrowseDirs([]);
-    } finally {
-      setBrowseLoading(false);
-    }
+    await loadBrowsePath(path);
   };
 
   const selectBrowsePath = () => {
