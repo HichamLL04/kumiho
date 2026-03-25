@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Trash2,
@@ -581,6 +581,45 @@ export function LibrariesTab() {
     setIsBrowseOpen(false);
   }, []);
 
+  const handleBrowseDialogKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+
+    const focusableSelectors = [
+      "a[href]",
+      "area[href]",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "button:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(", ");
+
+    const focusableElements = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(focusableSelectors),
+    ).filter((element) => {
+      if (element.getAttribute("aria-hidden") === "true") return false;
+      if (element.tabIndex < 0) return false;
+      return !element.hasAttribute("disabled");
+    });
+
+    if (focusableElements.length === 0) return;
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement as HTMLElement | null;
+
+    if (!event.shiftKey && activeElement === lastElement) {
+      event.preventDefault();
+      firstElement.focus();
+      return;
+    }
+
+    if (event.shiftKey && activeElement === firstElement) {
+      event.preventDefault();
+      lastElement.focus();
+    }
+  }, []);
+
   useEffect(() => {
     if (!isBrowseOpen) {
       browseTriggerRef.current?.focus();
@@ -1118,6 +1157,7 @@ export function LibrariesTab() {
           <div
             className={styles.browseModal}
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={handleBrowseDialogKeyDown}
             role="dialog"
             aria-modal="true"
             aria-labelledby="library-browse-title"
