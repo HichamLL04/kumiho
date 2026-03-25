@@ -745,7 +745,7 @@ func (s *Scanner) StartWatcher() error {
 						libPaths, _ := value.([]string)
 
 						for _, libPath := range libPaths {
-							if strings.HasPrefix(event.Name, libPath) {
+							if event.Name == libPath || strings.HasPrefix(event.Name, libPath+string(os.PathSeparator)) {
 								log.Printf("[SCANNER] Event match for library (ID:%s, Path:%s): %s %s", libID, libPath, event.Name, event.Op)
 
 								// 새 디렉토리가 생성되거나 이동되어 들어오면 감시 목록에 추가

@@ -47,7 +47,7 @@ func shouldSkipDirectory(name string) bool {
 func listQuickPaths() []DirectoryEntry {
 	rootEntries, err := os.ReadDir("/")
 	if err != nil {
-		return nil
+		return make([]DirectoryEntry, 0)
 	}
 
 	systemDirs := map[string]bool{
@@ -57,7 +57,7 @@ func listQuickPaths() []DirectoryEntry {
 		"bin.usr-is-merged": true, "lib.usr-is-merged": true,
 	}
 
-	var quickPaths []DirectoryEntry
+	quickPaths := make([]DirectoryEntry, 0)
 	for _, entry := range rootEntries {
 		if !entry.IsDir() {
 			continue
@@ -130,7 +130,8 @@ func (h *FilesystemHandler) Browse(c *fiber.Ctx) error {
 		})
 	}
 
-	var dirs []DirectoryEntry
+	dirs := make([]DirectoryEntry, 0)
+	quickPaths := listQuickPaths()
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -160,7 +161,7 @@ func (h *FilesystemHandler) Browse(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"current":     dirPath,
 		"parent":      parent,
-		"quick_paths": listQuickPaths(),
+		"quick_paths": quickPaths,
 		"directories": dirs,
 	})
 }
