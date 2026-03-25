@@ -100,3 +100,20 @@ func TestValidateLibraryPathsRejectsResolvedDuplicates(t *testing.T) {
 		t.Fatalf("error code = %d, want %d", fiberErr.Code, fiber.StatusBadRequest)
 	}
 }
+
+func TestValidateLibraryPathsRejectsRelativePath(t *testing.T) {
+	_, err := validateLibraryPaths([]string{"relative/path"}, func(string) (bool, error) {
+		return false, nil
+	})
+	if err == nil {
+		t.Fatal("validateLibraryPaths() error = nil, want relative path error")
+	}
+
+	fiberErr, ok := err.(*fiber.Error)
+	if !ok {
+		t.Fatalf("error type = %T, want *fiber.Error", err)
+	}
+	if fiberErr.Code != fiber.StatusBadRequest {
+		t.Fatalf("error code = %d, want %d", fiberErr.Code, fiber.StatusBadRequest)
+	}
+}
