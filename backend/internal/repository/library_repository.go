@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
@@ -29,7 +30,7 @@ func (r *LibraryRepository) loadLibraryPaths(db database.Queryer, libraryID stri
 	}
 	defer func() { _ = rows.Close() }()
 
-	var paths []string
+	paths := make([]string, 0)
 	for rows.Next() {
 		var path string
 		if err := rows.Scan(&path); err != nil {
@@ -41,6 +42,51 @@ func (r *LibraryRepository) loadLibraryPaths(db database.Queryer, libraryID stri
 		return nil, err
 	}
 	return paths, nil
+}
+
+func (r *LibraryRepository) loadLibraryPathsMap(db database.Queryer, libraryIDs []string) (map[string][]string, error) {
+	pathMap := make(map[string][]string, len(libraryIDs))
+	if len(libraryIDs) == 0 {
+		return pathMap, nil
+	}
+
+	for _, libraryID := range libraryIDs {
+		pathMap[libraryID] = make([]string, 0)
+	}
+
+	db = database.GetQueryer(db)
+	placeholders := make([]string, len(libraryIDs))
+	args := make([]interface{}, len(libraryIDs))
+	for i, libraryID := range libraryIDs {
+		placeholders[i] = "?"
+		args[i] = libraryID
+	}
+
+	rows, err := db.Query(
+		fmt.Sprintf(
+			`SELECT library_id, path FROM library_paths WHERE library_id IN (%s) ORDER BY library_id ASC, sort_order ASC, created_at ASC`,
+			strings.Join(placeholders, ", "),
+		),
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var libraryID string
+		var path string
+		if err := rows.Scan(&libraryID, &path); err != nil {
+			return nil, err
+		}
+		pathMap[libraryID] = append(pathMap[libraryID], path)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return pathMap, nil
 }
 
 // scanLibraryRow 공통 라이브러리 행 스캔 로직
@@ -245,22 +291,27 @@ func (r *LibraryRepository) FindAll(db database.Queryer) ([]model.Library, error
 	defer func() { _ = rows.Close() }()
 
 	var libraries []model.Library
+	libraryIDs := make([]string, 0)
 	for rows.Next() {
 		lib, err := scanLibraryRow(rows)
 		if err != nil {
 			return nil, err
 		}
-		// 경로 로드
-		paths, err := r.loadLibraryPaths(db, lib.ID)
-		if err != nil {
-			return nil, err
-		}
-		lib.Paths = paths
 		libraries = append(libraries, *lib)
+		libraryIDs = append(libraryIDs, lib.ID)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
+	pathMap, err := r.loadLibraryPathsMap(db, libraryIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range libraries {
+		libraries[i].Paths = pathMap[libraries[i].ID]
+	}
+
 	return libraries, nil
 }
 

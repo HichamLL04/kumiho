@@ -62,40 +62,48 @@ func normalizeLibraryType(value string) (string, bool) {
 	}
 }
 
-func validateLibraryPaths(paths []string, checkExists func(string) (bool, error)) error {
+func validateLibraryPaths(paths []string, checkExists func(string) (bool, error)) ([]string, error) {
 	seen := make(map[string]struct{}, len(paths))
+	normalizedPaths := make([]string, 0, len(paths))
 	for _, rawPath := range paths {
 		path := strings.TrimSpace(rawPath)
 		if path == "" {
-			return fiber.NewError(fiber.StatusBadRequest, "empty path is not allowed")
+			return nil, fiber.NewError(fiber.StatusBadRequest, "empty path is not allowed")
 		}
 
-		if _, ok := seen[path]; ok {
-			return fiber.NewError(fiber.StatusBadRequest, "duplicate path is not allowed: "+path)
+		cleanPath := filepath.Clean(path)
+		if !filepath.IsAbs(cleanPath) {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "only absolute paths are allowed: "+cleanPath)
 		}
-		seen[path] = struct{}{}
 
-		info, err := os.Stat(path)
+		if _, ok := seen[cleanPath]; ok {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "duplicate path is not allowed: "+cleanPath)
+		}
+		seen[cleanPath] = struct{}{}
+
+		info, err := os.Stat(cleanPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return fiber.NewError(fiber.StatusBadRequest, "path does not exist: "+path)
+				return nil, fiber.NewError(fiber.StatusBadRequest, "path does not exist: "+cleanPath)
 			}
-			return fiber.NewError(fiber.StatusInternalServerError, "failed to access path: "+path)
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to access path: "+cleanPath)
 		}
 		if !info.IsDir() {
-			return fiber.NewError(fiber.StatusBadRequest, "path is not a directory: "+path)
+			return nil, fiber.NewError(fiber.StatusBadRequest, "path is not a directory: "+cleanPath)
 		}
 
-		exists, err := checkExists(path)
+		exists, err := checkExists(cleanPath)
 		if err != nil {
-			return fiber.NewError(fiber.StatusInternalServerError, "failed to check existing library")
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to check existing library")
 		}
 		if exists {
-			return fiber.NewError(fiber.StatusConflict, "path already belongs to another library: "+path)
+			return nil, fiber.NewError(fiber.StatusConflict, "path already belongs to another library: "+cleanPath)
 		}
+
+		normalizedPaths = append(normalizedPaths, cleanPath)
 	}
 
-	return nil
+	return normalizedPaths, nil
 }
 
 // List 모든 라이브러리 목록
@@ -173,13 +181,14 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := validateLibraryPaths(req.Paths, func(path string) (bool, error) {
+	normalizedPaths, err := validateLibraryPaths(req.Paths, func(path string) (bool, error) {
 		existing, err := h.libraryRepo.FindByPath(nil, path)
 		if err != nil {
 			return false, err
 		}
 		return existing != nil, nil
-	}); err != nil {
+	})
+	if err != nil {
 		if fiberErr, ok := err.(*fiber.Error); ok {
 			return c.Status(fiberErr.Code).JSON(fiber.Map{
 				"error": fiberErr.Message,
@@ -189,6 +198,7 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 			"error": "failed to validate library paths",
 		})
 	}
+	req.Paths = normalizedPaths
 
 	// 유효성 검사
 	if req.DefaultViewMode != "" {
@@ -610,9 +620,10 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 
 		// 경로 변경
 		if len(req.Paths) > 0 {
-			if err := validateLibraryPaths(req.Paths, func(path string) (bool, error) {
+			normalizedPaths, err := validateLibraryPaths(req.Paths, func(path string) (bool, error) {
 				return h.libraryRepo.PathExists(nil, path, library.ID)
-			}); err != nil {
+			})
+			if err != nil {
 				if fiberErr, ok := err.(*fiber.Error); ok {
 					return c.Status(fiberErr.Code).JSON(fiber.Map{
 						"error": fiberErr.Message,
@@ -622,6 +633,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 					"error": "failed to validate paths",
 				})
 			}
+			req.Paths = normalizedPaths
 			if err := h.libraryRepo.UpdatePaths(nil, library.ID, req.Paths); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "failed to update paths",

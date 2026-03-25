@@ -323,18 +323,23 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 		basePath string
 	}
 	readFailed := false
-	for _, rootPath := range library.Paths {
-		entries, err := os.ReadDir(rootPath)
-		if err != nil {
-			readFailed = true
-			result.Errors = append(result.Errors, fmt.Sprintf("failed to read %s: %v", rootPath, err))
-			continue
-		}
-		for _, entry := range entries {
-			allEntries = append(allEntries, struct {
-				entry    fs.DirEntry
-				basePath string
-			}{entry, rootPath})
+	if len(library.Paths) == 0 {
+		readFailed = true
+		result.Errors = append(result.Errors, "library has no paths configured")
+	} else {
+		for _, rootPath := range library.Paths {
+			entries, err := os.ReadDir(rootPath)
+			if err != nil {
+				readFailed = true
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to read %s: %v", rootPath, err))
+				continue
+			}
+			for _, entry := range entries {
+				allEntries = append(allEntries, struct {
+					entry    fs.DirEntry
+					basePath string
+				}{entry, rootPath})
+			}
 		}
 	}
 

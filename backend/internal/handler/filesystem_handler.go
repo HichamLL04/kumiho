@@ -23,6 +23,17 @@ type DirectoryEntry struct {
 	Path string `json:"path"`
 }
 
+func filesystemErrorStatus(err error) (int, string) {
+	switch {
+	case os.IsNotExist(err):
+		return fiber.StatusNotFound, "path does not exist"
+	case os.IsPermission(err):
+		return fiber.StatusForbidden, "permission denied"
+	default:
+		return fiber.StatusInternalServerError, "failed to access path"
+	}
+}
+
 func shouldSkipDirectory(name string) bool {
 	hiddenPrefixes := []string{".", "@", "#"}
 	for _, prefix := range hiddenPrefixes {
@@ -92,13 +103,20 @@ func (h *FilesystemHandler) Browse(c *fiber.Ctx) error {
 	// 심볼릭 링크 해석 후 실제 경로 확인
 	realPath, err := filepath.EvalSymlinks(dirPath)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "path does not exist",
+		status, message := filesystemErrorStatus(err)
+		return c.Status(status).JSON(fiber.Map{
+			"error": message,
 		})
 	}
 
 	info, err := os.Stat(realPath)
-	if err != nil || !info.IsDir() {
+	if err != nil {
+		status, message := filesystemErrorStatus(err)
+		return c.Status(status).JSON(fiber.Map{
+			"error": message,
+		})
+	}
+	if !info.IsDir() {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "path is not a directory",
 		})
