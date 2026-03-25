@@ -24,10 +24,77 @@
   flex: 1;
 }
 
+.createFooter {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  min-height: 3.5rem;
+  margin-top: 0.5rem;
+}
+
 .formActions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.stepIndicator {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+}
+
+.stepIndicatorInner {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepNumber {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.stepNumberActive {
+  background: linear-gradient(135deg, #5b6ee1, #7182f6);
+  color: #f8fbff;
+  box-shadow: 0 10px 20px rgba(91, 110, 225, 0.2);
+}
+
+.stepNumberInactive {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.stepConnector {
+  width: 180px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+}
+
+.stepConnectorActive {
+  background: linear-gradient(90deg, rgba(113, 130, 246, 0.7), rgba(255, 255, 255, 0.14));
 }
 
 .libraryList {
@@ -245,7 +312,24 @@
 }
 
 .btnPrimary {
+  background: linear-gradient(135deg, #5b6ee1, #7182f6) !important;
+  border-color: rgba(122, 142, 255, 0.45) !important;
+  color: #f8fbff !important;
+  box-shadow: 0 10px 24px rgba(74, 85, 104, 0.22);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6a7bf0, #8190ff) !important;
+  border-color: rgba(148, 163, 255, 0.6) !important;
+}
+
+.btnPrimary:disabled {
   background: #4a5568 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.58) !important;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .dangerText {
