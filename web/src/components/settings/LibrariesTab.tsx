@@ -510,24 +510,40 @@ export function LibrariesTab() {
     }
   };
 
-  const fetchLibraries = useCallback(async () => {
-    await storeFetchLibraries();
-  }, [storeFetchLibraries]);
+  const fetchLibraries = useCallback(
+    async (showLoading = true) => {
+      await storeFetchLibraries(showLoading);
+    },
+    [storeFetchLibraries],
+  );
 
   useEffect(() => {
     fetchLibraries();
   }, [fetchLibraries]);
 
+  const hasScanningLibrary = libraries.some((l) => l.scan_status === "SCANNING");
+
   useEffect(() => {
-    const hasScanningLibrary = libraries.some((l) => l.scan_status === "SCANNING");
     if (!hasScanningLibrary) return;
 
-    const interval = setInterval(() => {
-      fetchLibraries();
-    }, 3000);
+    let timeoutId: number;
+    let isMounted = true;
 
-    return () => clearInterval(interval);
-  }, [libraries, fetchLibraries]);
+    const poll = async () => {
+      if (!isMounted) return;
+      await fetchLibraries(false);
+      if (isMounted) {
+        timeoutId = window.setTimeout(poll, 3000);
+      }
+    };
+
+    timeoutId = window.setTimeout(poll, 3000);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [hasScanningLibrary, fetchLibraries]);
 
   const handleCreateLibrary = async () => {
     if (!newLibrary.name || validNewLibraryPaths.length === 0) {
