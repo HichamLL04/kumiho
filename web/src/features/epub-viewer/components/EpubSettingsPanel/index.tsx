@@ -75,12 +75,21 @@ export function EpubSettingsPanel({
 
         {/* 페이지 모드 */}
         <div className={styles.section}>
-          <label className={styles.label}>
+          <label
+            className={styles.label}
+            id="spread-label"
+          >
             {t("epub_viewer.settings.spread.label", { defaultValue: "페이지 모드" })}
           </label>
-          <div className={styles.buttonGroup}>
+          <div
+            className={styles.buttonGroup}
+            role="radiogroup"
+            aria-labelledby="spread-label"
+          >
             <button
               type="button"
+              role="radio"
+              aria-checked={settings.spread === "none"}
               className={`${styles.optionBtn} ${settings.spread === "none" ? styles.active : ""}`}
               onClick={() => onSpreadChange("none")}
               disabled={isTypographyControlLimited || settings.renderMode === "comic"}
@@ -91,6 +100,8 @@ export function EpubSettingsPanel({
             </button>
             <button
               type="button"
+              role="radio"
+              aria-checked={settings.spread === "auto"}
               className={`${styles.optionBtn} ${settings.spread === "auto" ? styles.active : ""}`}
               onClick={() => onSpreadChange("auto")}
               disabled={isTypographyControlLimited || settings.renderMode === "comic"}
