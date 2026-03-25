@@ -293,15 +293,15 @@ func (r *LibraryRepository) FindAll(db database.Queryer) ([]model.Library, error
 	var libraries []model.Library
 	libraryIDs := make([]string, 0)
 	for rows.Next() {
-		lib, err := scanLibraryRow(rows)
-		if err != nil {
-			return nil, err
+		lib, scanErr := scanLibraryRow(rows)
+		if scanErr != nil {
+			return nil, scanErr
 		}
 		libraries = append(libraries, *lib)
 		libraryIDs = append(libraryIDs, lib.ID)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, rowsErr
 	}
 
 	pathMap, err := r.loadLibraryPathsMap(db, libraryIDs)

@@ -814,9 +814,18 @@ func (s *Scanner) RemoveLibraryWatch(libID string) {
 	if paths, ok := s.watchedLibs.LoadAndDelete(libID); ok {
 		if s.watcher != nil {
 			if ps, ok := paths.([]string); ok {
+				watchList := s.watcher.WatchList()
 				for _, p := range ps {
 					log.Printf("Removing watch for library %s: %s", libID, p)
 					_ = s.watcher.Remove(p)
+
+					prefix := p + string(os.PathSeparator)
+					for _, watchedPath := range watchList {
+						if watchedPath == p || strings.HasPrefix(watchedPath, prefix) {
+							log.Printf("Removing nested watch for library %s: %s", libID, watchedPath)
+							_ = s.watcher.Remove(watchedPath)
+						}
+					}
 				}
 			}
 		}

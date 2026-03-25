@@ -124,8 +124,9 @@ func (h *FilesystemHandler) Browse(c *fiber.Ctx) error {
 
 	entries, err := os.ReadDir(realPath)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to read directory",
+		status, message := filesystemErrorStatus(err)
+		return c.Status(status).JSON(fiber.Map{
+			"error": message,
 		})
 	}
 
