@@ -809,8 +809,12 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   );
 
   const handleBack = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+    if (viewerFrom) {
+      navigate(viewerFrom, { replace: true });
+    } else {
+      navigate(-1);
+    }
+  }, [navigate, viewerFrom]);
 
   const handleReachedSeriesEnd = useCallback(() => {
     if (isAdjacentResolved) {
