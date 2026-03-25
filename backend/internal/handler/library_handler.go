@@ -215,11 +215,7 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 	}
 
 	normalizedPaths, err := validateLibraryPaths(req.Paths, func(path string) (bool, error) {
-		existing, err := h.libraryRepo.FindByPath(nil, path)
-		if err != nil {
-			return false, err
-		}
-		return existing != nil, nil
+		return h.libraryRepo.PathExists(nil, path, "")
 	})
 	if err != nil {
 		if fiberErr, ok := err.(*fiber.Error); ok {

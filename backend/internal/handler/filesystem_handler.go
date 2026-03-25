@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -13,6 +15,14 @@ import (
 )
 
 type FilesystemHandler struct{}
+
+var (
+	quickPathsCacheMu        sync.RWMutex
+	quickPathsCache          []DirectoryEntry
+	quickPathsCacheExpiresAt time.Time
+)
+
+const quickPathsCacheTTL = 30 * time.Second
 
 func NewFilesystemHandler() *FilesystemHandler {
 	return &FilesystemHandler{}
@@ -45,6 +55,15 @@ func shouldSkipDirectory(name string) bool {
 }
 
 func listQuickPaths() []DirectoryEntry {
+	now := time.Now()
+	quickPathsCacheMu.RLock()
+	if now.Before(quickPathsCacheExpiresAt) {
+		cached := append(make([]DirectoryEntry, 0, len(quickPathsCache)), quickPathsCache...)
+		quickPathsCacheMu.RUnlock()
+		return cached
+	}
+	quickPathsCacheMu.RUnlock()
+
 	rootEntries, err := os.ReadDir("/")
 	if err != nil {
 		return make([]DirectoryEntry, 0)
@@ -75,6 +94,11 @@ func listQuickPaths() []DirectoryEntry {
 	sort.Slice(quickPaths, func(i, j int) bool {
 		return strings.ToLower(quickPaths[i].Name) < strings.ToLower(quickPaths[j].Name)
 	})
+
+	quickPathsCacheMu.Lock()
+	quickPathsCache = append(make([]DirectoryEntry, 0, len(quickPaths)), quickPaths...)
+	quickPathsCacheExpiresAt = now.Add(quickPathsCacheTTL)
+	quickPathsCacheMu.Unlock()
 
 	return quickPaths
 }

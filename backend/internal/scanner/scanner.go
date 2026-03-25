@@ -428,7 +428,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 				}
 
 				// 초기 진행 상태 업데이트 (시리즈 시작)
-				updateProgress(entry.Name())
+				updateProgress(path)
 
 				seriesResult, err := s.processSeries(
 					scanCtx,
@@ -492,7 +492,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					}
 				}
 
-				updateProgress(entry.Name())
+				updateProgress(path)
 
 				seriesResult, err := s.processArchiveAsSeries(
 					scanCtx,
