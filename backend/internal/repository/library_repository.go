@@ -258,6 +258,9 @@ func (r *LibraryRepository) FindAll(db database.Queryer) ([]model.Library, error
 		lib.Paths = paths
 		libraries = append(libraries, *lib)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return libraries, nil
 }
 

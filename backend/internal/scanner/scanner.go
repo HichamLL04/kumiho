@@ -322,9 +322,11 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 		entry    fs.DirEntry
 		basePath string
 	}
+	readFailed := false
 	for _, rootPath := range library.Paths {
 		entries, err := os.ReadDir(rootPath)
 		if err != nil {
+			readFailed = true
 			result.Errors = append(result.Errors, fmt.Sprintf("failed to read %s: %v", rootPath, err))
 			continue
 		}
@@ -518,11 +520,16 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 		result.Errors = append(result.Errors, err.Error())
 	}
 
-	// 3. 디스크에 없는 DB 시리즈 삭제
-	for path, series := range existingMap {
-		if !processedPaths[path] {
-			if err := s.seriesRepo.Delete(nil, series.ID); err != nil {
-				result.Errors = append(result.Errors, err.Error())
+	// 일부 루트 경로 읽기에 실패한 경우 삭제를 건너뛴다.
+	if readFailed {
+		result.Errors = append(result.Errors, "skipped deleted-series cleanup because one or more library roots could not be read")
+	} else {
+		// 3. 디스크에 없는 DB 시리즈 삭제
+		for path, series := range existingMap {
+			if !processedPaths[path] {
+				if err := s.seriesRepo.Delete(nil, series.ID); err != nil {
+					result.Errors = append(result.Errors, err.Error())
+				}
 			}
 		}
 	}

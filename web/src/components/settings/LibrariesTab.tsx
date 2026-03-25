@@ -542,6 +542,7 @@ export function LibrariesTab() {
   };
 
   const openBrowse = async (target: { type: "create" | "edit"; index: number }, initialPath?: string) => {
+    const fallbackPath = initialPath || "/";
     if (document.activeElement instanceof HTMLElement) {
       browseTriggerRef.current = document.activeElement;
     }
@@ -549,13 +550,16 @@ export function LibrariesTab() {
     setBrowseLoading(true);
     setIsBrowseOpen(true);
     try {
-      const res = await filesystemAPI.browse(initialPath || "/");
+      const res = await filesystemAPI.browse(fallbackPath);
       setBrowsePath(res.data.current);
       setBrowseInput(res.data.current);
       setBrowseParent(res.data.parent);
       setBrowseQuickPaths(res.data.quick_paths || []);
       setBrowseDirs(res.data.directories || []);
     } catch {
+      setBrowsePath(fallbackPath);
+      setBrowseInput(fallbackPath);
+      setBrowseParent(null);
       setBrowseQuickPaths([]);
       setBrowseDirs([]);
     } finally {
@@ -596,6 +600,9 @@ export function LibrariesTab() {
       setBrowseQuickPaths(res.data.quick_paths || []);
       setBrowseDirs(res.data.directories || []);
     } catch {
+      setBrowsePath(path);
+      setBrowseInput(path);
+      setBrowseParent(null);
       setBrowseQuickPaths([]);
       setBrowseDirs([]);
     } finally {
