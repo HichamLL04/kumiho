@@ -15,6 +15,8 @@ const useViewerSyncMock = vi.fn();
 const useAdjacentChaptersMock = vi.fn();
 let latestViewerProps: {
   onInitializationComplete: () => void;
+  initialProgressRatio?: number | null;
+  initialCFI?: string | null;
   onLocationChange: (location: {
     cfi: string;
     chapterPage: number;
@@ -23,6 +25,8 @@ let latestViewerProps: {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    spineIndex?: number;
+    spineLength?: number;
     atStart?: boolean;
     atEnd?: boolean;
   }) => void;
@@ -105,12 +109,16 @@ vi.mock("../components/common/LoadingSpinner", () => ({
 vi.mock("./EpubViewer", () => ({
   EpubViewer: ({
     onInitializationComplete,
+    initialProgressRatio,
+    initialCFI,
     onLocationChange,
     onReady,
     onBack,
     onReachedStartPrev,
   }: {
     onInitializationComplete: () => void;
+    initialProgressRatio?: number | null;
+    initialCFI?: string | null;
     onLocationChange: (location: {
       cfi: string;
       chapterPage: number;
@@ -119,6 +127,8 @@ vi.mock("./EpubViewer", () => ({
       currentPosition: number;
       totalPositions: number;
       chapterHref: string;
+      spineIndex?: number;
+      spineLength?: number;
       atStart?: boolean;
       atEnd?: boolean;
     }) => void;
@@ -126,7 +136,15 @@ vi.mock("./EpubViewer", () => ({
     onBack?: () => void;
     onReachedStartPrev?: () => void;
   }) => {
-    latestViewerProps = { onInitializationComplete, onLocationChange, onReady, onBack, onReachedStartPrev };
+    latestViewerProps = {
+      onInitializationComplete,
+      initialProgressRatio,
+      initialCFI,
+      onLocationChange,
+      onReady,
+      onBack,
+      onReachedStartPrev,
+    };
     return (
       <div>
         <div data-testid="epub-viewer">epub viewer</div>
@@ -344,6 +362,56 @@ describe("EpubViewerRoute", () => {
     });
   });
 
+  it("저장된 current_cfi가 있으면 progress_percent가 100이어도 ratio 복원을 사용하지 않는다", async () => {
+    epubProgressGetMock.mockResolvedValueOnce({
+      data: {
+        progress: {
+          current_cfi: "epubcfi(/6/2[chapter]!/4/8/2)",
+          progress_percent: 100,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("epub-viewer")).toBeInTheDocument();
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    expect(latestViewerProps?.initialCFI).toBe("epubcfi(/6/2[chapter]!/4/8/2)");
+    expect(latestViewerProps?.initialProgressRatio).toBeNull();
+  });
+
   it("locations 준비 전에는 저장을 미루고 준비 후 같은 CFI라도 정상 저장한다", async () => {
     render(
       <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
@@ -498,6 +566,69 @@ describe("EpubViewerRoute", () => {
     expect(mockSetGlobalProgress).toHaveBeenCalledWith(100);
   });
 
+  it("마지막 location이어도 실제 마지막 페이지 신호가 없으면 마지막으로 처리하지 않는다", async () => {
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("epub-viewer")).toBeInTheDocument();
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    act(() => {
+      screen.getByTestId("epub-init-complete").click();
+    });
+
+    await waitFor(() => {
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    mockSetIsAtLastPage.mockReset();
+
+    act(() => {
+      latestViewerProps?.onLocationChange({
+        cfi: "epubcfi(/6/2[chapter]!/4/9/6)",
+        chapterPage: 9,
+        chapterTotal: 10,
+        globalRatio: 0.94,
+        currentPosition: 9,
+        totalPositions: 10,
+        chapterHref: "chapter.xhtml",
+        atEnd: false,
+      });
+    });
+
+    expect(mockSetIsAtLastPage).toHaveBeenCalledWith(false);
+  });
+
   it("should not mark at last page when atEnd flag appears but progress is not at edge", async () => {
     render(
       <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
@@ -555,6 +686,70 @@ describe("EpubViewerRoute", () => {
         totalPositions: 10,
         chapterHref: "chapter.xhtml",
         atEnd: true,
+      });
+    });
+
+    expect(mockSetIsAtLastPage).toHaveBeenCalledWith(false);
+  });
+
+  it("마지막 스프레드의 첫 위치에서는 마지막 페이지로 처리하지 않는다", async () => {
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("epub-viewer")).toBeInTheDocument();
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    act(() => {
+      screen.getByTestId("epub-init-complete").click();
+    });
+
+    await waitFor(() => {
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    mockSetIsAtLastPage.mockReset();
+
+    act(() => {
+      latestViewerProps?.onLocationChange({
+        cfi: "epubcfi(/6/2[chapter]!/4/9/2)",
+        chapterPage: 10,
+        chapterTotal: 10,
+        globalRatio: 0.98,
+        currentPosition: 8,
+        totalPositions: 10,
+        chapterHref: "chapter.xhtml",
+        spineIndex: 4,
+        spineLength: 5,
       });
     });
 

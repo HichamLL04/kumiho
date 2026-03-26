@@ -16,8 +16,8 @@ import { applyOldIOSSafariPointerEventFallback } from "./iosTouchFallback";
 export type { EpubRenderLayout } from "../../utils/layoutMode";
 
 export interface EpubChapterViewerHandles {
-  next: () => void;
-  prev: () => void;
+  next: () => Promise<boolean>;
+  prev: () => Promise<boolean>;
   goToCFI: (cfi: string) => void;
   goToProgress: (ratio: number) => void;
   goToPage: (page: number) => void;
@@ -120,6 +120,13 @@ interface EpubjsSection {
   load?: () => Promise<unknown>;
   unload?: () => void;
   cfiFromElement?: (el: Element) => string;
+}
+
+interface NavigationSnapshot {
+  cfi: string | null;
+  page: number;
+  index: number;
+  scrollLeft: number;
 }
 
 const EPUB_LOCATION_STRIDE = 6144; // 6KB 단위로 가상 페이지(위치) 정의. backend/internal/util/epub.go의 EpubPositionStride와 일치해야 함.
@@ -1069,8 +1076,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
               const currentLoc = rendition.currentLocation() as unknown as EpubjsLocation;
               const currentPct = currentLoc?.start?.percentage ?? 0;
               const expectedRatio = typeof initialProgressRatio === "number" ? initialProgressRatio : 0;
+              const shouldCorrectFromProgress = !initialCFI && expectedRatio > 0.01;
 
-              if (currentPct < 0.01 && expectedRatio > 0.01) {
+              if (currentPct < 0.01 && shouldCorrectFromProgress) {
                 try {
                   const cfiFromRatio = book.locations.cfiFromPercentage(Math.max(0, Math.min(1, expectedRatio)));
                   if (cfiFromRatio) {
@@ -1169,12 +1177,41 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     }, [settings, applySettings, reflowRendition]);
 
     useImperativeHandle(ref, () => {
-      const withNavigation = async (action: () => Promise<unknown> | void) => {
-        if (isNavigatingRef.current) return;
+      const getNavigationSnapshot = (): NavigationSnapshot => {
+        const rendition = renditionRef.current;
+        const currentLocation = rendition?.currentLocation() as EpubjsLocation | undefined;
+        const manager = rendition as unknown as {
+          manager?: { container?: { scrollLeft?: number } };
+        };
+
+        return {
+          cfi: currentLocation?.start?.cfi ?? null,
+          page: currentLocation?.start?.displayed?.page ?? 0,
+          index: currentLocation?.start?.index ?? -1,
+          scrollLeft: manager.manager?.container?.scrollLeft ?? 0,
+        };
+      };
+
+      const didNavigationMove = (before: NavigationSnapshot, after: NavigationSnapshot): boolean => {
+        return (
+          before.cfi !== after.cfi ||
+          before.page !== after.page ||
+          before.index !== after.index ||
+          Math.abs(before.scrollLeft - after.scrollLeft) > 2
+        );
+      };
+
+      const withNavigation = async (action: () => Promise<boolean | void> | boolean | void): Promise<boolean> => {
+        if (isNavigatingRef.current) return false;
+        const before = getNavigationSnapshot();
         isNavigatingRef.current = true;
         if (containerRef.current) containerRef.current.style.opacity = "0";
+        let explicitMovement: boolean | undefined;
         try {
-          await action();
+          const result = await action();
+          if (typeof result === "boolean") {
+            explicitMovement = result;
+          }
         } catch (err) {
           console.error("[EpubChapterViewer] Navigation error:", err);
         } finally {
@@ -1183,11 +1220,18 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
           if (loc) handleRelocated(loc);
         }
+
+        if (explicitMovement !== undefined) {
+          return explicitMovement;
+        }
+
+        const after = getNavigationSnapshot();
+        return didNavigationMove(before, after);
       };
 
       return {
-        next: () => {
-          if (!renditionRef.current) return;
+        next: async () => {
+          if (!renditionRef.current) return false;
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const manager = (renditionRef.current as any).manager;
@@ -1204,12 +1248,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                   if (nextLeft + clientWidth > scrollWidth) {
                     const targetLeft = Math.max(0, scrollWidth - clientWidth);
                     if (targetLeft - scrollLeft > 2) {
-                      withNavigation(() => {
+                      return withNavigation(() => {
                         manager.container.scrollLeft = targetLeft;
                         manager.updateOffset();
-                        return Promise.resolve();
+                        return true;
                       });
-                      return;
                     }
                   }
                 }
@@ -1219,12 +1262,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                   if (nextLeft < 0) {
                     const targetLeft = 0;
                     if (scrollLeft - targetLeft > 2) {
-                      withNavigation(() => {
+                      return withNavigation(() => {
                         manager.container.scrollLeft = targetLeft;
                         manager.updateOffset();
-                        return Promise.resolve();
+                        return true;
                       });
-                      return;
                     }
                   }
                 }
@@ -1233,10 +1275,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           } catch (err) {
             console.warn("[EpubChapterViewer] manager next correction failed:", err);
           }
-          withNavigation(() => renditionRef.current!.next());
+          return withNavigation(() => renditionRef.current!.next());
         },
-        prev: () => {
-          if (!renditionRef.current) return;
+        prev: async () => {
+          if (!renditionRef.current) return false;
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const manager = (renditionRef.current as any).manager;
@@ -1253,12 +1295,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                   if (prevLeft < 0) {
                     const targetLeft = 0;
                     if (scrollLeft - targetLeft > 2) {
-                      withNavigation(() => {
+                      return withNavigation(() => {
                         manager.container.scrollLeft = targetLeft;
                         manager.updateOffset();
-                        return Promise.resolve();
+                        return true;
                       });
-                      return;
                     }
                   }
                 }
@@ -1268,12 +1309,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                   if (prevLeft + clientWidth > scrollWidth) {
                     const targetLeft = Math.max(0, scrollWidth - clientWidth);
                     if (targetLeft - scrollLeft > 2) {
-                      withNavigation(() => {
+                      return withNavigation(() => {
                         manager.container.scrollLeft = targetLeft;
                         manager.updateOffset();
-                        return Promise.resolve();
+                        return true;
                       });
-                      return;
                     }
                   }
                 }
@@ -1287,7 +1327,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           const beforeIndex = (
             renditionRef.current.currentLocation() as unknown as EpubjsLocation
           )?.start?.index;
-          withNavigation(async () => {
+          return withNavigation(async () => {
             await renditionRef.current!.prev();
 
             const afterLoc =

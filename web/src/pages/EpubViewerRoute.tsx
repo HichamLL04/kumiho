@@ -42,23 +42,13 @@ function isLocationAtEnd(location: {
   atEnd?: boolean;
 }): boolean {
   if (Number.isFinite(location.totalPositions) && location.totalPositions > 1) {
-    // 단일 페이지 모드의 마지막 위치
+    // 일부 EPUB은 마지막 spread의 첫 화면에서 이미 마지막 location을 보고할 수 있다.
+    // 그래서 마지막 location 도달만으로 종료 처리하지 않고,
+    // 실제 마지막 페이지/진행률/epub.js atEnd 중 하나가 함께 확인될 때만 종료로 간주한다.
     if (location.currentPosition >= location.totalPositions - 1) {
-      return true;
-    }
-    // 스프레드 모드: 마지막 스프레드의 왼쪽 페이지 CFI는 totalPositions-2
-    // spineIndex >= spineLength-1 조건으로 마지막 spine 섹션에서만 적용해 중간 섹션 오탐 방지
-    const isLastSection =
-      location.spineLength == null ||
-      location.spineLength <= 0 ||
-      (location.spineIndex != null && location.spineIndex >= location.spineLength - 1);
-    if (
-      isLastSection &&
-      location.currentPosition >= location.totalPositions - 2 &&
-      location.chapterTotal > 0 &&
-      location.chapterPage >= location.chapterTotal
-    ) {
-      return true;
+      const chapterAtEnd = location.chapterTotal > 0 && location.chapterPage >= location.chapterTotal;
+      const ratioAtEnd = Number.isFinite(location.globalRatio) && location.globalRatio >= 0.995;
+      return chapterAtEnd || ratioAtEnd || location.atEnd === true;
     }
     return false;
   }
@@ -83,6 +73,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const [isInitializing, setIsInitializing] = useState(true);
   const [showSeriesEndModal, setShowSeriesEndModal] = useState(false);
   const [isChapterListOpen, setIsChapterListOpen] = useState(false);
+  const [visiblePage, setVisiblePage] = useState(1);
+  const [visibleTotalPages, setVisibleTotalPages] = useState(1);
 
   // BGM
   const { bgmInfo, isBgmPlaying, setIsBgmPlaying, audioRef } = useBGM({
@@ -173,6 +165,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     isInitializingRef.current = true;
     baselineCFIRef.current = null;
     setIsInitializing(true);
+    setVisiblePage(1);
+    setVisibleTotalPages(1);
     reset();
 
     // 초기화 완료 신호가 오지 않을 경우를 대비한 세이프티 폴백 (20초)
@@ -190,8 +184,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         try {
           const chapterRes = await epubProgressAPI.get(chapterId);
           const chapterProgress = chapterRes.data.progress;
+          const hasSavedCFI =
+            typeof chapterProgress?.current_cfi === "string" && chapterProgress.current_cfi.trim().length > 0;
 
-          if (chapterProgress?.current_cfi) {
+          if (hasSavedCFI) {
             setInitialCFI(chapterProgress.current_cfi);
             setCurrentCFI(chapterProgress.current_cfi);
           } else {
@@ -200,7 +196,11 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
           if (chapterProgress?.progress_percent !== undefined) {
             setGlobalProgress(chapterProgress.progress_percent);
-            setInitialProgressRatio(Math.max(0, Math.min(1, chapterProgress.progress_percent / 100)));
+            // current_cfi가 있으면 위치 복원은 CFI를 우선 사용하고,
+            // progress_percent는 UI 표시용으로만 유지한다.
+            setInitialProgressRatio(
+              hasSavedCFI ? null : Math.max(0, Math.min(1, chapterProgress.progress_percent / 100)),
+            );
           } else {
             setInitialProgressRatio(null);
           }
@@ -619,6 +619,15 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       const atEnd = isLocationAtEnd(location);
       setIsAtLastPage(atEnd);
 
+      const resolvedVisibleTotal =
+        location.chapterTotal > 0 ? Math.max(1, location.chapterTotal) : Math.max(1, location.totalPositions || 1);
+      const resolvedVisiblePage =
+        location.chapterTotal > 0
+          ? Math.max(1, Math.min(resolvedVisibleTotal, location.chapterPage || 1))
+          : Math.max(1, Math.min(resolvedVisibleTotal, (location.currentPosition || 0) + 1));
+      setVisiblePage(resolvedVisiblePage);
+      setVisibleTotalPages(resolvedVisibleTotal);
+
       // isInitializingRef.current 사용으로 stale closure 방지
       if (isInitializingRef.current) {
         return;
@@ -935,6 +944,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           initialProgressRatio={initialProgressRatio}
           currentPage={currentPage}
           totalPages={totalPages}
+          visiblePage={visiblePage}
+          visibleTotalPages={visibleTotalPages}
           globalProgress={globalProgress}
           isUIVisible={isUIVisible}
           isSettingsOpen={isSettingsOpen}
