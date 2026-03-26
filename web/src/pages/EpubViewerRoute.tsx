@@ -14,6 +14,7 @@ import {
   useAdjacentChapters,
   useExitFullscreenOnViewerUnmount,
   useRestoreFullscreenAfterChapterSwitch,
+  useBGM,
 } from "../features/viewer";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 import { useViewerSync } from "../hooks/useViewerSync";
@@ -28,6 +29,43 @@ const toPositionRatio = (position: number, total: number): number => {
   return Math.max(0, Math.min(1, position / (total - 1)));
 };
 
+// epub.js의 atEnd는 일부 EPUB에서 섹션 단위로 true가 될 수 있어 직접 위치 기준으로 안정화한다.
+// currentPosition은 0-indexed (0 ~ totalPositions-1)
+function isLocationAtEnd(location: {
+  currentPosition: number;
+  totalPositions: number;
+  globalRatio: number;
+  chapterPage: number;
+  chapterTotal: number;
+  spineIndex?: number;
+  spineLength?: number;
+  atEnd?: boolean;
+}): boolean {
+  if (Number.isFinite(location.totalPositions) && location.totalPositions > 1) {
+    // 일부 EPUB은 마지막 spread의 첫 화면에서 이미 마지막 location을 보고할 수 있다.
+    // 그래서 마지막 location 도달만으로 종료 처리하지 않고,
+    // 실제 마지막 페이지/진행률/epub.js atEnd 중 하나가 함께 확인될 때만 종료로 간주한다.
+    if (location.currentPosition >= location.totalPositions - 1) {
+      const chapterAtEnd = location.chapterTotal > 0 && location.chapterPage >= location.chapterTotal;
+      // epub.js가 마지막 위치에서 1.0 대신 약간 낮은 진행률을 반환하는 경우를 보정한다.
+      const ratioAtEnd = Number.isFinite(location.globalRatio) && location.globalRatio >= 0.995;
+      return chapterAtEnd || ratioAtEnd || location.atEnd === true;
+    }
+    return false;
+  }
+
+  if (Number.isFinite(location.globalRatio)) {
+    // locations 축이 없을 때는 부동소수점 오차를 감안해 99.5% 이상을 마지막으로 본다.
+    return location.globalRatio >= 0.995;
+  }
+
+  if (location.chapterTotal > 0) {
+    return location.chapterPage >= location.chapterTotal;
+  }
+
+  return location.atEnd ?? false;
+}
+
 export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const { chapterId: routeChapterId } = useParams<{ chapterId: string }>();
   const { t } = useTranslation();
@@ -36,6 +74,16 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const chapterId = chapter?.id || "";
   const [isInitializing, setIsInitializing] = useState(true);
   const [showSeriesEndModal, setShowSeriesEndModal] = useState(false);
+  const [isChapterListOpen, setIsChapterListOpen] = useState(false);
+  const [visiblePage, setVisiblePage] = useState(1);
+  const [visibleTotalPages, setVisibleTotalPages] = useState(1);
+
+  // BGM
+  const { bgmInfo, isBgmPlaying, setIsBgmPlaying, audioRef } = useBGM({
+    volumeId: volumeId || null,
+    chapterId,
+    isReady: !isInitializing,
+  });
 
   const {
     currentPage,
@@ -93,7 +141,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
   const initFallbackTimerRef = useRef<number | null>(null);
-  const { nextChapterId, isAdjacentResolved } = useAdjacentChapters({
+  const { nextChapterId, prevChapterId, nextChapterTitle, prevChapterTitle, isAdjacentResolved } = useAdjacentChapters({
     volumeId,
     chapterId,
     seriesId,
@@ -119,6 +167,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     isInitializingRef.current = true;
     baselineCFIRef.current = null;
     setIsInitializing(true);
+    setVisiblePage(1);
+    setVisibleTotalPages(1);
     reset();
 
     // 초기화 완료 신호가 오지 않을 경우를 대비한 세이프티 폴백 (20초)
@@ -136,8 +186,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         try {
           const chapterRes = await epubProgressAPI.get(chapterId);
           const chapterProgress = chapterRes.data.progress;
+          const hasSavedCFI =
+            typeof chapterProgress?.current_cfi === "string" && chapterProgress.current_cfi.trim().length > 0;
 
-          if (chapterProgress?.current_cfi) {
+          if (hasSavedCFI) {
             setInitialCFI(chapterProgress.current_cfi);
             setCurrentCFI(chapterProgress.current_cfi);
           } else {
@@ -146,7 +198,11 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
           if (chapterProgress?.progress_percent !== undefined) {
             setGlobalProgress(chapterProgress.progress_percent);
-            setInitialProgressRatio(Math.max(0, Math.min(1, chapterProgress.progress_percent / 100)));
+            // current_cfi가 있으면 위치 복원은 CFI를 우선 사용하고,
+            // progress_percent는 UI 표시용으로만 유지한다.
+            setInitialProgressRatio(
+              hasSavedCFI ? null : Math.max(0, Math.min(1, chapterProgress.progress_percent / 100)),
+            );
           } else {
             setInitialProgressRatio(null);
           }
@@ -495,14 +551,17 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   );
 
   const saveProgress = useCallback(
-    async (location: {
-      cfi: string;
-      chapterPage: number;
-      chapterTotal: number;
-      globalRatio: number;
-      currentPosition: number;
-      totalPositions: number;
-    }) => {
+    async (
+      location: {
+        cfi: string;
+        chapterPage: number;
+        chapterTotal: number;
+        globalRatio: number;
+        currentPosition: number;
+        totalPositions: number;
+      },
+      atEnd = false,
+    ) => {
       if (isInitializingRef.current || effectiveIncognito) {
         if (isInitializingRef.current) console.log("[EpubViewerRoute] saveProgress skipped: isInitializing is true");
         return;
@@ -511,10 +570,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       const payload = canSaveProgress(location)
         ? (() => {
             const totalPositions = Math.max(0, location.totalPositions);
-            const currentPosition = Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
+            // atEnd일 때는 마지막 위치로 보정하여 100% 저장 (완독 처리)
+            const currentPosition = atEnd
+              ? Math.max(0, totalPositions - 1)
+              : Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
             const calculatedCurrentPage = currentPosition + 1;
             const calculatedTotalPages = totalPositions;
-            const progressPercent = toPositionRatio(currentPosition, calculatedTotalPages) * 100;
+            const progressPercent = atEnd ? 100 : toPositionRatio(currentPosition, calculatedTotalPages) * 100;
 
             return {
               current_page: calculatedCurrentPage,
@@ -549,12 +611,24 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       currentPosition: number;
       totalPositions: number;
       chapterHref: string;
+      spineIndex?: number;
+      spineLength?: number;
       atStart?: boolean;
       atEnd?: boolean;
     }) => {
       setCurrentCFI(location.cfi);
       setIsAtFirstPage(location.atStart ?? false);
-      setIsAtLastPage(location.atEnd ?? false);
+      const atEnd = isLocationAtEnd(location);
+      setIsAtLastPage(atEnd);
+
+      const resolvedVisibleTotal =
+        location.chapterTotal > 0 ? Math.max(1, location.chapterTotal) : Math.max(1, location.totalPositions || 1);
+      const resolvedVisiblePage =
+        location.chapterTotal > 0
+          ? Math.max(1, Math.min(resolvedVisibleTotal, location.chapterPage || 1))
+          : Math.max(1, Math.min(resolvedVisibleTotal, (location.currentPosition || 0) + 1));
+      setVisiblePage(resolvedVisiblePage);
+      setVisibleTotalPages(resolvedVisibleTotal);
 
       // isInitializingRef.current 사용으로 stale closure 방지
       if (isInitializingRef.current) {
@@ -563,15 +637,18 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
       // totalPositions가 1 이하면 페이지 축으로는 신뢰하지 않고 chapter 축을 우선 사용한다.
       if (location.totalPositions > 1) {
-        const clampedPosition = Math.max(0, Math.min(location.totalPositions - 1, location.currentPosition));
+        // atEnd일 때는 마지막 위치로 보정하여 100%로 저장
+        const clampedPosition = atEnd
+          ? location.totalPositions - 1
+          : Math.max(0, Math.min(location.totalPositions - 1, location.currentPosition));
         setCurrentPage(clampedPosition + 1);
         setTotalPages(location.totalPositions);
-        setGlobalProgress(toPositionRatio(clampedPosition, location.totalPositions) * 100);
+        setGlobalProgress(atEnd ? 100 : toPositionRatio(clampedPosition, location.totalPositions) * 100);
       } else {
         // locations 축이 신뢰 불가할 때는 section(page) 축보다 globalRatio 축을 우선 사용한다.
         // chapterTotal/chapterPage는 섹션 단위 값이라 조기 "마지막 페이지" 판정을 만들 수 있다.
         if (Number.isFinite(location.globalRatio)) {
-          const clampedRatio = Math.max(0, Math.min(1, location.globalRatio));
+          const clampedRatio = atEnd ? 1 : Math.max(0, Math.min(1, location.globalRatio));
           setGlobalProgress(clampedRatio * 100);
           const pseudoTotalPages = 100;
           const pseudoCurrentPage = Math.max(1, Math.round(clampedRatio * pseudoTotalPages));
@@ -579,7 +656,9 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           setTotalPages(pseudoTotalPages);
         } else if (location.chapterTotal > 0) {
           const clampedChapterTotal = Math.max(1, location.chapterTotal);
-          const clampedChapterPage = Math.max(1, Math.min(clampedChapterTotal, location.chapterPage || 1));
+          const clampedChapterPage = atEnd
+            ? clampedChapterTotal
+            : Math.max(1, Math.min(clampedChapterTotal, location.chapterPage || 1));
           const chapterRatio = clampedChapterPage / clampedChapterTotal;
           setCurrentPage(clampedChapterPage);
           setTotalPages(clampedChapterTotal);
@@ -598,14 +677,14 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         baselineCFIRef.current = location.cfi;
-        void saveProgress(location);
+        void saveProgress(location, atEnd);
         return;
       }
       if (baselineCFIRef.current === location.cfi) {
         return;
       }
 
-      void saveProgress(location);
+      void saveProgress(location, atEnd);
     },
     [
       setCurrentCFI,
@@ -771,8 +850,12 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   );
 
   const handleBack = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+    if (viewerFrom) {
+      navigate(viewerFrom, { replace: true });
+    } else {
+      navigate(-1);
+    }
+  }, [navigate, viewerFrom]);
 
   const handleReachedSeriesEnd = useCallback(() => {
     if (isAdjacentResolved) {
@@ -790,6 +873,15 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     }
     handleReachedSeriesEnd();
   }, [nextChapterId, navigate, handleReachedSeriesEnd, viewerFrom, routeIsIncognito]);
+
+  const handlePrevAtStart = useCallback(() => {
+    if (prevChapterId) {
+      startChapterSwitching(isDocumentFullscreen());
+      navigate(`/viewer/${prevChapterId}`, {
+        state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
+      });
+    }
+  }, [prevChapterId, navigate, viewerFrom, routeIsIncognito]);
 
   const handleTerminatedConfirm = useCallback(() => {
     if (viewerFrom) {
@@ -838,6 +930,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           height: "100%",
         }}
       >
+        {bgmInfo?.exists && bgmInfo.url && (
+          <audio
+            ref={audioRef}
+            src={bgmInfo.url}
+            playsInline
+          />
+        )}
         <EpubViewer
           key={chapterId}
           chapterTitle={chapter?.title || ""}
@@ -847,6 +946,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           initialProgressRatio={initialProgressRatio}
           currentPage={currentPage}
           totalPages={totalPages}
+          visiblePage={visiblePage}
+          visibleTotalPages={visibleTotalPages}
           globalProgress={globalProgress}
           isUIVisible={isUIVisible}
           isSettingsOpen={isSettingsOpen}
@@ -879,6 +980,23 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           onSpreadChange={handleSpreadChange}
           onReachedEndNext={handleNextAtEnd}
           isEndNavigationReady={isAdjacentResolved}
+          onReachedStartPrev={prevChapterId ? handlePrevAtStart : undefined}
+          isStartNavigationReady={isAdjacentResolved}
+          nextChapterTitle={nextChapterTitle}
+          prevChapterTitle={prevChapterTitle}
+          bgmInfo={bgmInfo}
+          isBgmPlaying={isBgmPlaying}
+          onToggleBgm={() => setIsBgmPlaying((prev) => !prev)}
+          seriesId={seriesId || ""}
+          isChapterListOpen={isChapterListOpen}
+          onOpenChapterList={() => setIsChapterListOpen(true)}
+          onCloseChapterList={() => setIsChapterListOpen(false)}
+          onChapterNavigate={(id) => {
+            navigate(`/viewer/${id}`, {
+              state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
+              replace: true,
+            });
+          }}
           onInteractionStart={handleInteractionStart}
           onInteractionEnd={handleInteractionEnd}
         />

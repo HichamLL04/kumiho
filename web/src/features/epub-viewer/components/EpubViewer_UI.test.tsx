@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { EpubViewer } from "../../../pages/EpubViewer";
 import { MemoryRouter } from "react-router-dom";
 
 const isOldIOSSafariMock = vi.hoisted(() => vi.fn(() => false));
-const viewerNextSpy = vi.hoisted(() => vi.fn());
-const viewerPrevSpy = vi.hoisted(() => vi.fn());
+const viewerNextSpy = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+const viewerPrevSpy = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 
 const goToCFISpy = vi.fn();
 const goToProgressSpy = vi.fn();
@@ -47,6 +47,8 @@ function createDefaultProps() {
     initialCFI: null,
     currentPage: 1,
     totalPages: 10,
+    visiblePage: 1,
+    visibleTotalPages: 10,
     globalProgress: 0,
     isUIVisible: true,
     isSettingsOpen: false,
@@ -118,6 +120,8 @@ function touchEnd(target: Element, x: number, y: number) {
 describe("EpubViewer UI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    viewerNextSpy.mockResolvedValue(true);
+    viewerPrevSpy.mockResolvedValue(true);
     isOldIOSSafariMock.mockReturnValue(false);
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
@@ -190,7 +194,7 @@ describe("EpubViewer UI", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("(0%)")).toBeInTheDocument();
+    expect(screen.getByText("| 0%")).toBeInTheDocument();
   });
 
   it("should display progress percentage from unified position axis", () => {
@@ -206,7 +210,7 @@ describe("EpubViewer UI", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("(50%)")).toBeInTheDocument();
+    expect(screen.getByText("| 50%")).toBeInTheDocument();
   });
 
   it("should render epub view mode dropdown in settings panel", () => {
@@ -523,16 +527,17 @@ describe("EpubViewer UI", () => {
     expect(viewerPrevSpy).not.toHaveBeenCalled();
   });
 
-  it("should call onReachedEndNext instead of viewer.next at end position", () => {
+  it("should call onReachedEndNext when viewer.next reports no movement", async () => {
     const props = createDefaultProps();
     const onReachedEndNext = vi.fn();
+    viewerNextSpy.mockResolvedValue(false);
 
     render(
       <MemoryRouter>
         <EpubViewer
           {...props}
-          currentPage={10}
-          totalPages={10}
+          visiblePage={10}
+          visibleTotalPages={10}
           onReachedEndNext={onReachedEndNext}
           isEndNavigationReady
         />
@@ -541,20 +546,23 @@ describe("EpubViewer UI", () => {
 
     fireEvent.click(screen.getByLabelText("epub_viewer.footer.next_page"));
 
-    expect(onReachedEndNext).toHaveBeenCalledTimes(1);
-    expect(viewerNextSpy).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onReachedEndNext).toHaveBeenCalledTimes(1);
+    });
+    expect(viewerNextSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("should not call onReachedEndNext when end navigation is not ready", () => {
+  it("should keep next navigation disabled when end navigation is not ready", () => {
     const props = createDefaultProps();
     const onReachedEndNext = vi.fn();
+    viewerNextSpy.mockResolvedValue(false);
 
     render(
       <MemoryRouter>
         <EpubViewer
           {...props}
-          currentPage={10}
-          totalPages={10}
+          visiblePage={10}
+          visibleTotalPages={10}
           onReachedEndNext={onReachedEndNext}
           isEndNavigationReady={false}
         />
@@ -563,11 +571,11 @@ describe("EpubViewer UI", () => {
 
     fireEvent.click(screen.getByLabelText("epub_viewer.footer.next_page"));
 
-    expect(onReachedEndNext).not.toHaveBeenCalled();
     expect(viewerNextSpy).not.toHaveBeenCalled();
+    expect(onReachedEndNext).not.toHaveBeenCalled();
   });
 
-  it("should call viewer.next when not at end position", () => {
+  it("should call viewer.next when movement succeeds", async () => {
     const props = createDefaultProps();
     const onReachedEndNext = vi.fn();
 
@@ -575,8 +583,10 @@ describe("EpubViewer UI", () => {
       <MemoryRouter>
         <EpubViewer
           {...props}
-          currentPage={9}
+          currentPage={10}
           totalPages={10}
+          visiblePage={9}
+          visibleTotalPages={10}
           onReachedEndNext={onReachedEndNext}
           isEndNavigationReady
         />
@@ -585,21 +595,73 @@ describe("EpubViewer UI", () => {
 
     fireEvent.click(screen.getByLabelText("epub_viewer.footer.next_page"));
 
+    await waitFor(() => {
+      expect(viewerNextSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(onReachedEndNext).not.toHaveBeenCalled();
+  });
+
+  it("should not open end flow before the visible last page even when progress is 100%", async () => {
+    const props = createDefaultProps();
+    const onReachedEndNext = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <EpubViewer
+          {...props}
+          currentPage={10}
+          totalPages={10}
+          visiblePage={14}
+          visibleTotalPages={16}
+          globalProgress={100}
+          onReachedEndNext={onReachedEndNext}
+          isEndNavigationReady
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByLabelText("epub_viewer.footer.next_page"));
+
+    await waitFor(() => {
+      expect(viewerNextSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(onReachedEndNext).not.toHaveBeenCalled();
+  });
+
+  it("should open end flow only when the visible last page can no longer move", async () => {
+    const props = createDefaultProps();
+    const onReachedEndNext = vi.fn();
+    viewerNextSpy.mockResolvedValue(false);
+
+    render(
+      <MemoryRouter>
+        <EpubViewer
+          {...props}
+          visiblePage={16}
+          visibleTotalPages={16}
+          onReachedEndNext={onReachedEndNext}
+          isEndNavigationReady
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByLabelText("epub_viewer.footer.next_page"));
+
+    await waitFor(() => {
+      expect(onReachedEndNext).toHaveBeenCalledTimes(1);
+    });
     expect(viewerNextSpy).toHaveBeenCalledTimes(1);
-    expect(onReachedEndNext).not.toHaveBeenCalled();
   });
 
-  it("should call onReachedEndNext when isAtLastPage is true even if currentPage is less than totalPages", () => {
+  it("should call onReachedEndNext when viewer.next fails even if isAtLastPage is false", async () => {
     const props = createDefaultProps();
     const onReachedEndNext = vi.fn();
+    viewerNextSpy.mockResolvedValue(false);
 
     render(
       <MemoryRouter>
         <EpubViewer
           {...props}
-          currentPage={5}
-          totalPages={10}
-          isAtLastPage
           onReachedEndNext={onReachedEndNext}
           isEndNavigationReady
         />
@@ -608,7 +670,9 @@ describe("EpubViewer UI", () => {
 
     fireEvent.click(screen.getByLabelText("epub_viewer.footer.next_page"));
 
-    expect(onReachedEndNext).toHaveBeenCalledTimes(1);
-    expect(viewerNextSpy).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onReachedEndNext).toHaveBeenCalledTimes(1);
+    });
+    expect(viewerNextSpy).toHaveBeenCalledTimes(1);
   });
 });

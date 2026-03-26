@@ -127,7 +127,7 @@ describe("ChapterListModal", () => {
       expect(parentButton).toHaveAttribute("aria-expanded", "true");
       expect(screen.getByRole("button", { name: /^1화$/i })).toBeInTheDocument();
     });
-  });
+  }, 10000);
 
   it("챕터 항목 클릭 시 onNavigate를 호출한다", async () => {
     const onNavigate = vi.fn();

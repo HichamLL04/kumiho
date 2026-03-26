@@ -16,8 +16,8 @@ import { applyOldIOSSafariPointerEventFallback } from "./iosTouchFallback";
 export type { EpubRenderLayout } from "../../utils/layoutMode";
 
 export interface EpubChapterViewerHandles {
-  next: () => void;
-  prev: () => void;
+  next: () => Promise<boolean>;
+  prev: () => Promise<boolean>;
   goToCFI: (cfi: string) => void;
   goToProgress: (ratio: number) => void;
   goToPage: (page: number) => void;
@@ -39,6 +39,7 @@ interface EpubChapterViewerProps {
   chapterTitle: string;
   chapterPage: number;
   chapterTotal: number;
+  globalProgressPercent?: number;
   isUIVisible: boolean;
   initialCFI?: string | null;
   initialProgressRatio?: number | null;
@@ -53,6 +54,8 @@ interface EpubChapterViewerProps {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    spineIndex: number;
+    spineLength: number;
     atStart?: boolean;
     atEnd?: boolean;
   }) => void;
@@ -119,6 +122,13 @@ interface EpubjsSection {
   cfiFromElement?: (el: Element) => string;
 }
 
+interface NavigationSnapshot {
+  cfi: string | null;
+  page: number;
+  index: number;
+  scrollLeft: number;
+}
+
 const EPUB_LOCATION_STRIDE = 6144; // 6KB 단위로 가상 페이지(위치) 정의. backend/internal/util/epub.go의 EpubPositionStride와 일치해야 함.
 const toLocationRatio = (position: number, total: number): number => {
   if (!Number.isFinite(position) || !Number.isFinite(total) || total <= 1) return 0;
@@ -147,6 +157,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       chapterTitle,
       chapterPage,
       chapterTotal,
+      globalProgressPercent,
       isUIVisible,
       initialCFI,
       initialProgressRatio,
@@ -443,19 +454,31 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       let chapterPage = displayed?.page || 0;
       let chapterTotal = displayed?.total || 0;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const manager = (rendition as any).manager;
-      if (manager && manager.isPaginated && manager.container) {
-        const scrollWidth = manager.container.scrollWidth;
-        const delta = manager.layout?.delta;
-        if (delta > 0 && scrollWidth > 0) {
-          const adjustedTotal = Math.ceil((scrollWidth - 3) / delta);
-          const newTotal = adjustedTotal > 0 ? adjustedTotal : 1;
-          if (newTotal < chapterTotal) {
-            chapterTotal = newTotal;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const manager = (rendition as any).manager;
+        if (manager && manager.isPaginated && manager.container) {
+          const scrollWidth = manager.container.scrollWidth;
+          const delta = manager.layout?.delta;
+          if (delta > 0 && scrollWidth > 0) {
+            const adjustedTotal = Math.ceil((scrollWidth - 3) / delta);
+            const newTotal = adjustedTotal > 0 ? adjustedTotal : 1;
+            if (newTotal < chapterTotal) {
+              // 스프레드 모드에서 epub.js가 총 페이지를 과대계산할 경우 비례 축소한다
+              // (단순 clamp 시 여러 스프레드가 같은 페이지 번호를 표시하는 버그 방지)
+              const originalTotal = chapterTotal;
+              chapterTotal = newTotal;
+              chapterPage = Math.max(
+                1,
+                Math.min(Math.ceil((chapterPage * newTotal) / originalTotal), newTotal),
+              );
+            } else {
+              chapterPage = Math.max(1, Math.min(chapterPage, chapterTotal));
+            }
           }
-          chapterPage = Math.max(1, Math.min(chapterPage, chapterTotal));
         }
+      } catch (err) {
+        console.warn("[EpubChapterViewer] manager spread correction failed:", err);
       }
 
       const spine = book.spine as unknown as EpubjsSpine;
@@ -488,7 +511,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         }
       }
 
-      const currentSpineItem = spineItems[start?.index ?? -1];
+      const spineIndex = start?.index ?? -1;
+      const currentSpineItem = spineItems[spineIndex];
       const chapterHref = currentSpineItem?.href || "";
 
       onLocationChangeRef.current?.({
@@ -499,6 +523,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         currentPosition,
         totalPositions,
         chapterHref,
+        spineIndex,
+        spineLength: spineItems.length,
         atStart: location.atStart,
         atEnd: location.atEnd,
       });
@@ -1050,8 +1076,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
               const currentLoc = rendition.currentLocation() as unknown as EpubjsLocation;
               const currentPct = currentLoc?.start?.percentage ?? 0;
               const expectedRatio = typeof initialProgressRatio === "number" ? initialProgressRatio : 0;
+              const shouldCorrectFromProgress = !initialCFI && expectedRatio > 0.01;
 
-              if (currentPct < 0.01 && expectedRatio > 0.01) {
+              if (currentPct < 0.01 && shouldCorrectFromProgress) {
                 try {
                   const cfiFromRatio = book.locations.cfiFromPercentage(Math.max(0, Math.min(1, expectedRatio)));
                   if (cfiFromRatio) {
@@ -1150,12 +1177,41 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     }, [settings, applySettings, reflowRendition]);
 
     useImperativeHandle(ref, () => {
-      const withNavigation = async (action: () => Promise<unknown> | void) => {
-        if (isNavigatingRef.current) return;
+      const getNavigationSnapshot = (): NavigationSnapshot => {
+        const rendition = renditionRef.current;
+        const currentLocation = rendition?.currentLocation() as EpubjsLocation | undefined;
+        const manager = rendition as unknown as {
+          manager?: { container?: { scrollLeft?: number } };
+        };
+
+        return {
+          cfi: currentLocation?.start?.cfi ?? null,
+          page: currentLocation?.start?.displayed?.page ?? 0,
+          index: currentLocation?.start?.index ?? -1,
+          scrollLeft: manager.manager?.container?.scrollLeft ?? 0,
+        };
+      };
+
+      const didNavigationMove = (before: NavigationSnapshot, after: NavigationSnapshot): boolean => {
+        return (
+          before.cfi !== after.cfi ||
+          before.page !== after.page ||
+          before.index !== after.index ||
+          Math.abs(before.scrollLeft - after.scrollLeft) > 2
+        );
+      };
+
+      const withNavigation = async (action: () => Promise<boolean | void> | boolean | void): Promise<boolean> => {
+        if (isNavigatingRef.current) return false;
+        const before = getNavigationSnapshot();
         isNavigatingRef.current = true;
         if (containerRef.current) containerRef.current.style.opacity = "0";
+        let explicitMovement: boolean | undefined;
         try {
-          await action();
+          const result = await action();
+          if (typeof result === "boolean") {
+            explicitMovement = result;
+          }
         } catch (err) {
           console.error("[EpubChapterViewer] Navigation error:", err);
         } finally {
@@ -1164,98 +1220,145 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
           if (loc) handleRelocated(loc);
         }
+
+        if (explicitMovement !== undefined) {
+          return explicitMovement;
+        }
+
+        const after = getNavigationSnapshot();
+        return didNavigationMove(before, after);
       };
 
       return {
-        next: () => {
-          if (!renditionRef.current) return;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const manager = (renditionRef.current as any).manager;
-          if (manager && manager.isPaginated && manager.container) {
-            const dir = manager.settings?.direction;
-            const scrollLeft = manager.container.scrollLeft;
-            const scrollWidth = manager.container.scrollWidth;
-            const clientWidth = manager.container.clientWidth;
-            const delta = manager.layout?.delta || clientWidth;
+        next: async () => {
+          if (!renditionRef.current) return false;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const manager = (renditionRef.current as any).manager;
+            if (manager && manager.isPaginated && manager.container) {
+              const dir = manager.settings?.direction;
+              const scrollLeft = manager.container.scrollLeft;
+              const scrollWidth = manager.container.scrollWidth;
+              const clientWidth = manager.container.clientWidth;
+              const delta = manager.layout?.delta || clientWidth;
 
-            if (dir === "ltr") {
-              if (scrollLeft + clientWidth < scrollWidth) {
-                const nextLeft = scrollLeft + delta;
-                if (nextLeft + clientWidth > scrollWidth) {
-                  const targetLeft = Math.max(0, scrollWidth - clientWidth);
-                  if (targetLeft - scrollLeft > 2) {
-                    withNavigation(() => {
-                      manager.container.scrollLeft = targetLeft;
-                      manager.updateOffset();
-                      return Promise.resolve();
-                    });
-                    return;
+              if (dir === "ltr") {
+                if (scrollLeft + clientWidth < scrollWidth) {
+                  const nextLeft = scrollLeft + delta;
+                  if (nextLeft + clientWidth > scrollWidth) {
+                    const targetLeft = Math.max(0, scrollWidth - clientWidth);
+                    if (targetLeft - scrollLeft > 2) {
+                      return withNavigation(() => {
+                        manager.container.scrollLeft = targetLeft;
+                        manager.updateOffset();
+                        return true;
+                      });
+                    }
                   }
                 }
-              }
-            } else {
-              if (scrollLeft > 0) {
-                const nextLeft = scrollLeft - delta;
-                if (nextLeft < 0) {
-                  const targetLeft = 0;
-                  if (scrollLeft - targetLeft > 2) {
-                    withNavigation(() => {
-                      manager.container.scrollLeft = targetLeft;
-                      manager.updateOffset();
-                      return Promise.resolve();
-                    });
-                    return;
+              } else {
+                if (scrollLeft > 0) {
+                  const nextLeft = scrollLeft - delta;
+                  if (nextLeft < 0) {
+                    const targetLeft = 0;
+                    if (scrollLeft - targetLeft > 2) {
+                      return withNavigation(() => {
+                        manager.container.scrollLeft = targetLeft;
+                        manager.updateOffset();
+                        return true;
+                      });
+                    }
                   }
                 }
               }
             }
+          } catch (err) {
+            console.warn("[EpubChapterViewer] manager next correction failed:", err);
           }
-          withNavigation(() => renditionRef.current!.next());
+          return withNavigation(() => renditionRef.current!.next());
         },
-        prev: () => {
-          if (!renditionRef.current) return;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const manager = (renditionRef.current as any).manager;
-          if (manager && manager.isPaginated && manager.container) {
-            const dir = manager.settings?.direction;
-            const scrollLeft = manager.container.scrollLeft;
-            const scrollWidth = manager.container.scrollWidth;
-            const clientWidth = manager.container.clientWidth;
-            const delta = manager.layout?.delta || clientWidth;
+        prev: async () => {
+          if (!renditionRef.current) return false;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const manager = (renditionRef.current as any).manager;
+            if (manager && manager.isPaginated && manager.container) {
+              const dir = manager.settings?.direction;
+              const scrollLeft = manager.container.scrollLeft;
+              const scrollWidth = manager.container.scrollWidth;
+              const clientWidth = manager.container.clientWidth;
+              const delta = manager.layout?.delta || clientWidth;
 
-            if (dir === "ltr") {
-              if (scrollLeft > 0) {
-                const prevLeft = scrollLeft - delta;
-                if (prevLeft < 0) {
-                  const targetLeft = 0;
-                  if (scrollLeft - targetLeft > 2) {
-                    withNavigation(() => {
-                      manager.container.scrollLeft = targetLeft;
-                      manager.updateOffset();
-                      return Promise.resolve();
-                    });
-                    return;
+              if (dir === "ltr") {
+                if (scrollLeft > 0) {
+                  const prevLeft = scrollLeft - delta;
+                  if (prevLeft < 0) {
+                    const targetLeft = 0;
+                    if (scrollLeft - targetLeft > 2) {
+                      return withNavigation(() => {
+                        manager.container.scrollLeft = targetLeft;
+                        manager.updateOffset();
+                        return true;
+                      });
+                    }
                   }
                 }
-              }
-            } else {
-              if (scrollLeft + clientWidth < scrollWidth) {
-                const prevLeft = scrollLeft + delta;
-                if (prevLeft + clientWidth > scrollWidth) {
-                  const targetLeft = Math.max(0, scrollWidth - clientWidth);
-                  if (targetLeft - scrollLeft > 2) {
-                    withNavigation(() => {
-                      manager.container.scrollLeft = targetLeft;
-                      manager.updateOffset();
-                      return Promise.resolve();
-                    });
-                    return;
+              } else {
+                if (scrollLeft + clientWidth < scrollWidth) {
+                  const prevLeft = scrollLeft + delta;
+                  if (prevLeft + clientWidth > scrollWidth) {
+                    const targetLeft = Math.max(0, scrollWidth - clientWidth);
+                    if (targetLeft - scrollLeft > 2) {
+                      return withNavigation(() => {
+                        manager.container.scrollLeft = targetLeft;
+                        manager.updateOffset();
+                        return true;
+                      });
+                    }
                   }
                 }
               }
             }
+          } catch (err) {
+            console.warn("[EpubChapterViewer] manager prev correction failed:", err);
           }
-          withNavigation(() => renditionRef.current!.prev());
+          // 섹션 경계를 넘는 prev()는 이전 섹션의 끝이 아닌 중간 위치로 이동하는
+          // epub.js 버그가 있어, 섹션 변경 감지 후 마지막 페이지로 스크롤을 보정한다.
+          const beforeIndex = (
+            renditionRef.current.currentLocation() as unknown as EpubjsLocation
+          )?.start?.index;
+          return withNavigation(async () => {
+            await renditionRef.current!.prev();
+
+            const afterLoc =
+              renditionRef.current!.currentLocation() as unknown as EpubjsLocation;
+            const afterIndex = afterLoc?.start?.index;
+            if (
+              beforeIndex !== undefined &&
+              afterIndex !== undefined &&
+              beforeIndex !== afterIndex
+            ) {
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const mgr = (renditionRef.current as any).manager;
+                if (mgr?.isPaginated && mgr.container) {
+                  const d = mgr.settings?.direction;
+                  const sw = mgr.container.scrollWidth;
+                  const cw = mgr.container.clientWidth;
+                  const dt = mgr.layout?.delta || cw;
+                  if (d === "rtl") {
+                    mgr.container.scrollLeft = 0;
+                  } else {
+                    const maxScroll = Math.max(0, sw - cw);
+                    mgr.container.scrollLeft = Math.floor(maxScroll / dt) * dt;
+                  }
+                  mgr.updateOffset?.();
+                }
+              } catch (err) {
+                console.warn("[EpubChapterViewer] manager prev-section correction failed:", err);
+              }
+            }
+          });
         },
         goToCFI: (cfi: string) => {
           if (!renditionRef.current) return;
@@ -1310,6 +1413,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         />
         <div className={`${styles.chapterPageInfo} ${isUIVisible ? styles.hidden : ""}`}>
           {chapterTitle} - {Math.max(1, chapterPage || 1)}/{Math.max(1, chapterTotal || 1)}
+          {globalProgressPercent != null && ` | ${globalProgressPercent}%`}
         </div>
       </div>
     );

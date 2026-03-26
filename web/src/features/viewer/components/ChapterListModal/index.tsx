@@ -133,7 +133,7 @@ export function ChapterListModal({ seriesId, currentChapterId, isOpen, onClose, 
       // 약간의 지연을 주어 대화상자 애니메이션과 겹치지 않게 함
       const timer = setTimeout(() => {
         const activeItem = containerRef.current?.querySelector(`.${styles.activeChapter}`);
-        if (activeItem) {
+        if (activeItem instanceof HTMLElement && typeof activeItem.scrollIntoView === "function") {
           activeItem.scrollIntoView({ behavior: "smooth", block: "center" });
         }
       }, 100);

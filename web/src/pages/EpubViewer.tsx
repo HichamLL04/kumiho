@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect, useMemo, type MouseEvent } from "react";
+import { useRef, useCallback, useState, useEffect, useMemo, useId, type MouseEvent } from "react";
 import { isOldIOSSafari } from "../utils/browserDetect";
 import { useTranslation } from "react-i18next";
 import {
@@ -12,8 +12,15 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Music,
+  Sparkles,
+  LayoutGrid,
 } from "lucide-react";
 import type { EpubFontFamily, EpubRenderMode, EpubViewerSettings, EpubTheme } from "../stores/epubViewerStore";
+import type { BGMInfo } from "../features/viewer/types";
+import { useAtmosphereStore } from "../stores/atmosphereStore";
+import { AtmospherePopover } from "../features/viewer/components/AtmospherePopover";
+import { ChapterListModal } from "../features/viewer/components";
 import {
   EpubChapterViewer,
   type EpubTOCItem,
@@ -22,6 +29,7 @@ import {
 import type { EpubChapterViewerHandles } from "../features/epub-viewer/components/EpubChapterViewer";
 import { EpubSettingsPanel } from "../features/epub-viewer/components/EpubSettingsPanel";
 import { EpubTOC } from "../features/epub-viewer/components/EpubTOC";
+import { ChapterNavHint } from "../features/viewer/components/ChapterNavHint";
 import styles from "./EpubViewer.module.css";
 
 interface EpubViewerProps {
@@ -32,6 +40,8 @@ interface EpubViewerProps {
   initialProgressRatio?: number | null;
   currentPage: number;
   totalPages: number;
+  visiblePage: number;
+  visibleTotalPages: number;
   isUIVisible: boolean;
   isSettingsOpen: boolean;
   isTOCOpen: boolean;
@@ -58,6 +68,8 @@ interface EpubViewerProps {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    spineIndex: number;
+    spineLength: number;
     atStart?: boolean;
     atEnd?: boolean;
   }) => void;
@@ -73,6 +85,18 @@ interface EpubViewerProps {
   onSpreadChange: (spread: "auto" | "none") => void;
   onReachedEndNext?: () => void;
   isEndNavigationReady?: boolean;
+  onReachedStartPrev?: () => void;
+  isStartNavigationReady?: boolean;
+  nextChapterTitle?: string | null;
+  prevChapterTitle?: string | null;
+  bgmInfo?: BGMInfo | null;
+  isBgmPlaying?: boolean;
+  onToggleBgm?: () => void;
+  seriesId?: string;
+  isChapterListOpen?: boolean;
+  onOpenChapterList?: () => void;
+  onCloseChapterList?: () => void;
+  onChapterNavigate?: (chapterId: string) => void;
   onInitializationComplete?: () => void;
   onInteractionStart?: () => void;
   onInteractionEnd?: () => void;
@@ -83,6 +107,7 @@ const THEME_BG: Record<string, string> = {
   dark: "#1a1a1a",
   sepia: "#f4ecd8",
 };
+const CHAPTER_NAV_HINT_DURATION_MS = 3000;
 
 export function EpubViewer({
   chapterTitle,
@@ -92,14 +117,14 @@ export function EpubViewer({
   initialProgressRatio,
   currentPage,
   totalPages,
+  visiblePage,
+  visibleTotalPages,
   isUIVisible,
   isSettingsOpen,
   isTOCOpen,
   isFullscreen,
   isIncognito,
   globalProgress,
-  isAtFirstPage,
-  isAtLastPage,
   toc,
   settings,
   onBack,
@@ -123,6 +148,18 @@ export function EpubViewer({
   onSpreadChange,
   onReachedEndNext,
   isEndNavigationReady = true,
+  onReachedStartPrev,
+  isStartNavigationReady = true,
+  nextChapterTitle,
+  prevChapterTitle,
+  bgmInfo,
+  isBgmPlaying = true,
+  onToggleBgm,
+  seriesId,
+  isChapterListOpen = false,
+  onOpenChapterList,
+  onCloseChapterList,
+  onChapterNavigate,
   onInitializationComplete,
   onInteractionStart,
   onInteractionEnd,
@@ -137,8 +174,53 @@ export function EpubViewer({
   const [hoveredProgressRatio, setHoveredProgressRatio] = useState<number | null>(null);
   const [hoveredMarker, setHoveredMarker] = useState<{ ratio: number; label: string } | null>(null);
   const [pendingProgressRatio, setPendingProgressRatio] = useState<number | null>(null);
-  const [chapterPageDisplay, setChapterPageDisplay] = useState(1);
-  const [chapterTotalDisplay, setChapterTotalDisplay] = useState(1);
+  const [chapterPageDisplay, setChapterPageDisplay] = useState(visiblePage);
+  const [chapterTotalDisplay, setChapterTotalDisplay] = useState(visibleTotalPages);
+  const [nextHintTriggeredChapterId, setNextHintTriggeredChapterId] = useState<string | null>(null);
+  const [prevHintTriggeredChapterId, setPrevHintTriggeredChapterId] = useState<string | null>(null);
+  const hintTimeoutRef = useRef<number | null>(null);
+  const showNextHint = nextHintTriggeredChapterId === chapterId;
+  const showPrevHint = prevHintTriggeredChapterId === chapterId;
+
+  useEffect(() => {
+    return () => {
+      if (hintTimeoutRef.current !== null) {
+        window.clearTimeout(hintTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setChapterPageDisplay(Math.max(1, visiblePage));
+  }, [visiblePage]);
+
+  useEffect(() => {
+    setChapterTotalDisplay(Math.max(1, visibleTotalPages));
+  }, [visibleTotalPages]);
+
+  // Atmosphere
+  const isAtmosphereEnabled = useAtmosphereStore((state) => state.isEnabled);
+  const setAtmosphereEnabled = useAtmosphereStore((state) => state.setEnabled);
+  const atmosphereButtonRef = useRef<HTMLButtonElement>(null);
+  const atmospherePopoverId = useId();
+  const [isAtmospherePopoverOpen, setIsAtmospherePopoverOpen] = useState(false);
+  const handleCloseAtmospherePopover = useCallback(() => {
+    setIsAtmospherePopoverOpen(false);
+  }, []);
+  const handleAtmosphereClick = useCallback(() => {
+    if (isAtmosphereEnabled) {
+      setAtmosphereEnabled(false);
+      setIsAtmospherePopoverOpen(false);
+    } else {
+      setIsAtmospherePopoverOpen((prev) => !prev);
+    }
+  }, [isAtmosphereEnabled, setAtmosphereEnabled]);
+  const showsAtmosphereDialogState = isAtmospherePopoverOpen || !isAtmosphereEnabled;
+  const atmosphereButtonLabel = isAtmosphereEnabled
+    ? t("viewer.header.atmosphere_off")
+    : isAtmospherePopoverOpen
+      ? t("viewer.header.atmosphere_settings_close")
+      : t("viewer.header.atmosphere_settings_open");
 
   const getZoneRatio = useCallback((clientX: number, element: HTMLElement | null): number => {
     const rect = element?.getBoundingClientRect();
@@ -182,6 +264,8 @@ export function EpubViewer({
       currentPosition: number;
       totalPositions: number;
       chapterHref: string;
+      spineIndex: number;
+      spineLength: number;
       atStart?: boolean;
       atEnd?: boolean;
     }) => {
@@ -197,21 +281,101 @@ export function EpubViewer({
     [onLocationChange],
   );
 
-  const handleNext = useCallback(() => {
-    const isAtEnd = isAtLastPage || (totalPages > 0 && currentPage >= totalPages);
-    if (isAtEnd) {
-      if (!isEndNavigationReady) return;
-      onReachedEndNext?.();
-      return;
+  const clearHintTimeout = useCallback(() => {
+    if (hintTimeoutRef.current !== null) {
+      window.clearTimeout(hintTimeoutRef.current);
+      hintTimeoutRef.current = null;
     }
-    clearPendingProgress();
-    viewerRef.current?.next();
-  }, [isAtLastPage, currentPage, totalPages, onReachedEndNext, isEndNavigationReady, clearPendingProgress]);
+  }, []);
+
+  const handleNext = useCallback(() => {
+    const attemptNext = async () => {
+      if (!viewerRef.current?.next) return;
+      const moved = await viewerRef.current.next();
+      if (moved) {
+        if (showNextHint || showPrevHint) {
+          clearHintTimeout();
+          setNextHintTriggeredChapterId(null);
+          setPrevHintTriggeredChapterId(null);
+        }
+        clearPendingProgress();
+        return;
+      }
+
+      if (!isEndNavigationReady) return;
+      if (showNextHint && onReachedEndNext) {
+        // 두 번째 클릭: 실제 이동
+        clearHintTimeout();
+        setNextHintTriggeredChapterId(null);
+        onReachedEndNext();
+        return;
+      }
+      if (onReachedEndNext && nextChapterTitle) {
+        // 첫 번째 클릭: 힌트 표시
+        clearHintTimeout();
+        setPrevHintTriggeredChapterId(null);
+        setNextHintTriggeredChapterId(chapterId);
+        hintTimeoutRef.current = window.setTimeout(() => {
+          setNextHintTriggeredChapterId(null);
+          hintTimeoutRef.current = null;
+        }, CHAPTER_NAV_HINT_DURATION_MS);
+        return;
+      }
+      // nextChapterTitle이 없으면 힌트 문구를 구성할 수 없어 즉시 종료 플로우로 위임한다.
+      onReachedEndNext?.();
+    };
+
+    void attemptNext();
+  }, [
+    onReachedEndNext, isEndNavigationReady,
+    showNextHint, showPrevHint, nextChapterTitle, chapterId, clearPendingProgress, clearHintTimeout,
+  ]);
+
+  const isVisibleAtStart = chapterPageDisplay <= 1;
+  const isVisibleAtEnd = chapterTotalDisplay > 0 && chapterPageDisplay >= chapterTotalDisplay;
 
   const handlePrev = useCallback(() => {
-    clearPendingProgress();
-    viewerRef.current?.prev();
-  }, [clearPendingProgress]);
+    const attemptPrev = async () => {
+      if (!viewerRef.current?.prev) return;
+      const moved = await viewerRef.current.prev();
+      if (moved) {
+        if (showNextHint || showPrevHint) {
+          clearHintTimeout();
+          setNextHintTriggeredChapterId(null);
+          setPrevHintTriggeredChapterId(null);
+        }
+        clearPendingProgress();
+        return;
+      }
+
+      if (!isStartNavigationReady) return;
+      if (showPrevHint && onReachedStartPrev) {
+        // 두 번째 클릭: 실제 이동
+        clearHintTimeout();
+        setPrevHintTriggeredChapterId(null);
+        onReachedStartPrev();
+        return;
+      }
+      if (onReachedStartPrev && prevChapterTitle) {
+        // 첫 번째 클릭: 힌트 표시
+        clearHintTimeout();
+        setNextHintTriggeredChapterId(null);
+        setPrevHintTriggeredChapterId(chapterId);
+        hintTimeoutRef.current = window.setTimeout(() => {
+          setPrevHintTriggeredChapterId(null);
+          hintTimeoutRef.current = null;
+        }, CHAPTER_NAV_HINT_DURATION_MS);
+        return;
+      }
+      // prevChapterTitle이 없으면 힌트 문구를 구성할 수 없어 즉시 이동 플로우로 위임한다.
+      onReachedStartPrev?.();
+    };
+
+    void attemptPrev();
+  }, [
+    isStartNavigationReady, onReachedStartPrev,
+    showPrevHint, showNextHint, prevChapterTitle, chapterId, clearPendingProgress, clearHintTimeout,
+  ]);
 
   const handleTOCJump = useCallback(
     (href: string) => {
@@ -537,6 +701,31 @@ export function EpubViewer({
           >
             <List size={24} />
           </button>
+
+          {/* 앰비언트 사운드 */}
+          <button
+            ref={atmosphereButtonRef}
+            className={`${styles.iconBtn} ${!isAtmosphereEnabled ? styles.muted : ""}`}
+            onClick={handleAtmosphereClick}
+            title={atmosphereButtonLabel}
+            aria-label={atmosphereButtonLabel}
+            aria-haspopup={showsAtmosphereDialogState ? "dialog" : undefined}
+            aria-expanded={showsAtmosphereDialogState ? isAtmospherePopoverOpen : undefined}
+            aria-controls={isAtmospherePopoverOpen ? atmospherePopoverId : undefined}
+          >
+            <Sparkles
+              size={24}
+              fill={isAtmosphereEnabled ? "currentColor" : "none"}
+            />
+          </button>
+          {isAtmospherePopoverOpen && (
+            <AtmospherePopover
+              onClose={handleCloseAtmospherePopover}
+              triggerRef={atmosphereButtonRef}
+              id={atmospherePopoverId}
+            />
+          )}
+
           <button
             className={`${styles.iconBtn} ${isSettingsOpen ? styles.active : ""}`}
             onClick={onToggleSettings}
@@ -545,6 +734,19 @@ export function EpubViewer({
           >
             <Settings size={24} />
           </button>
+
+          {/* BGM */}
+          {bgmInfo?.exists && (
+            <button
+              className={`${styles.iconBtn} ${!isBgmPlaying ? styles.muted : ""}`}
+              onClick={onToggleBgm}
+              title={isBgmPlaying ? t("viewer.header.bgm_off") : t("viewer.header.bgm_on")}
+              aria-label={isBgmPlaying ? t("viewer.header.bgm_off") : t("viewer.header.bgm_on")}
+              aria-pressed={isBgmPlaying}
+            >
+              <Music size={24} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -620,6 +822,7 @@ export function EpubViewer({
           chapterTitle={currentTocLabel}
           chapterPage={chapterPageDisplay}
           chapterTotal={chapterTotalDisplay}
+          globalProgressPercent={currentProgressPercent >= 0 ? currentProgressPercent : undefined}
           isUIVisible={isUIVisible}
           initialCFI={initialCFI}
           initialProgressRatio={initialProgressRatio}
@@ -635,6 +838,29 @@ export function EpubViewer({
         />
       </main>
 
+      {/* 챕터 이동 힌트 */}
+      <ChapterNavHint
+        type="next"
+        title={nextChapterTitle || ""}
+        show={showNextHint && !!nextChapterTitle}
+      />
+      <ChapterNavHint
+        type="prev"
+        title={prevChapterTitle || ""}
+        show={showPrevHint && !!prevChapterTitle}
+      />
+
+      {/* 시리즈 목록 모달 */}
+      {seriesId && (
+        <ChapterListModal
+          seriesId={seriesId}
+          currentChapterId={chapterId}
+          isOpen={isChapterListOpen}
+          onClose={onCloseChapterList ?? (() => {})}
+          onNavigate={onChapterNavigate ?? (() => {})}
+        />
+      )}
+
       {/* 푸터 */}
       {settings.flow === "paginated" && (
         <footer
@@ -647,7 +873,7 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={() => viewerRef.current?.goToProgress?.(0)}
-              disabled={isAtFirstPage}
+              disabled={isVisibleAtStart}
               aria-label={t("epub_viewer.footer.first_page")}
             >
               <ChevronsLeft size={20} />
@@ -655,7 +881,7 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={handlePrev}
-              disabled={isAtFirstPage}
+              disabled={isVisibleAtStart && (!onReachedStartPrev || !isStartNavigationReady)}
               aria-label={t("epub_viewer.footer.prev_page")}
             >
               <ChevronLeft size={20} />
@@ -743,17 +969,17 @@ export function EpubViewer({
               <div className={styles.pageInfo}>
                 {currentPage >= 0 && (
                   <span className={styles.pageInfoClickable}>
-                    {currentPage > 0 && totalPages > 0 ? (
+                    {chapterPageDisplay > 0 && chapterTotalDisplay > 0 ? (
                       <>
-                        {currentPage} / {totalPages} P
+                        {chapterPageDisplay} / {chapterTotalDisplay} P
+                        {currentProgressPercent >= 0 && (
+                          <span style={{ fontSize: "0.85em", opacity: 0.8, marginLeft: "8px" }}>
+                            | {currentProgressPercent}%
+                          </span>
+                        )}
                       </>
                     ) : (
-                      <>{Math.round(currentPage)}%</>
-                    )}
-                    {currentProgressPercent >= 0 && (
-                      <span style={{ fontSize: "0.85em", opacity: 0.8, marginLeft: "8px" }}>
-                        ({currentProgressPercent}%)
-                      </span>
+                      <>{currentProgressPercent >= 0 ? `${currentProgressPercent}%` : ""}</>
                     )}
                   </span>
                 )}
@@ -763,7 +989,7 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={handleNext}
-              disabled={isAtLastPage && (!onReachedEndNext || !isEndNavigationReady)}
+              disabled={isVisibleAtEnd && (!onReachedEndNext || !isEndNavigationReady)}
               aria-label={t("epub_viewer.footer.next_page")}
             >
               <ChevronRight size={20} />
@@ -771,7 +997,7 @@ export function EpubViewer({
             <button
               className={styles.navBtn}
               onClick={() => viewerRef.current?.goToProgress?.(1)}
-              disabled={isAtLastPage}
+              disabled={isVisibleAtEnd}
               aria-label={t("epub_viewer.footer.last_page")}
             >
               <ChevronsRight size={20} />
@@ -786,6 +1012,18 @@ export function EpubViewer({
                 {settings.spread === "auto" ? t("epub_viewer.footer.pages_2") : t("epub_viewer.footer.pages_1")}
               </button>
             </div>
+
+            {/* 시리즈 목록 */}
+            {seriesId && onOpenChapterList && (
+              <button
+                className={styles.navBtn}
+                onClick={onOpenChapterList}
+                title={t("viewer.footer.chapter_list")}
+                aria-label={t("viewer.footer.chapter_list")}
+              >
+                <LayoutGrid size={20} />
+              </button>
+            )}
           </div>
         </footer>
       )}
