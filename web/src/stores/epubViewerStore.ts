@@ -18,7 +18,7 @@ const LEGACY_EPUB_LINE_HEIGHT_DEFAULT = 1.6;
 
 export const normalizeEpubLineHeightScale = (value: number): number | null => {
   if (!Number.isFinite(value)) return null;
-  if (value >= EPUB_LINE_HEIGHT_SCALE_MIN && value <= EPUB_LINE_HEIGHT_SCALE_MAX) {
+  if (value >= EPUB_LINE_HEIGHT_SCALE_MIN && value < 1.2) {
     return value;
   }
   if (value >= 1.2 && value <= 2.0) {
