@@ -15,11 +15,16 @@ import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import type { Series } from "../types/series";
 import styles from "./Library.module.css";
 
+const POLL_INTERVAL_MS = 3000;
+
 export function LibraryPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
 
   const { fetchLibraries, triggerRefresh, refreshKey } = useLibraryStore();
+  const currentLibraryScanStatus = useLibraryStore(
+    (state) => state.libraries.find((l) => l.id === id)?.scan_status,
+  );
 
   // 데이터 상태
   const [library, setLibrary] = useState<Library | null>(null);
@@ -82,6 +87,31 @@ export function LibraryPage() {
     }
   }, [id, refreshKey, loadData, fetchLibraries]);
 
+  // 스캔 중일 때 시리즈 목록 실시간 폴링
+  // - isScanning: 이 페이지에서 직접 스캔 버튼을 눌렀을 때 (libraryAPI.scan은 동기 블로킹이므로 스토어 갱신 없음)
+  // - currentLibraryScanStatus: 외부(다른 탭/스케줄러 등)에서 스캔이 시작된 경우
+  useEffect(() => {
+    if (!isScanning && currentLibraryScanStatus !== "SCANNING") return;
+
+    let timeoutId: number;
+    let isMounted = true;
+
+    const poll = async () => {
+      if (!isMounted) return;
+      await Promise.all([loadData(false), fetchLibraries(false)]);
+      if (isMounted) {
+        timeoutId = window.setTimeout(poll, POLL_INTERVAL_MS);
+      }
+    };
+
+    void poll();
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [isScanning, currentLibraryScanStatus, loadData, fetchLibraries]);
+
   const handleScan = async () => {
     if (!id) return;
     setIsScanning(true);
@@ -102,8 +132,11 @@ export function LibraryPage() {
       const err = error as { response?: { status?: number } };
       if (err.response?.status === 409) {
         setStatus({ type: "info", message: t("settings.libraries.toast.scan_running") });
+        // 스토어 scan_status를 SCANNING으로 갱신해야 폴링 effect가 유지됨
+        await fetchLibraries(false);
       } else {
         setStatus({ type: "error", message: t("settings.libraries.toast.scan_failed") });
+        await loadData(false);  // 실패 후 최신 상태로 복원
       }
     } finally {
       setIsScanning(false);
