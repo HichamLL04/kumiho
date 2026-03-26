@@ -56,6 +56,7 @@ export function LibraryPage() {
         console.error("Failed to load library data:", error);
       } finally {
         if (currentLoad === loadSequenceRef.current) {
+          // 초기 진입과 새로고침 모두 최신 요청이 끝나면 로딩을 해제해야 화면이 갱신된다.
           setIsLoading(false);
         }
       }

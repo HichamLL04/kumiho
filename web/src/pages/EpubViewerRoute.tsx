@@ -47,6 +47,7 @@ function isLocationAtEnd(location: {
     // 실제 마지막 페이지/진행률/epub.js atEnd 중 하나가 함께 확인될 때만 종료로 간주한다.
     if (location.currentPosition >= location.totalPositions - 1) {
       const chapterAtEnd = location.chapterTotal > 0 && location.chapterPage >= location.chapterTotal;
+      // epub.js가 마지막 위치에서 1.0 대신 약간 낮은 진행률을 반환하는 경우를 보정한다.
       const ratioAtEnd = Number.isFinite(location.globalRatio) && location.globalRatio >= 0.995;
       return chapterAtEnd || ratioAtEnd || location.atEnd === true;
     }
@@ -54,6 +55,7 @@ function isLocationAtEnd(location: {
   }
 
   if (Number.isFinite(location.globalRatio)) {
+    // locations 축이 없을 때는 부동소수점 오차를 감안해 99.5% 이상을 마지막으로 본다.
     return location.globalRatio >= 0.995;
   }
 

@@ -107,6 +107,7 @@ const THEME_BG: Record<string, string> = {
   dark: "#1a1a1a",
   sepia: "#f4ecd8",
 };
+const CHAPTER_NAV_HINT_DURATION_MS = 3000;
 
 export function EpubViewer({
   chapterTitle,
@@ -317,9 +318,10 @@ export function EpubViewer({
         hintTimeoutRef.current = window.setTimeout(() => {
           setNextHintTriggeredChapterId(null);
           hintTimeoutRef.current = null;
-        }, 3000);
+        }, CHAPTER_NAV_HINT_DURATION_MS);
         return;
       }
+      // nextChapterTitle이 없으면 힌트 문구를 구성할 수 없어 즉시 종료 플로우로 위임한다.
       onReachedEndNext?.();
     };
 
@@ -362,9 +364,10 @@ export function EpubViewer({
         hintTimeoutRef.current = window.setTimeout(() => {
           setPrevHintTriggeredChapterId(null);
           hintTimeoutRef.current = null;
-        }, 3000);
+        }, CHAPTER_NAV_HINT_DURATION_MS);
         return;
       }
+      // prevChapterTitle이 없으면 힌트 문구를 구성할 수 없어 즉시 이동 플로우로 위임한다.
       onReachedStartPrev?.();
     };
 
