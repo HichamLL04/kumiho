@@ -429,10 +429,12 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 				req.CurrentCFI = existing.CurrentCFI
 			}
 			if req.CurrentPosition == nil && existing.CurrentPosition > 0 {
-				req.CurrentPosition = &existing.CurrentPosition
+				v := existing.CurrentPosition
+				req.CurrentPosition = &v
 			}
 			if req.TotalPositions == nil && existing.TotalPositions > 0 {
-				req.TotalPositions = &existing.TotalPositions
+				v := existing.TotalPositions
+				req.TotalPositions = &v
 			}
 			if req.AnchorPage <= 0 {
 				req.AnchorPage = fallbackAnchorPage(existing)
