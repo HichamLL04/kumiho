@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import type { EpubFontFamily, EpubRenderMode, EpubViewerSettings, EpubTheme } from "../../../../stores/epubViewerStore";
+import { EPUB_LINE_HEIGHT_SCALE_DEFAULT, EPUB_LINE_HEIGHT_SCALE_MAX, EPUB_LINE_HEIGHT_SCALE_MIN } from "../../../../stores/epubViewerStore";
 import styles from "./EpubSettingsPanel.module.css";
 
 interface EpubSettingsPanelProps {
@@ -33,6 +34,12 @@ export function EpubSettingsPanel({
   isTypographyControlLimited = false,
 }: EpubSettingsPanelProps) {
   const { t } = useTranslation();
+  const isOriginalFontSize = settings.fontSize === 100;
+  const isOriginalLineHeight = Math.abs(settings.lineHeight - EPUB_LINE_HEIGHT_SCALE_DEFAULT) < 0.001;
+  const fontSizeValueLabel = isOriginalFontSize ? t("epub_viewer.settings.font_size.original", { defaultValue: "원본" }) : `${settings.fontSize}%`;
+  const lineHeightValueLabel = isOriginalLineHeight
+    ? t("epub_viewer.settings.line_height.original", { defaultValue: "원본" })
+    : `${settings.lineHeight.toFixed(2)}x`;
 
   return (
     <div className={styles.panel}>
@@ -139,7 +146,7 @@ export function EpubSettingsPanel({
             className={styles.label}
             htmlFor="font-size-slider"
           >
-            {t("epub_viewer.settings.font_size.label")} ({settings.fontSize}%)
+            {t("epub_viewer.settings.font_size.label")} ({fontSizeValueLabel})
           </label>
           <input
             id="font-size-slider"
@@ -164,22 +171,22 @@ export function EpubSettingsPanel({
             className={styles.label}
             htmlFor="line-height-slider"
           >
-            {t("epub_viewer.settings.line_height.label")} ({settings.lineHeight.toFixed(1)})
+            {t("epub_viewer.settings.line_height.label")} ({lineHeightValueLabel})
           </label>
           <input
             id="line-height-slider"
             type="range"
-            min={1.2}
-            max={2.0}
-            step={0.1}
+            min={EPUB_LINE_HEIGHT_SCALE_MIN}
+            max={EPUB_LINE_HEIGHT_SCALE_MAX}
+            step={0.05}
             value={settings.lineHeight}
             onChange={(e) => onLineHeightChange(Number(e.target.value))}
             className={styles.slider}
             disabled={isTypographyControlLimited}
           />
           <div className={styles.sliderLabels}>
-            <span>1.2</span>
-            <span>2.0</span>
+            <span>{EPUB_LINE_HEIGHT_SCALE_MIN.toFixed(2)}x</span>
+            <span>{EPUB_LINE_HEIGHT_SCALE_MAX.toFixed(2)}x</span>
           </div>
           {isTypographyControlLimited && (
             <p className={styles.helperText}>{t("epub_viewer.settings.render_mode.typography_limited")}</p>

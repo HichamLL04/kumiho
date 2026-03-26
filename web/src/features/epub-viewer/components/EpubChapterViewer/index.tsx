@@ -10,8 +10,10 @@ import {
   resolveEffectiveLayout,
   type EpubRenderLayout,
 } from "../../utils/layoutMode";
+import { buildEpubInjectedStyle, getEpubThemeStyle } from "./styleBuilder";
 import styles from "./EpubChapterViewer.module.css";
 import { applyOldIOSSafariPointerEventFallback } from "./iosTouchFallback";
+import { applyEpubLineHeightScale } from "./lineHeightScale";
 
 export type { EpubRenderLayout } from "../../utils/layoutMode";
 
@@ -66,16 +68,6 @@ interface EpubChapterViewerProps {
   onRenderLayoutChange?: (layout: EpubRenderLayout) => void;
 }
 
-const FONT_FAMILY_MAP: Record<string, string> = {
-  serif: "Georgia, 'Times New Roman', serif",
-  "sans-serif": "Arial, Helvetica, sans-serif",
-};
-
-const THEME_STYLES: Record<string, Record<string, string>> = {
-  light: { background: "#ffffff", color: "#1a1a1a" },
-  dark: { background: "#1a1a1a", color: "#e0e0e0" },
-  sepia: { background: "#f4ecd8", color: "#3b2f2f" },
-};
 const EPUB_VIEWER_STYLE_ID = "kumiho-epub-viewer-settings";
 
 // epub.js 관련 내부 타입 정의
@@ -271,11 +263,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       void anyRendition.display(currentCfi).catch(() => {});
     }, []);
     const applyDocumentSettings = useCallback((doc: Document, s: EpubViewerSettings, layout: EpubRenderLayout) => {
-      const theme = THEME_STYLES[s.theme] || THEME_STYLES.light;
-      const isOriginal = s.fontFamily === "original";
-      const isComic = layout === "comic";
-      const fontFamily = isOriginal ? "inherit" : (FONT_FAMILY_MAP[s.fontFamily] || "inherit");
-      const linkColor = s.theme === "dark" ? "#7eb8f7" : "#1a6bb5";
       let styleEl = doc.getElementById(EPUB_VIEWER_STYLE_ID) as HTMLStyleElement | null;
 
       if (!styleEl) {
@@ -294,104 +281,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         containerForStyle.appendChild(styleEl);
       }
 
-      if (isComic) {
-        styleEl.textContent = `
-          html, body {
-            background: ${theme.background} !important;
-          }
-        `;
-        return;
-      }
-
-      styleEl.textContent = `
-        html, body {
-          background: ${theme.background} !important;
-          color: ${theme.color} !important;
-        }
-
-        body {
-          font-family: ${fontFamily} !important;
-          font-size: ${s.fontSize}% !important;
-          line-height: ${s.lineHeight} !important;
-          column-fill: auto !important;
-          padding-top: 0 !important;
-          padding-bottom: 0 !important;
-          padding-left: 8px !important;
-          padding-right: 8px !important;
-        }
-
-        body p,
-        body div,
-        body span,
-        body li,
-        body dd,
-        body dt,
-        body blockquote,
-        body figcaption,
-        body th,
-        body td,
-        body a:not([href]),
-        body h1,
-        body h2,
-        body h3,
-        body h4,
-        body h5,
-        body h6 {
-          color: ${theme.color} !important;
-          line-height: ${s.lineHeight} !important;
-        }
-
-        body a[href] {
-          color: ${linkColor} !important;
-        }
-
-        [epub\\:type~="titlepage"] h1,
-        [epub\\:type~="titlepage"] p,
-        [epub\\:type~="titlepage"] hgroup,
-        [epub\\:type~="colophon"] h2,
-        [epub\\:type~="imprint"] h2,
-        [epub\\:type~="halftitlepage"] h1,
-        [epub\\:type~="dedication"] h1,
-        [epub\\:type~="epigraph"] h1,
-        .epub-type-contains-word-titlepage h1,
-        .epub-type-contains-word-titlepage p,
-        .epub-type-contains-word-colophon h2,
-        .epub-type-contains-word-imprint h2,
-        .epub-type-contains-word-halftitlepage h1,
-        .epub-type-contains-word-dedication h1 {
-          position: static !important;
-          left: auto !important;
-          width: auto !important;
-          height: auto !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          visibility: hidden !important;
-          display: none !important;
-        }
-
-        section, .epub-type-contains-word-section {
-          display: block !important;
-          break-inside: auto !important;
-          page-break-inside: auto !important;
-          overflow: visible !important;
-          height: auto !important;
-        }
-
-        .box_brown, .box_white, .box_grey {
-          break-inside: avoid !important;
-          -webkit-break-inside: avoid !important;
-          page-break-inside: avoid !important;
-          min-height: 100% !important;
-        }
-
-        ${s.theme !== "dark" ? `
-        img[epub\\:type~='se:image.color-depth.black-on-transparent'],
-        img.epub-type-contains-word-se-image-color-depth-black-on-transparent {
-          filter: none !important;
-          background: transparent !important;
-        }` : ""}
-      `;
-
+      styleEl.textContent = buildEpubInjectedStyle(s, layout);
+      applyEpubLineHeightScale(doc, s.lineHeight);
     }, []);
     // epub.js themes API는 소형 뷰포트·리사이즈 시 스타일이 유실될 수 있으므로
     // CSS 스타일링은 applyDocumentSettings(<style> 직접 주입)에서 일원화한다.
@@ -1404,7 +1295,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     return (
       <div
         className={styles.container}
-        style={{ background: THEME_STYLES[settings.theme]?.background || "#fff" }}
+        style={{ background: getEpubThemeStyle(settings.theme).background }}
       >
         <div
           ref={containerRef}
