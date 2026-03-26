@@ -190,7 +190,7 @@ describe("EpubViewer UI", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("(0%)")).toBeInTheDocument();
+    expect(screen.getByText("| 0%")).toBeInTheDocument();
   });
 
   it("should display progress percentage from unified position axis", () => {
@@ -206,7 +206,7 @@ describe("EpubViewer UI", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("(50%)")).toBeInTheDocument();
+    expect(screen.getByText("| 50%")).toBeInTheDocument();
   });
 
   it("should render epub view mode dropdown in settings panel", () => {

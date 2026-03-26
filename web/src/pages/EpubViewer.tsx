@@ -717,6 +717,7 @@ export function EpubViewer({
               onClick={onToggleBgm}
               title={isBgmPlaying ? t("viewer.header.bgm_off") : t("viewer.header.bgm_on")}
               aria-label={isBgmPlaying ? t("viewer.header.bgm_off") : t("viewer.header.bgm_on")}
+              aria-pressed={isBgmPlaying}
             >
               <Music size={24} />
             </button>
