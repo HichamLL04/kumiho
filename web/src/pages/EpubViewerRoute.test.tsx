@@ -410,6 +410,76 @@ describe("EpubViewerRoute", () => {
     });
   });
 
+  it("마지막 위치 도달 시 progress_percent: 100으로 저장한다", async () => {
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("epub-viewer")).toBeInTheDocument();
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    act(() => {
+      screen.getByTestId("epub-init-complete").click();
+    });
+
+    act(() => {
+      latestViewerProps?.onReady(10);
+      // currentPosition: 9 = totalPositions - 1 → isLocationAtEnd = true → atEnd=true
+      latestViewerProps?.onLocationChange({
+        cfi: "epubcfi(/6/2[chapter]!/4/10/2)",
+        chapterPage: 10,
+        chapterTotal: 10,
+        globalRatio: 1.0,
+        currentPosition: 9,
+        totalPositions: 10,
+        chapterHref: "chapter.xhtml",
+      });
+    });
+
+    await waitFor(() => {
+      expect(epubProgressUpdateMock).toHaveBeenCalledWith("chapter-1", {
+        current_page: 10,
+        total_pages: 10,
+        progress_percent: 100,
+        current_position: 9,
+        total_positions: 10,
+        current_cfi: "epubcfi(/6/2[chapter]!/4/10/2)",
+      });
+    });
+
+    expect(mockSetIsAtLastPage).toHaveBeenCalledWith(true);
+    expect(mockSetGlobalProgress).toHaveBeenCalledWith(100);
+  });
+
   it("should not mark at last page when atEnd flag appears but progress is not at edge", async () => {
     render(
       <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
