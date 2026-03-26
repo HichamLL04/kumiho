@@ -20,14 +20,170 @@
   gap: 1rem;
 }
 
+.multilineHelp {
+  white-space: pre-line;
+}
+
 .flexOne {
   flex: 1;
+}
+
+.createFooter {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  min-height: 3.5rem;
+  margin-top: 0.5rem;
+}
+
+.createStepPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  animation-duration: 220ms;
+  animation-timing-function: ease;
+  animation-fill-mode: both;
+  will-change: opacity, transform;
+}
+
+.createStepForward {
+  animation-name: createStepForwardIn;
+}
+
+.createStepBackward {
+  animation-name: createStepBackwardIn;
 }
 
 .formActions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.stepIndicator {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+}
+
+.stepIndicatorInner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: calc(2rem + 180px + 2rem + 1.8rem);
+  height: 2rem;
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+}
+
+.stepNumber {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition:
+    color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    background 220ms ease;
+}
+
+.stepNumberActive {
+  color: #f8fbff;
+  box-shadow: 0 10px 20px rgba(91, 110, 225, 0.16);
+}
+
+.stepNumberInactive {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.stepMarker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #5b6ee1, #7182f6);
+  box-shadow: 0 10px 20px rgba(91, 110, 225, 0.24);
+  transition:
+    left 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 260ms ease;
+  z-index: 1;
+}
+
+.stepMarkerStepOne {
+  left: 0;
+}
+
+.stepMarkerStepTwo {
+  left: calc(100% - 2rem);
+}
+
+.stepConnector {
+  width: 180px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+}
+
+.stepConnectorProgress {
+  position: absolute;
+  left: calc(2rem + 0.9rem);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(113, 130, 246, 0.95), rgba(157, 171, 255, 0.55));
+  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 1;
+}
+
+.stepConnectorProgressActive {
+  width: 180px;
+}
+
+@keyframes createStepForwardIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+@keyframes createStepBackwardIn {
+  from {
+    opacity: 0;
+    transform: translateX(-16px) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
 }
 
 .libraryList {
@@ -158,6 +314,33 @@
   flex: 1;
 }
 
+@media (max-width: 1180px) {
+  .createFooter {
+    min-height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.9rem;
+  }
+
+  .formActions {
+    width: 100%;
+    order: 1;
+  }
+
+  .stepIndicator {
+    position: static;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    order: 2;
+    width: 100%;
+  }
+
+  .stepIndicatorInner {
+    margin: 0 auto;
+  }
+}
+
 @media (max-width: 768px) {
   .libraryItem {
     flex-direction: column;
@@ -196,6 +379,26 @@
   .formActions {
     justify-content: flex-end;
   }
+
+  .selectGroup {
+    flex-direction: column;
+  }
+
+  .createFooter {
+    gap: 0.75rem;
+  }
+
+  .stepConnector {
+    width: 120px;
+  }
+
+  .stepConnectorProgressActive {
+    width: 120px;
+  }
+
+  .stepIndicatorInner {
+    width: min(100%, 260px);
+  }
 }
 
 /* 추가된 레이아웃 스타일 */
@@ -215,6 +418,18 @@
   /* padding과 font-size는 commonStyles.settingsSelect를 따르도록 명시적으로 오버라이드하지 않음 */
 }
 
+@media (max-width: 768px) {
+  .tabHeaderFlex {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .addLibraryButton {
+    align-self: flex-end;
+  }
+}
+
 .listHeader {
   display: flex;
   justify-content: space-between;
@@ -226,6 +441,18 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .listHeader {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .scanAllButton {
+    align-self: flex-end;
+  }
 }
 
 /* 유틸리티 스타일 */
@@ -245,7 +472,24 @@
 }
 
 .btnPrimary {
+  background: linear-gradient(135deg, #5b6ee1, #7182f6) !important;
+  border-color: rgba(122, 142, 255, 0.45) !important;
+  color: #f8fbff !important;
+  box-shadow: 0 10px 24px rgba(74, 85, 104, 0.22);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6a7bf0, #8190ff) !important;
+  border-color: rgba(148, 163, 255, 0.6) !important;
+}
+
+.btnPrimary:disabled {
   background: #4a5568 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.58) !important;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .dangerText {
@@ -293,4 +537,239 @@
 .btnGreen {
   color: #68d391 !important;
   border-color: rgba(104, 211, 145, 0.3) !important;
+}
+
+.btnDanger {
+  color: #fc8181 !important;
+}
+
+.flexFull {
+  grid-column: 1 / -1;
+}
+
+/* 경로 행 */
+.pathRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.pathToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.pathValueButton {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.8rem 0.95rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pathValueButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.pathValueButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 디렉토리 브라우저 모달 */
+.browseOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.browseModal {
+  background: #1a202c;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 620px;
+  height: min(88vh, 900px);
+  max-height: calc(100vh - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.browseHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+
+.browseClose {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+}
+
+.browseClose:hover {
+  color: #fff;
+}
+
+.browseCurrent {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.browseQuickSection {
+  padding: 0.85rem 1.25rem 0.9rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.browseQuickHeader {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.48);
+  margin-bottom: 0.65rem;
+}
+
+.browseQuickList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.browseQuickItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.84);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  font-size: 0.82rem;
+}
+
+.browseQuickItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(122, 142, 255, 0.36);
+  color: #fff;
+}
+
+.browseQuickItem span {
+  white-space: nowrap;
+}
+
+.browseInputRow {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.browseInput {
+  font-family: monospace;
+}
+
+.browseCurrent span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browseUp {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.browseUp:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.browseList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.browseLoading,
+.browseEmpty {
+  padding: 2rem;
+  text-align: center;
+  opacity: 0.5;
+}
+
+.browseItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.browseItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.browseActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+@media (max-width: 768px) {
+  .browseModal {
+    width: calc(100vw - 1rem);
+    height: calc(100vh - 1rem);
+    max-height: calc(100vh - 1rem);
+    border-radius: 10px;
+  }
 }

@@ -87,6 +87,7 @@ docker-data/
 # =============
 .agent/
 .claude/
+.github/agents/
 
 *.db
 *.db-shm

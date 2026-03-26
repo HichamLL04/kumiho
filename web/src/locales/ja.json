@@ -5,6 +5,8 @@
     "cancel": "キャンセル",
     "confirm": "確認",
     "create": "作成",
+    "prev": "前へ",
+    "next": "次へ",
     "delete": "削除",
     "edit": "編集",
     "hide": "非表示",
@@ -328,18 +330,37 @@
       "add_button": "ライブラリ追加",
       "scan_all_button": "全ライブラリスキャン",
       "add_title": "新しいライブラリを追加",
+      "name_label": "ライブラリ名",
       "path_label": "パス設定",
       "path_desc": "サーバー内の実際のフォルダパスを入力してください。",
+      "paths_label": "フォルダパス",
+      "paths_desc": "スキャンするフォルダパスを追加してください。複数指定可能です。",
+      "add_path": "パスを追加",
+      "remove_path": "パスを削除",
+      "browse": "参照",
+      "browse_title": "フォルダを参照",
+      "browse_up": "上のフォルダ",
+      "browse_loading": "フォルダを読み込み中...",
+      "browse_empty": "サブフォルダが見つかりません。",
+      "browse_select": "このフォルダを選択",
+      "browse_quick_paths": "クイックパス",
+      "browse_input_placeholder": "パスを入力または貼り付けしてください。例: /mnt/c/workspace/media",
+      "browse_go": "このパスへ移動",
+      "path_empty": "フォルダを選択してください",
       "name_placeholder": "ライブラリ名 (例: 漫画)",
       "path_placeholder": "フォルダパス (例: /data/comics)",
       "type_label": "ライブラリタイプ",
       "type_desc": "このライブラリに含まれるメディアの種類を選択します。",
-      "type_book": "書籍 (ZIP/PDF/EPUB/TXT)",
+      "type_book": "一般書籍",
+      "type_comic": "漫画/ウェブトゥーン/コミックス",
+      "type_novel": "小説/ライトノベル",
       "type_audiobook": "オーディオブック",
+      "step_basic": "ライブラリ設定",
+      "step_viewer_scan": "ビューアーとスキャン設定",
       "view_mode_label": "デフォルトビューアー設定",
       "view_mode_desc": "このライブラリのデフォルト表示モードを設定します。",
       "excludes_label": "スキャン除外設定",
-      "excludes_desc": "スキャン時に無視するファイルやフォルダ名を設定します。(カンマ区切り)",
+      "excludes_desc": "スキャン時に無視するファイルやフォルダ名を設定します。(カンマ区切り)\nデフォルト除外: @eaDir, #recycle, .DS_Store, Thumbs.db, .git, .idea",
       "excludes_placeholder": "例: .DS_Store, #recycle, @eaDir",
       "scan": {
         "title": "スキャン設定",
@@ -805,7 +826,8 @@
     "settings": {
       "title": "⚙️ EPUB設定",
       "font_size": {
-        "label": "文字サイズ"
+        "label": "文字サイズ",
+        "original": "オリジナル"
       },
       "font_family": {
         "label": "フォント",
@@ -821,7 +843,8 @@
         "typography_limited": "マンガ（固定レイアウト）モードでは文字サイズ・行間の反映が制限される場合があります。"
       },
       "line_height": {
-        "label": "行間"
+        "label": "行間",
+        "original": "オリジナル"
       },
       "theme": {
         "label": "テーマ",

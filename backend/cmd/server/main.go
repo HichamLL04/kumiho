@@ -99,6 +99,7 @@ func main() {
 	bookmarkRepo := repository.NewBookmarkRepository()
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkRepo, seriesRepo, volumeRepo, chapterRepo, authService)
 	sseHandler := handler.NewSSEHandler(hub)
+	filesystemHandler := handler.NewFilesystemHandler()
 
 	// 미들웨어 초기화
 	authMiddleware := middleware.NewAuthMiddleware(authService)
@@ -169,6 +170,9 @@ func main() {
 	users.Put("/:id/libraries", userHandler.UpdateLibraries)
 	users.Get("/sessions", authMiddleware.MasterOnly(), authHandler.ListAllSessions)
 	users.Delete("/:userId/sessions/:sessionId", authMiddleware.MasterOnly(), authHandler.RevokeSessionByAdmin)
+
+	// 파일시스템 브라우저 (MASTER only)
+	protected.Get("/filesystem", authMiddleware.MasterOnly(), filesystemHandler.Browse)
 
 	// 라이브러리
 	libraries := protected.Group("/libraries")

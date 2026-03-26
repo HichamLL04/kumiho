@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/fsnotify/fsnotify"
 )
 
 var tinyPNG = []byte{
@@ -50,7 +52,7 @@ func TestScanLibraryBumpsSeriesUpdatedAtWhenNewChapterIsAdded(t *testing.T) {
 
 	library := &model.Library{
 		Name:        "테스트 라이브러리",
-		Path:        libraryPath,
+		Paths:       []string{libraryPath},
 		LibraryType: "book",
 	}
 	if err := libraryRepo.Create(nil, library); err != nil {
@@ -165,6 +167,48 @@ func TestHasScannedVolumeContentChangeTreatsSentinelPageCountAsUnchanged(t *test
 
 	if changed {
 		t.Fatal("hasScannedVolumeContentChange() = true, want false")
+	}
+}
+
+func TestRemoveLibraryWatchKeepsNestedLibraryWatches(t *testing.T) {
+	baseDir := t.TempDir()
+	rootPath := filepath.Join(baseDir, "data")
+	nestedPath := filepath.Join(rootPath, "other")
+	nestedChildPath := filepath.Join(nestedPath, "child")
+
+	if err := os.MkdirAll(nestedChildPath, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("fsnotify.NewWatcher() error = %v", err)
+	}
+	defer func() { _ = watcher.Close() }()
+
+	s := &Scanner{
+		watcher:   watcher,
+		watchRefs: make(map[string]int),
+	}
+
+	if err := s.AddLibraryWatch("root-lib", rootPath); err != nil {
+		t.Fatalf("AddLibraryWatch(root) error = %v", err)
+	}
+	if err := s.AddLibraryWatch("nested-lib", nestedPath); err != nil {
+		t.Fatalf("AddLibraryWatch(nested) error = %v", err)
+	}
+
+	s.RemoveLibraryWatch("root-lib")
+
+	watchList := watcher.WatchList()
+	if !slices.Contains(watchList, nestedPath) {
+		t.Fatalf("watch list missing nested root %q after removing parent: %v", nestedPath, watchList)
+	}
+	if !slices.Contains(watchList, nestedChildPath) {
+		t.Fatalf("watch list missing nested child %q after removing parent: %v", nestedChildPath, watchList)
+	}
+	if slices.Contains(watchList, rootPath) {
+		t.Fatalf("watch list still contains removed root %q: %v", rootPath, watchList)
 	}
 }
 

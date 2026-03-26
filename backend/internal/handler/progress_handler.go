@@ -32,7 +32,7 @@ type ProgressHandler struct {
 	seriesEnrichSvc       *service.SeriesEnrichService
 }
 
-const completionThresholdPercent = 98.0
+const completionThresholdPercent = 100.0
 const viewerSessionLeaseTTL = 90 * time.Second
 
 func NewProgressHandler(
@@ -69,8 +69,8 @@ type UpdateProgressRequest struct {
 	AnchorPage      int      `json:"anchor_page"`
 	OffsetRatio     float64  `json:"offset_ratio"`
 	TotalPages      int      `json:"total_pages"`
-	CurrentPosition int      `json:"current_position"`
-	TotalPositions  int      `json:"total_positions"`
+	CurrentPosition *int     `json:"current_position"`
+	TotalPositions  *int     `json:"total_positions"`
 	CurrentTime     *float64 `json:"current_time,omitempty"`
 	Duration        *float64 `json:"duration,omitempty"`
 	ProgressPercent float64  `json:"progress_percent"`
@@ -428,11 +428,13 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 			if req.CurrentCFI == nil || *req.CurrentCFI == "" {
 				req.CurrentCFI = existing.CurrentCFI
 			}
-			if req.CurrentPosition == 0 && existing.CurrentPosition > 0 {
-				req.CurrentPosition = existing.CurrentPosition
+			if req.CurrentPosition == nil && existing.CurrentPosition > 0 {
+				v := existing.CurrentPosition
+				req.CurrentPosition = &v
 			}
-			if req.TotalPositions == 0 && existing.TotalPositions > 0 {
-				req.TotalPositions = existing.TotalPositions
+			if req.TotalPositions == nil && existing.TotalPositions > 0 {
+				v := existing.TotalPositions
+				req.TotalPositions = &v
 			}
 			if req.AnchorPage <= 0 {
 				req.AnchorPage = fallbackAnchorPage(existing)
@@ -465,8 +467,8 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 		AnchorPage:      req.AnchorPage,
 		OffsetRatio:     req.OffsetRatio,
 		TotalPages:      req.TotalPages,
-		CurrentPosition: req.CurrentPosition,
-		TotalPositions:  req.TotalPositions,
+		CurrentPosition: intValue(req.CurrentPosition),
+		TotalPositions:  intValue(req.TotalPositions),
 		CurrentTime:     req.CurrentTime,
 		Duration:        req.Duration,
 		ProgressPercent: progressPercent,
@@ -899,6 +901,13 @@ func (h *ProgressHandler) touchViewerLease(userID string, c *fiber.Ctx, seriesID
 func stringValue(v *string) string {
 	if v == nil {
 		return ""
+	}
+	return *v
+}
+
+func intValue(v *int) int {
+	if v == nil {
+		return 0
 	}
 	return *v
 }
@@ -2203,9 +2212,7 @@ func (h *ProgressHandler) ResetChapterProgress(c *fiber.Ctx) error {
 func (h *ProgressHandler) removeCompletionIfIncomplete(userID string, volumeID *string, currentPage, totalPages int, currentTime, duration *float64) {
 	isComplete := false
 	if totalPages > 0 {
-		// 페이지 기반 판단
-		progressPercent := (float64(currentPage) / float64(totalPages)) * 100.0
-		if progressPercent >= 95.0 && currentPage >= totalPages {
+		if currentPage >= totalPages {
 			isComplete = true
 		}
 	} else if duration != nil && *duration > 0 && currentTime != nil {
@@ -2234,9 +2241,9 @@ func (h *ProgressHandler) markCompleteIfLastPage(userID string, volumeID, chapte
 		return
 	}
 
-	// 서버에 저장된 PageCount를 우선 사용하고, 없는 경우 클라이언트 요청값(totalPages)으로 fallback
+	// 클라이언트 요청값(totalPages)을 우선 사용하고, 없는 경우 서버에 저장된 PageCount로 fallback
 	lastPage := totalPages
-	if chapter.PageCount > 0 {
+	if lastPage <= 0 && chapter.PageCount > 0 {
 		lastPage = chapter.PageCount
 	}
 
@@ -2250,9 +2257,7 @@ func (h *ProgressHandler) markCompleteIfLastPage(userID string, volumeID, chapte
 	// 완료 여부 판단
 	isComplete := false
 	if lastPage > 0 {
-		// 페이지 기반 판단
-		progressPercent := (float64(currentPage) / float64(lastPage)) * 100.0
-		if progressPercent >= 95.0 && currentPage >= lastPage {
+		if currentPage >= lastPage {
 			isComplete = true
 		}
 	} else if duration != nil && *duration > 0 && currentTime != nil {

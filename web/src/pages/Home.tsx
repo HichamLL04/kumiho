@@ -56,6 +56,7 @@ export function HomePage() {
 
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isFirstMount = useRef(true);
 
   const loadData = useCallback(
     async (options: { isInitial?: boolean } = {}) => {
@@ -68,7 +69,7 @@ export function HomePage() {
 
       try {
         // 라이브러리 목록도 전역 스토어에서 갱신
-        await fetchLibraries();
+        await fetchLibraries(options.isInitial);
 
         // 병렬로 데이터 요청
         const [progressRes, settingsRes, likedResOrNull] = await Promise.all([
@@ -193,8 +194,10 @@ export function HomePage() {
     chapterExtensionCacheRef.current.clear();
     volumeExtensionCacheRef.current.clear();
     seriesExtensionCacheRef.current.clear();
+    const initial = isFirstMount.current;
+    isFirstMount.current = false;
     const timer = window.setTimeout(() => {
-      void loadData({ isInitial: true });
+      void loadData({ isInitial: initial });
     }, 0);
     return () => {
       window.clearTimeout(timer);

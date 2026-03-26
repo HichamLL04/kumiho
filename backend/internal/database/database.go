@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 34
+const latestMigrationVersion = 35
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -99,7 +99,6 @@ func ensureSystemLikesLibrary() error {
 	requiredColumns := []string{
 		"id",
 		"name",
-		"path",
 		"type",
 		"library_type",
 		"is_visible",
@@ -116,30 +115,60 @@ func ensureSystemLikesLibrary() error {
 		}
 	}
 
-	if _, err := DB.Exec(`
-		INSERT INTO libraries (
-			id, name, path, type, library_type, is_visible,
-			default_view_mode, default_read_direction, default_page_transition,
-			created_at, updated_at, sort_order
-		)
-		VALUES (
-			'system-likes', '좋아요한 시리즈', 'SYSTEM://LIKES', 'SYSTEM', 'book', 1,
-			'single', 'ltr', 'slide',
-			datetime('now'), datetime('now'), 0
-		)
-		ON CONFLICT(id) DO UPDATE SET
-			name = excluded.name,
-			path = excluded.path,
-			type = excluded.type,
-			library_type = excluded.library_type,
-			is_visible = excluded.is_visible,
-			default_view_mode = excluded.default_view_mode,
-			default_read_direction = excluded.default_read_direction,
-			default_page_transition = excluded.default_page_transition,
-			sort_order = excluded.sort_order,
-			updated_at = datetime('now')
-	`); err != nil {
-		return fmt.Errorf("upsert system-likes library: %w", err)
+	// path 컬럼 유무에 따라 다른 SQL 실행
+	if columnExists("libraries", "path") {
+		// 마이그레이션 전 (path 컬럼 있음)
+		if _, err := DB.Exec(`
+			INSERT INTO libraries (
+				id, name, path, type, library_type, is_visible,
+				default_view_mode, default_read_direction, default_page_transition,
+				created_at, updated_at, sort_order
+			)
+			VALUES (
+				'system-likes', '좋아요한 시리즈', 'SYSTEM://LIKES', 'SYSTEM', 'book', 1,
+				'single', 'ltr', 'slide',
+				datetime('now'), datetime('now'), 0
+			)
+			ON CONFLICT(id) DO UPDATE SET
+				name = excluded.name,
+				path = excluded.path,
+				type = excluded.type,
+				library_type = excluded.library_type,
+				is_visible = excluded.is_visible,
+				default_view_mode = excluded.default_view_mode,
+				default_read_direction = excluded.default_read_direction,
+				default_page_transition = excluded.default_page_transition,
+				sort_order = excluded.sort_order,
+				updated_at = datetime('now')
+		`); err != nil {
+			return fmt.Errorf("upsert system-likes library: %w", err)
+		}
+	} else {
+		// 마이그레이션 후 (path 컬럼 없음)
+		if _, err := DB.Exec(`
+			INSERT INTO libraries (
+				id, name, type, library_type, is_visible,
+				default_view_mode, default_read_direction, default_page_transition,
+				created_at, updated_at, sort_order
+			)
+			VALUES (
+				'system-likes', '좋아요한 시리즈', 'SYSTEM', 'book', 1,
+				'single', 'ltr', 'slide',
+				datetime('now'), datetime('now'), 0
+			)
+			ON CONFLICT(id) DO UPDATE SET
+				name = excluded.name,
+				type = excluded.type,
+				library_type = excluded.library_type,
+				is_visible = excluded.is_visible,
+				default_view_mode = excluded.default_view_mode,
+				default_read_direction = excluded.default_read_direction,
+				default_page_transition = excluded.default_page_transition,
+				sort_order = excluded.sort_order,
+				updated_at = datetime('now')
+		`); err != nil {
+			return fmt.Errorf("upsert system-likes library: %w", err)
+		}
 	}
 
 	return nil
@@ -180,9 +209,8 @@ func Migrate() error {
 	CREATE TABLE IF NOT EXISTS libraries (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
-		path TEXT UNIQUE NOT NULL,
 		type TEXT DEFAULT 'LOCAL',
-		library_type TEXT DEFAULT 'book', -- "book", "audiobook"
+		library_type TEXT DEFAULT 'book', -- "book", "audiobook", "comic", "novel"
 		is_visible BOOLEAN DEFAULT 1,
 		default_view_mode TEXT DEFAULT 'single',
 		default_read_direction TEXT DEFAULT 'ltr',
@@ -422,6 +450,16 @@ func Migrate() error {
 		expires_at DATETIME NOT NULL
 	);
 
+	-- 라이브러리 경로 (멀티 폴더 지원)
+	CREATE TABLE IF NOT EXISTS library_paths (
+		id TEXT PRIMARY KEY,
+		library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+		path TEXT NOT NULL UNIQUE,
+		sort_order INTEGER DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_library_paths_library ON library_paths(library_id);
+
 	-- 인덱스
 	CREATE INDEX IF NOT EXISTS idx_daily_activity_user_date ON daily_activity(user_id, date);
 	CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -512,6 +550,7 @@ func Migrate() error {
 		{32, "챕터별 has_audio 컬럼 추가", migrateChaptersHasAudio},
 		{33, "오디오북 관련 컬럼 추가", migrateAudiobookColumns},
 		{34, "오디오 진행시간 문자열 정규화", migrateAudioProgressTimeFormat},
+		{35, "멀티 폴더 지원 (library_paths 테이블)", migrateMultiFolderPaths},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -1548,6 +1587,159 @@ func migrateAudioProgressTimeFormat() error {
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit audio progress time normalize: %w", err)
+	}
+
+	return nil
+}
+
+// #35 migrateMultiFolderPaths library_paths 테이블 생성 및 기존 libraries.path 데이터 이전
+func migrateMultiFolderPaths() error {
+	// 1. library_paths 테이블 생성 (초기 스키마에도 있지만 안전하게)
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS library_paths (
+			id TEXT PRIMARY KEY,
+			library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+			path TEXT NOT NULL UNIQUE,
+			sort_order INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`); err != nil {
+		return fmt.Errorf("create library_paths: %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_library_paths_library ON library_paths(library_id)`); err != nil {
+		return fmt.Errorf("create idx_library_paths_library: %w", err)
+	}
+
+	// 2. 기존 libraries.path 값을 library_paths로 복사
+	if columnExists("libraries", "path") {
+		rows, err := DB.Query(`SELECT id, path FROM libraries WHERE path != '' AND path NOT LIKE 'SYSTEM:%'`)
+		if err != nil {
+			return fmt.Errorf("query existing library paths: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+
+		for rows.Next() {
+			var libID, libPath string
+			if err := rows.Scan(&libID, &libPath); err != nil {
+				return fmt.Errorf("scan library path: %w", err)
+			}
+			// 이미 존재하면 무시하되, 실행 오류는 마이그레이션 실패로 처리
+			if _, err := DB.Exec(
+				`INSERT OR IGNORE INTO library_paths (id, library_id, path, sort_order) VALUES (?, ?, ?, 0)`,
+				"lp-"+libID, libID, libPath,
+			); err != nil {
+				return fmt.Errorf("insert library_path for library %s: %w", libID, err)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate existing library paths: %w", err)
+		}
+	}
+
+	// 3. libraries 테이블에서 path 컬럼 제거 (테이블 재생성)
+	if !columnExists("libraries", "path") {
+		return nil // 이미 제거됨
+	}
+
+	ctx := context.Background()
+	conn, err := DB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("get connection for library path migration: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, execErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
+		return fmt.Errorf("disable foreign keys: %w", execErr)
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("start transaction for library path migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TABLE libraries_new (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			type TEXT DEFAULT 'LOCAL',
+			library_type TEXT DEFAULT 'book',
+			is_visible BOOLEAN DEFAULT 1,
+			default_view_mode TEXT DEFAULT 'single',
+			default_read_direction TEXT DEFAULT 'ltr',
+			default_page_transition TEXT DEFAULT 'slide',
+			default_epub_render_mode TEXT DEFAULT 'auto',
+			default_epub_theme TEXT DEFAULT 'light',
+			default_epub_spread TEXT DEFAULT 'auto',
+			default_epub_wheel_direction TEXT DEFAULT 'down',
+			default_epub_keyboard_direction TEXT DEFAULT 'right',
+			default_epub_click_direction TEXT DEFAULT 'right',
+			sort_order INTEGER DEFAULT 0,
+			scan_status TEXT DEFAULT 'IDLE',
+			last_scan_result TEXT DEFAULT '',
+			scan_excludes TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			last_scanned_at DATETIME
+		)
+	`); err != nil {
+		return fmt.Errorf("create libraries_new: %w", err)
+	}
+
+	selectColumnOrDefault := func(columnName, defaultExpr string) string {
+		if columnExists("libraries", columnName) {
+			return columnName
+		}
+		return defaultExpr
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO libraries_new (
+			id, name, type, library_type, is_visible,
+			default_view_mode, default_read_direction, default_page_transition,
+			default_epub_render_mode, default_epub_theme, default_epub_spread,
+			default_epub_wheel_direction, default_epub_keyboard_direction, default_epub_click_direction,
+			sort_order, scan_status, last_scan_result, scan_excludes,
+			created_at, updated_at, last_scanned_at
+		)
+		SELECT
+			id,
+			name,
+			`+selectColumnOrDefault("type", "'LOCAL'")+`,
+			`+selectColumnOrDefault("library_type", "'book'")+`,
+			`+selectColumnOrDefault("is_visible", "1")+`,
+			`+selectColumnOrDefault("default_view_mode", "'single'")+`,
+			`+selectColumnOrDefault("default_read_direction", "'ltr'")+`,
+			`+selectColumnOrDefault("default_page_transition", "'slide'")+`,
+			`+selectColumnOrDefault("default_epub_render_mode", "'auto'")+`,
+			`+selectColumnOrDefault("default_epub_theme", "'light'")+`,
+			`+selectColumnOrDefault("default_epub_spread", "'auto'")+`,
+			`+selectColumnOrDefault("default_epub_wheel_direction", "'down'")+`,
+			`+selectColumnOrDefault("default_epub_keyboard_direction", "'right'")+`,
+			`+selectColumnOrDefault("default_epub_click_direction", "'right'")+`,
+			`+selectColumnOrDefault("sort_order", "0")+`,
+			`+selectColumnOrDefault("scan_status", "'IDLE'")+`,
+			`+selectColumnOrDefault("last_scan_result", "''")+`,
+			`+selectColumnOrDefault("scan_excludes", "''")+`,
+			`+selectColumnOrDefault("created_at", "CURRENT_TIMESTAMP")+`,
+			`+selectColumnOrDefault("updated_at", "CURRENT_TIMESTAMP")+`,
+			`+selectColumnOrDefault("last_scanned_at", "NULL")+`
+		FROM libraries
+	`); err != nil {
+		return fmt.Errorf("copy libraries data: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DROP TABLE libraries`); err != nil {
+		return fmt.Errorf("drop old libraries: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE libraries_new RENAME TO libraries`); err != nil {
+		return fmt.Errorf("rename libraries_new: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit library path migration: %w", err)
 	}
 
 	return nil

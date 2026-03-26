@@ -10,11 +10,29 @@ export type EpubFontFamily = "original" | "serif" | "sans-serif";
 export type EpubFlow = "paginated" | "scrolled";
 export type EpubRenderMode = "auto" | "book" | "comic";
 
+export const EPUB_FONT_SIZE_DEFAULT = 100;
+export const EPUB_LINE_HEIGHT_SCALE_DEFAULT = 1;
+export const EPUB_LINE_HEIGHT_SCALE_MIN = 0.75;
+export const EPUB_LINE_HEIGHT_SCALE_MAX = 1.25;
+const LEGACY_EPUB_LINE_HEIGHT_DEFAULT = 1.6;
+
+export const normalizeEpubLineHeightScale = (value: number): number | null => {
+  if (!Number.isFinite(value)) return null;
+  if (value >= EPUB_LINE_HEIGHT_SCALE_MIN && value < 1.2) {
+    return value;
+  }
+  if (value >= 1.2 && value <= 2.0) {
+    const normalized = value / LEGACY_EPUB_LINE_HEIGHT_DEFAULT;
+    return Math.max(EPUB_LINE_HEIGHT_SCALE_MIN, Math.min(EPUB_LINE_HEIGHT_SCALE_MAX, normalized));
+  }
+  return null;
+};
+
 // EPUB 뷰어 설정 (이미지/PDF 뷰어와 완전히 분리)
 export interface EpubViewerSettings {
   fontSize: number; // 폰트 크기 % (100 = 기본, 50~150)
   fontFamily: EpubFontFamily;
-  lineHeight: number; // 줄 간격 (1.2 ~ 2.0)
+  lineHeight: number; // 줄 간격 배율 (1 = 원본, 0.75 ~ 1.25)
   theme: EpubTheme; // 테마
   renderMode: EpubRenderMode; // EPUB 렌더 모드 ("auto" = 자동 감지)
   flow: EpubFlow; // 레이아웃 방식
@@ -74,9 +92,9 @@ interface EpubViewerState {
 }
 
 const defaultSettings: EpubViewerSettings = {
-  fontSize: 100,
+  fontSize: EPUB_FONT_SIZE_DEFAULT,
   fontFamily: "original",
-  lineHeight: 1.6,
+  lineHeight: EPUB_LINE_HEIGHT_SCALE_DEFAULT,
   theme: "light",
   renderMode: "auto",
   flow: "paginated",

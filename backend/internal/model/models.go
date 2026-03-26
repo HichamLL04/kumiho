@@ -28,7 +28,7 @@ type User struct {
 type Library struct {
 	ID                     string     `json:"id"`
 	Name                   string     `json:"name"`
-	Path                   string     `json:"path"`
+	Paths                  []string   `json:"paths"`
 	DefaultViewMode        string     `json:"default_view_mode" db:"default_view_mode"`
 	DefaultReadDirection   string     `json:"default_read_direction" db:"default_read_direction"`
 	DefaultPageTransition  string     `json:"default_page_transition" db:"default_page_transition"`

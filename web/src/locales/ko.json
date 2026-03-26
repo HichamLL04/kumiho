@@ -5,6 +5,8 @@
     "cancel": "취소",
     "confirm": "확인",
     "create": "생성",
+    "prev": "이전",
+    "next": "다음",
     "delete": "삭제",
     "edit": "수정",
     "hide": "숨기기",
@@ -328,18 +330,37 @@
       "add_button": "라이브러리 추가",
       "scan_all_button": "전체 라이브러리 스캔",
       "add_title": "새 라이브러리 추가",
+      "name_label": "라이브러리 이름",
       "path_label": "경로 설정",
       "path_desc": "서버 내의 실제 폴더 경로를 입력하세요.",
+      "paths_label": "폴더 경로",
+      "paths_desc": "스캔할 폴더 경로를 추가하세요. 여러 경로를 지정할 수 있습니다.",
+      "add_path": "경로 추가",
+      "remove_path": "경로 제거",
+      "browse": "찾아보기",
+      "browse_title": "폴더 찾아보기",
+      "browse_up": "상위 폴더",
+      "browse_loading": "폴더를 불러오는 중...",
+      "browse_empty": "하위 폴더가 없습니다.",
+      "browse_select": "이 폴더 선택",
+      "browse_quick_paths": "빠른 경로",
+      "browse_input_placeholder": "경로를 입력하거나 붙여넣으세요. 예: /mnt/c/workspace/media",
+      "browse_go": "이 경로로 이동",
+      "path_empty": "폴더를 선택하세요",
       "name_placeholder": "라이브러리 이름 (예: 만화책)",
       "path_placeholder": "폴더 경로 (예: /data/comics)",
       "type_label": "라이브러리 타입",
       "type_desc": "이 라이브러리에 포함된 미디어의 종류를 선택합니다.",
-      "type_book": "도서 (ZIP/PDF/EPUB/TXT)",
+      "type_book": "일반 도서",
+      "type_comic": "만화/웹툰/코믹스",
+      "type_novel": "소설",
       "type_audiobook": "오디오북",
+      "step_basic": "라이브러리 설정",
+      "step_viewer_scan": "뷰어 및 스캔 설정",
       "view_mode_label": "기본 뷰어 설정",
       "view_mode_desc": "이 라이브러리의 기본 보기 방식을 설정합니다.",
       "excludes_label": "스캔 제외 설정",
-      "excludes_desc": "스캔 시 무시할 파일이나 폴더 이름을 설정합니다. (쉼표로 구분)",
+      "excludes_desc": "스캔 시 무시할 파일이나 폴더 이름을 설정합니다. (쉼표로 구분)\n기본 제외: @eaDir, #recycle, .DS_Store, Thumbs.db, .git, .idea",
       "excludes_placeholder": "예: .DS_Store, #recycle, @eaDir",
       "scan": {
         "title": "스캔 설정",
@@ -806,7 +827,8 @@
     "settings": {
       "title": "⚙️ EPUB 설정",
       "font_size": {
-        "label": "글자 크기"
+        "label": "글자 크기",
+        "original": "원본"
       },
       "font_family": {
         "label": "글꼴",
@@ -822,7 +844,8 @@
         "typography_limited": "만화책(고정 레이아웃) 모드에서는 글자 크기/줄 간격 반영이 제한될 수 있습니다."
       },
       "line_height": {
-        "label": "줄 간격"
+        "label": "줄 간격",
+        "original": "원본"
       },
       "theme": {
         "label": "테마",

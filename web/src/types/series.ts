@@ -1,6 +1,6 @@
 import type { ExtensionBadge } from "../utils/extension";
 
-export type LibraryType = "book" | "audiobook";
+export type LibraryType = "book" | "audiobook" | "comic" | "novel";
 
 export interface EbookMetadata {
   series_id: string;
@@ -152,7 +152,7 @@ export interface UserSeriesSetting {
 export interface Library {
   id: string;
   name: string;
-  path?: string;
+  paths?: string[];
   default_view_mode?: string;
   default_read_direction?: string;
   default_page_transition?: string;

@@ -34,19 +34,19 @@ func NewLibraryHandler(appCtx context.Context, libraryRepo *repository.LibraryRe
 
 // CreateLibraryRequest 라이브러리 생성 요청
 type CreateLibraryRequest struct {
-	Name                         string `json:"name"`
-	Path                         string `json:"path"`
-	DefaultViewMode              string `json:"default_view_mode"`
-	DefaultReadDirection         string `json:"default_read_direction"`
-	DefaultPageTransition        string `json:"default_page_transition"`
-	DefaultEpubRenderMode        string `json:"default_epub_render_mode"`
-	DefaultEpubTheme             string `json:"default_epub_theme"`
-	DefaultEpubSpread            string `json:"default_epub_spread"`
-	DefaultEpubWheelDirection    string `json:"default_epub_wheel_direction"`
-	DefaultEpubKeyboardDirection string `json:"default_epub_keyboard_direction"`
-	DefaultEpubClickDirection    string `json:"default_epub_click_direction"`
-	LibraryType                  string `json:"library_type"`
-	ScanExcludes                 string `json:"scan_excludes"`
+	Name                         string   `json:"name"`
+	Paths                        []string `json:"paths"`
+	DefaultViewMode              string   `json:"default_view_mode"`
+	DefaultReadDirection         string   `json:"default_read_direction"`
+	DefaultPageTransition        string   `json:"default_page_transition"`
+	DefaultEpubRenderMode        string   `json:"default_epub_render_mode"`
+	DefaultEpubTheme             string   `json:"default_epub_theme"`
+	DefaultEpubSpread            string   `json:"default_epub_spread"`
+	DefaultEpubWheelDirection    string   `json:"default_epub_wheel_direction"`
+	DefaultEpubKeyboardDirection string   `json:"default_epub_keyboard_direction"`
+	DefaultEpubClickDirection    string   `json:"default_epub_click_direction"`
+	LibraryType                  string   `json:"library_type"`
+	ScanExcludes                 string   `json:"scan_excludes"`
 }
 
 func normalizeLibraryType(value string) (string, bool) {
@@ -55,11 +55,101 @@ func normalizeLibraryType(value string) (string, bool) {
 		return "book", true
 	}
 	switch normalized {
-	case "book", "audiobook":
+	case "book", "audiobook", "comic", "novel":
 		return normalized, true
 	default:
 		return "", false
 	}
+}
+
+func validateLibraryPaths(paths []string, checkExists func(string) (bool, error)) ([]string, error) {
+	seen := make(map[string]struct{}, len(paths))
+	normalizedPaths := make([]string, 0, len(paths))
+	for _, rawPath := range paths {
+		path := strings.TrimSpace(rawPath)
+		if path == "" {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "empty path is not allowed")
+		}
+
+		cleanPath := filepath.Clean(path)
+		absPath, err := filepath.Abs(cleanPath)
+		if err != nil {
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to normalize path: "+cleanPath)
+		}
+		if !filepath.IsAbs(absPath) {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "only absolute paths are allowed: "+absPath)
+		}
+
+		info, err := os.Stat(absPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fiber.NewError(fiber.StatusBadRequest, "path does not exist: "+absPath)
+			}
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to access path: "+absPath)
+		}
+		if !info.IsDir() {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "path is not a directory: "+absPath)
+		}
+
+		resolvedPath, err := filepath.EvalSymlinks(absPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fiber.NewError(fiber.StatusBadRequest, "path does not exist: "+absPath)
+			}
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to resolve path: "+absPath)
+		}
+		resolvedPath = filepath.Clean(resolvedPath)
+
+		if _, ok := seen[resolvedPath]; ok {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "duplicate path is not allowed: "+resolvedPath)
+		}
+		seen[resolvedPath] = struct{}{}
+
+		exists, err := checkExists(resolvedPath)
+		if err != nil {
+			return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to check existing library")
+		}
+		if exists {
+			return nil, fiber.NewError(fiber.StatusConflict, "path already belongs to another library: "+resolvedPath)
+		}
+
+		normalizedPaths = append(normalizedPaths, resolvedPath)
+	}
+
+	return normalizedPaths, nil
+}
+
+func areNestedLibraryPaths(pathA, pathB string) bool {
+	if pathA == pathB {
+		return false
+	}
+	return strings.HasPrefix(pathA, pathB+string(os.PathSeparator)) ||
+		strings.HasPrefix(pathB, pathA+string(os.PathSeparator))
+}
+
+func validateNoNestedLibraryPaths(paths []string, libraries []model.Library, excludeLibraryID string) error {
+	for i := 0; i < len(paths); i++ {
+		for j := i + 1; j < len(paths); j++ {
+			if areNestedLibraryPaths(paths[i], paths[j]) {
+				return fiber.NewError(fiber.StatusBadRequest, "nested library paths are not allowed: "+paths[i]+" and "+paths[j])
+			}
+		}
+	}
+
+	for _, lib := range libraries {
+		if lib.ID == excludeLibraryID {
+			continue
+		}
+		for _, existingPath := range lib.Paths {
+			for _, path := range paths {
+				if areNestedLibraryPaths(path, existingPath) {
+					return fiber.NewError(fiber.StatusBadRequest, "nested library paths are not allowed: "+path+" and "+existingPath)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // List 모든 라이브러리 목록
@@ -125,9 +215,9 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		})
 	}
 
-	if req.Name == "" || req.Path == "" {
+	if req.Name == "" || len(req.Paths) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "name and path are required",
+			"error": "name and at least one path are required",
 		})
 	}
 	libraryType, ok := normalizeLibraryType(req.LibraryType)
@@ -137,25 +227,36 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		})
 	}
 
-	// 경로 존재 여부 확인
-	if _, err := os.Stat(req.Path); os.IsNotExist(err) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "path does not exist",
+	normalizedPaths, err := validateLibraryPaths(req.Paths, func(path string) (bool, error) {
+		return h.libraryRepo.PathExists(nil, path, "")
+	})
+	if err != nil {
+		if fiberErr, ok := err.(*fiber.Error); ok {
+			return c.Status(fiberErr.Code).JSON(fiber.Map{
+				"error": fiberErr.Message,
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to validate library paths",
 		})
 	}
-
-	// 중복 경로 확인
-	existing, err := h.libraryRepo.FindByPath(nil, req.Path)
+	libraries, err := h.libraryRepo.FindAll(nil)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to check existing library",
+			"error": "failed to check existing libraries",
 		})
 	}
-	if existing != nil {
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"error": "library with this path already exists",
+	if err := validateNoNestedLibraryPaths(normalizedPaths, libraries, ""); err != nil {
+		if fiberErr, ok := err.(*fiber.Error); ok {
+			return c.Status(fiberErr.Code).JSON(fiber.Map{
+				"error": fiberErr.Message,
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to validate nested library paths",
 		})
 	}
+	req.Paths = normalizedPaths
 
 	// 유효성 검사
 	if req.DefaultViewMode != "" {
@@ -263,7 +364,7 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 
 	library := &model.Library{
 		Name:                   req.Name,
-		Path:                   req.Path,
+		Paths:                  req.Paths,
 		DefaultViewMode:        req.DefaultViewMode,
 		DefaultReadDirection:   req.DefaultReadDirection,
 		DefaultPageTransition:  req.DefaultPageTransition,
@@ -286,7 +387,9 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 
 	// 실시간 감시 추가 (LOCAL 타입인 경우)
 	if library.Type == "LOCAL" {
-		_ = h.scanner.AddLibraryWatch(library.ID, library.Path)
+		for _, p := range library.Paths {
+			_ = h.scanner.AddLibraryWatch(library.ID, p)
+		}
 	}
 
 	// 자동 스캔 트리거 (비동기)
@@ -505,20 +608,20 @@ func (h *LibraryHandler) Delete(c *fiber.Ctx) error {
 
 // UpdateLibraryRequest 라이브러리 수정 요청
 type UpdateLibraryRequest struct {
-	Name                         string  `json:"name"`
-	Path                         string  `json:"path"`
-	DefaultViewMode              string  `json:"default_view_mode"`
-	DefaultReadDirection         string  `json:"default_read_direction"`
-	DefaultPageTransition        string  `json:"default_page_transition"`
-	DefaultEpubRenderMode        string  `json:"default_epub_render_mode"`
-	DefaultEpubTheme             string  `json:"default_epub_theme"`
-	DefaultEpubSpread            string  `json:"default_epub_spread"`
-	DefaultEpubWheelDirection    string  `json:"default_epub_wheel_direction"`
-	DefaultEpubKeyboardDirection string  `json:"default_epub_keyboard_direction"`
-	DefaultEpubClickDirection    string  `json:"default_epub_click_direction"`
-	LibraryType                  string  `json:"library_type"`
-	IsVisible                    *bool   `json:"is_visible"` // Optional, pointer to distinguish false vs missing
-	ScanExcludes                 *string `json:"scan_excludes"`
+	Name                         string    `json:"name"`
+	Paths                        *[]string `json:"paths,omitempty"`
+	DefaultViewMode              string    `json:"default_view_mode"`
+	DefaultReadDirection         string    `json:"default_read_direction"`
+	DefaultPageTransition        string    `json:"default_page_transition"`
+	DefaultEpubRenderMode        string    `json:"default_epub_render_mode"`
+	DefaultEpubTheme             string    `json:"default_epub_theme"`
+	DefaultEpubSpread            string    `json:"default_epub_spread"`
+	DefaultEpubWheelDirection    string    `json:"default_epub_wheel_direction"`
+	DefaultEpubKeyboardDirection string    `json:"default_epub_keyboard_direction"`
+	DefaultEpubClickDirection    string    `json:"default_epub_click_direction"`
+	LibraryType                  string    `json:"library_type"`
+	IsVisible                    *bool     `json:"is_visible"` // Optional, pointer to distinguish false vs missing
+	ScanExcludes                 *string   `json:"scan_excludes"`
 }
 
 // Update 라이브러리 수정
@@ -552,14 +655,16 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		})
 	}
 
+	pathsChanged := false
+
 	// SYSTEM 라이브러리는 가시성 외의 수정 불가
 	if library.Type == "SYSTEM" {
-		if req.Name != "" || req.Path != "" || req.DefaultViewMode != "" || req.DefaultReadDirection != "" ||
+		if req.Name != "" || req.Paths != nil || req.DefaultViewMode != "" || req.DefaultReadDirection != "" ||
 			req.DefaultPageTransition != "" || req.DefaultEpubRenderMode != "" || req.DefaultEpubTheme != "" ||
 			req.DefaultEpubSpread != "" || req.DefaultEpubWheelDirection != "" || req.DefaultEpubKeyboardDirection != "" ||
 			req.DefaultEpubClickDirection != "" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "system libraries cannot use name, path, or default settings",
+				"error": "system libraries cannot use name, paths, or default settings",
 			})
 		}
 		if req.IsVisible != nil {
@@ -567,15 +672,59 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		}
 	} else {
 		// 일반 라이브러리 수정
+		pendingLibrary := *library
+		var pendingPaths *[]string
+
 		if req.Name != "" {
-			library.Name = req.Name
+			pendingLibrary.Name = req.Name
 		}
-		// Path change not supported for now
+
+		// 경로 변경
+		if req.Paths != nil {
+			if len(*req.Paths) == 0 {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "at least one path is required when updating paths",
+				})
+			}
+
+			normalizedPaths, err := validateLibraryPaths(*req.Paths, func(path string) (bool, error) {
+				return h.libraryRepo.PathExists(nil, path, library.ID)
+			})
+			if err != nil {
+				if fiberErr, ok := err.(*fiber.Error); ok {
+					return c.Status(fiberErr.Code).JSON(fiber.Map{
+						"error": fiberErr.Message,
+					})
+				}
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "failed to validate paths",
+				})
+			}
+			libraries, err := h.libraryRepo.FindAll(nil)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "failed to check existing libraries",
+				})
+			}
+			if err := validateNoNestedLibraryPaths(normalizedPaths, libraries, library.ID); err != nil {
+				if fiberErr, ok := err.(*fiber.Error); ok {
+					return c.Status(fiberErr.Code).JSON(fiber.Map{
+						"error": fiberErr.Message,
+					})
+				}
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "failed to validate nested library paths",
+				})
+			}
+			pendingPaths = &normalizedPaths
+			pendingLibrary.Paths = normalizedPaths
+			pathsChanged = true
+		}
 
 		if req.DefaultViewMode != "" {
 			switch req.DefaultViewMode {
 			case "single", "double", "vertical":
-				library.DefaultViewMode = req.DefaultViewMode
+				pendingLibrary.DefaultViewMode = req.DefaultViewMode
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_view_mode",
@@ -585,7 +734,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultReadDirection != "" {
 			switch req.DefaultReadDirection {
 			case "ltr", "rtl":
-				library.DefaultReadDirection = req.DefaultReadDirection
+				pendingLibrary.DefaultReadDirection = req.DefaultReadDirection
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_read_direction",
@@ -595,7 +744,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultPageTransition != "" {
 			switch req.DefaultPageTransition {
 			case "none", "fade", "slide":
-				library.DefaultPageTransition = req.DefaultPageTransition
+				pendingLibrary.DefaultPageTransition = req.DefaultPageTransition
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_page_transition",
@@ -605,7 +754,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubRenderMode != "" {
 			switch req.DefaultEpubRenderMode {
 			case "auto", "book", "comic":
-				library.DefaultEpubRenderMode = req.DefaultEpubRenderMode
+				pendingLibrary.DefaultEpubRenderMode = req.DefaultEpubRenderMode
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_render_mode",
@@ -615,7 +764,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubTheme != "" {
 			switch req.DefaultEpubTheme {
 			case "light", "dark", "sepia":
-				library.DefaultEpubTheme = req.DefaultEpubTheme
+				pendingLibrary.DefaultEpubTheme = req.DefaultEpubTheme
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_theme",
@@ -625,7 +774,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubSpread != "" {
 			switch req.DefaultEpubSpread {
 			case "auto", "none":
-				library.DefaultEpubSpread = req.DefaultEpubSpread
+				pendingLibrary.DefaultEpubSpread = req.DefaultEpubSpread
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_spread",
@@ -635,7 +784,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubWheelDirection != "" {
 			switch req.DefaultEpubWheelDirection {
 			case "down", "up":
-				library.DefaultEpubWheelDir = req.DefaultEpubWheelDirection
+				pendingLibrary.DefaultEpubWheelDir = req.DefaultEpubWheelDirection
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_wheel_direction",
@@ -645,7 +794,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubKeyboardDirection != "" {
 			switch req.DefaultEpubKeyboardDirection {
 			case "right", "left":
-				library.DefaultEpubKeyboardDir = req.DefaultEpubKeyboardDirection
+				pendingLibrary.DefaultEpubKeyboardDir = req.DefaultEpubKeyboardDirection
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_keyboard_direction",
@@ -655,7 +804,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.DefaultEpubClickDirection != "" {
 			switch req.DefaultEpubClickDirection {
 			case "right", "left":
-				library.DefaultEpubClickDir = req.DefaultEpubClickDirection
+				pendingLibrary.DefaultEpubClickDir = req.DefaultEpubClickDirection
 			default:
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "invalid default_epub_click_direction",
@@ -669,10 +818,10 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 					"error": "invalid library_type",
 				})
 			}
-			library.LibraryType = libraryType
+			pendingLibrary.LibraryType = libraryType
 		}
 		if req.IsVisible != nil {
-			library.IsVisible = *req.IsVisible
+			pendingLibrary.IsVisible = *req.IsVisible
 		}
 		if req.ScanExcludes != nil {
 			if *req.ScanExcludes != "" {
@@ -683,14 +832,32 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 					})
 				}
 			}
-			library.ScanExcludes = *req.ScanExcludes
+			pendingLibrary.ScanExcludes = *req.ScanExcludes
+		}
+
+		if err := h.libraryRepo.UpdateWithPaths(nil, &pendingLibrary, pendingPaths); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to update library",
+			})
+		}
+		*library = pendingLibrary
+	}
+
+	if library.Type == "SYSTEM" {
+		if err := h.libraryRepo.Update(nil, library); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to update library",
+			})
 		}
 	}
 
-	if err := h.libraryRepo.Update(nil, library); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to update library",
-		})
+	if library.Type == "LOCAL" && pathsChanged {
+		h.scanner.RemoveLibraryWatch(library.ID)
+		for _, path := range library.Paths {
+			if err := h.scanner.AddLibraryWatch(library.ID, path); err != nil {
+				log.Printf("Failed to refresh watch for library %s (%s): %v", library.Name, path, err)
+			}
+		}
 	}
 
 	return c.JSON(library)

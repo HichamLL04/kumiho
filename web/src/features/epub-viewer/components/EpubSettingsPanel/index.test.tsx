@@ -34,6 +34,7 @@ describe("EpubSettingsPanel", () => {
         onWheelDirectionChange={vi.fn()}
         onKeyboardDirectionChange={vi.fn()}
         onClickDirectionChange={vi.fn()}
+        onSpreadChange={vi.fn()}
         onClose={onClose}
       />,
     );
@@ -42,5 +43,44 @@ describe("EpubSettingsPanel", () => {
     expect(closeButton).toBeInTheDocument();
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("페이지 모드(Spread) 버튼 클릭 시 onSpreadChange를 올바른 인자로 호출한다", () => {
+    const onSpreadChange = vi.fn();
+    render(
+      <EpubSettingsPanel
+        settings={{
+          fontSize: 100,
+          fontFamily: "sans-serif",
+          lineHeight: 1.5,
+          theme: "light",
+          renderMode: "auto",
+          flow: "paginated",
+          spread: "auto",
+          wheelDirection: "down",
+          keyboardDirection: "right",
+          clickDirection: "right",
+        }}
+        onFontSizeChange={vi.fn()}
+        onFontFamilyChange={vi.fn()}
+        onLineHeightChange={vi.fn()}
+        onThemeChange={vi.fn()}
+        onRenderModeChange={vi.fn()}
+        onWheelDirectionChange={vi.fn()}
+        onKeyboardDirectionChange={vi.fn()}
+        onClickDirectionChange={vi.fn()}
+        onSpreadChange={onSpreadChange}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const btn1Page = screen.getByText("epub_viewer.footer.pages_1");
+    const btn2Page = screen.getByText("epub_viewer.footer.pages_2");
+
+    fireEvent.click(btn1Page);
+    expect(onSpreadChange).toHaveBeenCalledWith("none");
+
+    fireEvent.click(btn2Page);
+    expect(onSpreadChange).toHaveBeenCalledWith("auto");
   });
 });
