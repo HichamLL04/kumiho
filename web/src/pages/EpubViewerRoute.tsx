@@ -1,7 +1,12 @@
 import { useEffect, useCallback, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useEpubViewerStore, type EpubFontFamily, type EpubRenderMode } from "../stores/epubViewerStore";
+import {
+  normalizeEpubLineHeightScale,
+  useEpubViewerStore,
+  type EpubFontFamily,
+  type EpubRenderMode,
+} from "../stores/epubViewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
 import { startChapterSwitching } from "../stores/fullscreenSwitchStore";
 import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapterLoader";
@@ -303,8 +308,9 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         if (Number.isFinite(fontSize) && fontSize >= 50 && fontSize <= 150) {
           setFontSize(fontSize);
         }
-        if (Number.isFinite(lineHeight) && lineHeight >= 1.2 && lineHeight <= 2.0) {
-          setLineHeight(lineHeight);
+        const normalizedLineHeight = normalizeEpubLineHeightScale(lineHeight);
+        if (normalizedLineHeight != null) {
+          setLineHeight(normalizedLineHeight);
         }
         if (fontFamily === "original" || fontFamily === "serif" || fontFamily === "sans-serif") {
           setFontFamily(fontFamily);

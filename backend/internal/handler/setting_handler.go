@@ -238,8 +238,8 @@ func (h *SettingHandler) validateSettingValue(key, value string) error {
 			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_font_family value")
 		}
 	case "epub_line_height":
-		if !h.isValidFloat(value, 1.2, 2.0) {
-			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_line_height value (must be 1.2-2.0)")
+		if !h.isValidFloat(value, 0.75, 1.25) {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_line_height value (must be 0.75-1.25)")
 		}
 	case "epub_theme":
 		if !validEpubThemes[value] {

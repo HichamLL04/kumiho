@@ -42,6 +42,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../stores/epubViewerStore", () => ({
+  normalizeEpubLineHeightScale: (value: number) => value,
   useEpubViewerStore: () => ({
     currentPage: 1,
     totalPages: 1,
@@ -56,7 +57,7 @@ vi.mock("../stores/epubViewerStore", () => ({
       renderMode: "horizontal",
       fontSize: 100,
       fontFamily: "original",
-      lineHeight: 1.6,
+      lineHeight: 1,
       theme: "dark",
       spread: "auto",
       wheelDirection: "down",
