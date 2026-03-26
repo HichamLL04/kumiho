@@ -569,18 +569,6 @@ func (h *ProgressHandler) UpdateEpubProgress(c *fiber.Ctx) error {
 		}
 	}
 
-	// EPUB 전용: 프론트엔드의 epub.js 위치 수를 chapter.PageCount에 동기화
-	// scanner는 바이트 기반(ceil(htmlBytes/6144))으로 PageCount를 계산하므로
-	// epub.js location 수와 다를 수 있다. markCompleteIfLastPage가 chapter.PageCount를
-	// 우선 사용하므로 여기서 동기화하여 완독 판정이 올바르게 동작하도록 한다.
-	if totalPositions > 0 && chapter.PageCount != totalPositions {
-		if syncErr := h.chapterRepo.UpdatePageCount(nil, chapter.ID, totalPositions); syncErr == nil {
-			chapter.PageCount = totalPositions
-		} else {
-			log.Printf("[UpdateEpubProgress] Failed to sync epub page count: %v", syncErr)
-		}
-	}
-
 	currentPage := req.CurrentPage
 	if currentPage <= 0 {
 		if totalPositions > 0 {
@@ -2244,9 +2232,9 @@ func (h *ProgressHandler) markCompleteIfLastPage(userID string, volumeID, chapte
 		return
 	}
 
-	// 서버에 저장된 PageCount를 우선 사용하고, 없는 경우 클라이언트 요청값(totalPages)으로 fallback
+	// 클라이언트 요청값(totalPages)을 우선 사용하고, 없는 경우 서버에 저장된 PageCount로 fallback
 	lastPage := totalPages
-	if chapter.PageCount > 0 {
+	if lastPage <= 0 && chapter.PageCount > 0 {
 		lastPage = chapter.PageCount
 	}
 
