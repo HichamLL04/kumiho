@@ -66,6 +66,8 @@ interface EpubViewerProps {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    spineIndex: number;
+    spineLength: number;
     atStart?: boolean;
     atEnd?: boolean;
   }) => void;
@@ -251,6 +253,8 @@ export function EpubViewer({
       currentPosition: number;
       totalPositions: number;
       chapterHref: string;
+      spineIndex: number;
+      spineLength: number;
       atStart?: boolean;
       atEnd?: boolean;
     }) => {
@@ -792,6 +796,7 @@ export function EpubViewer({
           chapterTitle={currentTocLabel}
           chapterPage={chapterPageDisplay}
           chapterTotal={chapterTotalDisplay}
+          globalProgressPercent={currentProgressPercent >= 0 ? currentProgressPercent : undefined}
           isUIVisible={isUIVisible}
           initialCFI={initialCFI}
           initialProgressRatio={initialProgressRatio}
@@ -938,17 +943,17 @@ export function EpubViewer({
               <div className={styles.pageInfo}>
                 {currentPage >= 0 && (
                   <span className={styles.pageInfoClickable}>
-                    {currentPage > 0 && totalPages > 0 ? (
+                    {chapterPageDisplay > 0 && chapterTotalDisplay > 0 ? (
                       <>
-                        {currentPage} / {totalPages} P
+                        {chapterPageDisplay} / {chapterTotalDisplay} P
+                        {currentProgressPercent >= 0 && (
+                          <span style={{ fontSize: "0.85em", opacity: 0.8, marginLeft: "8px" }}>
+                            | {currentProgressPercent}%
+                          </span>
+                        )}
                       </>
                     ) : (
-                      <>{Math.round(currentPage)}%</>
-                    )}
-                    {currentProgressPercent >= 0 && (
-                      <span style={{ fontSize: "0.85em", opacity: 0.8, marginLeft: "8px" }}>
-                        ({currentProgressPercent}%)
-                      </span>
+                      <>{currentProgressPercent >= 0 ? `${currentProgressPercent}%` : ""}</>
                     )}
                   </span>
                 )}

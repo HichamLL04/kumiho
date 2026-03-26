@@ -32,7 +32,7 @@ type ProgressHandler struct {
 	seriesEnrichSvc       *service.SeriesEnrichService
 }
 
-const completionThresholdPercent = 98.0
+const completionThresholdPercent = 100.0
 const viewerSessionLeaseTTL = 90 * time.Second
 
 func NewProgressHandler(
@@ -566,6 +566,18 @@ func (h *ProgressHandler) UpdateEpubProgress(c *fiber.Ctx) error {
 			totalPages = chapter.PageCount
 		} else {
 			totalPages = 1
+		}
+	}
+
+	// EPUB 전용: 프론트엔드의 epub.js 위치 수를 chapter.PageCount에 동기화
+	// scanner는 바이트 기반(ceil(htmlBytes/6144))으로 PageCount를 계산하므로
+	// epub.js location 수와 다를 수 있다. markCompleteIfLastPage가 chapter.PageCount를
+	// 우선 사용하므로 여기서 동기화하여 완독 판정이 올바르게 동작하도록 한다.
+	if totalPositions > 0 && chapter.PageCount != totalPositions {
+		if syncErr := h.chapterRepo.UpdatePageCount(nil, chapter.ID, totalPositions); syncErr == nil {
+			chapter.PageCount = totalPositions
+		} else {
+			log.Printf("[UpdateEpubProgress] Failed to sync epub page count: %v", syncErr)
 		}
 	}
 
@@ -2203,9 +2215,7 @@ func (h *ProgressHandler) ResetChapterProgress(c *fiber.Ctx) error {
 func (h *ProgressHandler) removeCompletionIfIncomplete(userID string, volumeID *string, currentPage, totalPages int, currentTime, duration *float64) {
 	isComplete := false
 	if totalPages > 0 {
-		// 페이지 기반 판단
-		progressPercent := (float64(currentPage) / float64(totalPages)) * 100.0
-		if progressPercent >= 95.0 && currentPage >= totalPages {
+		if currentPage >= totalPages {
 			isComplete = true
 		}
 	} else if duration != nil && *duration > 0 && currentTime != nil {
@@ -2250,9 +2260,7 @@ func (h *ProgressHandler) markCompleteIfLastPage(userID string, volumeID, chapte
 	// 완료 여부 판단
 	isComplete := false
 	if lastPage > 0 {
-		// 페이지 기반 판단
-		progressPercent := (float64(currentPage) / float64(lastPage)) * 100.0
-		if progressPercent >= 95.0 && currentPage >= lastPage {
+		if currentPage >= lastPage {
 			isComplete = true
 		}
 	} else if duration != nil && *duration > 0 && currentTime != nil {

@@ -39,6 +39,7 @@ interface EpubChapterViewerProps {
   chapterTitle: string;
   chapterPage: number;
   chapterTotal: number;
+  globalProgressPercent?: number;
   isUIVisible: boolean;
   initialCFI?: string | null;
   initialProgressRatio?: number | null;
@@ -53,6 +54,8 @@ interface EpubChapterViewerProps {
     currentPosition: number;
     totalPositions: number;
     chapterHref: string;
+    spineIndex: number;
+    spineLength: number;
     atStart?: boolean;
     atEnd?: boolean;
   }) => void;
@@ -147,6 +150,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       chapterTitle,
       chapterPage,
       chapterTotal,
+      globalProgressPercent,
       isUIVisible,
       initialCFI,
       initialProgressRatio,
@@ -496,7 +500,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         }
       }
 
-      const currentSpineItem = spineItems[start?.index ?? -1];
+      const spineIndex = start?.index ?? -1;
+      const currentSpineItem = spineItems[spineIndex];
       const chapterHref = currentSpineItem?.href || "";
 
       onLocationChangeRef.current?.({
@@ -507,6 +512,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         currentPosition,
         totalPositions,
         chapterHref,
+        spineIndex,
+        spineLength: spineItems.length,
         atStart: location.atStart,
         atEnd: location.atEnd,
       });
@@ -1350,6 +1357,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         />
         <div className={`${styles.chapterPageInfo} ${isUIVisible ? styles.hidden : ""}`}>
           {chapterTitle} - {Math.max(1, chapterPage || 1)}/{Math.max(1, chapterTotal || 1)}
+          {globalProgressPercent != null && ` | ${globalProgressPercent}%`}
         </div>
       </div>
     );

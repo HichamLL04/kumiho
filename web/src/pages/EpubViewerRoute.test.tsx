@@ -181,6 +181,12 @@ vi.mock("../features/viewer", () => ({
   }),
   useExitFullscreenOnViewerUnmount: () => {},
   useRestoreFullscreenAfterChapterSwitch: () => {},
+  useBGM: () => ({
+    bgmInfo: null,
+    isBgmPlaying: false,
+    setIsBgmPlaying: vi.fn(),
+    audioRef: { current: null },
+  }),
 }));
 
 vi.mock("../features/viewer/hooks/usePreventBrowserZoom", () => ({

@@ -37,6 +37,8 @@ function isLocationAtEnd(location: {
   globalRatio: number;
   chapterPage: number;
   chapterTotal: number;
+  spineIndex?: number;
+  spineLength?: number;
   atEnd?: boolean;
 }): boolean {
   if (Number.isFinite(location.totalPositions) && location.totalPositions > 1) {
@@ -45,8 +47,13 @@ function isLocationAtEnd(location: {
       return true;
     }
     // 스프레드 모드: 마지막 스프레드의 왼쪽 페이지 CFI는 totalPositions-2
-    // chapterPage >= chapterTotal 조건으로 단일 페이지 모드의 직전 위치와 구분한다
+    // spineIndex >= spineLength-1 조건으로 마지막 spine 섹션에서만 적용해 중간 섹션 오탐 방지
+    const isLastSection =
+      location.spineLength == null ||
+      location.spineLength <= 0 ||
+      (location.spineIndex != null && location.spineIndex >= location.spineLength - 1);
     if (
+      isLastSection &&
       location.currentPosition >= location.totalPositions - 2 &&
       location.chapterTotal > 0 &&
       location.chapterPage >= location.chapterTotal
@@ -542,14 +549,17 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   );
 
   const saveProgress = useCallback(
-    async (location: {
-      cfi: string;
-      chapterPage: number;
-      chapterTotal: number;
-      globalRatio: number;
-      currentPosition: number;
-      totalPositions: number;
-    }) => {
+    async (
+      location: {
+        cfi: string;
+        chapterPage: number;
+        chapterTotal: number;
+        globalRatio: number;
+        currentPosition: number;
+        totalPositions: number;
+      },
+      atEnd = false,
+    ) => {
       if (isInitializingRef.current || effectiveIncognito) {
         if (isInitializingRef.current) console.log("[EpubViewerRoute] saveProgress skipped: isInitializing is true");
         return;
@@ -558,10 +568,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       const payload = canSaveProgress(location)
         ? (() => {
             const totalPositions = Math.max(0, location.totalPositions);
-            const currentPosition = Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
+            // atEnd일 때는 마지막 위치로 보정하여 100% 저장 (완독 처리)
+            const currentPosition = atEnd
+              ? Math.max(0, totalPositions - 1)
+              : Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
             const calculatedCurrentPage = currentPosition + 1;
             const calculatedTotalPages = totalPositions;
-            const progressPercent = toPositionRatio(currentPosition, calculatedTotalPages) * 100;
+            const progressPercent = atEnd ? 100 : toPositionRatio(currentPosition, calculatedTotalPages) * 100;
 
             return {
               current_page: calculatedCurrentPage,
@@ -596,12 +609,15 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       currentPosition: number;
       totalPositions: number;
       chapterHref: string;
+      spineIndex?: number;
+      spineLength?: number;
       atStart?: boolean;
       atEnd?: boolean;
     }) => {
       setCurrentCFI(location.cfi);
       setIsAtFirstPage(location.atStart ?? false);
-      setIsAtLastPage(isLocationAtEnd(location));
+      const atEnd = isLocationAtEnd(location);
+      setIsAtLastPage(atEnd);
 
       // isInitializingRef.current 사용으로 stale closure 방지
       if (isInitializingRef.current) {
@@ -610,15 +626,18 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
       // totalPositions가 1 이하면 페이지 축으로는 신뢰하지 않고 chapter 축을 우선 사용한다.
       if (location.totalPositions > 1) {
-        const clampedPosition = Math.max(0, Math.min(location.totalPositions - 1, location.currentPosition));
+        // atEnd일 때는 마지막 위치로 보정하여 100%로 저장
+        const clampedPosition = atEnd
+          ? location.totalPositions - 1
+          : Math.max(0, Math.min(location.totalPositions - 1, location.currentPosition));
         setCurrentPage(clampedPosition + 1);
         setTotalPages(location.totalPositions);
-        setGlobalProgress(toPositionRatio(clampedPosition, location.totalPositions) * 100);
+        setGlobalProgress(atEnd ? 100 : toPositionRatio(clampedPosition, location.totalPositions) * 100);
       } else {
         // locations 축이 신뢰 불가할 때는 section(page) 축보다 globalRatio 축을 우선 사용한다.
         // chapterTotal/chapterPage는 섹션 단위 값이라 조기 "마지막 페이지" 판정을 만들 수 있다.
         if (Number.isFinite(location.globalRatio)) {
-          const clampedRatio = Math.max(0, Math.min(1, location.globalRatio));
+          const clampedRatio = atEnd ? 1 : Math.max(0, Math.min(1, location.globalRatio));
           setGlobalProgress(clampedRatio * 100);
           const pseudoTotalPages = 100;
           const pseudoCurrentPage = Math.max(1, Math.round(clampedRatio * pseudoTotalPages));
@@ -626,7 +645,9 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           setTotalPages(pseudoTotalPages);
         } else if (location.chapterTotal > 0) {
           const clampedChapterTotal = Math.max(1, location.chapterTotal);
-          const clampedChapterPage = Math.max(1, Math.min(clampedChapterTotal, location.chapterPage || 1));
+          const clampedChapterPage = atEnd
+            ? clampedChapterTotal
+            : Math.max(1, Math.min(clampedChapterTotal, location.chapterPage || 1));
           const chapterRatio = clampedChapterPage / clampedChapterTotal;
           setCurrentPage(clampedChapterPage);
           setTotalPages(clampedChapterTotal);
@@ -645,14 +666,14 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         baselineCFIRef.current = location.cfi;
-        void saveProgress(location);
+        void saveProgress(location, atEnd);
         return;
       }
       if (baselineCFIRef.current === location.cfi) {
         return;
       }
 
-      void saveProgress(location);
+      void saveProgress(location, atEnd);
     },
     [
       setCurrentCFI,
