@@ -826,7 +826,8 @@
     "settings": {
       "title": "⚙️ EPUB設定",
       "font_size": {
-        "label": "文字サイズ"
+        "label": "文字サイズ",
+        "original": "オリジナル"
       },
       "font_family": {
         "label": "フォント",
@@ -842,7 +843,8 @@
         "typography_limited": "マンガ（固定レイアウト）モードでは文字サイズ・行間の反映が制限される場合があります。"
       },
       "line_height": {
-        "label": "行間"
+        "label": "行間",
+        "original": "オリジナル"
       },
       "theme": {
         "label": "テーマ",

@@ -826,7 +826,8 @@
     "settings": {
       "title": "⚙️ EPUB Settings",
       "font_size": {
-        "label": "Font Size"
+        "label": "Font Size",
+        "original": "Original"
       },
       "font_family": {
         "label": "Font",
@@ -842,7 +843,8 @@
         "typography_limited": "In comic (fixed layout) mode, font size and line spacing may have limited effect."
       },
       "line_height": {
-        "label": "Line Spacing"
+        "label": "Line Spacing",
+        "original": "Original"
       },
       "theme": {
         "label": "Theme",

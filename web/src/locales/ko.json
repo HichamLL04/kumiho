@@ -827,7 +827,8 @@
     "settings": {
       "title": "⚙️ EPUB 설정",
       "font_size": {
-        "label": "글자 크기"
+        "label": "글자 크기",
+        "original": "원본"
       },
       "font_family": {
         "label": "글꼴",
@@ -843,7 +844,8 @@
         "typography_limited": "만화책(고정 레이아웃) 모드에서는 글자 크기/줄 간격 반영이 제한될 수 있습니다."
       },
       "line_height": {
-        "label": "줄 간격"
+        "label": "줄 간격",
+        "original": "원본"
       },
       "theme": {
         "label": "테마",
