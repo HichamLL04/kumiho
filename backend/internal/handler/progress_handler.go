@@ -69,8 +69,8 @@ type UpdateProgressRequest struct {
 	AnchorPage      int      `json:"anchor_page"`
 	OffsetRatio     float64  `json:"offset_ratio"`
 	TotalPages      int      `json:"total_pages"`
-	CurrentPosition int      `json:"current_position"`
-	TotalPositions  int      `json:"total_positions"`
+	CurrentPosition *int     `json:"current_position"`
+	TotalPositions  *int     `json:"total_positions"`
 	CurrentTime     *float64 `json:"current_time,omitempty"`
 	Duration        *float64 `json:"duration,omitempty"`
 	ProgressPercent float64  `json:"progress_percent"`
@@ -428,11 +428,11 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 			if req.CurrentCFI == nil || *req.CurrentCFI == "" {
 				req.CurrentCFI = existing.CurrentCFI
 			}
-			if req.CurrentPosition == 0 && existing.CurrentPosition > 0 {
-				req.CurrentPosition = existing.CurrentPosition
+			if req.CurrentPosition == nil && existing.CurrentPosition > 0 {
+				req.CurrentPosition = &existing.CurrentPosition
 			}
-			if req.TotalPositions == 0 && existing.TotalPositions > 0 {
-				req.TotalPositions = existing.TotalPositions
+			if req.TotalPositions == nil && existing.TotalPositions > 0 {
+				req.TotalPositions = &existing.TotalPositions
 			}
 			if req.AnchorPage <= 0 {
 				req.AnchorPage = fallbackAnchorPage(existing)
@@ -465,8 +465,8 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 		AnchorPage:      req.AnchorPage,
 		OffsetRatio:     req.OffsetRatio,
 		TotalPages:      req.TotalPages,
-		CurrentPosition: req.CurrentPosition,
-		TotalPositions:  req.TotalPositions,
+		CurrentPosition: intValue(req.CurrentPosition),
+		TotalPositions:  intValue(req.TotalPositions),
 		CurrentTime:     req.CurrentTime,
 		Duration:        req.Duration,
 		ProgressPercent: progressPercent,
@@ -899,6 +899,13 @@ func (h *ProgressHandler) touchViewerLease(userID string, c *fiber.Ctx, seriesID
 func stringValue(v *string) string {
 	if v == nil {
 		return ""
+	}
+	return *v
+}
+
+func intValue(v *int) int {
+	if v == nil {
+		return 0
 	}
 	return *v
 }
