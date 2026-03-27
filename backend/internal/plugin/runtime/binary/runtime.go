@@ -24,8 +24,9 @@ import (
 )
 
 const (
-	EnvPluginHost = "KUMIHO_PLUGIN_HOST"
-	EnvPluginPort = "KUMIHO_PLUGIN_PORT"
+	EnvPluginHost    = "KUMIHO_PLUGIN_HOST"
+	EnvPluginPort    = "KUMIHO_PLUGIN_PORT"
+	maxStartAttempts = 3
 )
 
 type processState struct {
@@ -93,55 +94,74 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 		return fmt.Errorf("stat install path: %w", statErr)
 	}
 
-	host := "127.0.0.1"
-	port, err := allocatePort(host)
-	if err != nil {
-		r.finishStart(inst.ID, fmt.Errorf("allocate plugin port: %w", err))
-		r.remove(inst.ID)
-		return fmt.Errorf("allocate plugin port: %w", err)
-	}
-	baseURL := fmt.Sprintf("http://%s:%d", host, port)
-
-	procCtx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(procCtx, absPath)
-	cmd.Env = append(os.Environ(),
-		EnvPluginHost+"="+host,
-		EnvPluginPort+"="+strconv.Itoa(port),
-	)
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-
-	if err := cmd.Start(); err != nil {
-		cancel()
-		r.finishStart(inst.ID, fmt.Errorf("start plugin process: %w", err))
-		r.remove(inst.ID)
-		return fmt.Errorf("start plugin process: %w", err)
-	}
-
-	r.mu.Lock()
-	r.processes[inst.ID] = processState{cmd: cmd, cancel: cancel, baseURL: baseURL, exited: exited, ready: ready}
-	r.mu.Unlock()
-
-	go func() {
-		err := cmd.Wait()
-		exited <- err
-		close(exited)
-		r.mu.Lock()
-		delete(r.processes, inst.ID)
-		r.mu.Unlock()
-		if err != nil {
-			log.Printf("plugin process %s exited: %v", inst.ID, err)
+	var lastErr error
+	for attempt := 1; attempt <= maxStartAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			r.finishStart(inst.ID, err)
+			r.remove(inst.ID)
+			return err
 		}
-	}()
 
-	if err := r.waitUntilReady(ctx, inst.ID, baseURL, inst.Manifest.ID); err != nil {
-		r.finishStart(inst.ID, err)
-		_ = r.Stop(context.Background(), inst)
-		return err
+		host := "127.0.0.1"
+		port, err := allocatePort(host)
+		if err != nil {
+			lastErr = fmt.Errorf("allocate plugin port: %w", err)
+			break
+		}
+		baseURL := fmt.Sprintf("http://%s:%d", host, port)
+
+		procCtx, cancel := context.WithCancel(context.Background())
+		cmd := exec.CommandContext(procCtx, absPath)
+		cmd.Env = append(os.Environ(),
+			EnvPluginHost+"="+host,
+			EnvPluginPort+"="+strconv.Itoa(port),
+		)
+		cmd.Stdout = log.Writer()
+		cmd.Stderr = log.Writer()
+
+		if err := cmd.Start(); err != nil {
+			cancel()
+			lastErr = fmt.Errorf("start plugin process: %w", err)
+			break
+		}
+
+		r.mu.Lock()
+		r.processes[inst.ID] = processState{cmd: cmd, cancel: cancel, baseURL: baseURL, exited: exited, ready: ready}
+		r.mu.Unlock()
+
+		cmdExited := exited
+		go func(cmd *exec.Cmd, exited chan error) {
+			err := cmd.Wait()
+			exited <- err
+			close(exited)
+			r.mu.Lock()
+			delete(r.processes, inst.ID)
+			r.mu.Unlock()
+			if err != nil {
+				log.Printf("plugin process %s exited: %v", inst.ID, err)
+			}
+		}(cmd, cmdExited)
+
+		if err := r.waitUntilReady(ctx, inst.ID, baseURL, inst.Manifest.ID); err == nil {
+			r.finishStart(inst.ID, nil)
+			return nil
+		} else {
+			lastErr = err
+			_ = r.Stop(context.Background(), inst)
+			if attempt < maxStartAttempts {
+				r.mu.Lock()
+				r.processes[inst.ID] = processState{exited: make(chan error, 1), ready: ready}
+				exited = r.processes[inst.ID].exited
+				r.mu.Unlock()
+				time.Sleep(150 * time.Millisecond)
+				continue
+			}
+		}
 	}
-	r.finishStart(inst.ID, nil)
 
-	return nil
+	r.finishStart(inst.ID, lastErr)
+	r.remove(inst.ID)
+	return lastErr
 }
 
 func (r *Runtime) Stop(ctx context.Context, inst runtime.Instance) error {

@@ -27,9 +27,7 @@ func (s *SQLStore) Save(record Record) error {
 	if record.CreatedAt.IsZero() {
 		record.CreatedAt = time.Now()
 	}
-	if record.UpdatedAt.IsZero() {
-		record.UpdatedAt = time.Now()
-	}
+	record.UpdatedAt = time.Now()
 
 	_, err = database.DB.Exec(`
 		INSERT INTO plugin_installations (

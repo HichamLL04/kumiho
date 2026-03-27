@@ -190,6 +190,28 @@ type migration struct {
 	fn      func() error
 }
 
+func ensurePluginInstallationsSchema() error {
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS plugin_installations (
+			id TEXT PRIMARY KEY,
+			manifest_json TEXT NOT NULL,
+			state TEXT NOT NULL,
+			install_path TEXT DEFAULT '',
+			last_error TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`); err != nil {
+		return fmt.Errorf("create plugin_installations: %w", err)
+	}
+
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_plugin_installations_state ON plugin_installations(state)`); err != nil {
+		return fmt.Errorf("create index plugin_installations(state): %w", err)
+	}
+
+	return nil
+}
+
 // Migrate 스키마 마이그레이션
 func Migrate() error {
 	schema := `
@@ -460,18 +482,6 @@ func Migrate() error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_library_paths_library ON library_paths(library_id);
 
-	-- 플러그인 설치 상태
-	CREATE TABLE IF NOT EXISTS plugin_installations (
-		id TEXT PRIMARY KEY,
-		manifest_json TEXT NOT NULL,
-		state TEXT NOT NULL,
-		install_path TEXT DEFAULT '',
-		last_error TEXT DEFAULT '',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-	CREATE INDEX IF NOT EXISTS idx_plugin_installations_state ON plugin_installations(state);
-
 	-- 인덱스
 	CREATE INDEX IF NOT EXISTS idx_daily_activity_user_date ON daily_activity(user_id, date);
 	CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -499,6 +509,10 @@ func Migrate() error {
 		`
 
 	if _, err := DB.Exec(schema); err != nil {
+		return err
+	}
+
+	if err := ensurePluginInstallationsSchema(); err != nil {
 		return err
 	}
 
@@ -1760,25 +1774,7 @@ func migrateMultiFolderPaths() error {
 
 // #36 migratePluginInstallations 플러그인 설치 상태 테이블 추가
 func migratePluginInstallations() error {
-	if _, err := DB.Exec(`
-		CREATE TABLE IF NOT EXISTS plugin_installations (
-			id TEXT PRIMARY KEY,
-			manifest_json TEXT NOT NULL,
-			state TEXT NOT NULL,
-			install_path TEXT DEFAULT '',
-			last_error TEXT DEFAULT '',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)
-	`); err != nil {
-		return fmt.Errorf("create plugin_installations: %w", err)
-	}
-
-	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_plugin_installations_state ON plugin_installations(state)`); err != nil {
-		return fmt.Errorf("create index plugin_installations(state): %w", err)
-	}
-
-	return nil
+	return ensurePluginInstallationsSchema()
 }
 
 // parseLegacyTimeToSeconds 문자열 시간(HH:MM:SS, MM:SS)을 초 단위 float64로 변환
