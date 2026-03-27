@@ -6,6 +6,34 @@ import type { PluginManifest, PluginRecord } from "../../types/plugin";
 import { Toast } from "../common/Toast";
 import styles from "./SettingsComponents.module.css";
 
+type ToastState = { type: "success" | "error" | "info"; message: string } | null;
+
+function stateTone(state: string) {
+  switch (state) {
+    case "active":
+      return "active";
+    case "error":
+    case "unhealthy":
+      return "error";
+    case "disabled":
+      return "disabled";
+    case "registered":
+    case "installed":
+    case "activation_pending":
+      return "installed";
+    default:
+      return "inactive";
+  }
+}
+
+function iconURL(plugin: PluginManifest, record?: PluginRecord) {
+  return record?.manifest.icons?.svg
+    || record?.manifest.icons?.png
+    || plugin.icons?.svg
+    || plugin.icons?.png
+    || null;
+}
+
 export function PluginsTab() {
   const { t } = useTranslation();
   const [catalog, setCatalog] = useState<PluginManifest[]>([]);
@@ -13,9 +41,13 @@ export function PluginsTab() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [healthById, setHealthById] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [status, setStatus] = useState<ToastState>(null);
 
   const installedById = useMemo(() => new Map(installed.map((item) => [item.id, item])), [installed]);
+  const unmanagedInstalled = useMemo(
+    () => installed.filter((item) => !catalog.some((plugin) => plugin.id === item.id)),
+    [catalog, installed],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,60 +158,109 @@ export function PluginsTab() {
             <Blocks size={18} />
             <h3>{t("settings.plugins.catalog_title")}</h3>
           </div>
-          <div className={styles.sectionContent}>
+          <div className={styles.pluginGrid}>
             {catalog.map((plugin) => {
               const installedRecord = installedById.get(plugin.id);
+              const isInstalled = Boolean(installedRecord);
               const isActive = installedRecord?.state === "active";
               const isBusy = busyId === plugin.id;
+              const currentState = installedRecord?.state || "not_installed";
+              const tone = stateTone(currentState);
               const canInstall = !installedRecord || installedRecord.manifest.version !== plugin.version || installedRecord.state === "error";
-              const installLabel = !installedRecord
+              const installLabel = !installedRecord || installedRecord.manifest.version !== plugin.version
                 ? t("settings.plugins.install")
-                : installedRecord.manifest.version !== plugin.version
-                  ? t("settings.plugins.reinstall")
-                  : t("settings.plugins.reinstall");
+                : t("settings.plugins.reinstall");
+              const iconSrc = iconURL(plugin, installedRecord);
 
               return (
-                <div key={plugin.id} className={styles.settingsItem}>
-                  <div className={styles.itemInfo}>
-                    <label>{plugin.name}</label>
-                    <p>{plugin.description}</p>
-                    <p>
-                      {plugin.version} · {plugin.runtime_type} · {plugin.capabilities.join(", ")}
-                    </p>
-                    {installedRecord && (
-                      <p>
-                        {t("settings.plugins.state")}: {installedRecord.state}
-                        {installedRecord.last_error ? ` · ${installedRecord.last_error}` : ""}
-                      </p>
-                    )}
-                    {healthById[plugin.id] && <p>{healthById[plugin.id]}</p>}
+                <article
+                  key={plugin.id}
+                  className={[
+                    styles.pluginCard,
+                    !isInstalled ? styles.pluginCardDimmed : "",
+                    isActive ? styles.pluginCardActive : "",
+                    tone === "error" ? styles.pluginCardError : "",
+                  ].filter(Boolean).join(" ")}
+                >
+                  <div className={styles.pluginCardTop}>
+                    <div className={styles.pluginIdentity}>
+                      <div className={styles.pluginIconShell}>
+                        {iconSrc ? (
+                          <img
+                            src={iconSrc}
+                            alt={plugin.name}
+                            className={styles.pluginIconImage}
+                          />
+                        ) : (
+                          <Blocks size={28} className={styles.pluginIconFallback} />
+                        )}
+                      </div>
+                      <div className={styles.pluginHeading}>
+                        <div className={styles.pluginTitleRow}>
+                          <h4>{plugin.name}</h4>
+                          <span className={`${styles.pluginStateBadge} ${styles[`pluginStateBadge${tone[0].toUpperCase()}${tone.slice(1)}`]}`}>
+                            {currentState}
+                          </span>
+                        </div>
+                        <p className={styles.pluginAuthor}>
+                          {t("settings.plugins.author")}: {plugin.author || "-"}
+                        </p>
+                        <p className={styles.pluginMeta}>
+                          {plugin.version} · {plugin.runtime_type}
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className={`${styles.pluginToggle} ${!isInstalled ? styles.pluginToggleDisabled : ""}`}>
+                      <span>{isActive ? t("settings.plugins.deactivate") : t("settings.plugins.activate")}</span>
+                      <button
+                        type="button"
+                        className={`${styles.pluginToggleTrack} ${isActive ? styles.pluginToggleTrackOn : ""}`}
+                        onClick={() => void handleActivate(plugin.id, isActive)}
+                        disabled={!isInstalled || isBusy}
+                        aria-label={isActive ? t("settings.plugins.deactivate") : t("settings.plugins.activate")}
+                      >
+                        <span className={`${styles.pluginToggleThumb} ${isActive ? styles.pluginToggleThumbOn : ""}`} />
+                      </button>
+                    </label>
                   </div>
 
-                  <div className={styles.itemControl} style={{ display: "grid", gap: "0.5rem" }}>
+                  <p className={styles.pluginDescription}>{plugin.description || "-"}</p>
+
+                  <div className={styles.pluginCapabilities}>
+                    {plugin.capabilities.map((capability) => (
+                      <span key={capability} className={styles.pluginChip}>
+                        {capability}
+                      </span>
+                    ))}
+                  </div>
+
+                  {installedRecord?.last_error && (
+                    <p className={styles.pluginStatusLine}>{installedRecord.last_error}</p>
+                  )}
+                  {healthById[plugin.id] && (
+                    <p className={styles.pluginStatusLine}>{healthById[plugin.id]}</p>
+                  )}
+
+                  <div className={styles.pluginActions}>
                     {canInstall && (
-                      <button className={styles.settingsSelect} onClick={() => void handleInstall(plugin.id)} disabled={isBusy}>
-                        <Download size={14} style={{ marginRight: "0.5rem" }} />
-                        {isBusy ? t("common.loading") : installLabel}
+                      <button className={styles.pluginActionPrimary} onClick={() => void handleInstall(plugin.id)} disabled={isBusy}>
+                        <Download size={14} />
+                        <span>{isBusy ? t("common.loading") : installLabel}</span>
                       </button>
                     )}
-                    {installedRecord && (
-                      <>
-                        <button className={styles.settingsSelect} onClick={() => void handleActivate(plugin.id, isActive)} disabled={isBusy}>
-                          <PlugZap size={14} style={{ marginRight: "0.5rem" }} />
-                          {isActive ? t("settings.plugins.deactivate") : t("settings.plugins.activate")}
-                        </button>
-                        <button className={styles.settingsSelect} onClick={() => void handleHealth(plugin.id)} disabled={isBusy}>
-                          <HeartPulse size={14} style={{ marginRight: "0.5rem" }} />
-                          {t("settings.plugins.health")}
-                        </button>
-                        <button className={styles.settingsSelect} onClick={() => void handleUninstall(plugin.id)} disabled={isBusy}>
-                          <Trash2 size={14} style={{ marginRight: "0.5rem" }} />
-                          {t("settings.plugins.uninstall")}
-                        </button>
-                      </>
+                    <button className={styles.pluginActionSecondary} onClick={() => void handleHealth(plugin.id)} disabled={!isInstalled || isBusy}>
+                      <HeartPulse size={14} />
+                      <span>{t("settings.plugins.health")}</span>
+                    </button>
+                    {isInstalled && (
+                      <button className={styles.pluginActionDanger} onClick={() => void handleUninstall(plugin.id)} disabled={isBusy}>
+                        <Trash2 size={14} />
+                        <span>{t("settings.plugins.uninstall")}</span>
+                      </button>
                     )}
                   </div>
-                </div>
+                </article>
               );
             })}
 
@@ -192,41 +273,59 @@ export function PluginsTab() {
           </div>
         </section>
 
-        <section className={styles.settingsSection}>
-          <div className={styles.sectionTitle}>
-            <RefreshCw size={18} />
-            <h3>{t("settings.plugins.installed_title")}</h3>
-          </div>
-          <div className={styles.sectionContent}>
-            {installed.length === 0 ? (
-              <div className={styles.placeholderContent}>
-                <p>{t("settings.plugins.installed_empty")}</p>
-              </div>
-            ) : (
-              installed.map((item) => (
-                <div key={item.id} className={styles.settingsItem}>
-                  <div className={styles.itemInfo}>
-                    <label>{item.manifest.name}</label>
-                    <p>{item.id}</p>
-                    <p>
-                      {t("settings.plugins.state")}: {item.state}
-                    </p>
-                  </div>
-                  <div className={styles.itemControl}>
-                    <div style={{ display: "grid", gap: "0.5rem" }}>
-                      <button className={styles.settingsSelect} onClick={() => void handleHealth(item.id)} disabled={busyId === item.id}>
-                        {t("settings.plugins.health")}
-                      </button>
-                      <button className={styles.settingsSelect} onClick={() => void handleUninstall(item.id)} disabled={busyId === item.id}>
-                        {t("settings.plugins.uninstall")}
-                      </button>
+        {unmanagedInstalled.length > 0 && (
+          <section className={styles.settingsSection}>
+            <div className={styles.sectionTitle}>
+              <RefreshCw size={18} />
+              <h3>{t("settings.plugins.installed_title")}</h3>
+            </div>
+            <div className={styles.pluginGrid}>
+              {unmanagedInstalled.map((item) => (
+                <article key={item.id} className={`${styles.pluginCard} ${styles.pluginCardMuted}`}>
+                  <div className={styles.pluginCardTop}>
+                    <div className={styles.pluginIdentity}>
+                      <div className={styles.pluginIconShell}>
+                        {item.manifest.icons?.svg || item.manifest.icons?.png ? (
+                          <img
+                            src={item.manifest.icons?.svg || item.manifest.icons?.png}
+                            alt={item.manifest.name}
+                            className={styles.pluginIconImage}
+                          />
+                        ) : (
+                          <Blocks size={28} className={styles.pluginIconFallback} />
+                        )}
+                      </div>
+                      <div className={styles.pluginHeading}>
+                        <div className={styles.pluginTitleRow}>
+                          <h4>{item.manifest.name}</h4>
+                          <span className={`${styles.pluginStateBadge} ${styles.pluginStateBadgeInstalled}`}>{item.state}</span>
+                        </div>
+                        <p className={styles.pluginAuthor}>
+                          {t("settings.plugins.author")}: {item.manifest.author || "-"}
+                        </p>
+                        <p className={styles.pluginMeta}>{item.id}</p>
+                      </div>
                     </div>
+                    <PlugZap size={18} className={styles.pluginOrphanIcon} />
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
+
+                  <p className={styles.pluginDescription}>{item.manifest.description || "-"}</p>
+
+                  <div className={styles.pluginActions}>
+                    <button className={styles.pluginActionSecondary} onClick={() => void handleHealth(item.id)} disabled={busyId === item.id}>
+                      <HeartPulse size={14} />
+                      <span>{t("settings.plugins.health")}</span>
+                    </button>
+                    <button className={styles.pluginActionDanger} onClick={() => void handleUninstall(item.id)} disabled={busyId === item.id}>
+                      <Trash2 size={14} />
+                      <span>{t("settings.plugins.uninstall")}</span>
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

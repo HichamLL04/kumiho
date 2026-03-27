@@ -107,6 +107,7 @@
       "install": "Install",
       "reinstall": "Reinstall",
       "uninstall": "Remove",
+      "author": "Author",
       "activate": "Activate",
       "deactivate": "Deactivate",
       "health": "Healthcheck",

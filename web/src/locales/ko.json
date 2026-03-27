@@ -107,6 +107,7 @@
       "install": "설치",
       "reinstall": "재설치",
       "uninstall": "제거",
+      "author": "제작자",
       "activate": "활성화",
       "deactivate": "비활성화",
       "health": "상태 확인",

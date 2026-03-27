@@ -107,6 +107,7 @@
       "install": "インストール",
       "reinstall": "再インストール",
       "uninstall": "削除",
+      "author": "作成者",
       "activate": "有効化",
       "deactivate": "無効化",
       "health": "状態確認",

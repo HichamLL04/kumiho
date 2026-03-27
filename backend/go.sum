@@ -22,6 +22,8 @@ github.com/klauspost/compress v1.17.9 h1:6KIumPrER1LHsvBVuDa0r5xaG0Es51mhhB9BQB2
 github.com/klauspost/compress v1.17.9/go.mod h1:Di0epgTjJY877eYKx5yC51cX2A2Vl2ibi7bDH9ttBbw=
 github.com/kumiho-plugin/kumiho-plugin-sdk v0.1.1 h1:XoWFTrrXOnvfG5ph5iYo3RnCxZPjRcjohJfcO9Hr59U=
 github.com/kumiho-plugin/kumiho-plugin-sdk v0.1.1/go.mod h1:tGUgzprVuii3rMBy93UrYjo7mFl56ZV1EIoZQaidyec=
+github.com/kumiho-plugin/kumiho-plugin-sdk v0.1.2 h1:rXWYz56u564KK+FewdO+GkSD2B4GHmLANl57eNjyLRo=
+github.com/kumiho-plugin/kumiho-plugin-sdk v0.1.2/go.mod h1:tGUgzprVuii3rMBy93UrYjo7mFl56ZV1EIoZQaidyec=
 github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
 github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=

@@ -5,12 +5,18 @@ export interface PluginArtifact {
   signature?: string;
 }
 
+export interface PluginIcons {
+  svg?: string;
+  png?: string;
+}
+
 export interface PluginManifest {
   id: string;
   name: string;
   description?: string;
   version: string;
   author?: string;
+  icons?: PluginIcons;
   homepage?: string;
   repository?: string;
   license?: string;
