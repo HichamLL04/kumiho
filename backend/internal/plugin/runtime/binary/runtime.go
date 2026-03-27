@@ -78,8 +78,8 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 	if err != nil {
 		return fmt.Errorf("resolve install path: %w", err)
 	}
-	if _, err := os.Stat(absPath); err != nil {
-		return fmt.Errorf("stat install path: %w", err)
+	if _, statErr := os.Stat(absPath); statErr != nil {
+		return fmt.Errorf("stat install path: %w", statErr)
 	}
 
 	host := "127.0.0.1"
@@ -99,6 +99,7 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 	cmd.Stderr = log.Writer()
 
 	if err := cmd.Start(); err != nil {
+		cancel()
 		return fmt.Errorf("start plugin process: %w", err)
 	}
 
