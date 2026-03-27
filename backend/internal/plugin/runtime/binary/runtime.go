@@ -61,6 +61,13 @@ func (r *Runtime) Type() sdkmanifest.RuntimeType {
 	return sdkmanifest.RuntimeTypeBinary
 }
 
+func newProcessLifecycle() (chan error, chan error, context.Context, context.CancelFunc) {
+	exited := make(chan error, 1)
+	ready := make(chan error, 1)
+	procCtx, cancel := context.WithCancel(context.Background())
+	return exited, ready, procCtx, cancel
+}
+
 func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 	if inst.InstallPath == "" {
 		return errors.New("install path is required")
@@ -99,22 +106,20 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 			}
 			return nil
 		}
-		exited := make(chan error, 1)
-		ready := make(chan error, 1)
-		r.processes[inst.ID] = processState{exited: exited, ready: ready}
+		exited, ready, procCtx, cancel := newProcessLifecycle()
+		r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
 		r.mu.Unlock()
 
-		return r.startFresh(ctx, inst, exited, ready)
+		return r.startFresh(ctx, procCtx, cancel, inst, exited, ready)
 	}
-	exited := make(chan error, 1)
-	ready := make(chan error, 1)
-	r.processes[inst.ID] = processState{exited: exited, ready: ready}
+	exited, ready, procCtx, cancel := newProcessLifecycle()
+	r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
 	r.mu.Unlock()
 
-	return r.startFresh(ctx, inst, exited, ready)
+	return r.startFresh(ctx, procCtx, cancel, inst, exited, ready)
 }
 
-func (r *Runtime) startFresh(ctx context.Context, inst runtime.Instance, exited chan error, ready chan error) error {
+func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cancel context.CancelFunc, inst runtime.Instance, exited chan error, ready chan error) error {
 
 	absPath, err := filepath.Abs(inst.InstallPath)
 	if err != nil {
@@ -144,7 +149,6 @@ func (r *Runtime) startFresh(ctx context.Context, inst runtime.Instance, exited 
 		}
 		baseURL := fmt.Sprintf("http://%s:%d", host, port)
 
-		procCtx, cancel := context.WithCancel(context.Background())
 		cmd := exec.CommandContext(procCtx, absPath)
 		cmd.Env = append(os.Environ(),
 			EnvPluginHost+"="+host,
@@ -164,17 +168,19 @@ func (r *Runtime) startFresh(ctx context.Context, inst runtime.Instance, exited 
 		r.mu.Unlock()
 
 		cmdExited := exited
-		go func(cmd *exec.Cmd, exited chan error) {
+		go func(cmd *exec.Cmd, exited chan error, id string) {
 			err := cmd.Wait()
 			exited <- err
 			close(exited)
 			r.mu.Lock()
-			delete(r.processes, inst.ID)
+			if current, exists := r.processes[id]; exists && current.exited == exited {
+				delete(r.processes, id)
+			}
 			r.mu.Unlock()
 			if err != nil {
-				log.Printf("plugin process %s exited: %v", inst.ID, err)
+				log.Printf("plugin process %s exited: %v", id, err)
 			}
-		}(cmd, cmdExited)
+		}(cmd, cmdExited, inst.ID)
 
 		if err := r.waitUntilReady(ctx, inst.ID, baseURL, inst.Manifest.ID); err == nil {
 			r.finishStart(inst.ID, nil)
@@ -183,9 +189,9 @@ func (r *Runtime) startFresh(ctx context.Context, inst runtime.Instance, exited 
 			lastErr = err
 			_ = r.Stop(context.Background(), inst)
 			if attempt < maxStartAttempts {
+				exited = make(chan error, 1)
 				r.mu.Lock()
-				r.processes[inst.ID] = processState{exited: make(chan error, 1), ready: ready}
-				exited = r.processes[inst.ID].exited
+				r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
 				r.mu.Unlock()
 				time.Sleep(150 * time.Millisecond)
 				continue
@@ -205,10 +211,30 @@ func (r *Runtime) Stop(ctx context.Context, inst runtime.Instance) error {
 	}
 
 	if state.cmd == nil || state.cmd.Process == nil {
-		r.mu.Lock()
-		delete(r.processes, inst.ID)
-		r.mu.Unlock()
-		return nil
+		if state.cancel != nil {
+			state.cancel()
+		}
+		if state.ready != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-state.ready:
+			}
+		}
+
+		refreshed, ok := r.get(inst.ID)
+		if !ok {
+			return nil
+		}
+		if refreshed.cmd == nil || refreshed.cmd.Process == nil {
+			r.mu.Lock()
+			if current, exists := r.processes[inst.ID]; exists && current.exited == refreshed.exited {
+				delete(r.processes, inst.ID)
+			}
+			r.mu.Unlock()
+			return nil
+		}
+		state = refreshed
 	}
 
 	_ = state.cmd.Process.Signal(syscall.SIGTERM)
