@@ -21,14 +21,13 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/handler"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
-	"github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	binaryruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime/binary"
+	serviceruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime/service"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	"github.com/aha-hyeong/kumiho/backend/internal/sse"
 	"github.com/aha-hyeong/kumiho/backend/internal/version"
-	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
 
 func main() {
@@ -93,9 +92,9 @@ func main() {
 	pluginManager := pluginengine.NewManager(
 		pluginStore,
 		binaryruntime.NewRuntime(),
-		runtime.NewStubRuntime(sdkmanifest.RuntimeTypeService),
+		serviceruntime.NewRuntime(),
 	)
-	if err := pluginManager.Bootstrap(); err != nil {
+	if err := pluginManager.Bootstrap(ctx); err != nil {
 		log.Fatalf("Failed to bootstrap plugin manager: %v", err)
 	}
 	pluginRecords, err := pluginManager.List()
@@ -103,6 +102,8 @@ func main() {
 		log.Fatalf("Failed to list plugin records: %v", err)
 	}
 	log.Printf("Plugin manager initialized with %d persisted plugin records", len(pluginRecords))
+	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, pluginManager)
+	pluginInstallSvc := service.NewPluginInstallService(cfg, nil, pluginManager)
 
 	// 핸들러 초기화
 	authHandler := handler.NewAuthHandler(authService, cfg, hub)
@@ -120,7 +121,8 @@ func main() {
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkRepo, seriesRepo, volumeRepo, chapterRepo, authService)
 	sseHandler := handler.NewSSEHandler(hub)
 	filesystemHandler := handler.NewFilesystemHandler()
-	pluginHandler := handler.NewPluginHandler(pluginManager)
+	pluginHandler := handler.NewPluginHandler(pluginManager, pluginInstallSvc)
+	metadataHandler := handler.NewMetadataHandler(metadataSvc)
 
 	// 미들웨어 초기화
 	authMiddleware := middleware.NewAuthMiddleware(authService)
@@ -198,8 +200,11 @@ func main() {
 	// 플러그인
 	plugins := protected.Group("/plugins")
 	plugins.Get("", pluginHandler.List)
+	plugins.Get("/catalog", authMiddleware.MasterOnly(), pluginHandler.Catalog)
 	plugins.Get("/:id", pluginHandler.Get)
 	plugins.Get("/:id/health", authMiddleware.MasterOnly(), pluginHandler.Healthcheck)
+	plugins.Post("/install", authMiddleware.MasterOnly(), pluginHandler.Install)
+	plugins.Delete("/:id", authMiddleware.MasterOnly(), pluginHandler.Uninstall)
 	plugins.Post("/register-installed", authMiddleware.MasterOnly(), pluginHandler.RegisterInstalled)
 	plugins.Post("/:id/activate", authMiddleware.MasterOnly(), pluginHandler.Activate)
 	plugins.Post("/:id/deactivate", authMiddleware.MasterOnly(), pluginHandler.Deactivate)
@@ -225,6 +230,9 @@ func main() {
 	series.Post("/extensions/batch", seriesHandler.BatchGetExtensions)
 	series.Get("/:id", seriesHandler.GetSeries)
 	series.Patch("/:id", seriesHandler.UpdateSeries)
+	series.Post("/:id/metadata/search", metadataHandler.Search)
+	series.Post("/:id/metadata/fetch", metadataHandler.Fetch)
+	series.Post("/:id/metadata/apply", metadataHandler.Apply)
 	series.Get("/:seriesId/volumes", seriesHandler.ListVolumes)
 	series.Get("/:seriesId/chapters", seriesHandler.ListChaptersBySeries)
 	series.Get("/:seriesId/progress", progressHandler.GetProgress)

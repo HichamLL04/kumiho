@@ -11,6 +11,16 @@ import type {
 } from "../types/series";
 import type { User } from "../types/user";
 import type { Session } from "../types/session";
+import type {
+  MetadataApplyResponse,
+  MetadataFetchResponse,
+  MetadataResult,
+  MetadataSearchResult,
+  PluginCatalogResponse,
+  PluginInstallResponse,
+  PluginRecord,
+  PluginUninstallResponse,
+} from "../types/plugin";
 
 // Docker 및 배포 환경에서 유연하게 대처하기 위해 기본값을 상대 경로로 설정합니다.
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
@@ -237,6 +247,11 @@ export const seriesAPI = {
   getViewerSettings: (seriesId: string) => api.get(`/series/${seriesId}/viewer-settings`).then((res) => res.data),
   updateViewerSettings: (seriesId: string, data: Record<string, unknown>) =>
     api.patch(`/series/${seriesId}/viewer-settings`, data).then((res) => res.data),
+  metadataSearch: (seriesId: string) => api.post<MetadataSearchResult>(`/series/${seriesId}/metadata/search`),
+  metadataFetch: (seriesId: string, data: { plugin_id: string; source: { id: string; name: string; url?: string } }) =>
+    api.post<MetadataFetchResponse>(`/series/${seriesId}/metadata/fetch`, data),
+  metadataApply: (seriesId: string, result: MetadataResult) =>
+    api.post<MetadataApplyResponse>(`/series/${seriesId}/metadata/apply`, { result }),
 };
 
 // Volume API
@@ -416,6 +431,16 @@ export const downloadAPI = {
 // System API
 export const systemAPI = {
   getVersion: (force = false) => api.get(`/system/version?force=${force}`).then((res) => res.data),
+};
+
+export const pluginAPI = {
+  list: () => api.get<{ plugins: PluginRecord[] }>("/plugins").then((res) => res.data),
+  catalog: () => api.get<PluginCatalogResponse>("/plugins/catalog").then((res) => res.data),
+  install: (pluginId: string) => api.post<PluginInstallResponse>("/plugins/install", { plugin_id: pluginId }).then((res) => res.data),
+  uninstall: (pluginId: string) => api.delete<PluginUninstallResponse>(`/plugins/${pluginId}`).then((res) => res.data),
+  activate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/activate`).then((res) => res.data),
+  deactivate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/deactivate`).then((res) => res.data),
+  health: (pluginId: string) => api.get<{ status: string; version?: string; message?: string }>(`/plugins/${pluginId}/health`).then((res) => res.data),
 };
 
 // Session API

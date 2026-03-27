@@ -1,4 +1,4 @@
-package binary
+package service
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
+	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/healthcheck"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 	sdkplugin "github.com/kumiho-plugin/kumiho-plugin-sdk/plugin"
@@ -39,8 +39,10 @@ type processState struct {
 	ready   chan error
 }
 
-// Runtime starts plugin binaries as child processes and probes them over the
-// SDK HTTP contract. This is the Phase 1 minimal BinaryRuntime bridge.
+// Runtime is the current local bridge for service plugins.
+// Phase 2 still launches the installed service artifact as a child process
+// over the SDK HTTP contract. A container-backed runtime can replace this
+// implementation later without changing the capability contract.
 type Runtime struct {
 	client    *http.Client
 	stopGrace time.Duration
@@ -60,7 +62,7 @@ func NewRuntime() *Runtime {
 }
 
 func (r *Runtime) Type() sdkmanifest.RuntimeType {
-	return sdkmanifest.RuntimeTypeBinary
+	return sdkmanifest.RuntimeTypeService
 }
 
 func newProcessLifecycle() (chan error, chan error, context.Context, context.CancelFunc) {
@@ -70,12 +72,12 @@ func newProcessLifecycle() (chan error, chan error, context.Context, context.Can
 	return exited, ready, procCtx, cancel
 }
 
-func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
+func (r *Runtime) Start(ctx context.Context, inst pluginruntime.Instance) error {
 	if inst.InstallPath == "" {
 		return errors.New("install path is required")
 	}
-	if inst.Manifest.RuntimeType != "" && inst.Manifest.RuntimeType != sdkmanifest.RuntimeTypeBinary {
-		return fmt.Errorf("plugin runtime type %q is not binary", inst.Manifest.RuntimeType)
+	if inst.Manifest.RuntimeType != "" && inst.Manifest.RuntimeType != sdkmanifest.RuntimeTypeService {
+		return fmt.Errorf("plugin runtime type %q is not service", inst.Manifest.RuntimeType)
 	}
 
 	r.mu.Lock()
@@ -94,7 +96,7 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 			}
 			r.mu.Unlock()
 			if ok && err != nil {
-				log.Printf("plugin process %s exited before restart: %v", inst.ID, err)
+				log.Printf("service plugin process %s exited before restart: %v", inst.ID, err)
 			}
 		default:
 			return nil
@@ -121,8 +123,7 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 	return r.startFresh(ctx, procCtx, cancel, inst, exited, ready)
 }
 
-func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cancel context.CancelFunc, inst runtime.Instance, exited chan error, ready chan error) error {
-
+func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cancel context.CancelFunc, inst pluginruntime.Instance, exited chan error, ready chan error) error {
 	absPath, err := filepath.Abs(inst.InstallPath)
 	if err != nil {
 		r.finishStart(inst.ID, fmt.Errorf("resolve install path: %w", err))
@@ -161,7 +162,7 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 
 		if err := cmd.Start(); err != nil {
 			cancel()
-			lastErr = fmt.Errorf("start plugin process: %w", err)
+			lastErr = fmt.Errorf("start service plugin process: %w", err)
 			break
 		}
 
@@ -180,7 +181,7 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 			}
 			r.mu.Unlock()
 			if err != nil {
-				log.Printf("plugin process %s exited: %v", id, err)
+				log.Printf("service plugin process %s exited: %v", id, err)
 			}
 		}(cmd, cmdExited, inst.ID)
 
@@ -206,7 +207,7 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 	return lastErr
 }
 
-func (r *Runtime) Stop(ctx context.Context, inst runtime.Instance) error {
+func (r *Runtime) Stop(ctx context.Context, inst pluginruntime.Instance) error {
 	state, ok := r.get(inst.ID)
 	if !ok {
 		return nil
@@ -258,16 +259,16 @@ func (r *Runtime) Stop(ctx context.Context, inst runtime.Instance) error {
 		state.cancel()
 		_ = state.cmd.Process.Kill()
 		<-state.exited
-		return runtime.ErrStopTimeout
+		return pluginruntime.ErrStopTimeout
 	case <-state.exited:
 	}
 	return nil
 }
 
-func (r *Runtime) Healthcheck(ctx context.Context, inst runtime.Instance) (*healthcheck.Response, error) {
+func (r *Runtime) Healthcheck(ctx context.Context, inst pluginruntime.Instance) (*healthcheck.Response, error) {
 	state, ok := r.get(inst.ID)
 	if !ok || state.baseURL == "" {
-		return nil, runtime.ErrNotRunning
+		return nil, pluginruntime.ErrNotRunning
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, state.baseURL+sdkservice.PathHealth, nil)
@@ -293,7 +294,7 @@ func (r *Runtime) Healthcheck(ctx context.Context, inst runtime.Instance) (*heal
 	return &payload, nil
 }
 
-func (r *Runtime) Search(ctx context.Context, inst runtime.Instance, req *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+func (r *Runtime) Search(ctx context.Context, inst pluginruntime.Instance, req *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
 	payload := &sdktypes.SearchResponse{}
 	if err := r.doJSON(ctx, inst.ID, http.MethodPost, sdkservice.PathSearch, req, payload); err != nil {
 		return nil, err
@@ -301,7 +302,7 @@ func (r *Runtime) Search(ctx context.Context, inst runtime.Instance, req *sdktyp
 	return payload, nil
 }
 
-func (r *Runtime) Fetch(ctx context.Context, inst runtime.Instance, req *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
+func (r *Runtime) Fetch(ctx context.Context, inst pluginruntime.Instance, req *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
 	payload := &sdktypes.FetchResponse{}
 	if err := r.doJSON(ctx, inst.ID, http.MethodPost, sdkservice.PathFetch, req, payload); err != nil {
 		return nil, err
@@ -320,7 +321,7 @@ func (r *Runtime) waitUntilReady(ctx context.Context, id string, baseURL string,
 		}
 
 		checkCtx, cancel := context.WithTimeout(ctx, healthcheck.DefaultTimeout)
-		health, err := r.Healthcheck(checkCtx, runtime.Instance{ID: id})
+		health, err := r.Healthcheck(checkCtx, pluginruntime.Instance{ID: id})
 		cancel()
 		if err == nil && health != nil {
 			if expectedManifestID != "" {
@@ -339,7 +340,7 @@ func (r *Runtime) waitUntilReady(ctx context.Context, id string, baseURL string,
 func (r *Runtime) validateManifest(parent context.Context, id string, expectedID string) error {
 	state, ok := r.get(id)
 	if !ok || state.baseURL == "" {
-		return runtime.ErrNotRunning
+		return pluginruntime.ErrNotRunning
 	}
 
 	ctx, cancel := context.WithTimeout(parent, healthcheck.DefaultTimeout)
@@ -404,16 +405,16 @@ func (r *Runtime) remove(id string) {
 func (r *Runtime) exitedError(id string) error {
 	state, ok := r.get(id)
 	if !ok {
-		return runtime.ErrNotRunning
+		return pluginruntime.ErrNotRunning
 	}
 
 	select {
 	case err, ok := <-state.exited:
 		if !ok {
-			return runtime.ErrNotRunning
+			return pluginruntime.ErrNotRunning
 		}
 		if err == nil {
-			return runtime.ErrNotRunning
+			return pluginruntime.ErrNotRunning
 		}
 		return err
 	default:
@@ -450,7 +451,7 @@ func allocatePort(host string) (int, error) {
 func (r *Runtime) doJSON(ctx context.Context, id string, method string, path string, requestBody any, out any) error {
 	state, ok := r.get(id)
 	if !ok || state.baseURL == "" {
-		return runtime.ErrNotRunning
+		return pluginruntime.ErrNotRunning
 	}
 
 	body, err := json.Marshal(requestBody)

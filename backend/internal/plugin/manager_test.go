@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/healthcheck"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
+	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
 )
 
 func TestManagerRegisterAndActivate(t *testing.T) {
@@ -41,21 +43,28 @@ func TestManagerRegisterAndActivate(t *testing.T) {
 	}
 }
 
-func TestManagerBootstrapDowngradesRunningStateToRegistered(t *testing.T) {
+func TestManagerBootstrapReactivatesPreviouslyActivePlugin(t *testing.T) {
 	store := NewMemoryStore()
+	installFile, err := os.CreateTemp(t.TempDir(), "plugin-*")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	_ = installFile.Close()
 	now := time.Now()
 	if err := store.Save(Record{
-		ID:        "running-plugin",
-		Manifest:  sdkmanifest.Manifest{ID: "running-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
-		State:     sdkstate.Active,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          "running-plugin",
+		Manifest:    sdkmanifest.Manifest{ID: "running-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:       sdkstate.Active,
+		InstallPath: installFile.Name(),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	manager := NewManager(store)
-	if err := manager.Bootstrap(); err != nil {
+	rt := &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
+	manager := NewManager(store, rt)
+	if err := manager.Bootstrap(context.Background()); err != nil {
 		t.Fatalf("Bootstrap() error = %v", err)
 	}
 
@@ -66,8 +75,84 @@ func TestManagerBootstrapDowngradesRunningStateToRegistered(t *testing.T) {
 	if !ok {
 		t.Fatal("Get() ok = false")
 	}
-	if record.State != sdkstate.Registered {
-		t.Fatalf("state = %q, want %q", record.State, sdkstate.Registered)
+	if record.State != sdkstate.Active {
+		t.Fatalf("state = %q, want %q", record.State, sdkstate.Active)
+	}
+	if rt.startCalls != 1 {
+		t.Fatalf("startCalls = %d, want 1", rt.startCalls)
+	}
+}
+
+func TestManagerBootstrapMarksErrorWhenReactivationFails(t *testing.T) {
+	store := NewMemoryStore()
+	installFile, err := os.CreateTemp(t.TempDir(), "plugin-*")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	_ = installFile.Close()
+	now := time.Now()
+	if err := store.Save(Record{
+		ID:          "running-plugin",
+		Manifest:    sdkmanifest.Manifest{ID: "running-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:       sdkstate.Active,
+		InstallPath: installFile.Name(),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	manager := NewManager(store, &fakeRuntime{
+		runtimeType: sdkmanifest.RuntimeTypeBinary,
+		startErr:    errors.New("start failed"),
+	})
+	if err := manager.Bootstrap(context.Background()); err == nil {
+		t.Fatal("Bootstrap() error = nil")
+	}
+
+	record, ok, err := manager.Get("running-plugin")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false")
+	}
+	if record.State != sdkstate.Error {
+		t.Fatalf("state = %q, want %q", record.State, sdkstate.Error)
+	}
+}
+
+func TestManagerBootstrapMarksErrorWhenInstalledArtifactIsMissing(t *testing.T) {
+	store := NewMemoryStore()
+	now := time.Now()
+	if err := store.Save(Record{
+		ID:          "missing-plugin",
+		Manifest:    sdkmanifest.Manifest{ID: "missing-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:       sdkstate.Disabled,
+		InstallPath: "/path/does/not/exist",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	manager := NewManager(store, &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary})
+	if err := manager.Bootstrap(context.Background()); err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+
+	record, ok, err := manager.Get("missing-plugin")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false")
+	}
+	if record.State != sdkstate.Error {
+		t.Fatalf("state = %q, want %q", record.State, sdkstate.Error)
+	}
+	if record.LastError != "installed artifact is missing" {
+		t.Fatalf("LastError = %q", record.LastError)
 	}
 }
 
@@ -162,6 +247,7 @@ type fakeRuntime struct {
 	runtimeType sdkmanifest.RuntimeType
 	startErr    error
 	stopErr     error
+	startCalls  int
 	stopCalls   int
 }
 
@@ -170,6 +256,7 @@ func (r *fakeRuntime) Type() sdkmanifest.RuntimeType {
 }
 
 func (r *fakeRuntime) Start(context.Context, runtime.Instance) error {
+	r.startCalls++
 	return r.startErr
 }
 
@@ -179,6 +266,14 @@ func (r *fakeRuntime) Stop(context.Context, runtime.Instance) error {
 }
 
 func (r *fakeRuntime) Healthcheck(context.Context, runtime.Instance) (*healthcheck.Response, error) {
+	return nil, runtime.ErrNotImplemented
+}
+
+func (r *fakeRuntime) Search(context.Context, runtime.Instance, *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+	return nil, runtime.ErrNotImplemented
+}
+
+func (r *fakeRuntime) Fetch(context.Context, runtime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
 	return nil, runtime.ErrNotImplemented
 }
 
@@ -194,4 +289,47 @@ func (s *failingStore) Save(record Record) error {
 		return errors.New("save failed")
 	}
 	return s.Store.Save(record)
+}
+
+func TestManagerRemoveDeletesRecord(t *testing.T) {
+	store := NewMemoryStore()
+	manager := NewManager(store)
+	now := time.Now()
+
+	if err := store.Save(Record{
+		ID:        "plugin-a",
+		Manifest:  sdkmanifest.Manifest{ID: "plugin-a", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:     sdkstate.Registered,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if err := manager.Remove("plugin-a"); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+
+	_, ok, err := manager.Get("plugin-a")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if ok {
+		t.Fatal("plugin should be removed")
+	}
+}
+
+func TestInstallPathExists(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "plugin-*")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	_ = file.Close()
+
+	if !installPathExists(file.Name()) {
+		t.Fatal("installPathExists() = false, want true")
+	}
+	if installPathExists("/path/does/not/exist") {
+		t.Fatal("installPathExists() = true, want false")
+	}
 }

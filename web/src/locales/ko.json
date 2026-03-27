@@ -91,9 +91,36 @@
       "viewer": "뷰어",
       "libraries": "라이브러리",
       "users": "사용자 관리",
+      "plugins": "플러그인",
       "system": "시스템",
       "account": "내 계정",
       "statistics": "통계"
+    },
+    "plugins": {
+      "title": "플러그인",
+      "desc": "메타데이터 플러그인을 설치하고 활성 상태를 점검합니다.",
+      "loading": "플러그인 정보를 불러오는 중...",
+      "catalog_title": "설치 가능한 플러그인",
+      "installed_title": "설치된 플러그인",
+      "empty": "표시할 플러그인이 없습니다.",
+      "installed_empty": "아직 설치된 플러그인이 없습니다.",
+      "install": "설치",
+      "reinstall": "재설치",
+      "uninstall": "제거",
+      "activate": "활성화",
+      "deactivate": "비활성화",
+      "health": "상태 확인",
+      "state": "상태",
+      "toast": {
+        "load_failed": "플러그인 정보를 불러오지 못했습니다.",
+        "install_success": "플러그인을 설치했습니다.",
+        "install_failed": "플러그인을 설치하지 못했습니다.",
+        "uninstall_success": "플러그인을 제거했습니다.",
+        "uninstall_failed": "플러그인을 제거하지 못했습니다.",
+        "activated": "플러그인을 활성화했습니다.",
+        "deactivated": "플러그인을 비활성화했습니다.",
+        "action_failed": "플러그인 작업에 실패했습니다."
+      }
     },
     "statistics": {
       "title": "내 통계",
@@ -525,6 +552,34 @@
     }
   },
   "series": {
+    "metadata": {
+      "title": "메타데이터 테스트",
+      "desc": "현재 시리즈 기준으로 provider search, fetch, apply 흐름을 직접 확인합니다.",
+      "search": "후보 검색",
+      "fetch": "선택 후보 가져오기",
+      "apply": "현재 시리즈에 적용",
+      "candidates": "후보 목록",
+      "preview": "가져온 메타데이터",
+      "empty_candidates": "아직 검색한 후보가 없습니다.",
+      "empty_preview": "후보를 가져오면 여기서 결과를 확인할 수 있습니다.",
+      "fields": {
+        "title": "제목",
+        "authors": "작가",
+        "publisher": "출판사",
+        "publication_date": "출간일",
+        "description": "설명",
+        "tags": "태그"
+      },
+      "toast": {
+        "search_success": "메타데이터 후보를 불러왔습니다.",
+        "search_failed": "메타데이터 후보 검색에 실패했습니다.",
+        "fetch_success": "메타데이터 상세 정보를 불러왔습니다.",
+        "fetch_failed": "메타데이터 상세 정보를 불러오지 못했습니다.",
+        "apply_success": "{{count}}개 필드를 적용했습니다.",
+        "apply_no_changes": "변경할 메타데이터가 없습니다.",
+        "apply_failed": "메타데이터 적용에 실패했습니다."
+      }
+    },
     "count": "총 <strong>{{count}}</strong>권",
     "chapter_count": "총 <strong>{{count}}</strong>개의 챕터",
     "empty_volumes": "스캔된 볼륨이 없습니다",

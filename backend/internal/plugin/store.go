@@ -27,6 +27,7 @@ type Store interface {
 	Save(record Record) error
 	Get(id string) (Record, bool, error)
 	List() ([]Record, error)
+	Delete(id string) error
 }
 
 // MemoryStore is the initial in-memory implementation for Phase 1.
@@ -62,4 +63,11 @@ func (s *MemoryStore) List() ([]Record, error) {
 		records = append(records, record)
 	}
 	return records, nil
+}
+
+func (s *MemoryStore) Delete(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.records, id)
+	return nil
 }

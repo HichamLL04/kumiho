@@ -12,11 +12,14 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
+	"github.com/aha-hyeong/kumiho/backend/internal/service"
+	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
 
 type PluginHandler struct {
-	manager *pluginengine.Manager
+	manager        *pluginengine.Manager
+	installService *service.PluginInstallService
 }
 
 type RegisterPluginRequest struct {
@@ -34,8 +37,11 @@ type pluginRecordResponse struct {
 	UpdatedAt   string               `json:"updated_at"`
 }
 
-func NewPluginHandler(manager *pluginengine.Manager) *PluginHandler {
-	return &PluginHandler{manager: manager}
+func NewPluginHandler(manager *pluginengine.Manager, installService *service.PluginInstallService) *PluginHandler {
+	return &PluginHandler{
+		manager:        manager,
+		installService: installService,
+	}
 }
 
 // List plugins
@@ -150,6 +156,76 @@ func (h *PluginHandler) Healthcheck(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// Catalog lists installable plugins from the registry.
+// GET /api/v1/plugins/catalog
+func (h *PluginHandler) Catalog(c *fiber.Ctx) error {
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if h.installService == nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin install service is not configured"})
+	}
+
+	catalog, err := h.installService.ListCatalog(ctx)
+	if err != nil {
+		return writePluginError(c, err)
+	}
+	return c.JSON(catalog)
+}
+
+// Install downloads, verifies, and registers a plugin from the registry.
+// POST /api/v1/plugins/install
+func (h *PluginHandler) Install(c *fiber.Ctx) error {
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if h.installService == nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin install service is not configured"})
+	}
+
+	var req service.InstallPluginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if strings.TrimSpace(req.PluginID) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "plugin_id is required"})
+	}
+
+	result, err := h.installService.Install(ctx, req.PluginID)
+	if err != nil {
+		return writePluginError(c, err)
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"record":           toPluginRecordResponse(result.Record, true),
+		"artifact_url":     result.ArtifactURL,
+		"install_path":     result.InstallPath,
+		"restart_required": result.RestartRequired,
+	})
+}
+
+// Uninstall removes a plugin installation and its persisted record.
+// DELETE /api/v1/plugins/:id
+func (h *PluginHandler) Uninstall(c *fiber.Ctx) error {
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if h.installService == nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin install service is not configured"})
+	}
+
+	result, err := h.installService.Uninstall(ctx, c.Params("id"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
+
+	return c.JSON(result)
+}
+
 func toPluginRecordResponse(record pluginengine.Record, includePath bool) pluginRecordResponse {
 	resp := pluginRecordResponse{
 		ID:        record.ID,
@@ -172,6 +248,23 @@ func writePluginError(c *fiber.Ctx, err error) error {
 	case errors.Is(err, pluginruntime.ErrNotRunning):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
 	default:
+		var pluginErr *pluginerrors.PluginError
+		if errors.As(err, &pluginErr) {
+			status := fiber.StatusBadRequest
+			switch pluginErr.Code {
+			case pluginerrors.ErrCodeArtifactNotFound:
+				status = fiber.StatusNotFound
+			case pluginerrors.ErrCodeChecksumMismatch, pluginerrors.ErrCodeIncompatibleVersion:
+				status = fiber.StatusConflict
+			}
+			return c.Status(status).JSON(fiber.Map{"error": pluginErr.Message, "code": pluginErr.Code})
+		}
+		switch {
+		case errors.Is(err, service.ErrPluginRegistryNotConfigured):
+			return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
+		case errors.Is(err, service.ErrPluginCatalogEntryNotFound):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 }

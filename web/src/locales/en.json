@@ -91,9 +91,36 @@
       "viewer": "Viewer",
       "libraries": "Libraries",
       "users": "Users",
+      "plugins": "Plugins",
       "system": "System",
       "account": "Account",
       "statistics": "Statistics"
+    },
+    "plugins": {
+      "title": "Plugins",
+      "desc": "Install metadata plugins and verify their runtime state.",
+      "loading": "Loading plugin information...",
+      "catalog_title": "Available Plugins",
+      "installed_title": "Installed Plugins",
+      "empty": "No plugins available.",
+      "installed_empty": "No plugins have been installed yet.",
+      "install": "Install",
+      "reinstall": "Reinstall",
+      "uninstall": "Remove",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "health": "Healthcheck",
+      "state": "State",
+      "toast": {
+        "load_failed": "Failed to load plugin information.",
+        "install_success": "Plugin installed successfully.",
+        "install_failed": "Failed to install plugin.",
+        "uninstall_success": "Plugin removed successfully.",
+        "uninstall_failed": "Failed to remove plugin.",
+        "activated": "Plugin activated.",
+        "deactivated": "Plugin deactivated.",
+        "action_failed": "Plugin action failed."
+      }
     },
     "statistics": {
       "title": "My Statistics",
@@ -525,6 +552,34 @@
     }
   },
   "series": {
+    "metadata": {
+      "title": "Metadata Test",
+      "desc": "Run provider search, fetch, and apply flows for the current series.",
+      "search": "Search Candidates",
+      "fetch": "Fetch Selected Candidate",
+      "apply": "Apply To Series",
+      "candidates": "Candidates",
+      "preview": "Fetched Metadata",
+      "empty_candidates": "No metadata candidates yet.",
+      "empty_preview": "Fetched metadata will appear here.",
+      "fields": {
+        "title": "Title",
+        "authors": "Authors",
+        "publisher": "Publisher",
+        "publication_date": "Publication Date",
+        "description": "Description",
+        "tags": "Tags"
+      },
+      "toast": {
+        "search_success": "Metadata candidates loaded.",
+        "search_failed": "Failed to search metadata candidates.",
+        "fetch_success": "Metadata details loaded.",
+        "fetch_failed": "Failed to fetch metadata details.",
+        "apply_success": "Applied {{count}} fields.",
+        "apply_no_changes": "No metadata changes to apply.",
+        "apply_failed": "Failed to apply metadata."
+      }
+    },
     "count": "Total <strong>{{count}}</strong> volumes",
     "chapter_count": "Total <strong>{{count}}</strong> chapters",
     "empty_volumes": "No volumes found",

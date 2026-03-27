@@ -13,11 +13,12 @@ import (
 	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/healthcheck"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
+	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
 )
 
 func newPluginTestApp(role model.Role, manager *pluginengine.Manager) *fiber.App {
 	app := fiber.New()
-	handler := NewPluginHandler(manager)
+	handler := NewPluginHandler(manager, nil)
 
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals("role", role)
@@ -137,4 +138,12 @@ func (r *pluginHandlerRuntime) Healthcheck(context.Context, pluginruntime.Instan
 		return nil, r.healthErr
 	}
 	return &healthcheck.Response{Status: healthcheck.StatusOK}, nil
+}
+
+func (r *pluginHandlerRuntime) Search(context.Context, pluginruntime.Instance, *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+	return nil, pluginruntime.ErrNotImplemented
+}
+
+func (r *pluginHandlerRuntime) Fetch(context.Context, pluginruntime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
+	return nil, pluginruntime.ErrNotImplemented
 }

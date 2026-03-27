@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Library, Users, Server, User, Settings, Monitor, BarChart3 } from "lucide-react";
+import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle } from "lucide-react";
 import { Header } from "../components/headers/Header";
 import { Sidebar } from "../components/Sidebar";
 import { SubHeader } from "../components/headers/SubHeader";
@@ -13,10 +13,11 @@ import { UsersTab } from "../components/settings/UsersTab";
 import { SystemTab } from "../components/settings/SystemTab";
 import { AccountTab } from "../components/settings/AccountTab";
 import { StatisticsTab } from "../components/settings/StatisticsTab";
+import { PluginsTab } from "../components/settings/PluginsTab";
 import styles from "./Settings.module.css";
 
 // 설정 탭 타입
-type SettingsTab = "general" | "statistics" | "viewer" | "libraries" | "users" | "system" | "account";
+type SettingsTab = "general" | "statistics" | "viewer" | "libraries" | "users" | "plugins" | "system" | "account";
 
 // 탭 정보
 const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: boolean }[] = [
@@ -25,6 +26,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: 
   { id: "viewer", label: "settings.tabs.viewer", icon: Monitor, adminOnly: true },
   { id: "libraries", label: "settings.tabs.libraries", icon: Library, adminOnly: true },
   { id: "users", label: "settings.tabs.users", icon: Users, adminOnly: true },
+  { id: "plugins", label: "settings.tabs.plugins", icon: Puzzle, adminOnly: true },
   { id: "system", label: "settings.tabs.system", icon: Server, adminOnly: true },
   { id: "account", label: "settings.tabs.account", icon: User },
 ];
@@ -71,6 +73,8 @@ export function SettingsPage() {
         return <LibrariesTab />;
       case "users":
         return <UsersTab />;
+      case "plugins":
+        return <PluginsTab />;
       case "system":
         return <SystemTab />;
       case "account":

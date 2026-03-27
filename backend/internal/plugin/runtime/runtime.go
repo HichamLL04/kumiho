@@ -6,6 +6,7 @@ import (
 
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/healthcheck"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
+	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
 )
 
 var (
@@ -27,6 +28,8 @@ type Runtime interface {
 	Start(ctx context.Context, inst Instance) error
 	Stop(ctx context.Context, inst Instance) error
 	Healthcheck(ctx context.Context, inst Instance) (*healthcheck.Response, error)
+	Search(ctx context.Context, inst Instance, req *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error)
+	Fetch(ctx context.Context, inst Instance, req *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error)
 }
 
 // StubRuntime is used until a concrete runtime adapter is implemented.
@@ -51,5 +54,13 @@ func (r *StubRuntime) Stop(context.Context, Instance) error {
 }
 
 func (r *StubRuntime) Healthcheck(context.Context, Instance) (*healthcheck.Response, error) {
+	return nil, ErrNotImplemented
+}
+
+func (r *StubRuntime) Search(context.Context, Instance, *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+	return nil, ErrNotImplemented
+}
+
+func (r *StubRuntime) Fetch(context.Context, Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
 	return nil, ErrNotImplemented
 }

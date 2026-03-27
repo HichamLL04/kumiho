@@ -91,9 +91,36 @@
       "viewer": "ビューア",
       "libraries": "ライブラリ",
       "users": "ユーザー管理",
+      "plugins": "プラグイン",
       "system": "システム",
       "account": "アカウント",
       "statistics": "統計"
+    },
+    "plugins": {
+      "title": "プラグイン",
+      "desc": "メタデータプラグインをインストールし、実行状態を確認します。",
+      "loading": "プラグイン情報を読み込み中...",
+      "catalog_title": "インストール可能なプラグイン",
+      "installed_title": "インストール済みプラグイン",
+      "empty": "表示できるプラグインがありません。",
+      "installed_empty": "まだインストールされたプラグインはありません。",
+      "install": "インストール",
+      "reinstall": "再インストール",
+      "uninstall": "削除",
+      "activate": "有効化",
+      "deactivate": "無効化",
+      "health": "状態確認",
+      "state": "状態",
+      "toast": {
+        "load_failed": "プラグイン情報の読み込みに失敗しました。",
+        "install_success": "プラグインをインストールしました。",
+        "install_failed": "プラグインのインストールに失敗しました。",
+        "uninstall_success": "プラグインを削除しました。",
+        "uninstall_failed": "プラグインの削除に失敗しました。",
+        "activated": "プラグインを有効化しました。",
+        "deactivated": "プラグインを無効化しました。",
+        "action_failed": "プラグイン操作に失敗しました。"
+      }
     },
     "statistics": {
       "title": "マイ統計",
@@ -525,6 +552,34 @@
     }
   },
   "series": {
+    "metadata": {
+      "title": "メタデータテスト",
+      "desc": "現在のシリーズ基準で provider の search, fetch, apply フローを確認します。",
+      "search": "候補検索",
+      "fetch": "選択候補取得",
+      "apply": "シリーズへ適用",
+      "candidates": "候補一覧",
+      "preview": "取得したメタデータ",
+      "empty_candidates": "まだ検索した候補がありません。",
+      "empty_preview": "候補を取得するとここで結果を確認できます。",
+      "fields": {
+        "title": "タイトル",
+        "authors": "作家",
+        "publisher": "出版社",
+        "publication_date": "刊行日",
+        "description": "説明",
+        "tags": "タグ"
+      },
+      "toast": {
+        "search_success": "メタデータ候補を読み込みました。",
+        "search_failed": "メタデータ候補の検索に失敗しました。",
+        "fetch_success": "メタデータ詳細を読み込みました。",
+        "fetch_failed": "メタデータ詳細の取得に失敗しました。",
+        "apply_success": "{{count}}個のフィールドを適用しました。",
+        "apply_no_changes": "適用する変更がありません。",
+        "apply_failed": "メタデータの適用に失敗しました。"
+      }
+    },
     "count": "全 <strong>{{count}}</strong> 巻",
     "chapter_count": "全 <strong>{{count}}</strong> 話",
     "empty_volumes": "スキャンされた巻がありません",

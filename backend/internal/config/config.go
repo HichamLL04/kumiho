@@ -5,25 +5,30 @@ import (
 )
 
 type Config struct {
-	Port         string
-	DatabasePath string
-	JWTSecret    string
-	DataDir      string
-	Environment  string
-	CookieDomain string // 쿠키 도메인 (빈 값 = 현재 도메인)
-	CookieSecure bool   // HTTPS 전용 쿠키 여부
+	Port              string
+	DatabasePath      string
+	JWTSecret         string
+	DataDir           string
+	PluginDir         string
+	PluginRegistryURL string
+	Environment       string
+	CookieDomain      string // 쿠키 도메인 (빈 값 = 현재 도메인)
+	CookieSecure      bool   // HTTPS 전용 쿠키 여부
 }
 
 func Load() *Config {
 	env := getEnv("ENVIRONMENT", "development")
+	dataDir := getEnv("DATA_DIR", "./data")
 	return &Config{
-		Port:         getEnv("PORT", "9999"),
-		DatabasePath: getEnv("DATABASE_PATH", "./data/kumiho.db"),
-		JWTSecret:    getEnv("JWT_SECRET", "your-super-secret-key-change-in-production"),
-		DataDir:      getEnv("DATA_DIR", "./data"),
-		Environment:  env,
-		CookieDomain: getEnv("COOKIE_DOMAIN", ""),
-		CookieSecure: env == "production", // 프로덕션에서만 Secure 쿠키
+		Port:              getEnv("PORT", "9999"),
+		DatabasePath:      getEnv("DATABASE_PATH", "./data/kumiho.db"),
+		JWTSecret:         getEnv("JWT_SECRET", "your-super-secret-key-change-in-production"),
+		DataDir:           dataDir,
+		PluginDir:         getEnv("PLUGIN_DIR", dataDir+"/plugins"),
+		PluginRegistryURL: getEnv("PLUGIN_REGISTRY_URL", ""),
+		Environment:       env,
+		CookieDomain:      getEnv("COOKIE_DOMAIN", ""),
+		CookieSecure:      env == "production", // 프로덕션에서만 Secure 쿠키
 	}
 }
 
