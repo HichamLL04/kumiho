@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 35
+const latestMigrationVersion = 36
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -460,6 +460,18 @@ func Migrate() error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_library_paths_library ON library_paths(library_id);
 
+	-- 플러그인 설치 상태
+	CREATE TABLE IF NOT EXISTS plugin_installations (
+		id TEXT PRIMARY KEY,
+		manifest_json TEXT NOT NULL,
+		state TEXT NOT NULL,
+		install_path TEXT DEFAULT '',
+		last_error TEXT DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_plugin_installations_state ON plugin_installations(state);
+
 	-- 인덱스
 	CREATE INDEX IF NOT EXISTS idx_daily_activity_user_date ON daily_activity(user_id, date);
 	CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -551,6 +563,7 @@ func Migrate() error {
 		{33, "오디오북 관련 컬럼 추가", migrateAudiobookColumns},
 		{34, "오디오 진행시간 문자열 정규화", migrateAudioProgressTimeFormat},
 		{35, "멀티 폴더 지원 (library_paths 테이블)", migrateMultiFolderPaths},
+		{36, "플러그인 설치 상태 테이블 추가", migratePluginInstallations},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -1740,6 +1753,29 @@ func migrateMultiFolderPaths() error {
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit library path migration: %w", err)
+	}
+
+	return nil
+}
+
+// #36 migratePluginInstallations 플러그인 설치 상태 테이블 추가
+func migratePluginInstallations() error {
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS plugin_installations (
+			id TEXT PRIMARY KEY,
+			manifest_json TEXT NOT NULL,
+			state TEXT NOT NULL,
+			install_path TEXT DEFAULT '',
+			last_error TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`); err != nil {
+		return fmt.Errorf("create plugin_installations: %w", err)
+	}
+
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_plugin_installations_state ON plugin_installations(state)`); err != nil {
+		return fmt.Errorf("create index plugin_installations(state): %w", err)
 	}
 
 	return nil
