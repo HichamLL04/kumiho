@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Blocks, Download, HeartPulse, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { Blocks, Download, HeartPulse, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { pluginAPI } from "../../api/client";
 import type { PluginManifest, PluginRecord } from "../../types/plugin";
 import { Toast } from "../common/Toast";
@@ -34,6 +34,10 @@ function iconURL(plugin: PluginManifest, record?: PluginRecord) {
     || null;
 }
 
+function supportsAPIKeyConfig(plugin: PluginManifest) {
+  return plugin.id === "kumiho-plugin-metadata-googlebooks";
+}
+
 export function PluginsTab() {
   const { t } = useTranslation();
   const [catalog, setCatalog] = useState<PluginManifest[]>([]);
@@ -42,6 +46,8 @@ export function PluginsTab() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [healthById, setHealthById] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<ToastState>(null);
+  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
+  const [apiKeyDrafts, setAPIKeyDrafts] = useState<Record<string, string>>({});
 
   const installedById = useMemo(() => new Map(installed.map((item) => [item.id, item])), [installed]);
   const unmanagedInstalled = useMemo(
@@ -49,8 +55,10 @@ export function PluginsTab() {
     [catalog, installed],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true);
+    }
     try {
       const [catalogRes, installedRes] = await Promise.all([pluginAPI.catalog(), pluginAPI.list()]);
       setCatalog(catalogRes.plugins || []);
@@ -59,7 +67,9 @@ export function PluginsTab() {
       console.error("Failed to load plugin data:", error);
       setStatus({ type: "error", message: t("settings.plugins.toast.load_failed") });
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   }, [t]);
 
@@ -72,7 +82,7 @@ export function PluginsTab() {
     try {
       await pluginAPI.install(pluginId);
       setStatus({ type: "success", message: t("settings.plugins.toast.install_success") });
-      await load();
+      await load(true);
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.install_failed") });
@@ -86,7 +96,7 @@ export function PluginsTab() {
     try {
       await pluginAPI.uninstall(pluginId);
       setStatus({ type: "success", message: t("settings.plugins.toast.uninstall_success") });
-      await load();
+      await load(true);
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.uninstall_failed") });
@@ -98,13 +108,13 @@ export function PluginsTab() {
   const handleActivate = async (pluginId: string, active: boolean) => {
     setBusyId(pluginId);
     try {
-      if (active) {
-        await pluginAPI.deactivate(pluginId);
-      } else {
-        await pluginAPI.activate(pluginId);
-      }
+      const nextRecord = active
+        ? await pluginAPI.deactivate(pluginId)
+        : await pluginAPI.activate(pluginId);
+
+      setInstalled((prev) => prev.map((item) => (item.id === pluginId ? nextRecord : item)));
       setStatus({ type: "success", message: active ? t("settings.plugins.toast.deactivated") : t("settings.plugins.toast.activated") });
-      await load();
+      await load(true);
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.action_failed") });
@@ -124,6 +134,15 @@ export function PluginsTab() {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const handleConfigSave = (pluginId: string) => {
+    const draft = apiKeyDrafts[pluginId]?.trim();
+    if (!draft) {
+      setStatus({ type: "info", message: t("settings.plugins.toast.api_key_required") });
+      return;
+    }
+    setStatus({ type: "info", message: t("settings.plugins.toast.api_key_env_only") });
   };
 
   if (loading) {
@@ -171,20 +190,21 @@ export function PluginsTab() {
                 ? t("settings.plugins.install")
                 : t("settings.plugins.reinstall");
               const iconSrc = iconURL(plugin, installedRecord);
+              const showConfig = supportsAPIKeyConfig(plugin);
+              const isConfigOpen = expandedConfigId === plugin.id;
 
               return (
                 <article
                   key={plugin.id}
                   className={[
                     styles.pluginCard,
-                    !isInstalled ? styles.pluginCardDimmed : "",
                     isActive ? styles.pluginCardActive : "",
                     tone === "error" ? styles.pluginCardError : "",
                   ].filter(Boolean).join(" ")}
                 >
                   <div className={styles.pluginCardTop}>
-                    <div className={styles.pluginIdentity}>
-                      <div className={styles.pluginIconShell}>
+                    <div className={`${styles.pluginIdentity} ${!isInstalled ? styles.pluginContentDimmed : ""}`}>
+                      <div className={`${styles.pluginIconShell} ${!isInstalled ? styles.pluginIconShellDimmed : ""}`}>
                         {iconSrc ? (
                           <img
                             src={iconSrc}
@@ -198,9 +218,6 @@ export function PluginsTab() {
                       <div className={styles.pluginHeading}>
                         <div className={styles.pluginTitleRow}>
                           <h4>{plugin.name}</h4>
-                          <span className={`${styles.pluginStateBadge} ${styles[`pluginStateBadge${tone[0].toUpperCase()}${tone.slice(1)}`]}`}>
-                            {currentState}
-                          </span>
                         </div>
                         <p className={styles.pluginAuthor}>
                           {t("settings.plugins.author")}: {plugin.author || "-"}
@@ -212,7 +229,9 @@ export function PluginsTab() {
                     </div>
 
                     <label className={`${styles.pluginToggle} ${!isInstalled ? styles.pluginToggleDisabled : ""}`}>
-                      <span>{isActive ? t("settings.plugins.deactivate") : t("settings.plugins.activate")}</span>
+                      <span className={`${styles.pluginStateBadge} ${styles[`pluginStateBadge${tone[0].toUpperCase()}${tone.slice(1)}`]}`}>
+                        {currentState}
+                      </span>
                       <button
                         type="button"
                         className={`${styles.pluginToggleTrack} ${isActive ? styles.pluginToggleTrackOn : ""}`}
@@ -225,9 +244,9 @@ export function PluginsTab() {
                     </label>
                   </div>
 
-                  <p className={styles.pluginDescription}>{plugin.description || "-"}</p>
+                  <p className={`${styles.pluginDescription} ${!isInstalled ? styles.pluginContentDimmed : ""}`}>{plugin.description || "-"}</p>
 
-                  <div className={styles.pluginCapabilities}>
+                  <div className={`${styles.pluginCapabilities} ${!isInstalled ? styles.pluginContentDimmed : ""}`}>
                     {plugin.capabilities.map((capability) => (
                       <span key={capability} className={styles.pluginChip}>
                         {capability}
@@ -243,6 +262,16 @@ export function PluginsTab() {
                   )}
 
                   <div className={styles.pluginActions}>
+                    {showConfig && (
+                      <button
+                        className={styles.pluginActionSecondary}
+                        onClick={() => setExpandedConfigId((prev) => (prev === plugin.id ? null : plugin.id))}
+                        disabled={isBusy}
+                      >
+                        <KeyRound size={14} />
+                        <span>{t("settings.plugins.api_key.configure")}</span>
+                      </button>
+                    )}
                     {canInstall && (
                       <button className={styles.pluginActionPrimary} onClick={() => void handleInstall(plugin.id)} disabled={isBusy}>
                         <Download size={14} />
@@ -260,6 +289,47 @@ export function PluginsTab() {
                       </button>
                     )}
                   </div>
+
+                  {showConfig && isConfigOpen && (
+                    <div className={styles.pluginConfigPanel}>
+                      <div className={styles.pluginConfigHeader}>
+                        <div>
+                          <h5>{t("settings.plugins.api_key.title")}</h5>
+                          <p>{t("settings.plugins.api_key.desc")}</p>
+                        </div>
+                        <span className={`${styles.pluginStateBadge} ${styles.pluginStateBadgeInstalled}`}>
+                          {t("settings.plugins.api_key.restart_required")}
+                        </span>
+                      </div>
+
+                      <label className={styles.pluginConfigField}>
+                        <span>{t("settings.plugins.api_key.label")}</span>
+                        <input
+                          type="password"
+                          autoComplete="off"
+                          value={apiKeyDrafts[plugin.id] || ""}
+                          onChange={(event) => setAPIKeyDrafts((prev) => ({ ...prev, [plugin.id]: event.target.value }))}
+                          placeholder={t("settings.plugins.api_key.placeholder")}
+                        />
+                      </label>
+
+                      <div className={styles.pluginConfigNotes}>
+                        <p>{t("settings.plugins.api_key.current_mode")}</p>
+                        <p>{t("settings.plugins.api_key.flow_hint")}</p>
+                      </div>
+
+                      <div className={styles.pluginConfigActions}>
+                        <button
+                          type="button"
+                          className={styles.pluginActionPrimary}
+                          onClick={() => handleConfigSave(plugin.id)}
+                        >
+                          <KeyRound size={14} />
+                          <span>{t("settings.plugins.api_key.save")}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </article>
               );
             })}

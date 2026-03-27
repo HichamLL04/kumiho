@@ -112,6 +112,17 @@
       "deactivate": "Deactivate",
       "health": "Healthcheck",
       "state": "State",
+      "api_key": {
+        "configure": "API Key",
+        "title": "Google Books API Key",
+        "desc": "Set an API key to increase request limits.",
+        "label": "API Key",
+        "placeholder": "AIza...",
+        "save": "Save",
+        "restart_required": "Restart required",
+        "current_mode": "This version does not store API keys through the UI yet. For now, set GOOGLE_BOOKS_API_KEY before starting the server.",
+        "flow_hint": "The final flow will connect this to restart-required activation after the API key is saved."
+      },
       "toast": {
         "load_failed": "Failed to load plugin information.",
         "install_success": "Plugin installed successfully.",
@@ -120,7 +131,9 @@
         "uninstall_failed": "Failed to remove plugin.",
         "activated": "Plugin activated.",
         "deactivated": "Plugin deactivated.",
-        "action_failed": "Plugin action failed."
+        "action_failed": "Plugin action failed.",
+        "api_key_required": "Enter an API key first.",
+        "api_key_env_only": "UI-based API key storage is not wired yet. For now, use the GOOGLE_BOOKS_API_KEY environment variable."
       }
     },
     "statistics": {

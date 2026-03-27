@@ -112,6 +112,17 @@
       "deactivate": "無効化",
       "health": "状態確認",
       "state": "状態",
+      "api_key": {
+        "configure": "APIキー",
+        "title": "Google Books APIキー",
+        "desc": "リクエスト上限を増やすには APIキーの設定が必要です。",
+        "label": "APIキー",
+        "placeholder": "AIza...",
+        "save": "保存",
+        "restart_required": "再起動が必要",
+        "current_mode": "このバージョンでは APIキーはまだ UI に保存されません。現時点ではサーバー起動前に GOOGLE_BOOKS_API_KEY 環境変数を設定する必要があります。",
+        "flow_hint": "最終的には APIキー保存後、プラグイン有効化のために再起動が必要な流れへ接続する予定です。"
+      },
       "toast": {
         "load_failed": "プラグイン情報の読み込みに失敗しました。",
         "install_success": "プラグインをインストールしました。",
@@ -120,7 +131,9 @@
         "uninstall_failed": "プラグインの削除に失敗しました。",
         "activated": "プラグインを有効化しました。",
         "deactivated": "プラグインを無効化しました。",
-        "action_failed": "プラグイン操作に失敗しました。"
+        "action_failed": "プラグイン操作に失敗しました。",
+        "api_key_required": "先に APIキーを入力してください。",
+        "api_key_env_only": "UI ベースの APIキー保存はまだ接続されていません。現在は GOOGLE_BOOKS_API_KEY 環境変数を使用してください。"
       }
     },
     "statistics": {

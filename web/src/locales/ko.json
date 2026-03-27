@@ -112,6 +112,17 @@
       "deactivate": "비활성화",
       "health": "상태 확인",
       "state": "상태",
+      "api_key": {
+        "configure": "API 키",
+        "title": "Google Books API 키",
+        "desc": "요청 한도를 늘리려면 API 키를 설정해야 합니다.",
+        "label": "API 키",
+        "placeholder": "AIza...",
+        "save": "저장",
+        "restart_required": "재시작 필요",
+        "current_mode": "현재 버전에서는 API 키가 아직 UI에 저장되지 않으며, 서버 시작 시 GOOGLE_BOOKS_API_KEY 환경변수로 설정해야 합니다.",
+        "flow_hint": "최종 흐름은 API 키 저장 후 플러그인 활성화를 위해 서버 재시작이 필요한 방향으로 연결할 예정입니다."
+      },
       "toast": {
         "load_failed": "플러그인 정보를 불러오지 못했습니다.",
         "install_success": "플러그인을 설치했습니다.",
@@ -120,7 +131,9 @@
         "uninstall_failed": "플러그인을 제거하지 못했습니다.",
         "activated": "플러그인을 활성화했습니다.",
         "deactivated": "플러그인을 비활성화했습니다.",
-        "action_failed": "플러그인 작업에 실패했습니다."
+        "action_failed": "플러그인 작업에 실패했습니다.",
+        "api_key_required": "API 키를 입력해 주세요.",
+        "api_key_env_only": "아직 UI 저장은 연결되지 않았습니다. 현재는 GOOGLE_BOOKS_API_KEY 환경변수로 설정해야 합니다."
       }
     },
     "statistics": {
