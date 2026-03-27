@@ -36,3 +36,14 @@ func TestBuildSearchRequestFallsBackToFilename(t *testing.T) {
 		t.Fatalf("ContentType = %q", req.ContentType)
 	}
 }
+
+func TestParseTitleRemovesKoreanReleaseTag(t *testing.T) {
+	parsed := ParseTitle("작품명.완결.cbz")
+
+	if parsed.CanonicalTitle != "작품명" {
+		t.Fatalf("CanonicalTitle = %q", parsed.CanonicalTitle)
+	}
+	if parsed.SeriesName != "작품명" {
+		t.Fatalf("SeriesName = %q", parsed.SeriesName)
+	}
+}

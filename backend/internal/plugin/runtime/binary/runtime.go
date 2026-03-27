@@ -33,6 +33,7 @@ type processState struct {
 	cancel  context.CancelFunc
 	baseURL string
 	exited  chan error
+	ready   chan error
 }
 
 // Runtime starts plugin binaries as child processes and probes them over the
@@ -68,20 +69,26 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 	}
 
 	r.mu.Lock()
-	if _, alreadyRunning := r.processes[inst.ID]; alreadyRunning {
+	if state, alreadyRunning := r.processes[inst.ID]; alreadyRunning {
 		r.mu.Unlock()
+		if state.ready != nil {
+			return waitForStart(ctx, state.ready)
+		}
 		return nil
 	}
 	exited := make(chan error, 1)
-	r.processes[inst.ID] = processState{exited: exited}
+	ready := make(chan error, 1)
+	r.processes[inst.ID] = processState{exited: exited, ready: ready}
 	r.mu.Unlock()
 
 	absPath, err := filepath.Abs(inst.InstallPath)
 	if err != nil {
+		r.finishStart(inst.ID, fmt.Errorf("resolve install path: %w", err))
 		r.remove(inst.ID)
 		return fmt.Errorf("resolve install path: %w", err)
 	}
 	if _, statErr := os.Stat(absPath); statErr != nil {
+		r.finishStart(inst.ID, fmt.Errorf("stat install path: %w", statErr))
 		r.remove(inst.ID)
 		return fmt.Errorf("stat install path: %w", statErr)
 	}
@@ -89,6 +96,7 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 	host := "127.0.0.1"
 	port, err := allocatePort(host)
 	if err != nil {
+		r.finishStart(inst.ID, fmt.Errorf("allocate plugin port: %w", err))
 		r.remove(inst.ID)
 		return fmt.Errorf("allocate plugin port: %w", err)
 	}
@@ -105,12 +113,13 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 
 	if err := cmd.Start(); err != nil {
 		cancel()
+		r.finishStart(inst.ID, fmt.Errorf("start plugin process: %w", err))
 		r.remove(inst.ID)
 		return fmt.Errorf("start plugin process: %w", err)
 	}
 
 	r.mu.Lock()
-	r.processes[inst.ID] = processState{cmd: cmd, cancel: cancel, baseURL: baseURL, exited: exited}
+	r.processes[inst.ID] = processState{cmd: cmd, cancel: cancel, baseURL: baseURL, exited: exited, ready: ready}
 	r.mu.Unlock()
 
 	go func() {
@@ -126,9 +135,11 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 	}()
 
 	if err := r.waitUntilReady(ctx, inst.ID, baseURL, inst.Manifest.ID); err != nil {
+		r.finishStart(inst.ID, err)
 		_ = r.Stop(context.Background(), inst)
 		return err
 	}
+	r.finishStart(inst.ID, nil)
 
 	return nil
 }
@@ -139,7 +150,7 @@ func (r *Runtime) Stop(ctx context.Context, inst runtime.Instance) error {
 		return nil
 	}
 
-	if state.cmd.Process == nil {
+	if state.cmd == nil || state.cmd.Process == nil {
 		r.mu.Lock()
 		delete(r.processes, inst.ID)
 		r.mu.Unlock()
@@ -268,6 +279,23 @@ func (r *Runtime) get(id string) (processState, bool) {
 	return state, ok
 }
 
+func (r *Runtime) finishStart(id string, err error) {
+	r.mu.Lock()
+	state, ok := r.processes[id]
+	if !ok || state.ready == nil {
+		r.mu.Unlock()
+		return
+	}
+
+	ready := state.ready
+	state.ready = nil
+	r.processes[id] = state
+	r.mu.Unlock()
+
+	ready <- err
+	close(ready)
+}
+
 func (r *Runtime) remove(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -291,6 +319,18 @@ func (r *Runtime) exitedError(id string) error {
 		return err
 	default:
 		return nil
+	}
+}
+
+func waitForStart(ctx context.Context, ready <-chan error) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err, ok := <-ready:
+		if !ok {
+			return nil
+		}
+		return err
 	}
 }
 

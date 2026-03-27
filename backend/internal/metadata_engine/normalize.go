@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	releaseTagPattern = regexp.MustCompile(`(?i)\b(ebook|epub|pdf|cbz|zip|txt|webrip|retail|digital|scan|raw|완결)\b`)
+	releaseTagPattern = regexp.MustCompile(`(?i)(?:\b(ebook|epub|pdf|cbz|zip|txt|webrip|retail|digital|scan|raw)\b|(?:^|[\s._-])완결(?:$|[\s._-]))`)
 	bracketNoise      = regexp.MustCompile(`[\[\(\{][^\]\)\}]*[\]\)\}]`)
 	spacePattern      = regexp.MustCompile(`\s+`)
 	volumePattern     = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:v|vol(?:ume)?|권|part|season)\s*\.?\s*(\d+)(?:$|[\s._-])`)
