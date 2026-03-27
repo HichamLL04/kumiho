@@ -23,13 +23,13 @@ func TestParseTitle(t *testing.T) {
 func TestBuildSearchRequestFallsBackToFilename(t *testing.T) {
 	req := BuildSearchRequest("", "/library/Novel.Title.ch10.5.epub", sdktypes.ContentTypeNovel, sdktypes.Language("ko"))
 
-	if req.LocalTitle != "Novel Title ch10 5" {
+	if req.LocalTitle != "Novel Title ch10.5" {
 		t.Fatalf("LocalTitle = %q", req.LocalTitle)
 	}
-	if req.SeriesName != "Novel Title 5" {
+	if req.SeriesName != "Novel Title" {
 		t.Fatalf("SeriesName = %q", req.SeriesName)
 	}
-	if req.ChapterNumber == nil || *req.ChapterNumber != 10 {
+	if req.ChapterNumber == nil || *req.ChapterNumber != 10.5 {
 		t.Fatalf("ChapterNumber = %v", req.ChapterNumber)
 	}
 	if req.ContentType != sdktypes.ContentTypeNovel {

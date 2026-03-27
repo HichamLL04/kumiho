@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	releaseTagPattern = regexp.MustCompile(`(?i)\b(ebook|epub|pdf|cbz|zip|txt|webrip|webrip|retail|digital|scan|raw|완결)\b`)
+	releaseTagPattern = regexp.MustCompile(`(?i)\b(ebook|epub|pdf|cbz|zip|txt|webrip|retail|digital|scan|raw|완결)\b`)
 	bracketNoise      = regexp.MustCompile(`[\[\(\{][^\]\)\}]*[\]\)\}]`)
 	spacePattern      = regexp.MustCompile(`\s+`)
 	volumePattern     = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:v|vol(?:ume)?|권|part|season)\s*\.?\s*(\d+)(?:$|[\s._-])`)
@@ -46,7 +46,7 @@ func ParseTitle(raw string) ParsedTitle {
 func BuildSearchRequest(localTitle string, path string, contentType sdktypes.ContentType, language sdktypes.Language) sdktypes.SearchRequest {
 	parsed := ParseTitle(localTitle)
 	filename := filepath.Base(path)
-	if parsed.RawTitle == "" {
+	if strings.TrimSpace(localTitle) == "" || parsed.CanonicalTitle == "" {
 		parsed = ParseTitle(filename)
 	}
 
@@ -64,7 +64,7 @@ func BuildSearchRequest(localTitle string, path string, contentType sdktypes.Con
 func normalize(raw string) string {
 	base := strings.TrimSpace(raw)
 	base = strings.ReplaceAll(base, "_", " ")
-	base = strings.ReplaceAll(base, ".", " ")
+	base = replaceDotsExceptDecimals(base)
 	base = bracketNoise.ReplaceAllString(base, " ")
 	base = releaseTagPattern.ReplaceAllString(base, " ")
 	base = spacePattern.ReplaceAllString(base, " ")
@@ -102,4 +102,21 @@ func extractFloat(pattern *regexp.Regexp, value string) *float64 {
 		return nil
 	}
 	return &parsed
+}
+
+func replaceDotsExceptDecimals(value string) string {
+	runes := []rune(value)
+	for i, r := range runes {
+		if r != '.' {
+			continue
+		}
+
+		prevIsDigit := i > 0 && runes[i-1] >= '0' && runes[i-1] <= '9'
+		nextIsDigit := i+1 < len(runes) && runes[i+1] >= '0' && runes[i+1] <= '9'
+		if prevIsDigit && nextIsDigit {
+			continue
+		}
+		runes[i] = ' '
+	}
+	return string(runes)
 }

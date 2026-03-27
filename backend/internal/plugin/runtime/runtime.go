@@ -8,7 +8,10 @@ import (
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
 
-var ErrNotImplemented = errors.New("runtime not implemented")
+var (
+	ErrNotImplemented = errors.New("runtime not implemented")
+	ErrNotRunning     = errors.New("plugin process is not running")
+)
 
 // Instance is the runtime-facing view of a plugin installation.
 type Instance struct {

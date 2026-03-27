@@ -67,24 +67,29 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 		return fmt.Errorf("plugin runtime type %q is not binary", inst.Manifest.RuntimeType)
 	}
 
-	r.mu.RLock()
-	_, alreadyRunning := r.processes[inst.ID]
-	r.mu.RUnlock()
-	if alreadyRunning {
+	r.mu.Lock()
+	if _, alreadyRunning := r.processes[inst.ID]; alreadyRunning {
+		r.mu.Unlock()
 		return nil
 	}
+	exited := make(chan error, 1)
+	r.processes[inst.ID] = processState{exited: exited}
+	r.mu.Unlock()
 
 	absPath, err := filepath.Abs(inst.InstallPath)
 	if err != nil {
+		r.remove(inst.ID)
 		return fmt.Errorf("resolve install path: %w", err)
 	}
 	if _, statErr := os.Stat(absPath); statErr != nil {
+		r.remove(inst.ID)
 		return fmt.Errorf("stat install path: %w", statErr)
 	}
 
 	host := "127.0.0.1"
 	port, err := allocatePort(host)
 	if err != nil {
+		r.remove(inst.ID)
 		return fmt.Errorf("allocate plugin port: %w", err)
 	}
 	baseURL := fmt.Sprintf("http://%s:%d", host, port)
@@ -100,10 +105,10 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 
 	if err := cmd.Start(); err != nil {
 		cancel()
+		r.remove(inst.ID)
 		return fmt.Errorf("start plugin process: %w", err)
 	}
 
-	exited := make(chan error, 1)
 	r.mu.Lock()
 	r.processes[inst.ID] = processState{cmd: cmd, cancel: cancel, baseURL: baseURL, exited: exited}
 	r.mu.Unlock()
@@ -167,8 +172,8 @@ func (r *Runtime) Stop(ctx context.Context, inst runtime.Instance) error {
 
 func (r *Runtime) Healthcheck(ctx context.Context, inst runtime.Instance) (*healthcheck.Response, error) {
 	state, ok := r.get(inst.ID)
-	if !ok {
-		return nil, errors.New("plugin process is not running")
+	if !ok || state.baseURL == "" {
+		return nil, runtime.ErrNotRunning
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, state.baseURL+sdkservice.PathHealth, nil)
@@ -200,6 +205,9 @@ func (r *Runtime) waitUntilReady(ctx context.Context, id string, baseURL string,
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if err := r.exitedError(id); err != nil {
+			return fmt.Errorf("plugin process exited before readiness: %w", err)
+		}
 
 		checkCtx, cancel := context.WithTimeout(ctx, healthcheck.DefaultTimeout)
 		health, err := r.Healthcheck(checkCtx, runtime.Instance{ID: id})
@@ -220,8 +228,8 @@ func (r *Runtime) waitUntilReady(ctx context.Context, id string, baseURL string,
 
 func (r *Runtime) validateManifest(parent context.Context, id string, expectedID string) error {
 	state, ok := r.get(id)
-	if !ok {
-		return errors.New("plugin process is not running")
+	if !ok || state.baseURL == "" {
+		return runtime.ErrNotRunning
 	}
 
 	ctx, cancel := context.WithTimeout(parent, healthcheck.DefaultTimeout)
@@ -258,6 +266,32 @@ func (r *Runtime) get(id string) (processState, bool) {
 	defer r.mu.RUnlock()
 	state, ok := r.processes[id]
 	return state, ok
+}
+
+func (r *Runtime) remove(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.processes, id)
+}
+
+func (r *Runtime) exitedError(id string) error {
+	state, ok := r.get(id)
+	if !ok {
+		return runtime.ErrNotRunning
+	}
+
+	select {
+	case err, ok := <-state.exited:
+		if !ok {
+			return runtime.ErrNotRunning
+		}
+		if err == nil {
+			return runtime.ErrNotRunning
+		}
+		return err
+	default:
+		return nil
+	}
 }
 
 func allocatePort(host string) (int, error) {

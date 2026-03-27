@@ -2,12 +2,16 @@ package handler
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
+	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
 
@@ -76,6 +80,14 @@ func (h *PluginHandler) RegisterInstalled(c *fiber.Ctx) error {
 	if req.Manifest.ID == "" || req.Manifest.Name == "" || req.Manifest.RuntimeType == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "manifest.id, manifest.name, and manifest.runtime_type are required"})
 	}
+	if req.Manifest.RuntimeType == sdkmanifest.RuntimeTypeBinary {
+		if strings.TrimSpace(req.InstallPath) == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "install_path is required for binary runtime"})
+		}
+		if !filepath.IsAbs(req.InstallPath) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "install_path must be an absolute path for binary runtime"})
+		}
+	}
 
 	record, err := h.manager.RegisterInstalled(req.Manifest, req.InstallPath)
 	if err != nil {
@@ -100,7 +112,7 @@ func (h *PluginHandler) Activate(c *fiber.Ctx) error {
 
 	record, err := h.manager.Activate(ctx, c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return writePluginError(c, err)
 	}
 
 	return c.JSON(toPluginRecordResponse(record, true))
@@ -116,7 +128,7 @@ func (h *PluginHandler) Deactivate(c *fiber.Ctx) error {
 
 	record, err := h.manager.Deactivate(ctx, c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return writePluginError(c, err)
 	}
 
 	return c.JSON(toPluginRecordResponse(record, true))
@@ -132,7 +144,7 @@ func (h *PluginHandler) Healthcheck(c *fiber.Ctx) error {
 
 	resp, err := h.manager.Healthcheck(ctx, c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return writePluginError(c, err)
 	}
 
 	return c.JSON(resp)
@@ -151,4 +163,15 @@ func toPluginRecordResponse(record pluginengine.Record, includePath bool) plugin
 		resp.InstallPath = record.InstallPath
 	}
 	return resp
+}
+
+func writePluginError(c *fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, pluginengine.ErrPluginNotFound):
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	case errors.Is(err, pluginruntime.ErrNotRunning):
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
+	default:
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
 }
