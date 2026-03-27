@@ -20,11 +20,15 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/frontend"
 	"github.com/aha-hyeong/kumiho/backend/internal/handler"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
+	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
+	"github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
+	binaryruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime/binary"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	"github.com/aha-hyeong/kumiho/backend/internal/sse"
 	"github.com/aha-hyeong/kumiho/backend/internal/version"
+	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
 
 func main() {
@@ -84,6 +88,22 @@ func main() {
 	// 공통 서비스 초기화
 	seriesEnrichSvc := service.NewSeriesEnrichService(seriesRepo, chapterRepo, volumeRepo)
 
+	// 플러그인 시스템 초기화 (Phase 1)
+	pluginStore := pluginengine.NewSQLStore()
+	pluginManager := pluginengine.NewManager(
+		pluginStore,
+		binaryruntime.NewRuntime(),
+		runtime.NewStubRuntime(sdkmanifest.RuntimeTypeService),
+	)
+	if err := pluginManager.Bootstrap(); err != nil {
+		log.Fatalf("Failed to bootstrap plugin manager: %v", err)
+	}
+	pluginRecords, err := pluginManager.List()
+	if err != nil {
+		log.Fatalf("Failed to list plugin records: %v", err)
+	}
+	log.Printf("Plugin manager initialized with %d persisted plugin records", len(pluginRecords))
+
 	// 핸들러 초기화
 	authHandler := handler.NewAuthHandler(authService, cfg, hub)
 	userHandler := handler.NewUserHandler(authService)
@@ -100,6 +120,7 @@ func main() {
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkRepo, seriesRepo, volumeRepo, chapterRepo, authService)
 	sseHandler := handler.NewSSEHandler(hub)
 	filesystemHandler := handler.NewFilesystemHandler()
+	pluginHandler := handler.NewPluginHandler(pluginManager)
 
 	// 미들웨어 초기화
 	authMiddleware := middleware.NewAuthMiddleware(authService)
@@ -173,6 +194,15 @@ func main() {
 
 	// 파일시스템 브라우저 (MASTER only)
 	protected.Get("/filesystem", authMiddleware.MasterOnly(), filesystemHandler.Browse)
+
+	// 플러그인
+	plugins := protected.Group("/plugins")
+	plugins.Get("", pluginHandler.List)
+	plugins.Get("/:id", pluginHandler.Get)
+	plugins.Get("/:id/health", authMiddleware.MasterOnly(), pluginHandler.Healthcheck)
+	plugins.Post("/register-installed", authMiddleware.MasterOnly(), pluginHandler.RegisterInstalled)
+	plugins.Post("/:id/activate", authMiddleware.MasterOnly(), pluginHandler.Activate)
+	plugins.Post("/:id/deactivate", authMiddleware.MasterOnly(), pluginHandler.Deactivate)
 
 	// 라이브러리
 	libraries := protected.Group("/libraries")
