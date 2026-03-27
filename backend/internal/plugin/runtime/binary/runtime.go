@@ -75,12 +75,46 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 		if state.ready != nil {
 			return waitForStart(ctx, state.ready)
 		}
-		return nil
+
+		select {
+		case err, ok := <-state.exited:
+			r.mu.Lock()
+			current, exists := r.processes[inst.ID]
+			if exists && current.exited == state.exited {
+				delete(r.processes, inst.ID)
+			}
+			r.mu.Unlock()
+			if ok && err != nil {
+				log.Printf("plugin process %s exited before restart: %v", inst.ID, err)
+			}
+		default:
+			return nil
+		}
+
+		r.mu.Lock()
+		if state, alreadyRunning = r.processes[inst.ID]; alreadyRunning {
+			r.mu.Unlock()
+			if state.ready != nil {
+				return waitForStart(ctx, state.ready)
+			}
+			return nil
+		}
+		exited := make(chan error, 1)
+		ready := make(chan error, 1)
+		r.processes[inst.ID] = processState{exited: exited, ready: ready}
+		r.mu.Unlock()
+
+		return r.startFresh(ctx, inst, exited, ready)
 	}
 	exited := make(chan error, 1)
 	ready := make(chan error, 1)
 	r.processes[inst.ID] = processState{exited: exited, ready: ready}
 	r.mu.Unlock()
+
+	return r.startFresh(ctx, inst, exited, ready)
+}
+
+func (r *Runtime) startFresh(ctx context.Context, inst runtime.Instance, exited chan error, ready chan error) error {
 
 	absPath, err := filepath.Abs(inst.InstallPath)
 	if err != nil {
@@ -196,6 +230,7 @@ func (r *Runtime) Stop(ctx context.Context, inst runtime.Instance) error {
 		state.cancel()
 		_ = state.cmd.Process.Kill()
 		<-state.exited
+		return runtime.ErrStopTimeout
 	case <-state.exited:
 	}
 	return nil

@@ -11,6 +11,7 @@ import (
 var (
 	ErrNotImplemented = errors.New("runtime not implemented")
 	ErrNotRunning     = errors.New("plugin process is not running")
+	ErrStopTimeout    = errors.New("plugin stop timed out and was force killed")
 )
 
 // Instance is the runtime-facing view of a plugin installation.

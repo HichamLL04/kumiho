@@ -87,7 +87,12 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 
 	rt, ok := m.runtimes[record.Manifest.RuntimeType]
 	if !ok {
-		return m.MarkError(id, fmt.Sprintf("runtime %q is not registered", record.Manifest.RuntimeType))
+		runtimeErr := fmt.Errorf("runtime %q is not registered", record.Manifest.RuntimeType)
+		errorRecord, markErr := m.MarkError(id, runtimeErr.Error())
+		if markErr != nil {
+			return Record{}, markErr
+		}
+		return errorRecord, runtimeErr
 	}
 
 	record.State = sdkstate.ActivationPending
@@ -98,13 +103,30 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 	}
 
 	if err := rt.Start(ctx, toInstance(record)); err != nil {
-		return m.MarkError(id, err.Error())
+		errorRecord, markErr := m.MarkError(id, err.Error())
+		if markErr != nil {
+			return Record{}, markErr
+		}
+		return errorRecord, fmt.Errorf("plugin start failed: %w", err)
 	}
 
 	record.State = sdkstate.Active
 	record.UpdatedAt = time.Now()
 	if err := m.store.Save(record); err != nil {
-		return Record{}, err
+		stopErr := rt.Stop(ctx, toInstance(record))
+		if stopErr != nil {
+			errorRecord, markErr := m.MarkError(id, err.Error())
+			if markErr != nil {
+				return Record{}, fmt.Errorf("save active state: %w (additionally failed to stop runtime: %v and mark error: %v)", err, stopErr, markErr)
+			}
+			return errorRecord, fmt.Errorf("save active state: %w (additionally failed to stop runtime: %v)", err, stopErr)
+		}
+
+		errorRecord, markErr := m.MarkError(id, err.Error())
+		if markErr != nil {
+			return Record{}, fmt.Errorf("save active state: %w (runtime rolled back, but failed to mark error: %v)", err, markErr)
+		}
+		return errorRecord, fmt.Errorf("save active state: %w (runtime rolled back)", err)
 	}
 	return record, nil
 }
@@ -121,7 +143,11 @@ func (m *Manager) Deactivate(ctx context.Context, id string) (Record, error) {
 	}
 
 	if err := rt.Stop(ctx, toInstance(record)); err != nil {
-		return m.MarkError(id, err.Error())
+		errorRecord, markErr := m.MarkError(id, err.Error())
+		if markErr != nil {
+			return Record{}, fmt.Errorf("failed to stop plugin: %w (also failed to mark error: %v)", err, markErr)
+		}
+		return errorRecord, err
 	}
 	return m.Disable(id)
 }
