@@ -119,9 +119,14 @@
         "label": "API Key",
         "placeholder": "AIza...",
         "save": "Save",
-        "restart_required": "Restart required",
-        "current_mode": "This version does not store API keys through the UI yet. For now, set GOOGLE_BOOKS_API_KEY before starting the server.",
-        "flow_hint": "The final flow will connect this to restart-required activation after the API key is saved."
+        "delete": "Delete",
+        "configured": "Configured",
+        "not_configured": "Not configured",
+        "required_hint": "Save an API key before activating this plugin.",
+        "configured_hint": "Current key: {{masked}}",
+        "source_hint": "Applied from: {{source}}",
+        "apply_hint": "Saving an API key deactivates the currently running plugin. Activate it again to apply the new setting.",
+        "flow_hint": "Removing the plugin also removes the stored API key."
       },
       "toast": {
         "load_failed": "Failed to load plugin information.",
@@ -133,7 +138,11 @@
         "deactivated": "Plugin deactivated.",
         "action_failed": "Plugin action failed.",
         "api_key_required": "Enter an API key first.",
-        "api_key_env_only": "UI-based API key storage is not wired yet. For now, use the GOOGLE_BOOKS_API_KEY environment variable."
+        "api_key_saved": "API key saved.",
+        "api_key_saved_reactivate": "API key saved. Activate the plugin again to apply it.",
+        "api_key_save_failed": "Failed to save the API key.",
+        "api_key_deleted": "Stored API key removed.",
+        "api_key_delete_failed": "Failed to remove the stored API key."
       }
     },
     "statistics": {

@@ -15,11 +15,13 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
+	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
 )
 
 type PluginHandler struct {
 	manager        *pluginengine.Manager
 	installService *service.PluginInstallService
+	secretService  *service.PluginSecretService
 }
 
 type RegisterPluginRequest struct {
@@ -37,10 +39,16 @@ type pluginRecordResponse struct {
 	UpdatedAt   string               `json:"updated_at"`
 }
 
-func NewPluginHandler(manager *pluginengine.Manager, installService *service.PluginInstallService) *PluginHandler {
+type updatePluginConfigRequest struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
+}
+
+func NewPluginHandler(manager *pluginengine.Manager, installService *service.PluginInstallService, secretService *service.PluginSecretService) *PluginHandler {
 	return &PluginHandler{
 		manager:        manager,
 		installService: installService,
+		secretService:  secretService,
 	}
 }
 
@@ -224,6 +232,78 @@ func (h *PluginHandler) Uninstall(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(result)
+}
+
+// GetConfig returns safe plugin configuration status without exposing secrets.
+// GET /api/v1/plugins/:id/config
+func (h *PluginHandler) GetConfig(c *fiber.Ctx) error {
+	if h.secretService == nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin secret service is not configured"})
+	}
+
+	status, err := h.secretService.Status(c.Params("id"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
+	return c.JSON(status)
+}
+
+// UpdateConfig stores an encrypted plugin secret and leaves the plugin disabled
+// until the next activation so the new env takes effect on process start.
+// PUT /api/v1/plugins/:id/config
+func (h *PluginHandler) UpdateConfig(c *fiber.Ctx) error {
+	if h.secretService == nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin secret service is not configured"})
+	}
+
+	var req updatePluginConfigRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if strings.TrimSpace(req.Field) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "field is required"})
+	}
+
+	status, err := h.secretService.SetSecret(c.Params("id"), req.Field, req.Value)
+	if err != nil {
+		return writePluginError(c, err)
+	}
+
+	record, ok, err := h.manager.Get(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	reactivationRequired := false
+	if ok && record.State == sdkstate.Active {
+		ctx := c.UserContext()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		if _, err := h.manager.Deactivate(ctx, record.ID); err != nil {
+			return writePluginError(c, err)
+		}
+		reactivationRequired = true
+	}
+
+	return c.JSON(fiber.Map{
+		"config":                status,
+		"reactivation_required": reactivationRequired,
+		"message":               "config saved; activate the plugin again to apply it",
+	})
+}
+
+// DeleteConfig removes a stored plugin secret. Environment variable fallback may still apply.
+// DELETE /api/v1/plugins/:id/config/:field
+func (h *PluginHandler) DeleteConfig(c *fiber.Ctx) error {
+	if h.secretService == nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin secret service is not configured"})
+	}
+
+	status, err := h.secretService.DeleteSecret(c.Params("id"), c.Params("field"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
+	return c.JSON(fiber.Map{"config": status})
 }
 
 func toPluginRecordResponse(record pluginengine.Record, includePath bool) pluginRecordResponse {

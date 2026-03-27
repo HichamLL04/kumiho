@@ -157,6 +157,9 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 			EnvPluginHost+"="+host,
 			EnvPluginPort+"="+strconv.Itoa(port),
 		)
+		for key, value := range inst.Env {
+			cmd.Env = append(cmd.Env, key+"="+value)
+		}
 		cmd.Stdout = log.Writer()
 		cmd.Stderr = log.Writer()
 

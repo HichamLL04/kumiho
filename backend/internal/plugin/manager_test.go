@@ -243,20 +243,49 @@ func TestManagerDeactivateReturnsStopErrorAndMarksState(t *testing.T) {
 	}
 }
 
+func TestManagerActivateInjectsPluginEnvironment(t *testing.T) {
+	store := NewMemoryStore()
+	rt := &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
+	manager := NewManager(store, rt)
+	manager.SetEnvProvider(fakeEnvProvider{
+		env: map[string]string{"GOOGLE_BOOKS_API_KEY": "secret-value"},
+	})
+
+	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
+		ID:          "configured-plugin",
+		Name:        "Configured",
+		Version:     "0.1.0",
+		RuntimeType: sdkmanifest.RuntimeTypeBinary,
+	}, "/plugins/configured")
+	if err != nil {
+		t.Fatalf("RegisterInstalled() error = %v", err)
+	}
+
+	if _, err := manager.Activate(context.Background(), record.ID); err != nil {
+		t.Fatalf("Activate() error = %v", err)
+	}
+
+	if got := rt.lastInst.Env["GOOGLE_BOOKS_API_KEY"]; got != "secret-value" {
+		t.Fatalf("injected env = %q, want %q", got, "secret-value")
+	}
+}
+
 type fakeRuntime struct {
 	runtimeType sdkmanifest.RuntimeType
 	startErr    error
 	stopErr     error
 	startCalls  int
 	stopCalls   int
+	lastInst    runtime.Instance
 }
 
 func (r *fakeRuntime) Type() sdkmanifest.RuntimeType {
 	return r.runtimeType
 }
 
-func (r *fakeRuntime) Start(context.Context, runtime.Instance) error {
+func (r *fakeRuntime) Start(_ context.Context, inst runtime.Instance) error {
 	r.startCalls++
+	r.lastInst = inst
 	return r.startErr
 }
 
@@ -281,6 +310,18 @@ type failingStore struct {
 	Store
 	saveCalls   int
 	failOnSaveN int
+}
+
+type fakeEnvProvider struct {
+	env map[string]string
+}
+
+func (p fakeEnvProvider) EnvironmentForPlugin(string, sdkmanifest.Manifest) (map[string]string, error) {
+	return p.env, nil
+}
+
+func (p fakeEnvProvider) ValidateActivation(string, sdkmanifest.Manifest) error {
+	return nil
 }
 
 func (s *failingStore) Save(record Record) error {

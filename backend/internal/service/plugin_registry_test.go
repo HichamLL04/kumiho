@@ -58,7 +58,7 @@ func TestPluginInstallServiceInstall(t *testing.T) {
 		PluginRegistryURL: server.URL + "/index.json",
 	}
 	manager := pluginengine.NewManager(pluginengine.NewMemoryStore())
-	svc := NewPluginInstallService(cfg, server.Client(), manager)
+	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
 
 	result, err := svc.Install(context.Background(), "plugin-googlebooks")
 	if err != nil {
@@ -113,7 +113,7 @@ func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
 		PluginRegistryURL: server.URL + "/index.json",
 	}
 	manager := pluginengine.NewManager(pluginengine.NewMemoryStore())
-	svc := NewPluginInstallService(cfg, server.Client(), manager)
+	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
 
 	result, err := svc.Install(context.Background(), "plugin-googlebooks-service")
 	if err != nil {
@@ -163,7 +163,7 @@ func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
 		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
 		PluginRegistryURL: server.URL + "/index.json",
 	}
-	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
 
 	_, err := svc.Install(context.Background(), "plugin-googlebooks")
 	if err == nil {
@@ -187,7 +187,7 @@ func TestPluginInstallServiceUninstallRemovesArtifactAndRecord(t *testing.T) {
 	}
 	store := pluginengine.NewMemoryStore()
 	manager := pluginengine.NewManager(store)
-	svc := NewPluginInstallService(cfg, nil, manager)
+	svc := NewPluginInstallService(cfg, nil, manager, nil)
 
 	installDir := filepath.Join(cfg.PluginDir, "plugin-googlebooks", "0.1.0")
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
@@ -268,7 +268,7 @@ func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing
 	}
 	store := pluginengine.NewMemoryStore()
 	manager := pluginengine.NewManager(store)
-	svc := NewPluginInstallService(cfg, server.Client(), manager)
+	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
 
 	oldInstallDir := filepath.Join(cfg.PluginDir, "plugin-googlebooks", "0.1.0")
 	if err := os.MkdirAll(oldInstallDir, 0o755); err != nil {

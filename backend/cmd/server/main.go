@@ -55,6 +55,7 @@ func main() {
 	completionRepo := repository.NewVolumeCompletionRepository()
 	chapterCompletionRepo := repository.NewChapterCompletionRepository() // 추가
 	settingRepo := repository.NewSettingRepository()
+	pluginSecretRepo := repository.NewPluginSecretRepository()
 	userSettingRepo := repository.NewUserSettingRepository()
 	userSeriesSettingRepo := repository.NewUserSeriesSettingRepository()
 	sessionRepo := repository.NewSessionRepository()
@@ -94,6 +95,8 @@ func main() {
 		binaryruntime.NewRuntime(),
 		serviceruntime.NewRuntime(),
 	)
+	pluginSecretSvc := service.NewPluginSecretService(cfg, pluginSecretRepo)
+	pluginManager.SetEnvProvider(pluginSecretSvc)
 	if err := pluginManager.Bootstrap(ctx); err != nil {
 		log.Fatalf("Failed to bootstrap plugin manager: %v", err)
 	}
@@ -103,7 +106,7 @@ func main() {
 	}
 	log.Printf("Plugin manager initialized with %d persisted plugin records", len(pluginRecords))
 	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, pluginManager)
-	pluginInstallSvc := service.NewPluginInstallService(cfg, nil, pluginManager)
+	pluginInstallSvc := service.NewPluginInstallService(cfg, nil, pluginManager, pluginSecretSvc)
 
 	// 핸들러 초기화
 	authHandler := handler.NewAuthHandler(authService, cfg, hub)
@@ -121,7 +124,7 @@ func main() {
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkRepo, seriesRepo, volumeRepo, chapterRepo, authService)
 	sseHandler := handler.NewSSEHandler(hub)
 	filesystemHandler := handler.NewFilesystemHandler()
-	pluginHandler := handler.NewPluginHandler(pluginManager, pluginInstallSvc)
+	pluginHandler := handler.NewPluginHandler(pluginManager, pluginInstallSvc, pluginSecretSvc)
 	metadataHandler := handler.NewMetadataHandler(metadataSvc)
 
 	// 미들웨어 초기화
@@ -202,6 +205,9 @@ func main() {
 	plugins.Get("", pluginHandler.List)
 	plugins.Get("/catalog", authMiddleware.MasterOnly(), pluginHandler.Catalog)
 	plugins.Get("/:id", pluginHandler.Get)
+	plugins.Get("/:id/config", authMiddleware.MasterOnly(), pluginHandler.GetConfig)
+	plugins.Put("/:id/config", authMiddleware.MasterOnly(), pluginHandler.UpdateConfig)
+	plugins.Delete("/:id/config/:field", authMiddleware.MasterOnly(), pluginHandler.DeleteConfig)
 	plugins.Get("/:id/health", authMiddleware.MasterOnly(), pluginHandler.Healthcheck)
 	plugins.Post("/install", authMiddleware.MasterOnly(), pluginHandler.Install)
 	plugins.Delete("/:id", authMiddleware.MasterOnly(), pluginHandler.Uninstall)

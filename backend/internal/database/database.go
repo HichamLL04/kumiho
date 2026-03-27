@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 36
+const latestMigrationVersion = 37
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -207,6 +207,26 @@ func ensurePluginInstallationsSchema() error {
 
 	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_plugin_installations_state ON plugin_installations(state)`); err != nil {
 		return fmt.Errorf("create index plugin_installations(state): %w", err)
+	}
+
+	return nil
+}
+
+func ensurePluginSecretsSchema() error {
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS plugin_secrets (
+			plugin_id TEXT NOT NULL,
+			field_key TEXT NOT NULL,
+			value_encrypted TEXT NOT NULL,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (plugin_id, field_key)
+		)
+	`); err != nil {
+		return fmt.Errorf("create plugin_secrets: %w", err)
+	}
+
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_plugin_secrets_plugin_id ON plugin_secrets(plugin_id)`); err != nil {
+		return fmt.Errorf("create index plugin_secrets(plugin_id): %w", err)
 	}
 
 	return nil
@@ -578,6 +598,7 @@ func Migrate() error {
 		{34, "오디오 진행시간 문자열 정규화", migrateAudioProgressTimeFormat},
 		{35, "멀티 폴더 지원 (library_paths 테이블)", migrateMultiFolderPaths},
 		{36, "플러그인 설치 상태 테이블 추가", migratePluginInstallations},
+		{37, "플러그인 비밀 설정 테이블 추가", migratePluginSecrets},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -1775,6 +1796,11 @@ func migrateMultiFolderPaths() error {
 // #36 migratePluginInstallations 플러그인 설치 상태 테이블 추가
 func migratePluginInstallations() error {
 	return ensurePluginInstallationsSchema()
+}
+
+// #37 migratePluginSecrets 플러그인 비밀 설정 테이블 추가
+func migratePluginSecrets() error {
+	return ensurePluginSecretsSchema()
 }
 
 // parseLegacyTimeToSeconds 문자열 시간(HH:MM:SS, MM:SS)을 초 단위 float64로 변환

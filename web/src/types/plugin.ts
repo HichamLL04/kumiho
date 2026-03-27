@@ -42,6 +42,26 @@ export interface PluginRecord {
   updated_at: string;
 }
 
+export interface PluginConfigFieldStatus {
+  key: string;
+  type: string;
+  required: boolean;
+  configured: boolean;
+  source?: string;
+  masked_hint?: string;
+}
+
+export interface PluginConfigStatus {
+  plugin_id: string;
+  fields: PluginConfigFieldStatus[];
+}
+
+export interface PluginConfigUpdateResponse {
+  config: PluginConfigStatus;
+  reactivation_required: boolean;
+  message: string;
+}
+
 export interface PluginCatalogResponse {
   plugins: PluginManifest[];
 }

@@ -16,8 +16,14 @@ import (
 
 // Manager orchestrates plugin lifecycle and state transitions.
 type Manager struct {
-	store    Store
-	runtimes map[sdkmanifest.RuntimeType]runtime.Runtime
+	store       Store
+	runtimes    map[sdkmanifest.RuntimeType]runtime.Runtime
+	envProvider pluginEnvProvider
+}
+
+type pluginEnvProvider interface {
+	EnvironmentForPlugin(id string, manifest sdkmanifest.Manifest) (map[string]string, error)
+	ValidateActivation(id string, manifest sdkmanifest.Manifest) error
 }
 
 func NewManager(store Store, runtimes ...runtime.Runtime) *Manager {
@@ -33,6 +39,10 @@ func NewManager(store Store, runtimes ...runtime.Runtime) *Manager {
 		store:    store,
 		runtimes: registeredRuntimes,
 	}
+}
+
+func (m *Manager) SetEnvProvider(provider pluginEnvProvider) {
+	m.envProvider = provider
 }
 
 func (m *Manager) RegisterInstalled(pluginManifest sdkmanifest.Manifest, installPath string) (Record, error) {
@@ -88,6 +98,18 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 		return Record{}, err
 	}
 
+	instance := toInstance(record)
+	if m.envProvider != nil {
+		if err := m.envProvider.ValidateActivation(record.ID, record.Manifest); err != nil {
+			return Record{}, err
+		}
+		env, err := m.envProvider.EnvironmentForPlugin(record.ID, record.Manifest)
+		if err != nil {
+			return Record{}, err
+		}
+		instance.Env = env
+	}
+
 	rt, ok := m.runtimes[record.Manifest.RuntimeType]
 	if !ok {
 		runtimeErr := fmt.Errorf("runtime %q is not registered", record.Manifest.RuntimeType)
@@ -105,7 +127,7 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 		return Record{}, err
 	}
 
-	if err := rt.Start(ctx, toInstance(record)); err != nil {
+	if err := rt.Start(ctx, instance); err != nil {
 		errorRecord, markErr := m.MarkError(id, err.Error())
 		if markErr != nil {
 			return Record{}, markErr
@@ -116,7 +138,7 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 	record.State = sdkstate.Active
 	record.UpdatedAt = time.Now()
 	if err := m.store.Save(record); err != nil {
-		stopErr := rt.Stop(ctx, toInstance(record))
+		stopErr := rt.Stop(ctx, instance)
 		if stopErr != nil {
 			errorRecord, markErr := m.MarkError(id, err.Error())
 			if markErr != nil {

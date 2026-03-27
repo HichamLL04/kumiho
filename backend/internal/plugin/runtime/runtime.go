@@ -20,6 +20,7 @@ type Instance struct {
 	ID          string
 	Manifest    sdkmanifest.Manifest
 	InstallPath string
+	Env         map[string]string
 }
 
 // Runtime manages plugin lifecycle for a specific runtime type.

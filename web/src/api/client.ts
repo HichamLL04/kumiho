@@ -17,6 +17,8 @@ import type {
   MetadataResult,
   MetadataSearchResult,
   PluginCatalogResponse,
+  PluginConfigStatus,
+  PluginConfigUpdateResponse,
   PluginInstallResponse,
   PluginRecord,
   PluginUninstallResponse,
@@ -438,6 +440,11 @@ export const pluginAPI = {
   catalog: () => api.get<PluginCatalogResponse>("/plugins/catalog").then((res) => res.data),
   install: (pluginId: string) => api.post<PluginInstallResponse>("/plugins/install", { plugin_id: pluginId }).then((res) => res.data),
   uninstall: (pluginId: string) => api.delete<PluginUninstallResponse>(`/plugins/${pluginId}`).then((res) => res.data),
+  getConfig: (pluginId: string) => api.get<PluginConfigStatus>(`/plugins/${pluginId}/config`).then((res) => res.data),
+  updateConfig: (pluginId: string, field: string, value: string) =>
+    api.put<PluginConfigUpdateResponse>(`/plugins/${pluginId}/config`, { field, value }).then((res) => res.data),
+  deleteConfig: (pluginId: string, field: string) =>
+    api.delete<{ config: PluginConfigStatus }>(`/plugins/${pluginId}/config/${field}`).then((res) => res.data),
   activate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/activate`).then((res) => res.data),
   deactivate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/deactivate`).then((res) => res.data),
   health: (pluginId: string) => api.get<{ status: string; version?: string; message?: string }>(`/plugins/${pluginId}/health`).then((res) => res.data),

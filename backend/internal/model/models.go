@@ -227,6 +227,14 @@ type UserSetting struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// PluginSecret 플러그인별 비밀 설정 저장 모델
+type PluginSecret struct {
+	PluginID       string    `json:"plugin_id"`
+	FieldKey       string    `json:"field_key"`
+	ValueEncrypted string    `json:"-"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
 // UserSeriesSetting 사용자별 시리즈 개별 설정 모델
 type UserSeriesSetting struct {
 	UserID                string    `json:"user_id"`

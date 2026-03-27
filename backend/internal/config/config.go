@@ -8,6 +8,7 @@ type Config struct {
 	Port              string
 	DatabasePath      string
 	JWTSecret         string
+	PluginSecretKey   string
 	DataDir           string
 	PluginDir         string
 	PluginRegistryURL string
@@ -23,6 +24,7 @@ func Load() *Config {
 		Port:              getEnv("PORT", "9999"),
 		DatabasePath:      getEnv("DATABASE_PATH", "./data/kumiho.db"),
 		JWTSecret:         getEnv("JWT_SECRET", "your-super-secret-key-change-in-production"),
+		PluginSecretKey:   getEnv("PLUGIN_SECRET_KEY", ""),
 		DataDir:           dataDir,
 		PluginDir:         getEnv("PLUGIN_DIR", dataDir+"/plugins"),
 		PluginRegistryURL: getEnv("PLUGIN_REGISTRY_URL", ""),

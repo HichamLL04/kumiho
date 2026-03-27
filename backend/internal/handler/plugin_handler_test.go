@@ -18,7 +18,7 @@ import (
 
 func newPluginTestApp(role model.Role, manager *pluginengine.Manager) *fiber.App {
 	app := fiber.New()
-	handler := NewPluginHandler(manager, nil)
+	handler := NewPluginHandler(manager, nil, nil)
 
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals("role", role)

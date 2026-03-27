@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Blocks, Download, HeartPulse, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { pluginAPI } from "../../api/client";
-import type { PluginManifest, PluginRecord } from "../../types/plugin";
+import type { PluginConfigStatus, PluginManifest, PluginRecord } from "../../types/plugin";
 import { Toast } from "../common/Toast";
 import styles from "./SettingsComponents.module.css";
 
@@ -45,6 +45,7 @@ export function PluginsTab() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [healthById, setHealthById] = useState<Record<string, string>>({});
+  const [configById, setConfigById] = useState<Record<string, PluginConfigStatus>>({});
   const [status, setStatus] = useState<ToastState>(null);
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [apiKeyDrafts, setAPIKeyDrafts] = useState<Record<string, string>>({});
@@ -61,8 +62,24 @@ export function PluginsTab() {
     }
     try {
       const [catalogRes, installedRes] = await Promise.all([pluginAPI.catalog(), pluginAPI.list()]);
-      setCatalog(catalogRes.plugins || []);
-      setInstalled(installedRes.plugins || []);
+      const nextCatalog = catalogRes.plugins || [];
+      const nextInstalled = installedRes.plugins || [];
+      setCatalog(nextCatalog);
+      setInstalled(nextInstalled);
+
+      const pluginIDs = Array.from(new Set([
+        ...nextCatalog.map((item) => item.id),
+        ...nextInstalled.map((item) => item.id),
+      ]));
+      const configPairs = await Promise.all(pluginIDs.map(async (pluginId) => {
+        try {
+          const config = await pluginAPI.getConfig(pluginId);
+          return [pluginId, config] as const;
+        } catch {
+          return [pluginId, { plugin_id: pluginId, fields: [] }] as const;
+        }
+      }));
+      setConfigById(Object.fromEntries(configPairs));
     } catch (error) {
       console.error("Failed to load plugin data:", error);
       setStatus({ type: "error", message: t("settings.plugins.toast.load_failed") });
@@ -136,13 +153,46 @@ export function PluginsTab() {
     }
   };
 
-  const handleConfigSave = (pluginId: string) => {
+  const handleConfigSave = async (pluginId: string) => {
     const draft = apiKeyDrafts[pluginId]?.trim();
     if (!draft) {
       setStatus({ type: "info", message: t("settings.plugins.toast.api_key_required") });
       return;
     }
-    setStatus({ type: "info", message: t("settings.plugins.toast.api_key_env_only") });
+
+    setBusyId(pluginId);
+    try {
+      const response = await pluginAPI.updateConfig(pluginId, "api_key", draft);
+      setConfigById((prev) => ({ ...prev, [pluginId]: response.config }));
+      setAPIKeyDrafts((prev) => ({ ...prev, [pluginId]: "" }));
+      await load(true);
+      setStatus({
+        type: "success",
+        message: response.reactivation_required
+          ? t("settings.plugins.toast.api_key_saved_reactivate")
+          : t("settings.plugins.toast.api_key_saved"),
+      });
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.api_key_save_failed") });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleConfigDelete = async (pluginId: string) => {
+    setBusyId(pluginId);
+    try {
+      const response = await pluginAPI.deleteConfig(pluginId, "api_key");
+      setConfigById((prev) => ({ ...prev, [pluginId]: response.config }));
+      await load(true);
+      setStatus({ type: "success", message: t("settings.plugins.toast.api_key_deleted") });
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.api_key_delete_failed") });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   if (loading) {
@@ -192,6 +242,9 @@ export function PluginsTab() {
               const iconSrc = iconURL(plugin, installedRecord);
               const showConfig = supportsAPIKeyConfig(plugin);
               const isConfigOpen = expandedConfigId === plugin.id;
+              const configStatus = configById[plugin.id];
+              const apiKeyField = configStatus?.fields.find((field) => field.key === "api_key");
+              const configReady = !showConfig || apiKeyField?.configured;
 
               return (
                 <article
@@ -236,7 +289,7 @@ export function PluginsTab() {
                         type="button"
                         className={`${styles.pluginToggleTrack} ${isActive ? styles.pluginToggleTrackOn : ""}`}
                         onClick={() => void handleActivate(plugin.id, isActive)}
-                        disabled={!isInstalled || isBusy}
+                        disabled={!isInstalled || isBusy || !configReady}
                         aria-label={isActive ? t("settings.plugins.deactivate") : t("settings.plugins.activate")}
                       >
                         <span className={`${styles.pluginToggleThumb} ${isActive ? styles.pluginToggleThumbOn : ""}`} />
@@ -260,13 +313,16 @@ export function PluginsTab() {
                   {healthById[plugin.id] && (
                     <p className={styles.pluginStatusLine}>{healthById[plugin.id]}</p>
                   )}
+                  {showConfig && !apiKeyField?.configured && (
+                    <p className={styles.pluginStatusLine}>{t("settings.plugins.api_key.required_hint")}</p>
+                  )}
 
                   <div className={styles.pluginActions}>
                     {showConfig && (
                       <button
                         className={styles.pluginActionSecondary}
                         onClick={() => setExpandedConfigId((prev) => (prev === plugin.id ? null : plugin.id))}
-                        disabled={isBusy}
+                        disabled={!isInstalled || isBusy}
                       >
                         <KeyRound size={14} />
                         <span>{t("settings.plugins.api_key.configure")}</span>
@@ -297,10 +353,17 @@ export function PluginsTab() {
                           <h5>{t("settings.plugins.api_key.title")}</h5>
                           <p>{t("settings.plugins.api_key.desc")}</p>
                         </div>
-                        <span className={`${styles.pluginStateBadge} ${styles.pluginStateBadgeInstalled}`}>
-                          {t("settings.plugins.api_key.restart_required")}
+                        <span className={`${styles.pluginStateBadge} ${apiKeyField?.configured ? styles.pluginStateBadgeActive : styles.pluginStateBadgeInstalled}`}>
+                          {apiKeyField?.configured ? t("settings.plugins.api_key.configured") : t("settings.plugins.api_key.not_configured")}
                         </span>
                       </div>
+
+                      {apiKeyField?.configured && (
+                        <div className={styles.pluginConfigNotes}>
+                          <p>{t("settings.plugins.api_key.configured_hint", { masked: apiKeyField.masked_hint || "••••" })}</p>
+                          <p>{t("settings.plugins.api_key.source_hint", { source: apiKeyField.source || "-" })}</p>
+                        </div>
+                      )}
 
                       <label className={styles.pluginConfigField}>
                         <span>{t("settings.plugins.api_key.label")}</span>
@@ -314,7 +377,7 @@ export function PluginsTab() {
                       </label>
 
                       <div className={styles.pluginConfigNotes}>
-                        <p>{t("settings.plugins.api_key.current_mode")}</p>
+                        <p>{t("settings.plugins.api_key.apply_hint")}</p>
                         <p>{t("settings.plugins.api_key.flow_hint")}</p>
                       </div>
 
@@ -322,11 +385,23 @@ export function PluginsTab() {
                         <button
                           type="button"
                           className={styles.pluginActionPrimary}
-                          onClick={() => handleConfigSave(plugin.id)}
+                          onClick={() => void handleConfigSave(plugin.id)}
+                          disabled={isBusy}
                         >
                           <KeyRound size={14} />
                           <span>{t("settings.plugins.api_key.save")}</span>
                         </button>
+                        {apiKeyField?.configured && apiKeyField.source === "secret" && (
+                          <button
+                            type="button"
+                            className={styles.pluginActionDanger}
+                            onClick={() => void handleConfigDelete(plugin.id)}
+                            disabled={isBusy}
+                          >
+                            <Trash2 size={14} />
+                            <span>{t("settings.plugins.api_key.delete")}</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

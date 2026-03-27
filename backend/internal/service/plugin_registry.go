@@ -34,9 +34,10 @@ type PluginCatalog struct {
 }
 
 type PluginInstallService struct {
-	cfg     *config.Config
-	client  *http.Client
-	manager *pluginengine.Manager
+	cfg           *config.Config
+	client        *http.Client
+	manager       *pluginengine.Manager
+	secretService *PluginSecretService
 }
 
 type InstallPluginRequest struct {
@@ -55,14 +56,15 @@ type InstallPluginResult struct {
 	RestartRequired bool                `json:"restart_required"`
 }
 
-func NewPluginInstallService(cfg *config.Config, client *http.Client, manager *pluginengine.Manager) *PluginInstallService {
+func NewPluginInstallService(cfg *config.Config, client *http.Client, manager *pluginengine.Manager, secretService *PluginSecretService) *PluginInstallService {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	return &PluginInstallService{
-		cfg:     cfg,
-		client:  client,
-		manager: manager,
+		cfg:           cfg,
+		client:        client,
+		manager:       manager,
+		secretService: secretService,
 	}
 }
 
@@ -311,6 +313,11 @@ func (s *PluginInstallService) removeRecordAndArtifacts(ctx context.Context, rec
 
 	if err := removeInstallArtifacts(record.InstallPath); err != nil {
 		return err
+	}
+	if s.secretService != nil {
+		if err := s.secretService.DeleteAllForPlugin(record.ID); err != nil {
+			return err
+		}
 	}
 	return s.manager.Remove(record.ID)
 }
