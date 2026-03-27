@@ -102,7 +102,7 @@ func (s *PluginInstallService) Install(ctx context.Context, pluginID string) (*I
 		return nil, err
 	}
 
-	if err := s.removeExistingInstallation(ctx, pluginID); err != nil {
+	if err := s.removeExistingInstallation(ctx, pluginID, true); err != nil {
 		return nil, err
 	}
 
@@ -148,7 +148,7 @@ func (s *PluginInstallService) Uninstall(ctx context.Context, pluginID string) (
 		return nil, pluginengine.ErrPluginNotFound
 	}
 
-	if err := s.removeRecordAndArtifacts(ctx, record); err != nil {
+	if err := s.removeRecordAndArtifacts(ctx, record, false); err != nil {
 		return nil, err
 	}
 
@@ -293,7 +293,7 @@ func artifactFilename(manifest sdkmanifest.Manifest, artifact sdkmanifest.Artifa
 	return manifest.ID
 }
 
-func (s *PluginInstallService) removeExistingInstallation(ctx context.Context, pluginID string) error {
+func (s *PluginInstallService) removeExistingInstallation(ctx context.Context, pluginID string, preserveSecrets bool) error {
 	record, ok, err := s.manager.Get(pluginID)
 	if err != nil {
 		return err
@@ -301,10 +301,10 @@ func (s *PluginInstallService) removeExistingInstallation(ctx context.Context, p
 	if !ok {
 		return nil
 	}
-	return s.removeRecordAndArtifacts(ctx, record)
+	return s.removeRecordAndArtifacts(ctx, record, preserveSecrets)
 }
 
-func (s *PluginInstallService) removeRecordAndArtifacts(ctx context.Context, record pluginengine.Record) error {
+func (s *PluginInstallService) removeRecordAndArtifacts(ctx context.Context, record pluginengine.Record, preserveSecrets bool) error {
 	if record.State == sdkstate.Active || record.State == sdkstate.ActivationPending {
 		if _, err := s.manager.Deactivate(ctx, record.ID); err != nil {
 			return err
@@ -314,7 +314,7 @@ func (s *PluginInstallService) removeRecordAndArtifacts(ctx context.Context, rec
 	if err := removeInstallArtifacts(record.InstallPath); err != nil {
 		return err
 	}
-	if s.secretService != nil {
+	if s.secretService != nil && !preserveSecrets {
 		if err := s.secretService.DeleteAllForPlugin(record.ID); err != nil {
 			return err
 		}

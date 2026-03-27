@@ -5,6 +5,8 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -22,6 +24,11 @@ type PluginHandler struct {
 	manager        *pluginengine.Manager
 	installService *service.PluginInstallService
 	secretService  *service.PluginSecretService
+	updateCache    *service.PluginUpdateSummary
+	updateChecked  time.Time
+	updateMutex    sync.RWMutex
+	manualChecks   map[string]int
+	manualMutex    sync.Mutex
 }
 
 type RegisterPluginRequest struct {
@@ -49,7 +56,17 @@ func NewPluginHandler(manager *pluginengine.Manager, installService *service.Plu
 		manager:        manager,
 		installService: installService,
 		secretService:  secretService,
+		manualChecks:   make(map[string]int),
 	}
+}
+
+const pluginUpdateCacheTTL = 12 * time.Hour
+
+func (h *PluginHandler) invalidateUpdateCache() {
+	h.updateMutex.Lock()
+	defer h.updateMutex.Unlock()
+	h.updateCache = nil
+	h.updateChecked = time.Time{}
 }
 
 // List plugins
@@ -112,6 +129,7 @@ func (h *PluginHandler) RegisterInstalled(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
+	h.invalidateUpdateCache()
 
 	return c.Status(fiber.StatusCreated).JSON(toPluginRecordResponse(record, true))
 }
@@ -183,6 +201,60 @@ func (h *PluginHandler) Catalog(c *fiber.Ctx) error {
 	return c.JSON(catalog)
 }
 
+// Updates returns installed plugin update availability from the registry.
+// GET /api/v1/plugins/updates
+func (h *PluginHandler) Updates(c *fiber.Ctx) error {
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if h.installService == nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin install service is not configured"})
+	}
+
+	force := c.Query("force") == "true"
+	if force {
+		today := time.Now().Format("2006-01-02")
+		h.manualMutex.Lock()
+		if h.manualChecks[today] >= 10 {
+			h.manualMutex.Unlock()
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "오늘의 수동 업데이트 확인 횟수(10회)를 초과했습니다.",
+			})
+		}
+		h.manualChecks[today]++
+		h.manualMutex.Unlock()
+	}
+
+	h.updateMutex.RLock()
+	if !force && h.updateCache != nil && time.Since(h.updateChecked) < pluginUpdateCacheTTL {
+		cached := *h.updateCache
+		h.updateMutex.RUnlock()
+		return c.JSON(cached)
+	}
+	h.updateMutex.RUnlock()
+
+	summary, err := h.installService.CheckUpdates(ctx)
+	if err != nil {
+		h.updateMutex.RLock()
+		if h.updateCache != nil {
+			cached := *h.updateCache
+			h.updateMutex.RUnlock()
+			return c.JSON(cached)
+		}
+		h.updateMutex.RUnlock()
+		return writePluginError(c, err)
+	}
+
+	h.updateMutex.Lock()
+	h.updateCache = summary
+	h.updateChecked = time.Now()
+	h.updateMutex.Unlock()
+
+	return c.JSON(summary)
+}
+
 // Install downloads, verifies, and registers a plugin from the registry.
 // POST /api/v1/plugins/install
 func (h *PluginHandler) Install(c *fiber.Ctx) error {
@@ -206,6 +278,7 @@ func (h *PluginHandler) Install(c *fiber.Ctx) error {
 	if err != nil {
 		return writePluginError(c, err)
 	}
+	h.invalidateUpdateCache()
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"record":           toPluginRecordResponse(result.Record, true),
@@ -230,6 +303,7 @@ func (h *PluginHandler) Uninstall(c *fiber.Ctx) error {
 	if err != nil {
 		return writePluginError(c, err)
 	}
+	h.invalidateUpdateCache()
 
 	return c.JSON(result)
 }

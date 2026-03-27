@@ -204,6 +204,7 @@ func main() {
 	plugins := protected.Group("/plugins")
 	plugins.Get("", pluginHandler.List)
 	plugins.Get("/catalog", authMiddleware.MasterOnly(), pluginHandler.Catalog)
+	plugins.Get("/updates", authMiddleware.MasterOnly(), pluginHandler.Updates)
 	plugins.Get("/:id", pluginHandler.Get)
 	plugins.Get("/:id/config", authMiddleware.MasterOnly(), pluginHandler.GetConfig)
 	plugins.Put("/:id/config", authMiddleware.MasterOnly(), pluginHandler.UpdateConfig)

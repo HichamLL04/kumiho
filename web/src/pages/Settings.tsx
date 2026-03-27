@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle } from "lucide-react";
+import { pluginAPI, systemAPI } from "../api/client";
+import { UpdateBadge } from "../components/common/UpdateBadge";
 import { Header } from "../components/headers/Header";
 import { Sidebar } from "../components/Sidebar";
 import { SubHeader } from "../components/headers/SubHeader";
@@ -36,6 +38,8 @@ export function SettingsPage() {
   const user = useAuthStore((state) => state.user);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [hasSystemUpdate, setHasSystemUpdate] = useState(false);
+  const [hasPluginUpdate, setHasPluginUpdate] = useState(false);
 
   // 사용자 역할에 따른 탭 필터링
   const availableTabs = TABS.filter((tab) => !tab.adminOnly || user?.role === "MASTER");
@@ -60,6 +64,27 @@ export function SettingsPage() {
     setSearchParams(nextParams, { replace: true });
   }, [activeTab, availableTabs, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    if (user?.role !== "MASTER") return undefined;
+
+    const loadUpdates = async () => {
+      try {
+        const [systemInfo, pluginInfo] = await Promise.all([
+          systemAPI.getVersion(),
+          pluginAPI.getUpdates(),
+        ]);
+        setHasSystemUpdate(systemInfo.needs_update);
+        setHasPluginUpdate(pluginInfo.has_updates);
+      } catch (error) {
+        console.error("Failed to load settings update state:", error);
+      }
+    };
+
+    void loadUpdates();
+    const interval = setInterval(loadUpdates, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user?.role]);
+
   // 콘텐츠 렌더링
   const renderContent = () => {
     switch (activeTab) {
@@ -74,7 +99,7 @@ export function SettingsPage() {
       case "users":
         return <UsersTab />;
       case "plugins":
-        return <PluginsTab />;
+        return <PluginsTab onUpdateStateChange={setHasPluginUpdate} />;
       case "system":
         return <SystemTab />;
       case "account":
@@ -113,6 +138,8 @@ export function SettingsPage() {
                 >
                   <Icon size={18} />
                   <span>{t(tab.label)}</span>
+                  {tab.id === "system" && hasSystemUpdate && <UpdateBadge className={styles.navUpdateBadge} />}
+                  {tab.id === "plugins" && hasPluginUpdate && <UpdateBadge className={styles.navUpdateBadge} />}
                 </button>
               );
             })}

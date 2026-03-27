@@ -22,6 +22,7 @@ import type {
   PluginInstallResponse,
   PluginRecord,
   PluginUninstallResponse,
+  PluginUpdateSummary,
 } from "../types/plugin";
 
 // Docker 및 배포 환경에서 유연하게 대처하기 위해 기본값을 상대 경로로 설정합니다.
@@ -438,6 +439,7 @@ export const systemAPI = {
 export const pluginAPI = {
   list: () => api.get<{ plugins: PluginRecord[] }>("/plugins").then((res) => res.data),
   catalog: () => api.get<PluginCatalogResponse>("/plugins/catalog").then((res) => res.data),
+  getUpdates: (force = false) => api.get<PluginUpdateSummary>(`/plugins/updates?force=${force}`).then((res) => res.data),
   install: (pluginId: string) => api.post<PluginInstallResponse>("/plugins/install", { plugin_id: pluginId }).then((res) => res.data),
   uninstall: (pluginId: string) => api.delete<PluginUninstallResponse>(`/plugins/${pluginId}`).then((res) => res.data),
   getConfig: (pluginId: string) => api.get<PluginConfigStatus>(`/plugins/${pluginId}/config`).then((res) => res.data),

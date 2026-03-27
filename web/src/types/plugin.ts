@@ -66,6 +66,20 @@ export interface PluginCatalogResponse {
   plugins: PluginManifest[];
 }
 
+export interface PluginUpdateItem {
+  plugin_id: string;
+  name: string;
+  current_version: string;
+  latest_version?: string;
+  update_available: boolean;
+}
+
+export interface PluginUpdateSummary {
+  has_updates: boolean;
+  count: number;
+  plugins: PluginUpdateItem[];
+}
+
 export interface PluginInstallResponse {
   record: PluginRecord;
   artifact_url: string;

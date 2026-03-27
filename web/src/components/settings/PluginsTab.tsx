@@ -2,11 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Blocks, Download, HeartPulse, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { pluginAPI } from "../../api/client";
-import type { PluginConfigStatus, PluginManifest, PluginRecord } from "../../types/plugin";
+import type { PluginConfigStatus, PluginManifest, PluginRecord, PluginUpdateSummary } from "../../types/plugin";
+import { UpdateBadge } from "../common/UpdateBadge";
 import { Toast } from "../common/Toast";
 import styles from "./SettingsComponents.module.css";
 
 type ToastState = { type: "success" | "error" | "info"; message: string } | null;
+
+interface PluginsTabProps {
+  onUpdateStateChange?: (hasUpdates: boolean) => void;
+}
 
 function stateTone(state: string) {
   switch (state) {
@@ -38,7 +43,7 @@ function supportsAPIKeyConfig(plugin: PluginManifest) {
   return plugin.id === "kumiho-plugin-metadata-googlebooks";
 }
 
-export function PluginsTab() {
+export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
   const { t } = useTranslation();
   const [catalog, setCatalog] = useState<PluginManifest[]>([]);
   const [installed, setInstalled] = useState<PluginRecord[]>([]);
@@ -49,12 +54,24 @@ export function PluginsTab() {
   const [status, setStatus] = useState<ToastState>(null);
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [apiKeyDrafts, setAPIKeyDrafts] = useState<Record<string, string>>({});
+  const [updateSummary, setUpdateSummary] = useState<PluginUpdateSummary | null>(null);
 
   const installedById = useMemo(() => new Map(installed.map((item) => [item.id, item])), [installed]);
+  const updateById = useMemo(
+    () => new Map((updateSummary?.plugins || []).map((item) => [item.plugin_id, item])),
+    [updateSummary],
+  );
   const unmanagedInstalled = useMemo(
     () => installed.filter((item) => !catalog.some((plugin) => plugin.id === item.id)),
     [catalog, installed],
   );
+
+  const loadUpdates = useCallback(async (force = false) => {
+    const summary = await pluginAPI.getUpdates(force);
+    setUpdateSummary(summary);
+    onUpdateStateChange?.(summary.has_updates);
+    return summary;
+  }, [onUpdateStateChange]);
 
   const load = useCallback(async (background = false) => {
     if (!background) {
@@ -80,6 +97,7 @@ export function PluginsTab() {
         }
       }));
       setConfigById(Object.fromEntries(configPairs));
+      await loadUpdates(false);
     } catch (error) {
       console.error("Failed to load plugin data:", error);
       setStatus({ type: "error", message: t("settings.plugins.toast.load_failed") });
@@ -88,11 +106,40 @@ export function PluginsTab() {
         setLoading(false);
       }
     }
-  }, [t]);
+  }, [loadUpdates, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void loadUpdates();
+    }, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [loadUpdates]);
+
+  const handleCheckUpdates = async () => {
+    setBusyId("__plugin_update_check__");
+    try {
+      const summary = await loadUpdates(true);
+      setStatus({
+        type: "success",
+        message: summary.has_updates
+          ? t("settings.plugins.toast.update_found", { count: summary.count })
+          : t("settings.plugins.toast.update_checked"),
+      });
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number; data?: { error?: string } } };
+      if (err.response?.status === 429) {
+        setStatus({ type: "error", message: err.response.data?.error || t("settings.plugins.toast.update_rate_limited") });
+      } else {
+        setStatus({ type: "error", message: t("settings.plugins.toast.update_check_failed") });
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const handleInstall = async (pluginId: string) => {
     setBusyId(pluginId);
@@ -217,8 +264,24 @@ export function PluginsTab() {
       )}
 
       <div className={styles.tabHeader}>
-        <h2>{t("settings.plugins.title")}</h2>
-        <p className={styles.tabDescription}>{t("settings.plugins.desc")}</p>
+        <div className={styles.tabHeaderRow}>
+          <div>
+            <h2>{t("settings.plugins.title")}</h2>
+            <p className={styles.tabDescription}>{t("settings.plugins.desc")}</p>
+          </div>
+          <button
+            type="button"
+            className={styles.tabHeaderAction}
+            onClick={() => void handleCheckUpdates()}
+            disabled={busyId === "__plugin_update_check__"}
+          >
+            <RefreshCw
+              size={14}
+              className={busyId === "__plugin_update_check__" ? styles.spin : ""}
+            />
+            <span>{t("settings.plugins.check_updates")}</span>
+          </button>
+        </div>
       </div>
 
       <div className={styles.settingsSections}>
@@ -235,10 +298,14 @@ export function PluginsTab() {
               const isBusy = busyId === plugin.id;
               const currentState = installedRecord?.state || "not_installed";
               const tone = stateTone(currentState);
-              const canInstall = !installedRecord || installedRecord.manifest.version !== plugin.version || installedRecord.state === "error";
-              const installLabel = !installedRecord || installedRecord.manifest.version !== plugin.version
-                ? t("settings.plugins.install")
-                : t("settings.plugins.reinstall");
+              const updateInfo = updateById.get(plugin.id);
+              const hasUpdate = Boolean(updateInfo?.update_available);
+              const canInstall = !installedRecord || hasUpdate || installedRecord.state === "error";
+              const installLabel = hasUpdate
+                ? t("settings.plugins.update")
+                : (!installedRecord || installedRecord.manifest.version !== plugin.version
+                    ? t("settings.plugins.install")
+                    : t("settings.plugins.reinstall"));
               const iconSrc = iconURL(plugin, installedRecord);
               const showConfig = supportsAPIKeyConfig(plugin);
               const isConfigOpen = expandedConfigId === plugin.id;
@@ -267,6 +334,7 @@ export function PluginsTab() {
                         ) : (
                           <Blocks size={28} className={styles.pluginIconFallback} />
                         )}
+                        {hasUpdate && <UpdateBadge className={styles.pluginIconUpdateBadge} />}
                       </div>
                       <div className={styles.pluginHeading}>
                         <div className={styles.pluginTitleRow}>
@@ -278,6 +346,14 @@ export function PluginsTab() {
                         <p className={styles.pluginMeta}>
                           {plugin.version} · {plugin.runtime_type}
                         </p>
+                        {hasUpdate && (
+                          <p className={styles.pluginStatusLine}>
+                            {t("settings.plugins.update_available", {
+                              current: updateInfo?.current_version,
+                              latest: updateInfo?.latest_version,
+                            })}
+                          </p>
+                        )}
                       </div>
                     </div>
 

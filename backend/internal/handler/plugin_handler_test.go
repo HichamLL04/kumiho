@@ -3,14 +3,18 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/aha-hyeong/kumiho/backend/internal/config"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
+	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/healthcheck"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
@@ -113,6 +117,61 @@ func TestPluginHealthcheckMapsNotRunningToConflict(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusConflict)
+	}
+}
+
+func TestPluginUpdatesReturnsAvailableVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(service.PluginCatalog{
+			Plugins: []sdkmanifest.Manifest{
+				{ID: "plugin-a", Name: "Plugin A", Version: "0.2.0"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	manager := pluginengine.NewManager(pluginengine.NewMemoryStore(), &pluginHandlerRuntime{runtimeType: sdkmanifest.RuntimeTypeService})
+	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
+		ID:          "plugin-a",
+		Name:        "Plugin A",
+		Version:     "0.1.0",
+		RuntimeType: sdkmanifest.RuntimeTypeService,
+	}, filepath.Join(t.TempDir(), "plugin-a"))
+	if err != nil {
+		t.Fatalf("RegisterInstalled() error = %v", err)
+	}
+	if _, err := manager.MarkRegistered(record.ID); err != nil {
+		t.Fatalf("MarkRegistered() error = %v", err)
+	}
+
+	installSvc := service.NewPluginInstallService(&config.Config{
+		PluginRegistryURL: server.URL,
+		PluginDir:         t.TempDir(),
+	}, server.Client(), manager, nil)
+
+	app := fiber.New()
+	handler := NewPluginHandler(manager, installSvc, nil)
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("role", model.RoleMaster)
+		return c.Next()
+	})
+	app.Get("/plugins/updates", handler.Updates)
+
+	req := httptest.NewRequest("GET", "/plugins/updates", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	var body service.PluginUpdateSummary
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("json decode error = %v", err)
+	}
+	if !body.HasUpdates || body.Count != 1 {
+		t.Fatalf("body = %+v, want one update", body)
 	}
 }
 

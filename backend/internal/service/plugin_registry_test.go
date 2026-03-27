@@ -15,7 +15,10 @@ import (
 	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
+	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
+	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
@@ -309,4 +312,137 @@ func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing
 	if string(contents) != string(newBytes) {
 		t.Fatalf("artifact contents = %q", string(contents))
 	}
+}
+
+func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
+	artifactBytes := []byte("new plugin")
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []sdkmanifest.Manifest{
+					{
+						ID:                 googleBooksPluginID,
+						Name:               "Google Books",
+						Version:            "0.1.1",
+						RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+						MinCoreVersion:     "0.1.0",
+						Artifacts: []sdkmanifest.Artifact{
+							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
+						},
+					},
+				},
+			})
+		case "/artifact":
+			_, _ = w.Write(artifactBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+		PluginSecretKey:   "test-secret-key",
+	}
+	store := pluginengine.NewMemoryStore()
+	manager := pluginengine.NewManager(store)
+	secretRepo := newTestPluginSecretRepo()
+	secretSvc := NewPluginSecretService(cfg, secretRepo)
+	svc := NewPluginInstallService(cfg, server.Client(), manager, secretSvc)
+
+	oldInstallDir := filepath.Join(cfg.PluginDir, googleBooksPluginID, "0.1.0")
+	if err := os.MkdirAll(oldInstallDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	oldInstallPath := filepath.Join(oldInstallDir, googleBooksPluginID)
+	if err := os.WriteFile(oldInstallPath, []byte("old plugin"), 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	now := time.Now()
+	if err := store.Save(pluginengine.Record{
+		ID:          googleBooksPluginID,
+		Manifest:    sdkmanifest.Manifest{ID: googleBooksPluginID, Name: "Google Books", Version: "0.1.0", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:       "disabled",
+		InstallPath: oldInstallPath,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if _, err := secretSvc.SetSecret(googleBooksPluginID, "api_key", "AIza-test-key"); err != nil {
+		t.Fatalf("SetSecret() error = %v", err)
+	}
+
+	if _, err := svc.Install(context.Background(), googleBooksPluginID); err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+
+	status, err := secretSvc.Status(googleBooksPluginID)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if len(status.Fields) != 1 || !status.Fields[0].Configured {
+		t.Fatalf("secret status = %+v, want configured", status.Fields)
+	}
+}
+
+type testPluginSecretRepo struct {
+	items map[string]model.PluginSecret
+}
+
+func newTestPluginSecretRepo() repository.PluginSecretRepository {
+	return &testPluginSecretRepo{items: make(map[string]model.PluginSecret)}
+}
+
+func (r *testPluginSecretRepo) GetByKey(_ database.Queryer, pluginID, fieldKey string) (*model.PluginSecret, error) {
+	item, ok := r.items[pluginID+"::"+fieldKey]
+	if !ok {
+		return nil, nil
+	}
+	copy := item
+	return &copy, nil
+}
+
+func (r *testPluginSecretRepo) ListByPlugin(_ database.Queryer, pluginID string) ([]model.PluginSecret, error) {
+	var items []model.PluginSecret
+	for _, item := range r.items {
+		if item.PluginID == pluginID {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+func (r *testPluginSecretRepo) Upsert(_ database.Queryer, pluginID, fieldKey, valueEncrypted string) error {
+	r.items[pluginID+"::"+fieldKey] = model.PluginSecret{
+		PluginID:       pluginID,
+		FieldKey:       fieldKey,
+		ValueEncrypted: valueEncrypted,
+		UpdatedAt:      time.Now(),
+	}
+	return nil
+}
+
+func (r *testPluginSecretRepo) Delete(_ database.Queryer, pluginID, fieldKey string) error {
+	delete(r.items, pluginID+"::"+fieldKey)
+	return nil
+}
+
+func (r *testPluginSecretRepo) DeleteByPlugin(_ database.Queryer, pluginID string) error {
+	for key, item := range r.items {
+		if item.PluginID == pluginID {
+			delete(r.items, key)
+		}
+	}
+	return nil
 }
