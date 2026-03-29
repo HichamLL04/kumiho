@@ -16,6 +16,7 @@ import (
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
+	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
@@ -30,7 +31,7 @@ type PluginHandler struct {
 	updateMutex    sync.RWMutex
 	manualChecks   map[string]int
 	manualMutex    sync.Mutex
-	kitsuAuthSvc   *service.KitsuAuthService
+	authService    *service.PluginAuthService
 }
 
 type RegisterPluginRequest struct {
@@ -53,9 +54,8 @@ type updatePluginConfigRequest struct {
 	Value string `json:"value"`
 }
 
-type kitsuLoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+type pluginAuthActionRequest struct {
+	Values map[string]string `json:"values"`
 }
 
 type pluginConfigMutation func() (*service.PluginConfigStatus, error)
@@ -66,7 +66,7 @@ func NewPluginHandler(manager *pluginengine.Manager, installService *service.Plu
 		installService: installService,
 		secretService:  secretService,
 		manualChecks:   make(map[string]int),
-		kitsuAuthSvc:   service.NewKitsuAuthService(nil),
+		authService:    service.NewPluginAuthService(nil),
 	}
 }
 
@@ -325,11 +325,54 @@ func (h *PluginHandler) GetConfig(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin secret service is not configured"})
 	}
 
-	status, err := h.secretService.Status(c.Params("id"))
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	manifest, err := h.resolveManifest(ctx, c.Params("id"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
+
+	status, err := h.secretService.Status(c.Params("id"), manifest)
 	if err != nil {
 		return writePluginError(c, err)
 	}
 	return c.JSON(status)
+}
+
+func (h *PluginHandler) resolveManifest(ctx context.Context, pluginID string) (sdkmanifest.Manifest, error) {
+	record, ok, err := h.manager.Get(pluginID)
+	if err != nil {
+		return sdkmanifest.Manifest{}, err
+	}
+	if ok {
+		return record.Manifest, nil
+	}
+	if h.installService != nil {
+		catalog, err := h.installService.ListCatalog(ctx)
+		if err != nil {
+			return sdkmanifest.Manifest{}, err
+		}
+		for _, plugin := range catalog.Plugins {
+			if plugin.ID == pluginID {
+				return plugin, nil
+			}
+		}
+	}
+	return sdkmanifest.Manifest{}, pluginengine.ErrPluginNotFound
+}
+
+func resolveAuthAction(manifest sdkmanifest.Manifest, actionID string) (sdkconfig.AuthAction, error) {
+	if manifest.Auth == nil {
+		return sdkconfig.AuthAction{}, pluginerrors.New(pluginerrors.ErrCodeUnsupported, "plugin does not declare any auth actions")
+	}
+	for _, action := range manifest.Auth.Actions {
+		if action.ID == actionID {
+			return action, nil
+		}
+	}
+	return sdkconfig.AuthAction{}, pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "unsupported auth action")
 }
 
 // UpdateConfig stores an encrypted plugin secret and leaves the plugin disabled
@@ -352,9 +395,13 @@ func (h *PluginHandler) UpdateConfig(c *fiber.Ctx) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	manifest, err := h.resolveManifest(ctx, c.Params("id"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
 
 	status, reactivationRequired, err := h.mutatePluginSecrets(ctx, c.Params("id"), func() (*service.PluginConfigStatus, error) {
-		return h.secretService.SetSecret(c.Params("id"), req.Field, req.Value)
+		return h.secretService.SetSecret(c.Params("id"), manifest, req.Field, req.Value)
 	})
 	if err != nil {
 		return writePluginError(c, err)
@@ -378,9 +425,13 @@ func (h *PluginHandler) DeleteConfig(c *fiber.Ctx) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	manifest, err := h.resolveManifest(ctx, c.Params("id"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
 
 	status, reactivationRequired, err := h.mutatePluginSecrets(ctx, c.Params("id"), func() (*service.PluginConfigStatus, error) {
-		return h.secretService.DeleteSecret(c.Params("id"), c.Params("field"))
+		return h.secretService.DeleteSecret(c.Params("id"), manifest, c.Params("field"))
 	})
 	if err != nil {
 		return writePluginError(c, err)
@@ -392,20 +443,17 @@ func (h *PluginHandler) DeleteConfig(c *fiber.Ctx) error {
 	})
 }
 
-// KitsuLogin exchanges Kitsu credentials for tokens and stores only the tokens.
-// POST /api/v1/plugins/:id/kitsu-login
-func (h *PluginHandler) KitsuLogin(c *fiber.Ctx) error {
+// AuthAction executes a manifest-declared auth action and stores mapped secrets.
+// POST /api/v1/plugins/:id/auth/:action
+func (h *PluginHandler) AuthAction(c *fiber.Ctx) error {
 	if h.secretService == nil {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin secret service is not configured"})
 	}
-	if h.kitsuAuthSvc == nil {
-		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "kitsu auth service is not configured"})
-	}
-	if c.Params("id") != "kumiho-plugin-metadata-kitsu" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "kitsu login is only supported for the kitsu plugin"})
+	if h.authService == nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin auth service is not configured"})
 	}
 
-	var req kitsuLoginRequest
+	var req pluginAuthActionRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
@@ -414,17 +462,22 @@ func (h *PluginHandler) KitsuLogin(c *fiber.Ctx) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	manifest, err := h.resolveManifest(ctx, c.Params("id"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
+	action, err := resolveAuthAction(manifest, c.Params("action"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
 
-	tokens, err := h.kitsuAuthSvc.PasswordGrant(ctx, req.Username, req.Password)
+	result, err := h.authService.Execute(ctx, action, req.Values)
 	if err != nil {
 		return writePluginError(c, err)
 	}
 
 	status, reactivationRequired, err := h.mutatePluginSecrets(ctx, c.Params("id"), func() (*service.PluginConfigStatus, error) {
-		return h.secretService.SetSecrets(c.Params("id"), map[string]string{
-			"access_token":  tokens.AccessToken,
-			"refresh_token": tokens.RefreshToken,
-		})
+		return h.secretService.SetSecrets(c.Params("id"), manifest, result.Secrets)
 	})
 	if err != nil {
 		return writePluginError(c, err)
@@ -433,32 +486,39 @@ func (h *PluginHandler) KitsuLogin(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"config":                status,
 		"reactivation_required": reactivationRequired,
-		"message":               "kitsu login succeeded; activate the plugin again to apply it",
-		"expires_in":            tokens.ExpiresIn,
-		"token_type":            tokens.TokenType,
+		"message":               "auth action succeeded; activate the plugin again to apply it",
+		"expires_in":            result.Metadata["expires_in"],
+		"token_type":            result.Metadata["token_type"],
 	})
 }
 
-// KitsuLogout removes stored Kitsu tokens without keeping the password.
-// DELETE /api/v1/plugins/:id/kitsu-login
-func (h *PluginHandler) KitsuLogout(c *fiber.Ctx) error {
+// DeleteAuthAction removes secrets stored by a manifest-declared auth action.
+// DELETE /api/v1/plugins/:id/auth/:action
+func (h *PluginHandler) DeleteAuthAction(c *fiber.Ctx) error {
 	if h.secretService == nil {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin secret service is not configured"})
-	}
-	if c.Params("id") != "kumiho-plugin-metadata-kitsu" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "kitsu login is only supported for the kitsu plugin"})
 	}
 
 	ctx := c.UserContext()
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	manifest, err := h.resolveManifest(ctx, c.Params("id"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
+	action, err := resolveAuthAction(manifest, c.Params("action"))
+	if err != nil {
+		return writePluginError(c, err)
+	}
 
 	status, reactivationRequired, err := h.mutatePluginSecrets(ctx, c.Params("id"), func() (*service.PluginConfigStatus, error) {
-		if err := h.secretService.DeleteAllForPlugin(c.Params("id")); err != nil {
-			return nil, err
+		for targetKey := range action.StoreMappings {
+			if _, err := h.secretService.DeleteSecret(c.Params("id"), manifest, targetKey); err != nil {
+				return nil, err
+			}
 		}
-		return h.secretService.Status(c.Params("id"))
+		return h.secretService.Status(c.Params("id"), manifest)
 	})
 	if err != nil {
 		return writePluginError(c, err)
@@ -466,7 +526,7 @@ func (h *PluginHandler) KitsuLogout(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"config":                status,
-		"message":               "kitsu tokens removed",
+		"message":               "stored auth tokens removed",
 		"deleted":               true,
 		"plugin_id":             c.Params("id"),
 		"reactivation_required": reactivationRequired,

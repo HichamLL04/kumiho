@@ -117,7 +117,7 @@
       "update_available": "업데이트 가능 · {{current}} → {{latest}}",
       "api_key": {
         "configure": "API 키",
-        "title": "Google Books API 키",
+        "title": "API 키",
         "desc": "요청 한도를 늘리려면 API 키를 설정해야 합니다.",
         "label": "API 키",
         "placeholder": "AIza...",
@@ -135,6 +135,7 @@
         "configure": "인증 설정",
         "title": "인증 설정",
         "desc": "플러그인에서 사용할 비밀값을 저장합니다.",
+        "auth_modal_desc": "플러그인 인증 작업을 실행하고 필요한 값을 저장합니다.",
         "placeholder": "값 입력",
         "save": "저장",
         "delete": "삭제",
@@ -145,19 +146,6 @@
         "source_hint": "적용 소스: {{source}}",
         "apply_hint": "비밀값을 저장하면 현재 활성 플러그인은 비활성화되며, 다시 활성화할 때 새 설정이 적용됩니다.",
         "flow_hint": "플러그인을 제거하면 저장된 비밀값도 함께 삭제됩니다."
-      },
-      "kitsu_login": {
-        "modal_desc": "플러그인에서 사용하는 토큰을 발급받고 저장합니다.",
-        "desc": "Kitsu 계정으로 로그인해 토큰을 발급받고 저장합니다.\n비밀번호는 저장하지 않습니다.",
-        "apply_hint": "토큰을 저장하면 현재 활성 플러그인은 비활성화되며, 다시 활성화할 때 새 설정이 적용됩니다.",
-        "flow_hint": "플러그인을 제거하면 저장된 토큰도 함께 삭제됩니다.",
-        "username": "이메일 또는 슬러그",
-        "username_placeholder": "kitsu 이메일 또는 사용자명",
-        "password": "비밀번호",
-        "password_placeholder": "Kitsu 비밀번호",
-        "login": "Kitsu 로그인",
-        "relogin": "Kitsu 재로그인",
-        "delete": "토큰 삭제"
       },
       "toast": {
         "load_failed": "플러그인 정보를 불러오지 못했습니다.",
@@ -184,13 +172,13 @@
         "secret_save_failed": "{{field}} 값을 저장하지 못했습니다.",
         "secret_deleted": "저장된 {{field}} 값을 삭제했습니다.",
         "secret_delete_failed": "저장된 {{field}} 값을 삭제하지 못했습니다.",
-        "kitsu_login_required": "Kitsu 이메일(또는 슬러그)과 비밀번호를 입력해 주세요.",
-        "kitsu_login_saved": "Kitsu 토큰을 저장했습니다.",
-        "kitsu_login_saved_reactivate": "Kitsu 토큰을 저장했습니다. 플러그인을 다시 활성화하면 적용됩니다.",
-        "kitsu_login_failed": "Kitsu 로그인에 실패했습니다.",
-        "kitsu_login_deleted": "저장된 Kitsu 토큰을 삭제했습니다.",
-        "kitsu_login_deleted_reactivate": "저장된 Kitsu 토큰을 삭제했습니다. 플러그인을 다시 활성화하면 기본 검색으로 동작합니다.",
-        "kitsu_login_delete_failed": "저장된 Kitsu 토큰을 삭제하지 못했습니다."
+        "auth_required": "{{field}} 값을 입력해 주세요.",
+        "auth_saved": "{{title}} 작업을 완료했습니다.",
+        "auth_saved_reactivate": "{{title}} 작업을 완료했습니다. 플러그인을 다시 활성화하면 적용됩니다.",
+        "auth_failed": "{{title}} 작업에 실패했습니다.",
+        "auth_deleted": "{{title}}으로 저장한 값을 삭제했습니다.",
+        "auth_deleted_reactivate": "{{title}}으로 저장한 값을 삭제했습니다. 플러그인을 다시 활성화하면 기본 설정으로 동작합니다.",
+        "auth_delete_failed": "{{title}}으로 저장한 값 삭제에 실패했습니다."
       }
     },
     "statistics": {

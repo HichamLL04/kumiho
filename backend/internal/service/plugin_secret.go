@@ -14,13 +14,9 @@ import (
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
-)
-
-const (
-	googleBooksPluginID = "kumiho-plugin-metadata-googlebooks"
-	kitsuPluginID       = "kumiho-plugin-metadata-kitsu"
 )
 
 type PluginConfigFieldStatus struct {
@@ -52,8 +48,8 @@ func NewPluginSecretService(cfg *config.Config, repo repository.PluginSecretRepo
 	return &PluginSecretService{cfg: cfg, repo: repo}
 }
 
-func (s *PluginSecretService) Status(pluginID string) (*PluginConfigStatus, error) {
-	specs := configSpecsForPlugin(pluginID)
+func (s *PluginSecretService) Status(pluginID string, manifest sdkmanifest.Manifest) (*PluginConfigStatus, error) {
+	specs := configSpecsForManifest(manifest)
 	fields := make([]PluginConfigFieldStatus, 0, len(specs))
 	for _, spec := range specs {
 		configured, source, masked, err := s.resolveFieldStatus(pluginID, spec)
@@ -76,8 +72,8 @@ func (s *PluginSecretService) Status(pluginID string) (*PluginConfigStatus, erro
 	}, nil
 }
 
-func (s *PluginSecretService) SetSecret(pluginID, fieldKey, value string) (*PluginConfigStatus, error) {
-	spec, ok := findConfigSpec(pluginID, fieldKey)
+func (s *PluginSecretService) SetSecret(pluginID string, manifest sdkmanifest.Manifest, fieldKey, value string) (*PluginConfigStatus, error) {
+	spec, ok := findConfigSpec(manifest, fieldKey)
 	if !ok {
 		return nil, pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "unsupported plugin config field")
 	}
@@ -93,12 +89,12 @@ func (s *PluginSecretService) SetSecret(pluginID, fieldKey, value string) (*Plug
 	if err := s.repo.Upsert(nil, pluginID, spec.FieldKey, encrypted); err != nil {
 		return nil, err
 	}
-	return s.Status(pluginID)
+	return s.Status(pluginID, manifest)
 }
 
-func (s *PluginSecretService) SetSecrets(pluginID string, values map[string]string) (*PluginConfigStatus, error) {
+func (s *PluginSecretService) SetSecrets(pluginID string, manifest sdkmanifest.Manifest, values map[string]string) (*PluginConfigStatus, error) {
 	for fieldKey, value := range values {
-		spec, ok := findConfigSpec(pluginID, fieldKey)
+		spec, ok := findConfigSpec(manifest, fieldKey)
 		if !ok {
 			return nil, pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "unsupported plugin config field")
 		}
@@ -118,17 +114,17 @@ func (s *PluginSecretService) SetSecrets(pluginID string, values map[string]stri
 			return nil, err
 		}
 	}
-	return s.Status(pluginID)
+	return s.Status(pluginID, manifest)
 }
 
-func (s *PluginSecretService) DeleteSecret(pluginID, fieldKey string) (*PluginConfigStatus, error) {
-	if _, ok := findConfigSpec(pluginID, fieldKey); !ok {
+func (s *PluginSecretService) DeleteSecret(pluginID string, manifest sdkmanifest.Manifest, fieldKey string) (*PluginConfigStatus, error) {
+	if _, ok := findConfigSpec(manifest, fieldKey); !ok {
 		return nil, pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "unsupported plugin config field")
 	}
 	if err := s.repo.Delete(nil, pluginID, fieldKey); err != nil {
 		return nil, err
 	}
-	return s.Status(pluginID)
+	return s.Status(pluginID, manifest)
 }
 
 func (s *PluginSecretService) DeleteAllForPlugin(pluginID string) error {
@@ -136,7 +132,7 @@ func (s *PluginSecretService) DeleteAllForPlugin(pluginID string) error {
 }
 
 func (s *PluginSecretService) EnvironmentForPlugin(id string, manifest sdkmanifest.Manifest) (map[string]string, error) {
-	specs := configSpecsForPlugin(id)
+	specs := configSpecsForManifest(manifest)
 	if len(specs) == 0 {
 		return nil, nil
 	}
@@ -168,7 +164,7 @@ func (s *PluginSecretService) EnvironmentForPlugin(id string, manifest sdkmanife
 }
 
 func (s *PluginSecretService) ValidateActivation(id string, manifest sdkmanifest.Manifest) error {
-	for _, spec := range configSpecsForPlugin(id) {
+	for _, spec := range configSpecsForManifest(manifest) {
 		if !spec.Required {
 			continue
 		}
@@ -259,36 +255,27 @@ func (s *PluginSecretService) secretKey() []byte {
 	return sum[:]
 }
 
-func configSpecsForPlugin(pluginID string) []pluginSecretSpec {
-	switch pluginID {
-	case googleBooksPluginID:
-		return []pluginSecretSpec{
-			{
-				FieldKey: "api_key",
-				EnvKey:   "GOOGLE_BOOKS_API_KEY",
-				Required: true,
-			},
-		}
-	case kitsuPluginID:
-		return []pluginSecretSpec{
-			{
-				FieldKey: "access_token",
-				EnvKey:   "KITSU_ACCESS_TOKEN",
-				Required: false,
-			},
-			{
-				FieldKey: "refresh_token",
-				EnvKey:   "KITSU_REFRESH_TOKEN",
-				Required: false,
-			},
-		}
-	default:
+func configSpecsForManifest(manifest sdkmanifest.Manifest) []pluginSecretSpec {
+	if manifest.ConfigSchema == nil {
 		return nil
 	}
+
+	specs := make([]pluginSecretSpec, 0, len(manifest.ConfigSchema.Fields))
+	for _, field := range manifest.ConfigSchema.Fields {
+		if field.Type != sdkconfig.FieldTypeSecret {
+			continue
+		}
+		specs = append(specs, pluginSecretSpec{
+			FieldKey: field.Key,
+			EnvKey:   strings.TrimSpace(field.EnvKey),
+			Required: field.Required,
+		})
+	}
+	return specs
 }
 
-func findConfigSpec(pluginID, fieldKey string) (pluginSecretSpec, bool) {
-	for _, spec := range configSpecsForPlugin(pluginID) {
+func findConfigSpec(manifest sdkmanifest.Manifest, fieldKey string) (pluginSecretSpec, bool) {
+	for _, spec := range configSpecsForManifest(manifest) {
 		if spec.FieldKey == fieldKey {
 			return spec, true
 		}

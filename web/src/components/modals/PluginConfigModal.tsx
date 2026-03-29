@@ -1,6 +1,6 @@
 import { KeyRound, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { PluginConfigStatus, PluginManifest } from "../../types/plugin";
+import type { PluginAuthAction, PluginConfigSchemaField, PluginConfigStatus, PluginLocalizedString, PluginManifest } from "../../types/plugin";
 import styles from "./PluginConfigModal.module.css";
 
 interface PluginConfigModalProps {
@@ -8,14 +8,14 @@ interface PluginConfigModalProps {
   configStatus?: PluginConfigStatus;
   busy: boolean;
   configDrafts: Record<string, string>;
-  kitsuLoginDraft?: { username: string; password: string };
+  authDrafts: Record<string, string>;
   onClose: () => void;
   onConfigDraftChange: (fieldKey: string, value: string) => void;
   onConfigSave: (fieldKey: string) => void;
   onConfigDelete: (fieldKey: string) => void;
-  onKitsuDraftChange: (draft: { username: string; password: string }) => void;
-  onKitsuLogin: () => void;
-  onKitsuLogout: () => void;
+  onAuthDraftChange: (fieldKey: string, value: string) => void;
+  onAuthAction: (actionId: string) => void;
+  onDeleteAuthAction: (actionId: string) => void;
 }
 
 function humanizeConfigField(key: string) {
@@ -34,35 +34,59 @@ function humanizeConfigField(key: string) {
   }
 }
 
+function localizedText(
+  locale: string,
+  bundle?: PluginLocalizedString,
+  fallback?: string,
+) {
+  if (!bundle) return fallback || "";
+  const normalized = locale.toLowerCase();
+  const short = normalized.split("-")[0];
+  return bundle[normalized] || bundle[short] || bundle.en || fallback || "";
+}
+
+function configuredForAction(action: PluginAuthAction | undefined, configStatus?: PluginConfigStatus) {
+  if (!action || !configStatus) return false;
+  const mappedKeys = Object.keys(action.store_mappings || {});
+  if (mappedKeys.length === 0) return false;
+  return mappedKeys.some((key) => configStatus.fields.some((field) => field.key === key && field.configured));
+}
+
+function shouldRenderSecretField(fieldKey: string, action?: PluginAuthAction) {
+  if (!action?.store_mappings) return true;
+  return !(fieldKey in action.store_mappings);
+}
+
 export function PluginConfigModal({
   plugin,
   configStatus,
   busy,
   configDrafts,
-  kitsuLoginDraft,
+  authDrafts,
   onClose,
   onConfigDraftChange,
   onConfigSave,
   onConfigDelete,
-  onKitsuDraftChange,
-  onKitsuLogin,
-  onKitsuLogout,
+  onAuthDraftChange,
+  onAuthAction,
+  onDeleteAuthAction,
 }: PluginConfigModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language || "ko";
   const secretFields = configStatus?.fields.filter((field) => field.type === "secret") || [];
-  const isKitsuPlugin = plugin.id === "kumiho-plugin-metadata-kitsu";
-  const kitsuTokensConfigured = isKitsuPlugin && secretFields.some((field) => field.configured);
-  const modalDescription = isKitsuPlugin
-    ? t("settings.plugins.kitsu_login.modal_desc")
+  const authAction = plugin.auth?.actions?.[0];
+  const actionConfigured = configuredForAction(authAction, configStatus);
+  const visibleSecretFields = secretFields.filter((field) => shouldRenderSecretField(field.key, authAction));
+  const actionTitle = localizedText(locale, authAction?.title_i18n, authAction?.title);
+  const modalDescription = actionTitle
+    ? t("settings.plugins.secret.auth_modal_desc", { title: actionTitle })
     : t("settings.plugins.secret.desc");
   const allConfigured = secretFields.length > 0 && secretFields.every((field) => field.configured);
+  const fieldLabel = (field: PluginConfigSchemaField) => localizedText(locale, field.label_i18n, field.label || humanizeConfigField(field.key));
+  const fieldPlaceholder = (field: PluginConfigSchemaField) => localizedText(locale, field.placeholder_i18n, field.placeholder || localizedText(locale, field.description_i18n, field.description));
 
   return (
-    <div
-      className={styles.overlay}
-      onClick={onClose}
-      role="presentation"
-    >
+    <div className={styles.overlay} onClick={onClose} role="presentation">
       <div
         className={styles.modal}
         role="dialog"
@@ -91,61 +115,52 @@ export function PluginConfigModal({
         </div>
 
         <div className={styles.panel}>
-          {isKitsuPlugin && (
+          {authAction && (
             <div className={styles.notes}>
-              <p>{t("settings.plugins.kitsu_login.desc")}</p>
-              <label className={styles.field}>
-                <span>{t("settings.plugins.kitsu_login.username")}</span>
-                <input
-                  type="text"
-                  autoComplete="username"
-                  value={kitsuLoginDraft?.username || ""}
-                  onChange={(event) => onKitsuDraftChange({
-                    username: event.target.value,
-                    password: kitsuLoginDraft?.password || "",
-                  })}
-                  placeholder={t("settings.plugins.kitsu_login.username_placeholder")}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>{t("settings.plugins.kitsu_login.password")}</span>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={kitsuLoginDraft?.password || ""}
-                  onChange={(event) => onKitsuDraftChange({
-                    username: kitsuLoginDraft?.username || "",
-                    password: event.target.value,
-                  })}
-                  placeholder={t("settings.plugins.kitsu_login.password_placeholder")}
-                />
-              </label>
+              {localizedText(locale, authAction.description_i18n, authAction.description) && (
+                <p>{localizedText(locale, authAction.description_i18n, authAction.description)}</p>
+              )}
+              {authAction.fields.map((field) => (
+                <label key={field.key} className={styles.field}>
+                  <span>{fieldLabel(field)}</span>
+                  <input
+                    type={field.type === "secret" ? "password" : "text"}
+                    autoComplete={field.auto_complete || (field.type === "secret" ? "off" : "on")}
+                    value={authDrafts[field.key] || ""}
+                    onChange={(event) => onAuthDraftChange(field.key, event.target.value)}
+                    placeholder={fieldPlaceholder(field)}
+                  />
+                </label>
+              ))}
               <div className={styles.actions}>
                 <button
                   type="button"
                   className={styles.actionPrimary}
-                  onClick={onKitsuLogin}
+                  onClick={() => onAuthAction(authAction.id)}
                   disabled={busy}
                 >
                   <KeyRound size={14} />
-                  <span>{kitsuTokensConfigured ? t("settings.plugins.kitsu_login.relogin") : t("settings.plugins.kitsu_login.login")}</span>
+                  <span>{actionConfigured
+                    ? (localizedText(locale, authAction.repeat_label_i18n, authAction.repeat_label) || localizedText(locale, authAction.button_label_i18n, authAction.button_label) || t("settings.plugins.secret.save"))
+                    : (localizedText(locale, authAction.button_label_i18n, authAction.button_label) || t("settings.plugins.secret.save"))}
+                  </span>
                 </button>
-                {kitsuTokensConfigured && (
+                {actionConfigured && (
                   <button
                     type="button"
                     className={styles.actionDanger}
-                    onClick={onKitsuLogout}
+                    onClick={() => onDeleteAuthAction(authAction.id)}
                     disabled={busy}
                   >
                     <Trash2 size={14} />
-                    <span>{t("settings.plugins.kitsu_login.delete")}</span>
+                    <span>{localizedText(locale, authAction.delete_label_i18n, authAction.delete_label) || t("settings.plugins.secret.delete")}</span>
                   </button>
                 )}
               </div>
             </div>
           )}
 
-          {!isKitsuPlugin && secretFields.map((field) => (
+          {visibleSecretFields.map((field) => (
             <div key={field.key}>
               {field.configured && (
                 <div className={styles.notes}>
@@ -191,8 +206,8 @@ export function PluginConfigModal({
           ))}
 
           <div className={styles.notes}>
-            <p>{t(isKitsuPlugin ? "settings.plugins.kitsu_login.apply_hint" : "settings.plugins.secret.apply_hint")}</p>
-            <p>{t(isKitsuPlugin ? "settings.plugins.kitsu_login.flow_hint" : "settings.plugins.secret.flow_hint")}</p>
+            <p>{t("settings.plugins.secret.apply_hint")}</p>
+            <p>{t("settings.plugins.secret.flow_hint")}</p>
           </div>
         </div>
       </div>

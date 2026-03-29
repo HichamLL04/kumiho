@@ -117,7 +117,7 @@
       "update_available": "更新あり · {{current}} → {{latest}}",
       "api_key": {
         "configure": "APIキー",
-        "title": "Google Books APIキー",
+        "title": "APIキー",
         "desc": "リクエスト上限を増やすには APIキーの設定が必要です。",
         "label": "APIキー",
         "placeholder": "AIza...",
@@ -135,6 +135,7 @@
         "configure": "認証設定",
         "title": "認証設定",
         "desc": "プラグインで使用する秘密値を保存します。",
+        "auth_modal_desc": "プラグイン認証フローを実行し、必要な値を保存します。",
         "placeholder": "値を入力",
         "save": "保存",
         "delete": "削除",
@@ -145,19 +146,6 @@
         "source_hint": "適用元: {{source}}",
         "apply_hint": "秘密値を保存すると現在有効なプラグインは無効化されます。新しい設定を適用するには再度有効化してください。",
         "flow_hint": "プラグインを削除すると保存済みの秘密値も一緒に削除されます。"
-      },
-      "kitsu_login": {
-        "modal_desc": "このプラグインで使うトークンを発行して保存します。",
-        "desc": "Kitsu アカウントでログインしてトークンを発行・保存します。\nパスワードは保存しません。",
-        "apply_hint": "トークンを保存すると現在有効なプラグインは無効化されます。新しい設定を適用するには再度有効化してください。",
-        "flow_hint": "プラグインを削除すると保存済みのトークンも一緒に削除されます。",
-        "username": "メールアドレスまたはスラッグ",
-        "username_placeholder": "Kitsu のメールアドレスまたはユーザー名",
-        "password": "パスワード",
-        "password_placeholder": "Kitsu のパスワード",
-        "login": "Kitsu にログイン",
-        "relogin": "Kitsu に再ログイン",
-        "delete": "トークン削除"
       },
       "toast": {
         "load_failed": "プラグイン情報の読み込みに失敗しました。",
@@ -184,13 +172,13 @@
         "secret_save_failed": "{{field}} の保存に失敗しました。",
         "secret_deleted": "保存済み {{field}} を削除しました。",
         "secret_delete_failed": "保存済み {{field}} の削除に失敗しました。",
-        "kitsu_login_required": "先に Kitsu のメールアドレス（またはスラッグ）とパスワードを入力してください。",
-        "kitsu_login_saved": "Kitsu トークンを保存しました。",
-        "kitsu_login_saved_reactivate": "Kitsu トークンを保存しました。プラグインを再度有効化すると適用されます。",
-        "kitsu_login_failed": "Kitsu へのログインに失敗しました。",
-        "kitsu_login_deleted": "保存済み Kitsu トークンを削除しました。",
-        "kitsu_login_deleted_reactivate": "保存済み Kitsu トークンを削除しました。再度有効化すると基本検索で動作します。",
-        "kitsu_login_delete_failed": "保存済み Kitsu トークンの削除に失敗しました。"
+        "auth_required": "先に {{field}} を入力してください。",
+        "auth_saved": "{{title}} を完了しました。",
+        "auth_saved_reactivate": "{{title}} を完了しました。プラグインを再度有効化すると適用されます。",
+        "auth_failed": "{{title}} に失敗しました。",
+        "auth_deleted": "{{title}} で保存した値を削除しました。",
+        "auth_deleted_reactivate": "{{title}} で保存した値を削除しました。再度有効化すると既定動作になります。",
+        "auth_delete_failed": "{{title}} で保存した値の削除に失敗しました。"
       }
     },
     "statistics": {

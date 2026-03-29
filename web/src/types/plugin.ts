@@ -10,6 +10,70 @@ export interface PluginIcons {
   png?: string;
 }
 
+export type PluginLocalizedString = Record<string, string>;
+
+export interface PluginConfigSchemaField {
+  key: string;
+  type: string;
+  label: string;
+  label_i18n?: PluginLocalizedString;
+  description?: string;
+  description_i18n?: PluginLocalizedString;
+  required?: boolean;
+  default?: unknown;
+  env_key?: string;
+  placeholder?: string;
+  placeholder_i18n?: PluginLocalizedString;
+  auto_complete?: string;
+  options?: string[];
+}
+
+export interface PluginConfigSchema {
+  version: string;
+  fields: PluginConfigSchemaField[];
+}
+
+export interface PluginAuthAction {
+  id: string;
+  type: string;
+  title: string;
+  title_i18n?: PluginLocalizedString;
+  description?: string;
+  description_i18n?: PluginLocalizedString;
+  button_label?: string;
+  button_label_i18n?: PluginLocalizedString;
+  repeat_label?: string;
+  repeat_label_i18n?: PluginLocalizedString;
+  delete_label?: string;
+  delete_label_i18n?: PluginLocalizedString;
+  fields: PluginConfigSchemaField[];
+  endpoint?: string;
+  params?: Record<string, string>;
+  store_mappings?: Record<string, string>;
+  required_message?: string;
+  required_message_i18n?: PluginLocalizedString;
+  success_message?: string;
+  success_message_i18n?: PluginLocalizedString;
+  success_reactivate_message?: string;
+  success_reactivate_message_i18n?: PluginLocalizedString;
+  error_message?: string;
+  error_message_i18n?: PluginLocalizedString;
+  error_messages?: Record<string, string>;
+  error_messages_i18n?: Record<string, PluginLocalizedString>;
+  delete_message?: string;
+  delete_message_i18n?: PluginLocalizedString;
+  delete_reactivate_message?: string;
+  delete_reactivate_message_i18n?: PluginLocalizedString;
+  delete_error_message?: string;
+  delete_error_message_i18n?: PluginLocalizedString;
+  delete_error_messages?: Record<string, string>;
+  delete_error_messages_i18n?: Record<string, PluginLocalizedString>;
+}
+
+export interface PluginAuthSchema {
+  actions?: PluginAuthAction[];
+}
+
 export interface PluginManifest {
   id: string;
   name: string;
@@ -29,6 +93,8 @@ export interface PluginManifest {
   max_core_version?: string;
   sdk_version?: string;
   config_schema_version?: string;
+  config_schema?: PluginConfigSchema;
+  auth?: PluginAuthSchema;
   artifacts?: PluginArtifact[] | null;
 }
 
@@ -62,12 +128,12 @@ export interface PluginConfigUpdateResponse {
   message: string;
 }
 
-export interface PluginKitsuLoginResponse extends PluginConfigUpdateResponse {
+export interface PluginAuthActionResponse extends PluginConfigUpdateResponse {
   expires_in?: number;
   token_type?: string;
 }
 
-export interface PluginKitsuLogoutResponse {
+export interface PluginAuthDeleteResponse {
   config: PluginConfigStatus;
   message: string;
   deleted: boolean;

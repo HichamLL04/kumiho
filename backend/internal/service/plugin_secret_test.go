@@ -7,20 +7,24 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
+	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
+
+const kitsuPluginID = "kumiho-plugin-metadata-kitsu"
 
 func TestPluginSecretServiceStoresEncryptedSecretAndBuildsEnv(t *testing.T) {
 	repo := newFakePluginSecretRepo()
 	cfg := &config.Config{JWTSecret: "test-secret"}
 	svc := NewPluginSecretService(cfg, repo)
 
-	status, err := svc.SetSecret(googleBooksPluginID, "api_key", "abc123456")
+	manifest := kitsuSecretManifest()
+	status, err := svc.SetSecret(kitsuPluginID, manifest, "access_token", "abc123456")
 	if err != nil {
 		t.Fatalf("SetSecret() error = %v", err)
 	}
 
-	if len(status.Fields) != 1 || !status.Fields[0].Configured {
+	if len(status.Fields) != 2 || !status.Fields[0].Configured || status.Fields[1].Configured {
 		t.Fatalf("configured = %#v, want configured field", status.Fields)
 	}
 	if status.Fields[0].Source != "secret" {
@@ -30,11 +34,11 @@ func TestPluginSecretServiceStoresEncryptedSecretAndBuildsEnv(t *testing.T) {
 		t.Fatal("MaskedHint = empty")
 	}
 
-	env, err := svc.EnvironmentForPlugin(googleBooksPluginID, sdkmanifest.Manifest{ID: googleBooksPluginID})
+	env, err := svc.EnvironmentForPlugin(kitsuPluginID, manifest)
 	if err != nil {
 		t.Fatalf("EnvironmentForPlugin() error = %v", err)
 	}
-	if got := env["GOOGLE_BOOKS_API_KEY"]; got != "abc123456" {
+	if got := env["KITSU_ACCESS_TOKEN"]; got != "abc123456" {
 		t.Fatalf("env value = %q, want %q", got, "abc123456")
 	}
 }
@@ -43,25 +47,26 @@ func TestPluginSecretServiceFallsBackToProcessEnv(t *testing.T) {
 	repo := newFakePluginSecretRepo()
 	cfg := &config.Config{JWTSecret: "test-secret"}
 	svc := NewPluginSecretService(cfg, repo)
+	manifest := kitsuSecretManifest()
 
-	t.Setenv("GOOGLE_BOOKS_API_KEY", "env-secret")
+	t.Setenv("KITSU_ACCESS_TOKEN", "env-secret")
 
-	status, err := svc.Status(googleBooksPluginID)
+	status, err := svc.Status(kitsuPluginID, manifest)
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
-	if len(status.Fields) != 1 || !status.Fields[0].Configured {
+	if len(status.Fields) != 2 || !status.Fields[0].Configured || status.Fields[1].Configured {
 		t.Fatalf("configured = %#v, want env-configured field", status.Fields)
 	}
 	if status.Fields[0].Source != "environment" {
 		t.Fatalf("source = %q, want %q", status.Fields[0].Source, "environment")
 	}
 
-	env, err := svc.EnvironmentForPlugin(googleBooksPluginID, sdkmanifest.Manifest{ID: googleBooksPluginID})
+	env, err := svc.EnvironmentForPlugin(kitsuPluginID, manifest)
 	if err != nil {
 		t.Fatalf("EnvironmentForPlugin() error = %v", err)
 	}
-	if got := env["GOOGLE_BOOKS_API_KEY"]; got != "env-secret" {
+	if got := env["KITSU_ACCESS_TOKEN"]; got != "env-secret" {
 		t.Fatalf("env value = %q, want %q", got, "env-secret")
 	}
 }
@@ -70,19 +75,20 @@ func TestPluginSecretServiceDeleteSecret(t *testing.T) {
 	repo := newFakePluginSecretRepo()
 	cfg := &config.Config{JWTSecret: "test-secret"}
 	svc := NewPluginSecretService(cfg, repo)
+	manifest := kitsuSecretManifest()
 
-	if _, err := svc.SetSecret(googleBooksPluginID, "api_key", "abc123456"); err != nil {
+	if _, err := svc.SetSecret(kitsuPluginID, manifest, "access_token", "abc123456"); err != nil {
 		t.Fatalf("SetSecret() error = %v", err)
 	}
-	if _, err := svc.DeleteSecret(googleBooksPluginID, "api_key"); err != nil {
+	if _, err := svc.DeleteSecret(kitsuPluginID, manifest, "access_token"); err != nil {
 		t.Fatalf("DeleteSecret() error = %v", err)
 	}
 
-	env, err := svc.EnvironmentForPlugin(googleBooksPluginID, sdkmanifest.Manifest{ID: googleBooksPluginID})
+	env, err := svc.EnvironmentForPlugin(kitsuPluginID, manifest)
 	if err != nil {
 		t.Fatalf("EnvironmentForPlugin() error = %v", err)
 	}
-	if _, ok := env["GOOGLE_BOOKS_API_KEY"]; ok {
+	if _, ok := env["KITSU_ACCESS_TOKEN"]; ok {
 		t.Fatal("env should be empty after delete")
 	}
 }
@@ -93,6 +99,19 @@ func TestMaskSecret(t *testing.T) {
 	}
 	if got := maskSecret("abc"); got != "••••" {
 		t.Fatalf("maskSecret short = %q", got)
+	}
+}
+
+func kitsuSecretManifest() sdkmanifest.Manifest {
+	return sdkmanifest.Manifest{
+		ID: kitsuPluginID,
+		ConfigSchema: &sdkconfig.Schema{
+			Version: "1",
+			Fields: []sdkconfig.ConfigField{
+				{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN", Required: false},
+				{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN", Required: false},
+			},
+		},
 	}
 }
 

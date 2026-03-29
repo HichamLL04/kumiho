@@ -19,6 +19,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
@@ -35,8 +36,8 @@ func TestPluginInstallServiceInstall(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
 				Plugins: []sdkmanifest.Manifest{
 					{
-						ID:                 "plugin-googlebooks",
-						Name:               "Google Books",
+						ID:                 "plugin-sample",
+						Name:               "Sample Plugin",
 						Version:            "0.1.0",
 						RuntimeType:        sdkmanifest.RuntimeTypeBinary,
 						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
@@ -63,11 +64,11 @@ func TestPluginInstallServiceInstall(t *testing.T) {
 	manager := pluginengine.NewManager(pluginengine.NewMemoryStore())
 	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
 
-	result, err := svc.Install(context.Background(), "plugin-googlebooks")
+	result, err := svc.Install(context.Background(), "plugin-sample")
 	if err != nil {
 		t.Fatalf("Install() error = %v", err)
 	}
-	if result.Record.ID != "plugin-googlebooks" {
+	if result.Record.ID != "plugin-sample" {
 		t.Fatalf("record id = %q", result.Record.ID)
 	}
 	if result.InstallPath == "" {
@@ -90,8 +91,8 @@ func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
 				Plugins: []sdkmanifest.Manifest{
 					{
-						ID:                 "plugin-googlebooks-service",
-						Name:               "Google Books",
+						ID:                 "plugin-sample-service",
+						Name:               "Sample Service Plugin",
 						Version:            "0.1.0",
 						RuntimeType:        sdkmanifest.RuntimeTypeService,
 						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxDocker},
@@ -118,7 +119,7 @@ func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
 	manager := pluginengine.NewManager(pluginengine.NewMemoryStore())
 	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
 
-	result, err := svc.Install(context.Background(), "plugin-googlebooks-service")
+	result, err := svc.Install(context.Background(), "plugin-sample-service")
 	if err != nil {
 		t.Fatalf("Install() error = %v", err)
 	}
@@ -141,8 +142,8 @@ func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
 				Plugins: []sdkmanifest.Manifest{
 					{
-						ID:                 "plugin-googlebooks",
-						Name:               "Google Books",
+						ID:                 "plugin-sample",
+						Name:               "Sample Plugin",
 						Version:            "0.1.0",
 						RuntimeType:        sdkmanifest.RuntimeTypeBinary,
 						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
@@ -168,7 +169,7 @@ func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
 	}
 	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
 
-	_, err := svc.Install(context.Background(), "plugin-googlebooks")
+	_, err := svc.Install(context.Background(), "plugin-sample")
 	if err == nil {
 		t.Fatal("Install() error = nil")
 	}
@@ -192,18 +193,18 @@ func TestPluginInstallServiceUninstallRemovesArtifactAndRecord(t *testing.T) {
 	manager := pluginengine.NewManager(store)
 	svc := NewPluginInstallService(cfg, nil, manager, nil)
 
-	installDir := filepath.Join(cfg.PluginDir, "plugin-googlebooks", "0.1.0")
+	installDir := filepath.Join(cfg.PluginDir, "plugin-sample", "0.1.0")
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	installPath := filepath.Join(installDir, "plugin-googlebooks")
+	installPath := filepath.Join(installDir, "plugin-sample")
 	if err := os.WriteFile(installPath, []byte("plugin"), 0o755); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
 	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
-		ID:          "plugin-googlebooks",
-		Name:        "Google Books",
+		ID:          "plugin-sample",
+		Name:        "Sample Plugin",
 		Version:     "0.1.0",
 		RuntimeType: sdkmanifest.RuntimeTypeBinary,
 	}, installPath)
@@ -214,7 +215,7 @@ func TestPluginInstallServiceUninstallRemovesArtifactAndRecord(t *testing.T) {
 		t.Fatalf("MarkRegistered() error = %v", err)
 	}
 
-	result, err := svc.Uninstall(context.Background(), "plugin-googlebooks")
+	result, err := svc.Uninstall(context.Background(), "plugin-sample")
 	if err != nil {
 		t.Fatalf("Uninstall() error = %v", err)
 	}
@@ -224,7 +225,7 @@ func TestPluginInstallServiceUninstallRemovesArtifactAndRecord(t *testing.T) {
 	if _, err := os.Stat(installPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("artifact stat error = %v, want not exist", err)
 	}
-	if _, ok, err := manager.Get("plugin-googlebooks"); err != nil {
+	if _, ok, err := manager.Get("plugin-sample"); err != nil {
 		t.Fatalf("Get() error = %v", err)
 	} else if ok {
 		t.Fatal("record should be deleted")
@@ -244,8 +245,8 @@ func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
 				Plugins: []sdkmanifest.Manifest{
 					{
-						ID:                 "plugin-googlebooks",
-						Name:               "Google Books",
+						ID:                 "plugin-sample",
+						Name:               "Sample Plugin",
 						Version:            "0.1.1",
 						RuntimeType:        sdkmanifest.RuntimeTypeBinary,
 						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
@@ -273,19 +274,19 @@ func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing
 	manager := pluginengine.NewManager(store)
 	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
 
-	oldInstallDir := filepath.Join(cfg.PluginDir, "plugin-googlebooks", "0.1.0")
+	oldInstallDir := filepath.Join(cfg.PluginDir, "plugin-sample", "0.1.0")
 	if err := os.MkdirAll(oldInstallDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	oldInstallPath := filepath.Join(oldInstallDir, "plugin-googlebooks")
+	oldInstallPath := filepath.Join(oldInstallDir, "plugin-sample")
 	if err := os.WriteFile(oldInstallPath, oldBytes, 0o755); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
 	now := time.Now()
 	if err := store.Save(pluginengine.Record{
-		ID:          "plugin-googlebooks",
-		Manifest:    sdkmanifest.Manifest{ID: "plugin-googlebooks", Name: "Google Books", Version: "0.1.0", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		ID:          "plugin-sample",
+		Manifest:    sdkmanifest.Manifest{ID: "plugin-sample", Name: "Sample Plugin", Version: "0.1.0", RuntimeType: sdkmanifest.RuntimeTypeBinary},
 		State:       "disabled",
 		InstallPath: oldInstallPath,
 		CreatedAt:   now,
@@ -294,7 +295,7 @@ func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	result, err := svc.Install(context.Background(), "plugin-googlebooks")
+	result, err := svc.Install(context.Background(), "plugin-sample")
 	if err != nil {
 		t.Fatalf("Install() error = %v", err)
 	}
@@ -326,10 +327,17 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
 				Plugins: []sdkmanifest.Manifest{
 					{
-						ID:                 googleBooksPluginID,
-						Name:               "Google Books",
-						Version:            "0.1.1",
-						RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+						ID:          kitsuPluginID,
+						Name:        "Kitsu Manga",
+						Version:     "0.1.1",
+						RuntimeType: sdkmanifest.RuntimeTypeBinary,
+						ConfigSchema: &sdkconfig.Schema{
+							Version: "1",
+							Fields: []sdkconfig.ConfigField{
+								{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+								{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+							},
+						},
 						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
 						MinCoreVersion:     "0.1.0",
 						Artifacts: []sdkmanifest.Artifact{
@@ -358,19 +366,31 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 	secretSvc := NewPluginSecretService(cfg, secretRepo)
 	svc := NewPluginInstallService(cfg, server.Client(), manager, secretSvc)
 
-	oldInstallDir := filepath.Join(cfg.PluginDir, googleBooksPluginID, "0.1.0")
+	oldInstallDir := filepath.Join(cfg.PluginDir, kitsuPluginID, "0.1.0")
 	if err := os.MkdirAll(oldInstallDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	oldInstallPath := filepath.Join(oldInstallDir, googleBooksPluginID)
+	oldInstallPath := filepath.Join(oldInstallDir, kitsuPluginID)
 	if err := os.WriteFile(oldInstallPath, []byte("old plugin"), 0o755); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
 	now := time.Now()
 	if err := store.Save(pluginengine.Record{
-		ID:          googleBooksPluginID,
-		Manifest:    sdkmanifest.Manifest{ID: googleBooksPluginID, Name: "Google Books", Version: "0.1.0", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		ID: kitsuPluginID,
+		Manifest: sdkmanifest.Manifest{
+			ID:          kitsuPluginID,
+			Name:        "Kitsu Manga",
+			Version:     "0.1.0",
+			RuntimeType: sdkmanifest.RuntimeTypeBinary,
+			ConfigSchema: &sdkconfig.Schema{
+				Version: "1",
+				Fields: []sdkconfig.ConfigField{
+					{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+					{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+				},
+			},
+		},
 		State:       "disabled",
 		InstallPath: oldInstallPath,
 		CreatedAt:   now,
@@ -379,19 +399,37 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	if _, err := secretSvc.SetSecret(googleBooksPluginID, "api_key", "AIza-test-key"); err != nil {
+	if _, err := secretSvc.SetSecret(kitsuPluginID, sdkmanifest.Manifest{
+		ID: kitsuPluginID,
+		ConfigSchema: &sdkconfig.Schema{
+			Version: "1",
+			Fields: []sdkconfig.ConfigField{
+				{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+				{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+			},
+		},
+	}, "access_token", "test-access-token"); err != nil {
 		t.Fatalf("SetSecret() error = %v", err)
 	}
 
-	if _, err := svc.Install(context.Background(), googleBooksPluginID); err != nil {
+	if _, err := svc.Install(context.Background(), kitsuPluginID); err != nil {
 		t.Fatalf("Install() error = %v", err)
 	}
 
-	status, err := secretSvc.Status(googleBooksPluginID)
+	status, err := secretSvc.Status(kitsuPluginID, sdkmanifest.Manifest{
+		ID: kitsuPluginID,
+		ConfigSchema: &sdkconfig.Schema{
+			Version: "1",
+			Fields: []sdkconfig.ConfigField{
+				{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+				{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+			},
+		},
+	})
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
-	if len(status.Fields) != 1 || !status.Fields[0].Configured {
+	if len(status.Fields) != 2 || !status.Fields[0].Configured {
 		t.Fatalf("secret status = %+v, want configured", status.Fields)
 	}
 }

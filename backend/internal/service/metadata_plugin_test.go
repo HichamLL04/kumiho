@@ -30,7 +30,7 @@ func TestMetadataServiceSearchSeriesAggregatesCandidates(t *testing.T) {
 		searchResp: &sdktypes.SearchResponse{
 			Candidates: []sdktypes.SearchCandidate{
 				{
-					Source:     sdktypes.SourceRef{ID: "gb-1", Name: "googlebooks"},
+					Source:     sdktypes.SourceRef{ID: "src-1", Name: "sample"},
 					Title:      "Example Book",
 					Score:      0.95,
 					Confidence: 0.9,
@@ -48,7 +48,7 @@ func TestMetadataServiceSearchSeriesAggregatesCandidates(t *testing.T) {
 	if len(result.Candidates) != 1 {
 		t.Fatalf("candidates len = %d, want 1", len(result.Candidates))
 	}
-	if result.Candidates[0].PluginID != "plugin-googlebooks" {
+	if result.Candidates[0].PluginID != "plugin-sample" {
 		t.Fatalf("plugin_id = %q", result.Candidates[0].PluginID)
 	}
 	if result.Query.LocalTitle == "" {
@@ -64,9 +64,9 @@ func TestMetadataServiceSearchSeriesPrefersLowerVolumeWhenConfidenceMatches(t *t
 	rt := &metadataRuntime{
 		searchResp: &sdktypes.SearchResponse{
 			Candidates: []sdktypes.SearchCandidate{
-				{Source: sdktypes.SourceRef{ID: "gb-17", Name: "googlebooks"}, Title: "666 사탄 17", Score: 0.95, Confidence: 0.63},
-				{Source: sdktypes.SourceRef{ID: "gb-1", Name: "googlebooks"}, Title: "666 사탄 1", Score: 0.95, Confidence: 0.63},
-				{Source: sdktypes.SourceRef{ID: "gb-3", Name: "googlebooks"}, Title: "666 사탄 3", Score: 0.95, Confidence: 0.63},
+				{Source: sdktypes.SourceRef{ID: "src-17", Name: "sample"}, Title: "666 사탄 17", Score: 0.95, Confidence: 0.63},
+				{Source: sdktypes.SourceRef{ID: "src-1", Name: "sample"}, Title: "666 사탄 1", Score: 0.95, Confidence: 0.63},
+				{Source: sdktypes.SourceRef{ID: "src-3", Name: "sample"}, Title: "666 사탄 3", Score: 0.95, Confidence: 0.63},
 			},
 		},
 	}
@@ -100,7 +100,7 @@ func TestMetadataServiceSearchSeriesUsesOverrideTitle(t *testing.T) {
 	rt := &metadataRuntime{
 		searchResp: &sdktypes.SearchResponse{
 			Candidates: []sdktypes.SearchCandidate{
-				{Source: sdktypes.SourceRef{ID: "gb-1", Name: "googlebooks"}, Title: "Override Book", Score: 0.95, Confidence: 0.9},
+				{Source: sdktypes.SourceRef{ID: "src-1", Name: "sample"}, Title: "Override Book", Score: 0.95, Confidence: 0.9},
 			},
 		},
 	}
@@ -375,11 +375,11 @@ func newActiveMetadataManager(t *testing.T, rt *metadataRuntime) *pluginengine.M
 
 	manager := pluginengine.NewManager(pluginengine.NewMemoryStore(), rt)
 	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
-		ID:           "plugin-googlebooks",
-		Name:         "Google Books",
+		ID:           "plugin-sample",
+		Name:         "Sample Plugin",
 		RuntimeType:  sdkmanifest.RuntimeTypeBinary,
 		Capabilities: []capability.Capability{capability.MetadataSearch, capability.MetadataFetch},
-	}, "/plugins/googlebooks")
+	}, "/plugins/sample")
 	if err != nil {
 		t.Fatalf("RegisterInstalled() error = %v", err)
 	}

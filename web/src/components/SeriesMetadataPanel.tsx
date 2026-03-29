@@ -34,29 +34,13 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
       grouped.set(item.plugin_id, items);
     }
 
-    const preferredOrder = [
-      "kumiho-plugin-metadata-googlebooks",
-      "kumiho-plugin-metadata-kitsu",
-    ];
-    const ordered = preferredOrder
-      .filter((pluginId) => grouped.has(pluginId))
-      .map((pluginId) => ({
-        pluginId,
-        pluginName: grouped.get(pluginId)?.[0]?.plugin_name || pluginId,
-        items: grouped.get(pluginId) || [],
-      }));
-
-    for (const [pluginId, items] of grouped.entries()) {
-      if (preferredOrder.includes(pluginId)) {
-        continue;
-      }
-      ordered.push({
+    return Array.from(grouped.entries())
+      .map(([pluginId, items]) => ({
         pluginId,
         pluginName: items[0]?.plugin_name || pluginId,
         items,
-      });
-    }
-    return ordered;
+      }))
+      .sort((left, right) => left.pluginName.localeCompare(right.pluginName));
   }, [searchResult]);
 
   const handleSearch = async () => {

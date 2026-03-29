@@ -17,11 +17,11 @@ import type {
   MetadataResult,
   MetadataSearchRequest,
   MetadataSearchResult,
+  PluginAuthActionResponse,
+  PluginAuthDeleteResponse,
   PluginCatalogResponse,
   PluginConfigStatus,
   PluginConfigUpdateResponse,
-  PluginKitsuLoginResponse,
-  PluginKitsuLogoutResponse,
   PluginInstallResponse,
   PluginRecord,
   PluginUninstallResponse,
@@ -449,10 +449,10 @@ export const pluginAPI = {
   getConfig: (pluginId: string) => api.get<PluginConfigStatus>(`/plugins/${pluginId}/config`).then((res) => res.data),
   updateConfig: (pluginId: string, field: string, value: string) =>
     api.put<PluginConfigUpdateResponse>(`/plugins/${pluginId}/config`, { field, value }).then((res) => res.data),
-  kitsuLogin: (pluginId: string, username: string, password: string) =>
-    api.post<PluginKitsuLoginResponse>(`/plugins/${pluginId}/kitsu-login`, { username, password }).then((res) => res.data),
-  kitsuLogout: (pluginId: string) =>
-    api.delete<PluginKitsuLogoutResponse>(`/plugins/${pluginId}/kitsu-login`).then((res) => res.data),
+  runAuthAction: (pluginId: string, actionId: string, values: Record<string, string>) =>
+    api.post<PluginAuthActionResponse>(`/plugins/${pluginId}/auth/${actionId}`, { values }).then((res) => res.data),
+  deleteAuthAction: (pluginId: string, actionId: string) =>
+    api.delete<PluginAuthDeleteResponse>(`/plugins/${pluginId}/auth/${actionId}`).then((res) => res.data),
   deleteConfig: (pluginId: string, field: string) =>
     api.delete<{ config: PluginConfigStatus }>(`/plugins/${pluginId}/config/${field}`).then((res) => res.data),
   activate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/activate`).then((res) => res.data),

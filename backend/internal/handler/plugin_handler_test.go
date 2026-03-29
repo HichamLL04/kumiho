@@ -17,6 +17,7 @@ import (
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
+	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/healthcheck"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
@@ -27,11 +28,12 @@ func TestUpdateConfigReactivatesPluginWhenSecretMutationFails(t *testing.T) {
 	store := pluginengine.NewMemoryStore()
 	now := time.Now()
 	record := pluginengine.Record{
-		ID: "kumiho-plugin-metadata-googlebooks",
+		ID: "kumiho-plugin-metadata-kitsu",
 		Manifest: sdkmanifest.Manifest{
-			ID:          "kumiho-plugin-metadata-googlebooks",
-			Name:        "Google Books",
-			RuntimeType: sdkmanifest.RuntimeTypeBinary,
+			ID:           "kumiho-plugin-metadata-kitsu",
+			Name:         "Kitsu Manga",
+			RuntimeType:  sdkmanifest.RuntimeTypeBinary,
+			ConfigSchema: testKitsuConfigSchema(),
 		},
 		State:     sdkstate.Active,
 		CreatedAt: now,
@@ -49,7 +51,7 @@ func TestUpdateConfigReactivatesPluginWhenSecretMutationFails(t *testing.T) {
 	}
 	secretSvc := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret"}, repo)
 	manager.SetEnvProvider(secretSvc)
-	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-googlebooks", "api_key", "existing-key"); err != nil {
+	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-kitsu", record.Manifest, "access_token", "existing-token"); err != nil {
 		t.Fatalf("SetSecret() error = %v", err)
 	}
 	repo.upsertErr = errors.New("upsert failed")
@@ -59,10 +61,10 @@ func TestUpdateConfigReactivatesPluginWhenSecretMutationFails(t *testing.T) {
 	app.Put("/plugins/:id/config", handler.UpdateConfig)
 
 	body, _ := json.Marshal(map[string]string{
-		"field": "api_key",
-		"value": "next-key",
+		"field": "access_token",
+		"value": "next-token",
 	})
-	req := httptest.NewRequest(fiber.MethodPut, "/plugins/kumiho-plugin-metadata-googlebooks/config", bytes.NewReader(body))
+	req := httptest.NewRequest(fiber.MethodPut, "/plugins/kumiho-plugin-metadata-kitsu/config", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -73,7 +75,7 @@ func TestUpdateConfigReactivatesPluginWhenSecretMutationFails(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusInternalServerError)
 	}
 
-	updated, ok, err := manager.Get("kumiho-plugin-metadata-googlebooks")
+	updated, ok, err := manager.Get("kumiho-plugin-metadata-kitsu")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -95,11 +97,12 @@ func TestDeleteConfigReturnsReactivationRequiredForActivePlugin(t *testing.T) {
 	store := pluginengine.NewMemoryStore()
 	now := time.Now()
 	record := pluginengine.Record{
-		ID: "kumiho-plugin-metadata-googlebooks",
+		ID: "kumiho-plugin-metadata-kitsu",
 		Manifest: sdkmanifest.Manifest{
-			ID:          "kumiho-plugin-metadata-googlebooks",
-			Name:        "Google Books",
-			RuntimeType: sdkmanifest.RuntimeTypeBinary,
+			ID:           "kumiho-plugin-metadata-kitsu",
+			Name:         "Kitsu Manga",
+			RuntimeType:  sdkmanifest.RuntimeTypeBinary,
+			ConfigSchema: testKitsuConfigSchema(),
 		},
 		State:     sdkstate.Active,
 		CreatedAt: now,
@@ -117,7 +120,7 @@ func TestDeleteConfigReturnsReactivationRequiredForActivePlugin(t *testing.T) {
 	}
 	secretSvc := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret"}, repo)
 	manager.SetEnvProvider(secretSvc)
-	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-googlebooks", "api_key", "existing-key"); err != nil {
+	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-kitsu", record.Manifest, "access_token", "existing-token"); err != nil {
 		t.Fatalf("SetSecret() error = %v", err)
 	}
 
@@ -125,7 +128,7 @@ func TestDeleteConfigReturnsReactivationRequiredForActivePlugin(t *testing.T) {
 	app := fiber.New()
 	app.Delete("/plugins/:id/config/:field", handler.DeleteConfig)
 
-	req := httptest.NewRequest(fiber.MethodDelete, "/plugins/kumiho-plugin-metadata-googlebooks/config/api_key", nil)
+	req := httptest.NewRequest(fiber.MethodDelete, "/plugins/kumiho-plugin-metadata-kitsu/config/access_token", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -145,7 +148,7 @@ func TestDeleteConfigReturnsReactivationRequiredForActivePlugin(t *testing.T) {
 		t.Fatal("reactivation_required = false, want true")
 	}
 
-	updated, ok, err := manager.Get("kumiho-plugin-metadata-googlebooks")
+	updated, ok, err := manager.Get("kumiho-plugin-metadata-kitsu")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -190,6 +193,16 @@ func (r *handlerTestRuntime) Search(context.Context, pluginruntime.Instance, *sd
 
 func (r *handlerTestRuntime) Fetch(context.Context, pluginruntime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
 	return nil, nil
+}
+
+func testKitsuConfigSchema() *sdkconfig.Schema {
+	return &sdkconfig.Schema{
+		Version: "1",
+		Fields: []sdkconfig.ConfigField{
+			{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+			{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+		},
+	}
 }
 
 type handlerTestSecretRepo struct {

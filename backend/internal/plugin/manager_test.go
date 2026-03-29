@@ -248,7 +248,7 @@ func TestManagerActivateInjectsPluginEnvironment(t *testing.T) {
 	rt := &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
 	manager := NewManager(store, rt)
 	manager.SetEnvProvider(fakeEnvProvider{
-		env: map[string]string{"GOOGLE_BOOKS_API_KEY": "secret-value"},
+		env: map[string]string{"KITSU_ACCESS_TOKEN": "secret-value"},
 	})
 
 	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
@@ -265,7 +265,7 @@ func TestManagerActivateInjectsPluginEnvironment(t *testing.T) {
 		t.Fatalf("Activate() error = %v", err)
 	}
 
-	if got := rt.lastInst.Env["GOOGLE_BOOKS_API_KEY"]; got != "secret-value" {
+	if got := rt.lastInst.Env["KITSU_ACCESS_TOKEN"]; got != "secret-value" {
 		t.Fatalf("injected env = %q, want %q", got, "secret-value")
 	}
 }

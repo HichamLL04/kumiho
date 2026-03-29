@@ -117,7 +117,7 @@
       "update_available": "Update available · {{current}} → {{latest}}",
       "api_key": {
         "configure": "API Key",
-        "title": "Google Books API Key",
+        "title": "API Key",
         "desc": "Set an API key to increase request limits.",
         "label": "API Key",
         "placeholder": "AIza...",
@@ -135,6 +135,7 @@
         "configure": "Credentials",
         "title": "Credentials",
         "desc": "Store secret values used by the plugin.",
+        "auth_modal_desc": "Run the plugin auth flow and store the required values.",
         "placeholder": "Enter value",
         "save": "Save",
         "delete": "Delete",
@@ -145,19 +146,6 @@
         "source_hint": "Applied from: {{source}}",
         "apply_hint": "Saving a secret deactivates the currently running plugin. Activate it again to apply the new setting.",
         "flow_hint": "Removing the plugin also removes the stored secrets."
-      },
-      "kitsu_login": {
-        "modal_desc": "Issue and store the tokens used by this plugin.",
-        "desc": "Log in with a Kitsu account to issue and store tokens.\nThe password is not stored.",
-        "apply_hint": "Saving tokens deactivates the currently running plugin. Activate it again to apply the new setting.",
-        "flow_hint": "Removing the plugin also removes the stored tokens.",
-        "username": "Email or slug",
-        "username_placeholder": "Kitsu email or username",
-        "password": "Password",
-        "password_placeholder": "Kitsu password",
-        "login": "Log in to Kitsu",
-        "relogin": "Re-login to Kitsu",
-        "delete": "Remove Tokens"
       },
       "toast": {
         "load_failed": "Failed to load plugin information.",
@@ -184,13 +172,13 @@
         "secret_save_failed": "Failed to save {{field}}.",
         "secret_deleted": "Stored {{field}} removed.",
         "secret_delete_failed": "Failed to remove the stored {{field}}.",
-        "kitsu_login_required": "Enter your Kitsu email (or slug) and password first.",
-        "kitsu_login_saved": "Kitsu tokens saved.",
-        "kitsu_login_saved_reactivate": "Kitsu tokens saved. Activate the plugin again to apply them.",
-        "kitsu_login_failed": "Failed to log in to Kitsu.",
-        "kitsu_login_deleted": "Stored Kitsu tokens removed.",
-        "kitsu_login_deleted_reactivate": "Stored Kitsu tokens removed. Activate the plugin again to use public search.",
-        "kitsu_login_delete_failed": "Failed to remove the stored Kitsu tokens."
+        "auth_required": "Enter {{field}} first.",
+        "auth_saved": "{{title}} completed.",
+        "auth_saved_reactivate": "{{title}} completed. Activate the plugin again to apply it.",
+        "auth_failed": "{{title}} failed.",
+        "auth_deleted": "Values stored by {{title}} removed.",
+        "auth_deleted_reactivate": "Values stored by {{title}} removed. Activate the plugin again to use the default behavior.",
+        "auth_delete_failed": "Failed to remove values stored by {{title}}."
       }
     },
     "statistics": {

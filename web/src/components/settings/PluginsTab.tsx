@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Blocks, Download, HeartPulse, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { pluginAPI } from "../../api/client";
-import type { PluginConfigStatus, PluginManifest, PluginRecord, PluginUpdateSummary } from "../../types/plugin";
+import type { PluginAuthAction, PluginConfigStatus, PluginLocalizedString, PluginManifest, PluginRecord, PluginUpdateSummary } from "../../types/plugin";
 import { PluginConfigModal } from "../modals/PluginConfigModal";
 import { UpdateBadge } from "../common/UpdateBadge";
 import { Toast } from "../common/Toast";
@@ -60,8 +60,29 @@ function supportsAPIKeyConfig(config?: PluginConfigStatus) {
   return Boolean(config?.fields?.some((field) => field.type === "secret"));
 }
 
+function localizedText(
+  locale: string,
+  bundle?: PluginLocalizedString,
+  fallback?: string,
+) {
+  if (!bundle) return fallback || "";
+  const normalized = locale.toLowerCase();
+  const short = normalized.split("-")[0];
+  return bundle[normalized] || bundle[short] || bundle.en || fallback || "";
+}
+
+function localizedErrorMessage(
+  locale: string,
+  code: string | undefined,
+  messages?: Record<string, string>,
+  messagesI18n?: Record<string, PluginLocalizedString>,
+) {
+  if (!code) return "";
+  return localizedText(locale, messagesI18n?.[code], messages?.[code]);
+}
+
 export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [catalog, setCatalog] = useState<PluginManifest[]>([]);
   const [installed, setInstalled] = useState<PluginRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +92,7 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
   const [status, setStatus] = useState<ToastState>(null);
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [configDrafts, setConfigDrafts] = useState<Record<string, Record<string, string>>>({});
-  const [kitsuLoginDrafts, setKitsuLoginDrafts] = useState<Record<string, { username: string; password: string }>>({});
+  const [authDrafts, setAuthDrafts] = useState<Record<string, Record<string, string>>>({});
   const [updateSummary, setUpdateSummary] = useState<PluginUpdateSummary | null>(null);
 
   const installedById = useMemo(() => new Map(installed.map((item) => [item.id, item])), [installed]);
@@ -270,52 +291,76 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
     }
   };
 
-  const handleKitsuLogin = async (pluginId: string) => {
-    const username = kitsuLoginDrafts[pluginId]?.username?.trim();
-    const password = kitsuLoginDrafts[pluginId]?.password?.trim();
-    if (!username || !password) {
-      setStatus({ type: "info", message: t("settings.plugins.toast.kitsu_login_required") });
+  const handleAuthAction = async (pluginId: string, action: PluginAuthAction) => {
+    const locale = i18n.language || "ko";
+    const values = Object.fromEntries(
+      action.fields.map((field) => [field.key, (authDrafts[pluginId]?.[field.key] || "").trim()]),
+    );
+    const missingField = action.fields.find((field) => field.required && !values[field.key]);
+    if (missingField) {
+      setStatus({
+        type: "info",
+        message: localizedText(locale, action.required_message_i18n, action.required_message)
+          || t("settings.plugins.toast.auth_required", { field: localizedText(locale, missingField.label_i18n, missingField.label) || humanizeConfigField(missingField.key) }),
+      });
       return;
     }
 
     setBusyId(pluginId);
     try {
-      const response = await pluginAPI.kitsuLogin(pluginId, username, password);
+      const response = await pluginAPI.runAuthAction(pluginId, action.id, values);
       setConfigById((prev) => ({ ...prev, [pluginId]: response.config }));
-      setKitsuLoginDrafts((prev) => ({
+      setAuthDrafts((prev) => ({
         ...prev,
-        [pluginId]: { username: "", password: "" },
+        [pluginId]: Object.fromEntries(action.fields.map((field) => [field.key, ""])),
       }));
       await load(true);
       setStatus({
         type: "success",
         message: response.reactivation_required
-          ? t("settings.plugins.toast.kitsu_login_saved_reactivate")
-          : t("settings.plugins.toast.kitsu_login_saved"),
+          ? (localizedText(locale, action.success_reactivate_message_i18n, action.success_reactivate_message)
+            || t("settings.plugins.toast.auth_saved_reactivate", { title: localizedText(locale, action.title_i18n, action.title) }))
+          : (localizedText(locale, action.success_message_i18n, action.success_message)
+            || t("settings.plugins.toast.auth_saved", { title: localizedText(locale, action.title_i18n, action.title) })),
       });
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } } };
-      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.kitsu_login_failed") });
+      const err = error as { response?: { data?: { error?: string; code?: string } } };
+      setStatus({
+        type: "error",
+        message: localizedErrorMessage(locale, err.response?.data?.code, action.error_messages, action.error_messages_i18n)
+          || err.response?.data?.error
+          || localizedText(locale, action.error_message_i18n, action.error_message)
+          || t("settings.plugins.toast.auth_failed", { title: localizedText(locale, action.title_i18n, action.title) }),
+      });
     } finally {
       setBusyId(null);
     }
   };
 
-  const handleKitsuLogout = async (pluginId: string) => {
+  const handleDeleteAuthAction = async (pluginId: string, action: PluginAuthAction) => {
+    const locale = i18n.language || "ko";
     setBusyId(pluginId);
     try {
-      const response = await pluginAPI.kitsuLogout(pluginId);
+      const response = await pluginAPI.deleteAuthAction(pluginId, action.id);
       setConfigById((prev) => ({ ...prev, [pluginId]: response.config }));
       await load(true);
       setStatus({
         type: "success",
         message: response.reactivation_required
-          ? t("settings.plugins.toast.kitsu_login_deleted_reactivate")
-          : t("settings.plugins.toast.kitsu_login_deleted"),
+          ? (localizedText(locale, action.delete_reactivate_message_i18n, action.delete_reactivate_message)
+            || t("settings.plugins.toast.auth_deleted_reactivate", { title: localizedText(locale, action.title_i18n, action.title) }))
+          : (localizedText(locale, action.delete_message_i18n, action.delete_message)
+            || t("settings.plugins.toast.auth_deleted", { title: localizedText(locale, action.title_i18n, action.title) })),
       });
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } } };
-      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.kitsu_login_delete_failed") });
+      const err = error as { response?: { data?: { error?: string; code?: string } } };
+      setStatus({
+        type: "error",
+        message: localizedErrorMessage(locale, err.response?.data?.code, action.delete_error_messages, action.delete_error_messages_i18n)
+          || err.response?.data?.error
+          || localizedText(locale, action.delete_error_message_i18n, action.delete_error_message)
+          || t("settings.plugins.toast.auth_delete_failed", { title: localizedText(locale, action.title_i18n, action.title) }),
+      });
     } finally {
       setBusyId(null);
     }
@@ -387,7 +432,7 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
                     : t("settings.plugins.reinstall"));
               const iconSrc = iconURL(plugin, installedRecord);
               const configStatus = configById[plugin.id];
-              const showConfig = supportsAPIKeyConfig(configStatus);
+              const showConfig = supportsAPIKeyConfig(configStatus) || Boolean(plugin.auth?.actions?.length);
               const secretFields = configStatus?.fields.filter((field) => field.type === "secret") || [];
               const requiredFields = secretFields.filter((field) => field.required);
               const configReady = !showConfig || requiredFields.every((field) => field.configured);
@@ -577,7 +622,7 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
             configStatus={configById[plugin.id]}
             busy={busyId === plugin.id}
             configDrafts={configDrafts[plugin.id] || {}}
-            kitsuLoginDraft={kitsuLoginDrafts[plugin.id]}
+            authDrafts={authDrafts[plugin.id] || {}}
             onClose={() => setExpandedConfigId(null)}
             onConfigDraftChange={(fieldKey, value) => setConfigDrafts((prev) => ({
               ...prev,
@@ -588,12 +633,25 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
             }))}
             onConfigSave={(fieldKey) => void handleConfigSave(plugin.id, fieldKey)}
             onConfigDelete={(fieldKey) => void handleConfigDelete(plugin.id, fieldKey)}
-            onKitsuDraftChange={(draft) => setKitsuLoginDrafts((prev) => ({
+            onAuthDraftChange={(fieldKey, value) => setAuthDrafts((prev) => ({
               ...prev,
-              [plugin.id]: draft,
+              [plugin.id]: {
+                ...(prev[plugin.id] || {}),
+                [fieldKey]: value,
+              },
             }))}
-            onKitsuLogin={() => void handleKitsuLogin(plugin.id)}
-            onKitsuLogout={() => void handleKitsuLogout(plugin.id)}
+            onAuthAction={(actionId) => {
+              const action = plugin.auth?.actions?.find((item) => item.id === actionId);
+              if (action) {
+                void handleAuthAction(plugin.id, action);
+              }
+            }}
+            onDeleteAuthAction={(actionId) => {
+              const action = plugin.auth?.actions?.find((item) => item.id === actionId);
+              if (action) {
+                void handleDeleteAuthAction(plugin.id, action);
+              }
+            }}
           />
         );
       })()}
