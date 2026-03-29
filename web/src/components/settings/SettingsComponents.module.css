@@ -224,6 +224,7 @@
   min-height: 2.35rem;
   display: -webkit-box;
   -webkit-box-orient: vertical;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
@@ -335,114 +336,38 @@
   margin-top: auto;
 }
 
-.pluginConfigPanel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  margin-top: 0.2rem;
-  padding: 0.85rem;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 23, 42, 0.36);
-}
-
-.pluginConfigHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.pluginConfigHeader h5 {
-  margin: 0 0 0.24rem;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #f8fafc;
-}
-
-.pluginConfigHeader p {
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: #94a3b8;
-}
-
-.pluginConfigField {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.pluginConfigField span {
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: #cbd5e1;
-}
-
-.pluginConfigField input {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  background: rgba(15, 23, 42, 0.72);
-  color: #f8fafc;
-  font-size: 0.82rem;
-  padding: 0.72rem 0.82rem;
-  outline: none;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.pluginConfigField input:focus {
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.14);
-}
-
-.pluginConfigField input::placeholder {
-  color: #64748b;
-}
-
-.pluginConfigNotes {
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-}
-
-.pluginConfigNotes p {
-  margin: 0;
-  font-size: 0.76rem;
-  line-height: 1.5;
-  color: #94a3b8;
-}
-
-.pluginConfigActions {
-  display: flex;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
 .pluginActionPrimary,
 .pluginActionSecondary,
 .pluginActionDanger {
   display: inline-flex;
   align-items: center;
-  gap: 0.38rem;
-  border-radius: 10px;
-  padding: 0.55rem 0.72rem;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 42px;
+  padding: 0.72rem 0.95rem;
+  border-radius: 12px;
   border: 1px solid transparent;
   color: #f8fafc;
-  font-size: 0.78rem;
+  font-size: 0.86rem;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
-  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+  transition:
+    transform 0.16s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .pluginActionPrimary {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.94), rgba(102, 126, 234, 0.94));
+  background: linear-gradient(135deg, #8b5cf6, #667eea);
+  box-shadow: 0 12px 26px rgba(102, 126, 234, 0.28);
 }
 
 .pluginActionSecondary {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .pluginActionDanger {
@@ -451,10 +376,20 @@
   color: #fecaca;
 }
 
-.pluginActionPrimary:hover,
-.pluginActionSecondary:hover,
-.pluginActionDanger:hover {
+.pluginActionPrimary:hover:not(:disabled),
+.pluginActionSecondary:hover:not(:disabled),
+.pluginActionDanger:hover:not(:disabled) {
   transform: translateY(-1px);
+}
+
+.pluginActionSecondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.pluginActionDanger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.28);
 }
 
 .pluginActionPrimary:disabled,
@@ -463,6 +398,7 @@
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 .pluginOrphanIcon {
@@ -600,10 +536,6 @@
 
   .pluginToggle {
     justify-content: space-between;
-  }
-
-  .pluginConfigHeader {
-    flex-direction: column;
   }
 
   .statusMessage {

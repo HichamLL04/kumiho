@@ -209,6 +209,8 @@ func main() {
 	plugins.Get("/:id/config", authMiddleware.MasterOnly(), pluginHandler.GetConfig)
 	plugins.Put("/:id/config", authMiddleware.MasterOnly(), pluginHandler.UpdateConfig)
 	plugins.Delete("/:id/config/:field", authMiddleware.MasterOnly(), pluginHandler.DeleteConfig)
+	plugins.Post("/:id/kitsu-login", authMiddleware.MasterOnly(), pluginHandler.KitsuLogin)
+	plugins.Delete("/:id/kitsu-login", authMiddleware.MasterOnly(), pluginHandler.KitsuLogout)
 	plugins.Get("/:id/health", authMiddleware.MasterOnly(), pluginHandler.Healthcheck)
 	plugins.Post("/install", authMiddleware.MasterOnly(), pluginHandler.Install)
 	plugins.Delete("/:id", authMiddleware.MasterOnly(), pluginHandler.Uninstall)

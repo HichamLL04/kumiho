@@ -26,6 +26,38 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
     if (!selectedKey || !searchResult) return null;
     return searchResult.candidates.find((item) => candidateKey(item) === selectedKey) || null;
   }, [searchResult, selectedKey]);
+  const candidatesByProvider = useMemo(() => {
+    const grouped = new Map<string, MetadataCandidateItem[]>();
+    for (const item of searchResult?.candidates || []) {
+      const items = grouped.get(item.plugin_id) || [];
+      items.push(item);
+      grouped.set(item.plugin_id, items);
+    }
+
+    const preferredOrder = [
+      "kumiho-plugin-metadata-googlebooks",
+      "kumiho-plugin-metadata-kitsu",
+    ];
+    const ordered = preferredOrder
+      .filter((pluginId) => grouped.has(pluginId))
+      .map((pluginId) => ({
+        pluginId,
+        pluginName: grouped.get(pluginId)?.[0]?.plugin_name || pluginId,
+        items: grouped.get(pluginId) || [],
+      }));
+
+    for (const [pluginId, items] of grouped.entries()) {
+      if (preferredOrder.includes(pluginId)) {
+        continue;
+      }
+      ordered.push({
+        pluginId,
+        pluginName: items[0]?.plugin_name || pluginId,
+        items,
+      });
+    }
+    return ordered;
+  }, [searchResult]);
 
   const handleSearch = async () => {
     setBusy("search");
@@ -140,38 +172,51 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
             <Sparkles size={16} />
             <span>{t("series.metadata.candidates")}</span>
           </div>
-          <div className={styles.metadataCandidates}>
-            {searchResult?.candidates?.length ? (
-              searchResult.candidates.map((item) => {
-                const key = candidateKey(item);
-                const isSelected = selectedKey === key;
-                return (
-                  <button key={key} className={`${styles.metadataCandidate} ${isSelected ? styles.selected : ""}`} onClick={() => setSelectedKey(key)}>
-                    <div className={styles.metadataCandidateBody}>
-                      {item.candidate.cover_url ? (
-                        <img
-                          className={styles.metadataCandidateCover}
-                          src={item.candidate.cover_url}
-                          alt={item.candidate.title}
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className={styles.metadataCandidateCoverPlaceholder}>
-                          <Database size={18} />
-                        </div>
-                      )}
-                      <div className={styles.metadataCandidateContent}>
-                        <div className={styles.metadataCandidateTop}>
-                          <strong>{item.candidate.title}</strong>
-                          <span>{Math.round(item.candidate.confidence * 100)}%</span>
-                        </div>
-                        <p>{item.candidate.authors?.join(", ") || "-"}</p>
-                        <p>{item.plugin_name} · {item.candidate.reason || "-"}</p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
+          <div className={styles.metadataProviderGrid}>
+            {candidatesByProvider.length ? (
+              candidatesByProvider.map((provider) => (
+                <section key={provider.pluginId} className={styles.metadataProviderColumn}>
+                  <div className={styles.metadataProviderHeader}>
+                    <span>{provider.pluginName}</span>
+                    <small>{provider.items.length}건</small>
+                  </div>
+                  <div className={styles.metadataCandidates}>
+                    {provider.items.map((item) => {
+                      const key = candidateKey(item);
+                      const isSelected = selectedKey === key;
+                      return (
+                        <button key={key} className={`${styles.metadataCandidate} ${isSelected ? styles.selected : ""}`} onClick={() => setSelectedKey(key)}>
+                          <div className={styles.metadataCandidateBody}>
+                            {item.candidate.cover_url ? (
+                              <img
+                                className={styles.metadataCandidateCover}
+                                src={item.candidate.cover_url}
+                                alt={item.candidate.title}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className={styles.metadataCandidateCoverPlaceholder}>
+                                <Database size={18} />
+                              </div>
+                            )}
+                            <div className={styles.metadataCandidateContent}>
+                              <div className={styles.metadataCandidateTop}>
+                                <strong>{item.candidate.title}</strong>
+                                <span>{Math.round(item.candidate.confidence * 100)}%</span>
+                              </div>
+                              {item.candidate.description && (
+                                <p className={styles.metadataCandidateDescription}>{item.candidate.description}</p>
+                              )}
+                              <p>{item.candidate.authors?.join(", ") || "-"}</p>
+                              <p>{item.candidate.reason || "-"}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))
             ) : (
               <div className={styles.metadataEmpty}>{t("series.metadata.empty_candidates")}</div>
             )}
@@ -189,9 +234,23 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
           </div>
           {fetched?.result ? (
             <div className={styles.metadataPreview}>
+              {fetched.result.cover?.url && (
+                <div className={styles.metadataPreviewCoverSection}>
+                  <img
+                    className={styles.metadataPreviewCover}
+                    src={fetched.result.cover.url}
+                    alt={fetched.result.title}
+                    loading="lazy"
+                  />
+                </div>
+              )}
               <div className={styles.metadataPreviewSection}>
                 <label>{t("series.metadata.fields.title")}</label>
                 <p>{fetched.result.title}</p>
+              </div>
+              <div className={styles.metadataPreviewSection}>
+                <label>{t("series.metadata.fields.original_title")}</label>
+                <p>{fetched.result.original_title || "-"}</p>
               </div>
               <div className={styles.metadataPreviewSection}>
                 <label>{t("series.metadata.fields.authors")}</label>
@@ -206,12 +265,20 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
                 <p>{fetched.result.publication_date || "-"}</p>
               </div>
               <div className={styles.metadataPreviewSection}>
+                <label>{t("series.metadata.fields.language")}</label>
+                <p>{fetched.result.language || "-"}</p>
+              </div>
+              <div className={styles.metadataPreviewSection}>
                 <label>{t("series.metadata.fields.description")}</label>
                 <p>{fetched.result.description || "-"}</p>
               </div>
               <div className={styles.metadataPreviewSection}>
                 <label>{t("series.metadata.fields.tags")}</label>
                 <p>{fetched.result.tags?.join(", ") || "-"}</p>
+              </div>
+              <div className={styles.metadataPreviewSection}>
+                <label>{t("series.metadata.fields.identifiers")}</label>
+                <p className={styles.metadataIdentifiers}>{formatIdentifiers(fetched.result.identifiers)}</p>
               </div>
               <button className={commonStyles.settingsSelect} onClick={() => void handleApply(fetched.result)} disabled={busy !== null}>
                 {busy === "apply" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Sparkles size={14} />}
@@ -229,4 +296,12 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
 
 function candidateKey(item: MetadataCandidateItem) {
   return `${item.plugin_id}:${item.candidate.source.id}`;
+}
+
+function formatIdentifiers(identifiers?: Record<string, string>) {
+  if (!identifiers) return "-";
+  const entries = Object.entries(identifiers)
+    .filter(([, value]) => value && value.trim() !== "")
+    .map(([key, value]) => `${key}: ${value}`);
+  return entries.length ? entries.join("\n") : "-";
 }

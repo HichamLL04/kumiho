@@ -20,6 +20,7 @@ import (
 
 const (
 	googleBooksPluginID = "kumiho-plugin-metadata-googlebooks"
+	kitsuPluginID       = "kumiho-plugin-metadata-kitsu"
 )
 
 type PluginConfigFieldStatus struct {
@@ -91,6 +92,31 @@ func (s *PluginSecretService) SetSecret(pluginID, fieldKey, value string) (*Plug
 	}
 	if err := s.repo.Upsert(nil, pluginID, spec.FieldKey, encrypted); err != nil {
 		return nil, err
+	}
+	return s.Status(pluginID)
+}
+
+func (s *PluginSecretService) SetSecrets(pluginID string, values map[string]string) (*PluginConfigStatus, error) {
+	for fieldKey, value := range values {
+		spec, ok := findConfigSpec(pluginID, fieldKey)
+		if !ok {
+			return nil, pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "unsupported plugin config field")
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			if spec.Required {
+				return nil, pluginerrors.New(pluginerrors.ErrCodeConfigMissingRequired, "config value is required")
+			}
+			continue
+		}
+
+		encrypted, err := s.encrypt(value)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.repo.Upsert(nil, pluginID, spec.FieldKey, encrypted); err != nil {
+			return nil, err
+		}
 	}
 	return s.Status(pluginID)
 }
@@ -241,6 +267,19 @@ func configSpecsForPlugin(pluginID string) []pluginSecretSpec {
 				FieldKey: "api_key",
 				EnvKey:   "GOOGLE_BOOKS_API_KEY",
 				Required: true,
+			},
+		}
+	case kitsuPluginID:
+		return []pluginSecretSpec{
+			{
+				FieldKey: "access_token",
+				EnvKey:   "KITSU_ACCESS_TOKEN",
+				Required: false,
+			},
+			{
+				FieldKey: "refresh_token",
+				EnvKey:   "KITSU_REFRESH_TOKEN",
+				Required: false,
 			},
 		}
 	default:

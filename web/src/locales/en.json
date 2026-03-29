@@ -131,6 +131,34 @@
         "apply_hint": "Saving an API key deactivates the currently running plugin. Activate it again to apply the new setting.",
         "flow_hint": "Removing the plugin also removes the stored API key."
       },
+      "secret": {
+        "configure": "Credentials",
+        "title": "Credentials",
+        "desc": "Store secret values used by the plugin.",
+        "placeholder": "Enter value",
+        "save": "Save",
+        "delete": "Delete",
+        "configured": "Configured",
+        "not_configured": "Not configured",
+        "required_hint": "Save all required secrets before activating this plugin.",
+        "configured_hint": "{{field}}: {{masked}}",
+        "source_hint": "Applied from: {{source}}",
+        "apply_hint": "Saving a secret deactivates the currently running plugin. Activate it again to apply the new setting.",
+        "flow_hint": "Removing the plugin also removes the stored secrets."
+      },
+      "kitsu_login": {
+        "modal_desc": "Issue and store the tokens used by this plugin.",
+        "desc": "Log in with a Kitsu account to issue and store tokens.\nThe password is not stored.",
+        "apply_hint": "Saving tokens deactivates the currently running plugin. Activate it again to apply the new setting.",
+        "flow_hint": "Removing the plugin also removes the stored tokens.",
+        "username": "Email or slug",
+        "username_placeholder": "Kitsu email or username",
+        "password": "Password",
+        "password_placeholder": "Kitsu password",
+        "login": "Log in to Kitsu",
+        "relogin": "Re-login to Kitsu",
+        "delete": "Remove Tokens"
+      },
       "toast": {
         "load_failed": "Failed to load plugin information.",
         "install_success": "Plugin installed successfully.",
@@ -149,7 +177,20 @@
         "api_key_saved_reactivate": "API key saved. Activate the plugin again to apply it.",
         "api_key_save_failed": "Failed to save the API key.",
         "api_key_deleted": "Stored API key removed.",
-        "api_key_delete_failed": "Failed to remove the stored API key."
+        "api_key_delete_failed": "Failed to remove the stored API key.",
+        "secret_required": "Enter {{field}} first.",
+        "secret_saved": "{{field}} saved.",
+        "secret_saved_reactivate": "{{field}} saved. Activate the plugin again to apply it.",
+        "secret_save_failed": "Failed to save {{field}}.",
+        "secret_deleted": "Stored {{field}} removed.",
+        "secret_delete_failed": "Failed to remove the stored {{field}}.",
+        "kitsu_login_required": "Enter your Kitsu email (or slug) and password first.",
+        "kitsu_login_saved": "Kitsu tokens saved.",
+        "kitsu_login_saved_reactivate": "Kitsu tokens saved. Activate the plugin again to apply them.",
+        "kitsu_login_failed": "Failed to log in to Kitsu.",
+        "kitsu_login_deleted": "Stored Kitsu tokens removed.",
+        "kitsu_login_deleted_reactivate": "Stored Kitsu tokens removed. Activate the plugin again to use public search.",
+        "kitsu_login_delete_failed": "Failed to remove the stored Kitsu tokens."
       }
     },
     "statistics": {
@@ -594,11 +635,14 @@
       "empty_preview": "Fetched metadata will appear here.",
       "fields": {
         "title": "Title",
+        "original_title": "Original Title",
         "authors": "Authors",
         "publisher": "Publisher",
         "publication_date": "Publication Date",
+        "language": "Language",
         "description": "Description",
-        "tags": "Tags"
+        "tags": "Tags",
+        "identifiers": "Identifiers"
       },
       "toast": {
         "search_success": "Metadata candidates loaded.",

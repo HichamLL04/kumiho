@@ -62,6 +62,19 @@ export interface PluginConfigUpdateResponse {
   message: string;
 }
 
+export interface PluginKitsuLoginResponse extends PluginConfigUpdateResponse {
+  expires_in?: number;
+  token_type?: string;
+}
+
+export interface PluginKitsuLogoutResponse {
+  config: PluginConfigStatus;
+  message: string;
+  deleted: boolean;
+  plugin_id: string;
+  reactivation_required?: boolean;
+}
+
 export interface PluginCatalogResponse {
   plugins: PluginManifest[];
 }
@@ -103,6 +116,7 @@ export interface MetadataSearchCandidate {
   title: string;
   original_title?: string;
   authors?: string[];
+  description?: string;
   content_type?: string;
   year?: number;
   cover_url?: string;

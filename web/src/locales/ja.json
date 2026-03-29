@@ -131,6 +131,34 @@
         "apply_hint": "APIキーを保存すると現在有効なプラグインは無効化されます。新しい設定を適用するには再度有効化してください。",
         "flow_hint": "プラグインを削除すると保存済み APIキーも一緒に削除されます。"
       },
+      "secret": {
+        "configure": "認証設定",
+        "title": "認証設定",
+        "desc": "プラグインで使用する秘密値を保存します。",
+        "placeholder": "値を入力",
+        "save": "保存",
+        "delete": "削除",
+        "configured": "設定済み",
+        "not_configured": "未設定",
+        "required_hint": "必須の秘密値を保存してからこのプラグインを有効化してください。",
+        "configured_hint": "{{field}}: {{masked}}",
+        "source_hint": "適用元: {{source}}",
+        "apply_hint": "秘密値を保存すると現在有効なプラグインは無効化されます。新しい設定を適用するには再度有効化してください。",
+        "flow_hint": "プラグインを削除すると保存済みの秘密値も一緒に削除されます。"
+      },
+      "kitsu_login": {
+        "modal_desc": "このプラグインで使うトークンを発行して保存します。",
+        "desc": "Kitsu アカウントでログインしてトークンを発行・保存します。\nパスワードは保存しません。",
+        "apply_hint": "トークンを保存すると現在有効なプラグインは無効化されます。新しい設定を適用するには再度有効化してください。",
+        "flow_hint": "プラグインを削除すると保存済みのトークンも一緒に削除されます。",
+        "username": "メールアドレスまたはスラッグ",
+        "username_placeholder": "Kitsu のメールアドレスまたはユーザー名",
+        "password": "パスワード",
+        "password_placeholder": "Kitsu のパスワード",
+        "login": "Kitsu にログイン",
+        "relogin": "Kitsu に再ログイン",
+        "delete": "トークン削除"
+      },
       "toast": {
         "load_failed": "プラグイン情報の読み込みに失敗しました。",
         "install_success": "プラグインをインストールしました。",
@@ -149,7 +177,20 @@
         "api_key_saved_reactivate": "APIキーを保存しました。プラグインを再度有効化すると適用されます。",
         "api_key_save_failed": "APIキーの保存に失敗しました。",
         "api_key_deleted": "保存済み APIキーを削除しました。",
-        "api_key_delete_failed": "保存済み APIキーの削除に失敗しました。"
+        "api_key_delete_failed": "保存済み APIキーの削除に失敗しました。",
+        "secret_required": "先に {{field}} を入力してください。",
+        "secret_saved": "{{field}} を保存しました。",
+        "secret_saved_reactivate": "{{field}} を保存しました。プラグインを再度有効化すると適用されます。",
+        "secret_save_failed": "{{field}} の保存に失敗しました。",
+        "secret_deleted": "保存済み {{field}} を削除しました。",
+        "secret_delete_failed": "保存済み {{field}} の削除に失敗しました。",
+        "kitsu_login_required": "先に Kitsu のメールアドレス（またはスラッグ）とパスワードを入力してください。",
+        "kitsu_login_saved": "Kitsu トークンを保存しました。",
+        "kitsu_login_saved_reactivate": "Kitsu トークンを保存しました。プラグインを再度有効化すると適用されます。",
+        "kitsu_login_failed": "Kitsu へのログインに失敗しました。",
+        "kitsu_login_deleted": "保存済み Kitsu トークンを削除しました。",
+        "kitsu_login_deleted_reactivate": "保存済み Kitsu トークンを削除しました。再度有効化すると基本検索で動作します。",
+        "kitsu_login_delete_failed": "保存済み Kitsu トークンの削除に失敗しました。"
       }
     },
     "statistics": {
@@ -594,11 +635,14 @@
       "empty_preview": "候補を取得するとここで結果を確認できます。",
       "fields": {
         "title": "タイトル",
+        "original_title": "原題",
         "authors": "作家",
         "publisher": "出版社",
         "publication_date": "刊行日",
+        "language": "言語",
         "description": "説明",
-        "tags": "タグ"
+        "tags": "タグ",
+        "identifiers": "識別子"
       },
       "toast": {
         "search_success": "メタデータ候補を読み込みました。",

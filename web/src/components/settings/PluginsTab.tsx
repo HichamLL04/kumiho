@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Blocks, Download, HeartPulse, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { pluginAPI } from "../../api/client";
 import type { PluginConfigStatus, PluginManifest, PluginRecord, PluginUpdateSummary } from "../../types/plugin";
+import { PluginConfigModal } from "../modals/PluginConfigModal";
 import { UpdateBadge } from "../common/UpdateBadge";
 import { Toast } from "../common/Toast";
 import styles from "./SettingsComponents.module.css";
@@ -11,6 +12,22 @@ type ToastState = { type: "success" | "error" | "info"; message: string } | null
 
 interface PluginsTabProps {
   onUpdateStateChange?: (hasUpdates: boolean) => void;
+}
+
+function humanizeConfigField(key: string) {
+  switch (key) {
+    case "api_key":
+      return "API Key";
+    case "access_token":
+      return "Access Token";
+    case "refresh_token":
+      return "Refresh Token";
+    default:
+      return key
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
 }
 
 function stateTone(state: string) {
@@ -53,13 +70,18 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
   const [configById, setConfigById] = useState<Record<string, PluginConfigStatus>>({});
   const [status, setStatus] = useState<ToastState>(null);
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
-  const [apiKeyDrafts, setAPIKeyDrafts] = useState<Record<string, string>>({});
+  const [configDrafts, setConfigDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [kitsuLoginDrafts, setKitsuLoginDrafts] = useState<Record<string, { username: string; password: string }>>({});
   const [updateSummary, setUpdateSummary] = useState<PluginUpdateSummary | null>(null);
 
   const installedById = useMemo(() => new Map(installed.map((item) => [item.id, item])), [installed]);
   const updateById = useMemo(
     () => new Map((updateSummary?.plugins || []).map((item) => [item.plugin_id, item])),
     [updateSummary],
+  );
+  const selectedConfigPlugin = useMemo(
+    () => catalog.find((plugin) => plugin.id === expandedConfigId) || null,
+    [catalog, expandedConfigId],
   );
   const unmanagedInstalled = useMemo(
     () => installed.filter((item) => !catalog.some((plugin) => plugin.id === item.id)),
@@ -200,43 +222,100 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
     }
   };
 
-  const handleConfigSave = async (pluginId: string) => {
-    const draft = apiKeyDrafts[pluginId]?.trim();
+  const handleConfigSave = async (pluginId: string, fieldKey: string) => {
+    const draft = configDrafts[pluginId]?.[fieldKey]?.trim();
     if (!draft) {
-      setStatus({ type: "info", message: t("settings.plugins.toast.api_key_required") });
+      setStatus({ type: "info", message: t("settings.plugins.toast.secret_required", { field: humanizeConfigField(fieldKey) }) });
       return;
     }
 
     setBusyId(pluginId);
     try {
-      const response = await pluginAPI.updateConfig(pluginId, "api_key", draft);
+      const response = await pluginAPI.updateConfig(pluginId, fieldKey, draft);
       setConfigById((prev) => ({ ...prev, [pluginId]: response.config }));
-      setAPIKeyDrafts((prev) => ({ ...prev, [pluginId]: "" }));
+      setConfigDrafts((prev) => ({
+        ...prev,
+        [pluginId]: {
+          ...(prev[pluginId] || {}),
+          [fieldKey]: "",
+        },
+      }));
       await load(true);
       setStatus({
         type: "success",
         message: response.reactivation_required
-          ? t("settings.plugins.toast.api_key_saved_reactivate")
-          : t("settings.plugins.toast.api_key_saved"),
+          ? t("settings.plugins.toast.secret_saved_reactivate", { field: humanizeConfigField(fieldKey) })
+          : t("settings.plugins.toast.secret_saved", { field: humanizeConfigField(fieldKey) }),
       });
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
-      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.api_key_save_failed") });
+      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.secret_save_failed", { field: humanizeConfigField(fieldKey) }) });
     } finally {
       setBusyId(null);
     }
   };
 
-  const handleConfigDelete = async (pluginId: string) => {
+  const handleConfigDelete = async (pluginId: string, fieldKey: string) => {
     setBusyId(pluginId);
     try {
-      const response = await pluginAPI.deleteConfig(pluginId, "api_key");
+      const response = await pluginAPI.deleteConfig(pluginId, fieldKey);
       setConfigById((prev) => ({ ...prev, [pluginId]: response.config }));
       await load(true);
-      setStatus({ type: "success", message: t("settings.plugins.toast.api_key_deleted") });
+      setStatus({ type: "success", message: t("settings.plugins.toast.secret_deleted", { field: humanizeConfigField(fieldKey) }) });
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
-      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.api_key_delete_failed") });
+      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.secret_delete_failed", { field: humanizeConfigField(fieldKey) }) });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleKitsuLogin = async (pluginId: string) => {
+    const username = kitsuLoginDrafts[pluginId]?.username?.trim();
+    const password = kitsuLoginDrafts[pluginId]?.password?.trim();
+    if (!username || !password) {
+      setStatus({ type: "info", message: t("settings.plugins.toast.kitsu_login_required") });
+      return;
+    }
+
+    setBusyId(pluginId);
+    try {
+      const response = await pluginAPI.kitsuLogin(pluginId, username, password);
+      setConfigById((prev) => ({ ...prev, [pluginId]: response.config }));
+      setKitsuLoginDrafts((prev) => ({
+        ...prev,
+        [pluginId]: { username: "", password: "" },
+      }));
+      await load(true);
+      setStatus({
+        type: "success",
+        message: response.reactivation_required
+          ? t("settings.plugins.toast.kitsu_login_saved_reactivate")
+          : t("settings.plugins.toast.kitsu_login_saved"),
+      });
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.kitsu_login_failed") });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleKitsuLogout = async (pluginId: string) => {
+    setBusyId(pluginId);
+    try {
+      const response = await pluginAPI.kitsuLogout(pluginId);
+      setConfigById((prev) => ({ ...prev, [pluginId]: response.config }));
+      await load(true);
+      setStatus({
+        type: "success",
+        message: response.reactivation_required
+          ? t("settings.plugins.toast.kitsu_login_deleted_reactivate")
+          : t("settings.plugins.toast.kitsu_login_deleted"),
+      });
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      setStatus({ type: "error", message: err.response?.data?.error || t("settings.plugins.toast.kitsu_login_delete_failed") });
     } finally {
       setBusyId(null);
     }
@@ -309,9 +388,9 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
               const iconSrc = iconURL(plugin, installedRecord);
               const configStatus = configById[plugin.id];
               const showConfig = supportsAPIKeyConfig(configStatus);
-              const isConfigOpen = expandedConfigId === plugin.id;
-              const apiKeyField = configStatus?.fields.find((field) => field.key === "api_key");
-              const configReady = !showConfig || apiKeyField?.configured;
+              const secretFields = configStatus?.fields.filter((field) => field.type === "secret") || [];
+              const requiredFields = secretFields.filter((field) => field.required);
+              const configReady = !showConfig || requiredFields.every((field) => field.configured);
 
               return (
                 <article
@@ -389,19 +468,19 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
                   {healthById[plugin.id] && (
                     <p className={styles.pluginStatusLine}>{healthById[plugin.id]}</p>
                   )}
-                  {showConfig && !apiKeyField?.configured && (
-                    <p className={styles.pluginStatusLine}>{t("settings.plugins.api_key.required_hint")}</p>
+                  {showConfig && requiredFields.some((field) => !field.configured) && (
+                    <p className={styles.pluginStatusLine}>{t("settings.plugins.secret.required_hint")}</p>
                   )}
 
                   <div className={styles.pluginActions}>
                     {showConfig && (
                       <button
                         className={styles.pluginActionSecondary}
-                        onClick={() => setExpandedConfigId((prev) => (prev === plugin.id ? null : plugin.id))}
+                        onClick={() => setExpandedConfigId(plugin.id)}
                         disabled={!isInstalled || isBusy}
                       >
                         <KeyRound size={14} />
-                        <span>{t("settings.plugins.api_key.configure")}</span>
+                        <span>{t("settings.plugins.secret.configure")}</span>
                       </button>
                     )}
                     {canInstall && (
@@ -422,65 +501,6 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
                     )}
                   </div>
 
-                  {showConfig && isConfigOpen && (
-                    <div className={styles.pluginConfigPanel}>
-                      <div className={styles.pluginConfigHeader}>
-                        <div>
-                          <h5>{plugin.name} {t("settings.plugins.api_key.label")}</h5>
-                          <p>{t("settings.plugins.api_key.desc")}</p>
-                        </div>
-                        <span className={`${styles.pluginStateBadge} ${apiKeyField?.configured ? styles.pluginStateBadgeActive : styles.pluginStateBadgeInstalled}`}>
-                          {apiKeyField?.configured ? t("settings.plugins.api_key.configured") : t("settings.plugins.api_key.not_configured")}
-                        </span>
-                      </div>
-
-                      {apiKeyField?.configured && (
-                        <div className={styles.pluginConfigNotes}>
-                          <p>{t("settings.plugins.api_key.configured_hint", { masked: apiKeyField.masked_hint || "••••" })}</p>
-                          <p>{t("settings.plugins.api_key.source_hint", { source: apiKeyField.source || "-" })}</p>
-                        </div>
-                      )}
-
-                      <label className={styles.pluginConfigField}>
-                        <span>{t("settings.plugins.api_key.label")}</span>
-                        <input
-                          type="password"
-                          autoComplete="off"
-                          value={apiKeyDrafts[plugin.id] || ""}
-                          onChange={(event) => setAPIKeyDrafts((prev) => ({ ...prev, [plugin.id]: event.target.value }))}
-                          placeholder={t("settings.plugins.api_key.placeholder")}
-                        />
-                      </label>
-
-                      <div className={styles.pluginConfigNotes}>
-                        <p>{t("settings.plugins.api_key.apply_hint")}</p>
-                        <p>{t("settings.plugins.api_key.flow_hint")}</p>
-                      </div>
-
-                      <div className={styles.pluginConfigActions}>
-                        <button
-                          type="button"
-                          className={styles.pluginActionPrimary}
-                          onClick={() => void handleConfigSave(plugin.id)}
-                          disabled={isBusy}
-                        >
-                          <KeyRound size={14} />
-                          <span>{t("settings.plugins.api_key.save")}</span>
-                        </button>
-                        {apiKeyField?.configured && apiKeyField.source === "secret" && (
-                          <button
-                            type="button"
-                            className={styles.pluginActionDanger}
-                            onClick={() => void handleConfigDelete(plugin.id)}
-                            disabled={isBusy}
-                          >
-                            <Trash2 size={14} />
-                            <span>{t("settings.plugins.api_key.delete")}</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </article>
               );
             })}
@@ -548,6 +568,35 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
           </section>
         )}
       </div>
+
+      {selectedConfigPlugin && (() => {
+        const plugin = selectedConfigPlugin;
+        return (
+          <PluginConfigModal
+            plugin={plugin}
+            configStatus={configById[plugin.id]}
+            busy={busyId === plugin.id}
+            configDrafts={configDrafts[plugin.id] || {}}
+            kitsuLoginDraft={kitsuLoginDrafts[plugin.id]}
+            onClose={() => setExpandedConfigId(null)}
+            onConfigDraftChange={(fieldKey, value) => setConfigDrafts((prev) => ({
+              ...prev,
+              [plugin.id]: {
+                ...(prev[plugin.id] || {}),
+                [fieldKey]: value,
+              },
+            }))}
+            onConfigSave={(fieldKey) => void handleConfigSave(plugin.id, fieldKey)}
+            onConfigDelete={(fieldKey) => void handleConfigDelete(plugin.id, fieldKey)}
+            onKitsuDraftChange={(draft) => setKitsuLoginDrafts((prev) => ({
+              ...prev,
+              [plugin.id]: draft,
+            }))}
+            onKitsuLogin={() => void handleKitsuLogin(plugin.id)}
+            onKitsuLogout={() => void handleKitsuLogout(plugin.id)}
+          />
+        );
+      })()}
     </div>
   );
 }

@@ -19,6 +19,8 @@ require (
 	golang.org/x/sync v0.19.0
 )
 
+replace github.com/kumiho-plugin/kumiho-plugin-sdk => ../../kumiho-plugin/kumiho-plugin-sdk
+
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect

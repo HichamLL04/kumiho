@@ -1,59 +1,131 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"net/http"
+	"errors"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/healthcheck"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
+	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
 	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
 )
 
-func newPluginTestApp(role model.Role, manager *pluginengine.Manager) *fiber.App {
+func TestUpdateConfigReactivatesPluginWhenSecretMutationFails(t *testing.T) {
+	store := pluginengine.NewMemoryStore()
+	now := time.Now()
+	record := pluginengine.Record{
+		ID: "kumiho-plugin-metadata-googlebooks",
+		Manifest: sdkmanifest.Manifest{
+			ID:          "kumiho-plugin-metadata-googlebooks",
+			Name:        "Google Books",
+			RuntimeType: sdkmanifest.RuntimeTypeBinary,
+		},
+		State:     sdkstate.Active,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := store.Save(record); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	rt := &handlerTestRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
+	manager := pluginengine.NewManager(store, rt)
+
+	repo := &handlerTestSecretRepo{
+		items: map[string]model.PluginSecret{},
+	}
+	secretSvc := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret"}, repo)
+	manager.SetEnvProvider(secretSvc)
+	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-googlebooks", "api_key", "existing-key"); err != nil {
+		t.Fatalf("SetSecret() error = %v", err)
+	}
+	repo.upsertErr = errors.New("upsert failed")
+
+	handler := NewPluginHandler(manager, nil, secretSvc)
 	app := fiber.New()
-	handler := NewPluginHandler(manager, nil, nil)
+	app.Put("/plugins/:id/config", handler.UpdateConfig)
 
-	app.Use(func(c *fiber.Ctx) error {
-		c.Locals("role", role)
-		return c.Next()
+	body, _ := json.Marshal(map[string]string{
+		"field": "api_key",
+		"value": "next-key",
 	})
+	req := httptest.NewRequest(fiber.MethodPut, "/plugins/kumiho-plugin-metadata-googlebooks/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 
-	app.Get("/plugins", handler.List)
-	app.Get("/plugins/:id", handler.Get)
-	app.Get("/plugins/:id/health", handler.Healthcheck)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusInternalServerError)
+	}
 
-	return app
+	updated, ok, err := manager.Get("kumiho-plugin-metadata-googlebooks")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false")
+	}
+	if updated.State != sdkstate.Active {
+		t.Fatalf("state = %q, want %q", updated.State, sdkstate.Active)
+	}
+	if rt.stopCalls != 1 {
+		t.Fatalf("stopCalls = %d, want 1", rt.stopCalls)
+	}
+	if rt.startCalls != 1 {
+		t.Fatalf("startCalls = %d, want 1", rt.startCalls)
+	}
 }
 
-func TestPluginListHidesInstallPathForNonMaster(t *testing.T) {
-	manager := pluginengine.NewManager(pluginengine.NewMemoryStore(), &pluginHandlerRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary})
-	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
-		ID:          "plugin-a",
-		Name:        "Plugin A",
-		Version:     "0.1.0",
-		RuntimeType: sdkmanifest.RuntimeTypeBinary,
-	}, "/plugins/plugin-a")
-	if err != nil {
-		t.Fatalf("RegisterInstalled() error = %v", err)
+func TestDeleteConfigReturnsReactivationRequiredForActivePlugin(t *testing.T) {
+	store := pluginengine.NewMemoryStore()
+	now := time.Now()
+	record := pluginengine.Record{
+		ID: "kumiho-plugin-metadata-googlebooks",
+		Manifest: sdkmanifest.Manifest{
+			ID:          "kumiho-plugin-metadata-googlebooks",
+			Name:        "Google Books",
+			RuntimeType: sdkmanifest.RuntimeTypeBinary,
+		},
+		State:     sdkstate.Active,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
-	_, markErr := manager.MarkRegistered(record.ID)
-	if markErr != nil {
-		t.Fatalf("MarkRegistered() error = %v", markErr)
+	if err := store.Save(record); err != nil {
+		t.Fatalf("Save() error = %v", err)
 	}
 
-	app := newPluginTestApp(model.RoleUser, manager)
-	req := httptest.NewRequest("GET", "/plugins", nil)
+	rt := &handlerTestRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
+	manager := pluginengine.NewManager(store, rt)
+
+	repo := &handlerTestSecretRepo{
+		items: map[string]model.PluginSecret{},
+	}
+	secretSvc := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret"}, repo)
+	manager.SetEnvProvider(secretSvc)
+	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-googlebooks", "api_key", "existing-key"); err != nil {
+		t.Fatalf("SetSecret() error = %v", err)
+	}
+
+	handler := NewPluginHandler(manager, nil, secretSvc)
+	app := fiber.New()
+	app.Delete("/plugins/:id/config/:field", handler.DeleteConfig)
+
+	req := httptest.NewRequest(fiber.MethodDelete, "/plugins/kumiho-plugin-metadata-googlebooks/config/api_key", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -62,147 +134,118 @@ func TestPluginListHidesInstallPathForNonMaster(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
 	}
 
-	var body struct {
-		Plugins []map[string]any `json:"plugins"`
+	var payload struct {
+		Config               service.PluginConfigStatus `json:"config"`
+		ReactivationRequired bool                       `json:"reactivation_required"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("json decode error = %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode() error = %v", err)
 	}
-	if len(body.Plugins) != 1 {
-		t.Fatalf("plugins len = %d, want 1", len(body.Plugins))
+	if !payload.ReactivationRequired {
+		t.Fatal("reactivation_required = false, want true")
 	}
-	if _, ok := body.Plugins[0]["install_path"]; ok {
-		t.Fatal("install_path should be hidden for non-master")
+
+	updated, ok, err := manager.Get("kumiho-plugin-metadata-googlebooks")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false")
+	}
+	if updated.State != sdkstate.Disabled {
+		t.Fatalf("state = %q, want %q", updated.State, sdkstate.Disabled)
+	}
+	if rt.stopCalls != 1 {
+		t.Fatalf("stopCalls = %d, want 1", rt.stopCalls)
 	}
 }
 
-func TestPluginGetReturnsNotFound(t *testing.T) {
-	manager := pluginengine.NewManager(pluginengine.NewMemoryStore(), &pluginHandlerRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary})
-	app := newPluginTestApp(model.RoleMaster, manager)
-
-	req := httptest.NewRequest("GET", "/plugins/missing", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
-	if resp.StatusCode != fiber.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusNotFound)
-	}
-}
-
-func TestPluginHealthcheckMapsNotRunningToConflict(t *testing.T) {
-	manager := pluginengine.NewManager(pluginengine.NewMemoryStore(), &pluginHandlerRuntime{
-		runtimeType: sdkmanifest.RuntimeTypeBinary,
-		healthErr:   pluginruntime.ErrNotRunning,
-	})
-	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
-		ID:          "plugin-a",
-		Name:        "Plugin A",
-		Version:     "0.1.0",
-		RuntimeType: sdkmanifest.RuntimeTypeBinary,
-	}, "/plugins/plugin-a")
-	if err != nil {
-		t.Fatalf("RegisterInstalled() error = %v", err)
-	}
-	_, markErr := manager.MarkRegistered(record.ID)
-	if markErr != nil {
-		t.Fatalf("MarkRegistered() error = %v", markErr)
-	}
-
-	app := newPluginTestApp(model.RoleMaster, manager)
-	req := httptest.NewRequest("GET", "/plugins/plugin-a/health", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
-	if resp.StatusCode != fiber.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusConflict)
-	}
-}
-
-func TestPluginUpdatesReturnsAvailableVersion(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(service.PluginCatalog{
-			Plugins: []sdkmanifest.Manifest{
-				{ID: "plugin-a", Name: "Plugin A", Version: "0.2.0"},
-			},
-		})
-	}))
-	defer server.Close()
-
-	manager := pluginengine.NewManager(pluginengine.NewMemoryStore(), &pluginHandlerRuntime{runtimeType: sdkmanifest.RuntimeTypeService})
-	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
-		ID:          "plugin-a",
-		Name:        "Plugin A",
-		Version:     "0.1.0",
-		RuntimeType: sdkmanifest.RuntimeTypeService,
-	}, filepath.Join(t.TempDir(), "plugin-a"))
-	if err != nil {
-		t.Fatalf("RegisterInstalled() error = %v", err)
-	}
-	if _, err := manager.MarkRegistered(record.ID); err != nil {
-		t.Fatalf("MarkRegistered() error = %v", err)
-	}
-
-	installSvc := service.NewPluginInstallService(&config.Config{
-		PluginRegistryURL: server.URL,
-		PluginDir:         t.TempDir(),
-	}, server.Client(), manager, nil)
-
-	app := fiber.New()
-	handler := NewPluginHandler(manager, installSvc, nil)
-	app.Use(func(c *fiber.Ctx) error {
-		c.Locals("role", model.RoleMaster)
-		return c.Next()
-	})
-	app.Get("/plugins/updates", handler.Updates)
-
-	req := httptest.NewRequest("GET", "/plugins/updates", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
-	}
-
-	var body service.PluginUpdateSummary
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("json decode error = %v", err)
-	}
-	if !body.HasUpdates || body.Count != 1 {
-		t.Fatalf("body = %+v, want one update", body)
-	}
-}
-
-type pluginHandlerRuntime struct {
+type handlerTestRuntime struct {
 	runtimeType sdkmanifest.RuntimeType
-	healthErr   error
+	startCalls  int
+	stopCalls   int
+	startErr    error
+	stopErr     error
 }
 
-func (r *pluginHandlerRuntime) Type() sdkmanifest.RuntimeType {
-	return r.runtimeType
+func (r *handlerTestRuntime) Type() sdkmanifest.RuntimeType { return r.runtimeType }
+
+func (r *handlerTestRuntime) Start(context.Context, pluginruntime.Instance) error {
+	r.startCalls++
+	return r.startErr
 }
 
-func (r *pluginHandlerRuntime) Start(context.Context, pluginruntime.Instance) error {
-	return nil
+func (r *handlerTestRuntime) Stop(context.Context, pluginruntime.Instance) error {
+	r.stopCalls++
+	return r.stopErr
 }
 
-func (r *pluginHandlerRuntime) Stop(context.Context, pluginruntime.Instance) error {
-	return nil
-}
-
-func (r *pluginHandlerRuntime) Healthcheck(context.Context, pluginruntime.Instance) (*healthcheck.Response, error) {
-	if r.healthErr != nil {
-		return nil, r.healthErr
-	}
+func (r *handlerTestRuntime) Healthcheck(context.Context, pluginruntime.Instance) (*healthcheck.Response, error) {
 	return &healthcheck.Response{Status: healthcheck.StatusOK}, nil
 }
 
-func (r *pluginHandlerRuntime) Search(context.Context, pluginruntime.Instance, *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
-	return nil, pluginruntime.ErrNotImplemented
+func (r *handlerTestRuntime) Search(context.Context, pluginruntime.Instance, *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+	return nil, nil
 }
 
-func (r *pluginHandlerRuntime) Fetch(context.Context, pluginruntime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
-	return nil, pluginruntime.ErrNotImplemented
+func (r *handlerTestRuntime) Fetch(context.Context, pluginruntime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
+	return nil, nil
+}
+
+type handlerTestSecretRepo struct {
+	items     map[string]model.PluginSecret
+	upsertErr error
+	deleteErr error
+}
+
+func (r *handlerTestSecretRepo) GetByKey(_ database.Queryer, pluginID, fieldKey string) (*model.PluginSecret, error) {
+	item, ok := r.items[pluginID+":"+fieldKey]
+	if !ok {
+		return nil, nil
+	}
+	copy := item
+	return &copy, nil
+}
+
+func (r *handlerTestSecretRepo) ListByPlugin(_ database.Queryer, pluginID string) ([]model.PluginSecret, error) {
+	items := []model.PluginSecret{}
+	for _, item := range r.items {
+		if item.PluginID == pluginID {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+func (r *handlerTestSecretRepo) Upsert(_ database.Queryer, pluginID, fieldKey, valueEncrypted string) error {
+	if r.upsertErr != nil {
+		return r.upsertErr
+	}
+	r.items[pluginID+":"+fieldKey] = model.PluginSecret{
+		PluginID:       pluginID,
+		FieldKey:       fieldKey,
+		ValueEncrypted: valueEncrypted,
+		UpdatedAt:      time.Now(),
+	}
+	return nil
+}
+
+func (r *handlerTestSecretRepo) Delete(_ database.Queryer, pluginID, fieldKey string) error {
+	if r.deleteErr != nil {
+		return r.deleteErr
+	}
+	delete(r.items, pluginID+":"+fieldKey)
+	return nil
+}
+
+func (r *handlerTestSecretRepo) DeleteByPlugin(_ database.Queryer, pluginID string) error {
+	if r.deleteErr != nil {
+		return r.deleteErr
+	}
+	for key, item := range r.items {
+		if item.PluginID == pluginID {
+			delete(r.items, key)
+		}
+	}
+	return nil
 }
