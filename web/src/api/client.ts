@@ -15,6 +15,7 @@ import type {
   MetadataApplyResponse,
   MetadataFetchResponse,
   MetadataResult,
+  MetadataSearchRequest,
   MetadataSearchResult,
   PluginCatalogResponse,
   PluginConfigStatus,
@@ -250,7 +251,8 @@ export const seriesAPI = {
   getViewerSettings: (seriesId: string) => api.get(`/series/${seriesId}/viewer-settings`).then((res) => res.data),
   updateViewerSettings: (seriesId: string, data: Record<string, unknown>) =>
     api.patch(`/series/${seriesId}/viewer-settings`, data).then((res) => res.data),
-  metadataSearch: (seriesId: string) => api.post<MetadataSearchResult>(`/series/${seriesId}/metadata/search`),
+  metadataSearch: (seriesId: string, data?: MetadataSearchRequest) =>
+    api.post<MetadataSearchResult>(`/series/${seriesId}/metadata/search`, data ?? {}),
   metadataFetch: (seriesId: string, data: { plugin_id: string; source: { id: string; name: string; url?: string } }) =>
     api.post<MetadataFetchResponse>(`/series/${seriesId}/metadata/fetch`, data),
   metadataApply: (seriesId: string, result: MetadataResult) =>

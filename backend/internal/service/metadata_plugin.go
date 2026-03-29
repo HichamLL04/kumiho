@@ -32,6 +32,7 @@ var (
 	ErrNoActiveMetadataPlugin = errors.New("no active metadata plugin")
 	htmlTagPattern            = regexp.MustCompile(`(?s)<[^>]*>`)
 	blockHTMLPattern          = regexp.MustCompile(`(?i)</?(p|div|br|li|ul|ol|h[1-6]|blockquote)[^>]*>`)
+	candidateVolumePattern    = regexp.MustCompile(`(?i)(?:^|[\s._:-])(?:vol(?:ume)?\.?\s*)?(\d{1,3})(?:$|[\s._:-])`)
 )
 
 type MetadataPluginFailure struct {
@@ -57,6 +58,10 @@ type MetadataFetchSelection struct {
 	Source   sdktypes.SourceRef `json:"source"`
 }
 
+type MetadataSearchOptions struct {
+	Title string `json:"title"`
+}
+
 type MetadataFetchResult struct {
 	PluginID string                   `json:"plugin_id"`
 	Result   *sdktypes.MetadataResult `json:"result"`
@@ -71,6 +76,7 @@ type MetadataApplyResult struct {
 
 type MetadataService struct {
 	seriesRepo *repository.SeriesRepository
+	volumeRepo *repository.VolumeRepository
 	manager    *pluginengine.Manager
 	cfg        *config.Config
 	client     *http.Client
@@ -82,13 +88,14 @@ func NewMetadataService(cfg *config.Config, client *http.Client, seriesRepo *rep
 	}
 	return &MetadataService{
 		seriesRepo: seriesRepo,
+		volumeRepo: repository.NewVolumeRepository(),
 		manager:    manager,
 		cfg:        cfg,
 		client:     client,
 	}
 }
 
-func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, userID string) (*MetadataSearchResult, error) {
+func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, userID string, opts MetadataSearchOptions) (*MetadataSearchResult, error) {
 	series, err := s.seriesRepo.FindByID(nil, seriesID, userID)
 	if err != nil {
 		return nil, err
@@ -97,9 +104,14 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 		return nil, ErrSeriesNotFound
 	}
 
-	req := metadata_engine.BuildSearchRequest(series.Title, series.Path, mapContentType(series.LibraryType), "")
-	req.Language = inferSearchLanguage(series.Title)
-	if series.Metadata != nil && strings.TrimSpace(series.Metadata.ISBN) != "" {
+	searchTitle := strings.TrimSpace(opts.Title)
+	if searchTitle == "" {
+		searchTitle = series.Title
+	}
+
+	req := metadata_engine.BuildSearchRequest(searchTitle, series.Path, mapContentType(series.LibraryType), "")
+	req.Language = inferSearchLanguage(searchTitle)
+	if strings.TrimSpace(opts.Title) == "" && series.Metadata != nil && strings.TrimSpace(series.Metadata.ISBN) != "" {
 		req.Identifiers = map[string]string{"isbn": strings.TrimSpace(series.Metadata.ISBN)}
 	}
 
@@ -159,10 +171,24 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 	sort.SliceStable(result.Candidates, func(i, j int) bool {
 		left := result.Candidates[i].Candidate
 		right := result.Candidates[j].Candidate
-		if left.Confidence == right.Confidence {
+		if left.Confidence != right.Confidence {
+			return left.Confidence > right.Confidence
+		}
+
+		leftVolume, leftHasVolume := candidateVolumeNumber(left.Title)
+		rightVolume, rightHasVolume := candidateVolumeNumber(right.Title)
+		switch {
+		case leftHasVolume && rightHasVolume && leftVolume != rightVolume:
+			return leftVolume < rightVolume
+		case leftHasVolume != rightHasVolume:
+			return leftHasVolume
+		}
+
+		if left.Score != right.Score {
 			return left.Score > right.Score
 		}
-		return left.Confidence > right.Confidence
+
+		return strings.ToLower(left.Title) < strings.ToLower(right.Title)
 	})
 
 	return result, nil
@@ -268,6 +294,7 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	}
 
 	if len(updatedFields) == 0 {
+		s.enrichSeriesThumbnail(series)
 		return &MetadataApplyResult{
 			Series:        series,
 			UpdatedFields: updatedFields,
@@ -280,6 +307,8 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	if err := s.seriesRepo.Update(nil, series); err != nil {
 		return nil, err
 	}
+
+	s.enrichSeriesThumbnail(series)
 
 	return &MetadataApplyResult{
 		Series:        series,
@@ -361,6 +390,35 @@ func yearFromDate(value string) string {
 	return ""
 }
 
+func candidateVolumeNumber(title string) (int, bool) {
+	matches := candidateVolumePattern.FindAllStringSubmatch(title, -1)
+	if len(matches) == 0 {
+		return 0, false
+	}
+
+	last := matches[len(matches)-1]
+	if len(last) < 2 {
+		return 0, false
+	}
+
+	value := strings.TrimSpace(last[1])
+	if value == "" {
+		return 0, false
+	}
+
+	var volume int
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		volume = (volume * 10) + int(r-'0')
+	}
+	if volume <= 0 {
+		return 0, false
+	}
+	return volume, true
+}
+
 func coverURL(result *sdktypes.MetadataResult) string {
 	if result == nil || result.Cover == nil {
 		return ""
@@ -430,6 +488,12 @@ func (s *MetadataService) applySeriesThumbnail(ctx context.Context, series *mode
 		return false, nil
 	}
 	if series == nil || strings.TrimSpace(series.Path) == "" {
+		return false, nil
+	}
+	if series.ThumbnailPath != nil && strings.TrimSpace(*series.ThumbnailPath) != "" {
+		return false, nil
+	}
+	if series.ThumbnailURL != nil && strings.TrimSpace(*series.ThumbnailURL) != "" {
 		return false, nil
 	}
 
@@ -507,6 +571,33 @@ func deleteHashFiles(dir string, hash string) {
 	}
 	for _, match := range matches {
 		_ = os.Remove(match)
+	}
+}
+
+func (s *MetadataService) enrichSeriesThumbnail(series *model.Series) {
+	if series == nil || s.seriesRepo == nil {
+		return
+	}
+	if series.ThumbnailPath != nil && strings.TrimSpace(*series.ThumbnailPath) != "" {
+		url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, series.UpdatedAt.Unix())
+		series.ThumbnailURL = &url
+		return
+	}
+
+	pageID, err := s.seriesRepo.GetFirstPageID(nil, series.ID)
+	if err == nil && pageID != "" {
+		url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
+		series.ThumbnailURL = &url
+		return
+	}
+
+	if s.volumeRepo == nil {
+		return
+	}
+	vol, volErr := s.volumeRepo.GetFirstVolume(nil, series.ID)
+	if volErr == nil && vol != nil && vol.ThumbnailPath != nil && strings.TrimSpace(*vol.ThumbnailPath) != "" {
+		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", vol.ID, vol.UpdatedAt.Unix())
+		series.ThumbnailURL = &url
 	}
 }
 

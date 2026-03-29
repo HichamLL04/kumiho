@@ -15,6 +15,11 @@ var (
 	spacePattern      = regexp.MustCompile(`\s+`)
 	volumePattern     = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:v|vol(?:ume)?|권|part|season)\s*\.?\s*(\d+)(?:$|[\s._-])`)
 	chapterPattern    = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:c|ch(?:apter)?|화|회)\s*\.?\s*(\d+(?:\.\d+)?)(?:$|[\s._-])`)
+	rangePattern      = regexp.MustCompile(`(?i)(?:^|[\s._-])\d+\s*[~+-]\s*\d+\s*권?(?:$|[\s._-])`)
+	trailingVolumeSet = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:전\s*)?\d+\s*권(?:$|[\s._-])`)
+	trailingIssueNum  = regexp.MustCompile(`(?i)(?:^|[\s._-])\d{1,3}(?:$|[\s._-])`)
+	comicNoisePattern = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:완|완결|웹툰)(?:$|[\s._-])`)
+	extraEditionNoise = regexp.MustCompile(`(?i)(?:^|[\s._+-])(?:특별편|특별판|외전|합본|총집편|스페셜|special|omnibus)(?:$|[\s._+-])`)
 )
 
 // ParsedTitle is the normalized local interpretation used before plugin search.
@@ -67,6 +72,13 @@ func normalize(raw string) string {
 	base = replaceDotsExceptDecimals(base)
 	base = bracketNoise.ReplaceAllString(base, " ")
 	base = releaseTagPattern.ReplaceAllString(base, " ")
+	base = comicNoisePattern.ReplaceAllString(base, " ")
+	base = extraEditionNoise.ReplaceAllString(base, " ")
+	base = rangePattern.ReplaceAllString(base, " ")
+	base = trailingVolumeSet.ReplaceAllString(base, " ")
+	base = spacePattern.ReplaceAllString(base, " ")
+	base = strings.TrimSpace(base)
+	base = stripTrailingIssueNumber(base)
 	base = spacePattern.ReplaceAllString(base, " ")
 	return strings.TrimSpace(base)
 }
@@ -119,4 +131,24 @@ func replaceDotsExceptDecimals(value string) string {
 		runes[i] = ' '
 	}
 	return string(runes)
+}
+
+func stripTrailingIssueNumber(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return trimmed
+	}
+
+	candidate := trailingIssueNum.ReplaceAllString(trimmed, " ")
+	candidate = strings.TrimSpace(spacePattern.ReplaceAllString(candidate, " "))
+	if candidate == "" || candidate == trimmed {
+		return trimmed
+	}
+
+	wordsBefore := len(strings.Fields(candidate))
+	wordsAfter := len(strings.Fields(trimmed))
+	if wordsBefore >= 2 && wordsAfter-wordsBefore == 1 {
+		return candidate
+	}
+	return trimmed
 }

@@ -134,6 +134,10 @@ export interface MetadataSearchResult {
   failures?: { plugin_id: string; plugin_name: string; message: string }[];
 }
 
+export interface MetadataSearchRequest {
+  title?: string;
+}
+
 export interface MetadataResult {
   source: MetadataSourceRef;
   title: string;

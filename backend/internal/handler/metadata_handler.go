@@ -16,6 +16,10 @@ type MetadataHandler struct {
 	metadataSvc *service.MetadataService
 }
 
+type metadataSearchRequest struct {
+	Title string `json:"title"`
+}
+
 type metadataApplyRequest struct {
 	Result *sdktypes.MetadataResult `json:"result"`
 }
@@ -30,7 +34,16 @@ func (h *MetadataHandler) Search(c *fiber.Ctx) error {
 		ctx = context.Background()
 	}
 
-	result, err := h.metadataSvc.SearchSeries(ctx, c.Params("id"), middleware.GetUserID(c))
+	var req metadataSearchRequest
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		}
+	}
+
+	result, err := h.metadataSvc.SearchSeries(ctx, c.Params("id"), middleware.GetUserID(c), service.MetadataSearchOptions{
+		Title: req.Title,
+	})
 	if err != nil {
 		return writeMetadataError(c, err)
 	}

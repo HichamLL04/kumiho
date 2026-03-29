@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
@@ -40,7 +41,7 @@ func TestMetadataServiceSearchSeriesAggregatesCandidates(t *testing.T) {
 	manager := newActiveMetadataManager(t, rt)
 	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
 
-	result, err := svc.SearchSeries(context.Background(), series.ID, "")
+	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{})
 	if err != nil {
 		t.Fatalf("SearchSeries() error = %v", err)
 	}
@@ -52,6 +53,69 @@ func TestMetadataServiceSearchSeriesAggregatesCandidates(t *testing.T) {
 	}
 	if result.Query.LocalTitle == "" {
 		t.Fatal("query local title should not be empty")
+	}
+}
+
+func TestMetadataServiceSearchSeriesPrefersLowerVolumeWhenConfidenceMatches(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+
+	rt := &metadataRuntime{
+		searchResp: &sdktypes.SearchResponse{
+			Candidates: []sdktypes.SearchCandidate{
+				{Source: sdktypes.SourceRef{ID: "gb-17", Name: "googlebooks"}, Title: "666 사탄 17", Score: 0.95, Confidence: 0.63},
+				{Source: sdktypes.SourceRef{ID: "gb-1", Name: "googlebooks"}, Title: "666 사탄 1", Score: 0.95, Confidence: 0.63},
+				{Source: sdktypes.SourceRef{ID: "gb-3", Name: "googlebooks"}, Title: "666 사탄 3", Score: 0.95, Confidence: 0.63},
+			},
+		},
+	}
+	manager := newActiveMetadataManager(t, rt)
+	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+
+	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{})
+	if err != nil {
+		t.Fatalf("SearchSeries() error = %v", err)
+	}
+
+	if len(result.Candidates) != 3 {
+		t.Fatalf("candidates len = %d, want 3", len(result.Candidates))
+	}
+	if result.Candidates[0].Candidate.Title != "666 사탄 1" {
+		t.Fatalf("first candidate title = %q", result.Candidates[0].Candidate.Title)
+	}
+	if result.Candidates[1].Candidate.Title != "666 사탄 3" {
+		t.Fatalf("second candidate title = %q", result.Candidates[1].Candidate.Title)
+	}
+	if result.Candidates[2].Candidate.Title != "666 사탄 17" {
+		t.Fatalf("third candidate title = %q", result.Candidates[2].Candidate.Title)
+	}
+}
+
+func TestMetadataServiceSearchSeriesUsesOverrideTitle(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+
+	rt := &metadataRuntime{
+		searchResp: &sdktypes.SearchResponse{
+			Candidates: []sdktypes.SearchCandidate{
+				{Source: sdktypes.SourceRef{ID: "gb-1", Name: "googlebooks"}, Title: "Override Book", Score: 0.95, Confidence: 0.9},
+			},
+		},
+	}
+	manager := newActiveMetadataManager(t, rt)
+	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+
+	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{Title: "All you Need Is Kill"})
+	if err != nil {
+		t.Fatalf("SearchSeries() error = %v", err)
+	}
+	if result.Query.LocalTitle != "All you Need Is Kill" {
+		t.Fatalf("query local title = %q", result.Query.LocalTitle)
+	}
+	if len(result.Query.Identifiers) != 0 {
+		t.Fatalf("query identifiers = %#v, want empty for manual override search", result.Query.Identifiers)
 	}
 }
 
@@ -179,6 +243,82 @@ func TestMetadataServiceApplySeriesMetadataDownloadsThumbnail(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("UpdatedFields = %v, want thumbnail included", result.UpdatedFields)
+	}
+}
+
+func TestMetadataServiceApplySeriesMetadataKeepsExistingThumbnail(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+
+	existingThumb := filepath.Join(t.TempDir(), "existing-thumb.png")
+	if err := os.WriteFile(existingThumb, []byte{0x89, 0x50, 0x4e, 0x47}, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	series.ThumbnailPath = &existingThumb
+	existingURL := "/api/v1/series/" + series.ID + "/thumbnail"
+	series.ThumbnailURL = &existingURL
+	series.UpdatedAt = time.Now()
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	serverHit := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHit = true
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte{0x89, 0x50, 0x4e, 0x47})
+	}))
+	defer server.Close()
+
+	cfg := (&configForMetadataTests{DataDir: t.TempDir()}).Config()
+	svc := NewMetadataService(cfg, server.Client(), seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	result, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		Cover: &sdktypes.CoverInfo{
+			URL: server.URL + "/cover.png",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+	if serverHit {
+		t.Fatal("cover should not be downloaded when thumbnail already exists")
+	}
+	if result.Series == nil || result.Series.ThumbnailPath == nil {
+		t.Fatal("ThumbnailPath should remain set")
+	}
+	if *result.Series.ThumbnailPath != existingThumb {
+		t.Fatalf("ThumbnailPath = %q", *result.Series.ThumbnailPath)
+	}
+	for _, field := range result.UpdatedFields {
+		if field == "thumbnail" {
+			t.Fatalf("UpdatedFields = %v, thumbnail should not be included", result.UpdatedFields)
+		}
+	}
+}
+
+func TestMetadataServiceApplySeriesMetadataReturnsFallbackThumbnailURL(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+
+	if _, err := database.DB.Exec(`INSERT INTO volumes (id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, created_at, updated_at)
+		VALUES ('vol-1', ?, 'Volume 1', 1, '/library/volume-1.cbz', ?, 0, 'volume', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+		series.ID, "/tmp/volume-thumb.png"); err != nil {
+		t.Fatalf("insert volume error = %v", err)
+	}
+
+	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	result, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		Title: "Applied Title",
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+	if result.Series == nil || result.Series.ThumbnailURL == nil || *result.Series.ThumbnailURL == "" {
+		t.Fatal("ThumbnailURL should be enriched on apply response")
 	}
 }
 

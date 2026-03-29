@@ -6,7 +6,7 @@ import type { Series } from "../types/series";
 import type { MetadataCandidateItem, MetadataFetchResponse, MetadataResult, MetadataSearchResult } from "../types/plugin";
 import { Toast } from "./common/Toast";
 import commonStyles from "./settings/SettingsComponents.module.css";
-import styles from "../pages/Series.module.css";
+import styles from "./SeriesMetadataPanel.module.css";
 
 interface SeriesMetadataPanelProps {
   series: Series;
@@ -20,6 +20,7 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
   const [busy, setBusy] = useState<"search" | "fetch" | "apply" | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [searchTitle, setSearchTitle] = useState("");
 
   const selectedCandidate = useMemo(() => {
     if (!selectedKey || !searchResult) return null;
@@ -30,7 +31,7 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
     setBusy("search");
     setFetched(null);
     try {
-      const response = await seriesAPI.metadataSearch(series.id);
+      const response = await seriesAPI.metadataSearch(series.id, { title: searchTitle.trim() || undefined });
       setSearchResult(response.data);
       setSelectedKey(response.data.candidates[0] ? candidateKey(response.data.candidates[0]) : null);
       setStatus({ type: "success", message: t("series.metadata.toast.search_success") });
@@ -97,11 +98,30 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
           <h2>{t("series.metadata.title")}</h2>
           <p>{t("series.metadata.desc")}</p>
         </div>
-        <button className={commonStyles.settingsSelect} onClick={() => void handleSearch()} disabled={busy !== null}>
-          {busy === "search" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Search size={14} />}
-          <span>{t("series.metadata.search")}</span>
-        </button>
+        <div className={styles.metadataSearchControls}>
+          <input
+            className={styles.metadataSearchInput}
+            value={searchTitle}
+            onChange={(event) => setSearchTitle(event.target.value)}
+            placeholder={series.title}
+          />
+          <button
+            className={`${commonStyles.settingsSelect} ${styles.metadataSearchButton}`}
+            onClick={() => void handleSearch()}
+            disabled={busy !== null}
+          >
+            {busy === "search" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Search size={14} />}
+            <span>{t("series.metadata.search")}</span>
+          </button>
+        </div>
       </div>
+
+      {searchResult?.query && (
+        <div className={styles.metadataQueryInfo}>
+          <strong>검색어</strong>
+          <span>{searchResult.query.series_name || searchResult.query.local_title || searchTitle || series.title}</span>
+        </div>
+      )}
 
       {searchResult?.failures && searchResult.failures.length > 0 && (
         <div className={styles.metadataFailures}>
@@ -127,12 +147,28 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
                 const isSelected = selectedKey === key;
                 return (
                   <button key={key} className={`${styles.metadataCandidate} ${isSelected ? styles.selected : ""}`} onClick={() => setSelectedKey(key)}>
-                    <div className={styles.metadataCandidateTop}>
-                      <strong>{item.candidate.title}</strong>
-                      <span>{Math.round(item.candidate.confidence * 100)}%</span>
+                    <div className={styles.metadataCandidateBody}>
+                      {item.candidate.cover_url ? (
+                        <img
+                          className={styles.metadataCandidateCover}
+                          src={item.candidate.cover_url}
+                          alt={item.candidate.title}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className={styles.metadataCandidateCoverPlaceholder}>
+                          <Database size={18} />
+                        </div>
+                      )}
+                      <div className={styles.metadataCandidateContent}>
+                        <div className={styles.metadataCandidateTop}>
+                          <strong>{item.candidate.title}</strong>
+                          <span>{Math.round(item.candidate.confidence * 100)}%</span>
+                        </div>
+                        <p>{item.candidate.authors?.join(", ") || "-"}</p>
+                        <p>{item.plugin_name} · {item.candidate.reason || "-"}</p>
+                      </div>
                     </div>
-                    <p>{item.candidate.authors?.join(", ") || "-"}</p>
-                    <p>{item.plugin_name} · {item.candidate.reason || "-"}</p>
                   </button>
                 );
               })

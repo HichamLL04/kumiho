@@ -39,8 +39,8 @@ function iconURL(plugin: PluginManifest, record?: PluginRecord) {
     || null;
 }
 
-function supportsAPIKeyConfig(plugin: PluginManifest) {
-  return plugin.id === "kumiho-plugin-metadata-googlebooks";
+function supportsAPIKeyConfig(config?: PluginConfigStatus) {
+  return Boolean(config?.fields?.some((field) => field.type === "secret"));
 }
 
 export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
@@ -307,9 +307,9 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
                     ? t("settings.plugins.install")
                     : t("settings.plugins.reinstall"));
               const iconSrc = iconURL(plugin, installedRecord);
-              const showConfig = supportsAPIKeyConfig(plugin);
-              const isConfigOpen = expandedConfigId === plugin.id;
               const configStatus = configById[plugin.id];
+              const showConfig = supportsAPIKeyConfig(configStatus);
+              const isConfigOpen = expandedConfigId === plugin.id;
               const apiKeyField = configStatus?.fields.find((field) => field.key === "api_key");
               const configReady = !showConfig || apiKeyField?.configured;
 
@@ -426,7 +426,7 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
                     <div className={styles.pluginConfigPanel}>
                       <div className={styles.pluginConfigHeader}>
                         <div>
-                          <h5>{t("settings.plugins.api_key.title")}</h5>
+                          <h5>{plugin.name} {t("settings.plugins.api_key.label")}</h5>
                           <p>{t("settings.plugins.api_key.desc")}</p>
                         </div>
                         <span className={`${styles.pluginStateBadge} ${apiKeyField?.configured ? styles.pluginStateBadgeActive : styles.pluginStateBadgeInstalled}`}>
