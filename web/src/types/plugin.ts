@@ -78,6 +78,7 @@ export interface PluginManifest {
   id: string;
   name: string;
   description?: string;
+  description_i18n?: PluginLocalizedString;
   version: string;
   author?: string;
   icons?: PluginIcons;

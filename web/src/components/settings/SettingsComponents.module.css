@@ -224,9 +224,39 @@
   min-height: 2.35rem;
   display: -webkit-box;
   -webkit-box-orient: vertical;
+  white-space: pre-line;
   line-clamp: 2;
   -webkit-line-clamp: 2;
   overflow: hidden;
+}
+
+.pluginDescriptionBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+}
+
+.pluginDescriptionExpanded {
+  display: block;
+  min-height: 0;
+  line-clamp: unset;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.pluginDescriptionToggle {
+  border: 0;
+  background: transparent;
+  color: #c7d2fe;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+}
+
+.pluginDescriptionToggle:hover {
+  color: #e2e8f0;
 }
 
 .pluginStateBadge {

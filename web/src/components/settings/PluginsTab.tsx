@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Blocks, Download, HeartPulse, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { pluginAPI } from "../../api/client";
@@ -79,6 +79,49 @@ function localizedErrorMessage(
 ) {
   if (!code) return "";
   return localizedText(locale, messagesI18n?.[code], messages?.[code]);
+}
+
+function ExpandablePluginDescription({ text }: { text: string }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const [expandable, setExpandable] = useState(false);
+  const ref = useRef<HTMLParagraphElement | null>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+
+    const measure = () => {
+      setExpandable(node.scrollHeight > node.clientHeight + 1);
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [text, expanded]);
+
+  return (
+    <div className={styles.pluginDescriptionBlock}>
+      <p
+        ref={ref}
+        className={[
+          styles.pluginDescription,
+          expanded ? styles.pluginDescriptionExpanded : "",
+        ].filter(Boolean).join(" ")}
+      >
+        {text}
+      </p>
+      {expandable && (
+        <button
+          type="button"
+          className={styles.pluginDescriptionToggle}
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          {expanded ? t("library.action.less") : t("library.action.more")}
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
@@ -497,7 +540,11 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
                     </label>
                   </div>
 
-                  <p className={`${styles.pluginDescription} ${!isInstalled ? styles.pluginContentDimmed : ""}`}>{plugin.description || "-"}</p>
+                  <div className={!isInstalled ? styles.pluginContentDimmed : ""}>
+                    <ExpandablePluginDescription
+                      text={localizedText(i18n.language || "ko", plugin.description_i18n, plugin.description) || "-"}
+                    />
+                  </div>
 
                   <div className={`${styles.pluginCapabilities} ${!isInstalled ? styles.pluginContentDimmed : ""}`}>
                     {plugin.capabilities.map((capability) => (
@@ -595,7 +642,7 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
                     <PlugZap size={18} className={styles.pluginOrphanIcon} />
                   </div>
 
-                  <p className={styles.pluginDescription}>{item.manifest.description || "-"}</p>
+                  <ExpandablePluginDescription text={item.manifest.description || "-"} />
 
                   <div className={styles.pluginActions}>
                     <button className={styles.pluginActionSecondary} onClick={() => void handleHealth(item.id)} disabled={busyId === item.id}>

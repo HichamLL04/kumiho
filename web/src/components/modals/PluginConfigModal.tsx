@@ -1,5 +1,6 @@
 import { KeyRound, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Fragment } from "react";
 import type { PluginAuthAction, PluginConfigSchemaField, PluginConfigStatus, PluginLocalizedString, PluginManifest } from "../../types/plugin";
 import styles from "./PluginConfigModal.module.css";
 
@@ -55,6 +56,33 @@ function configuredForAction(action: PluginAuthAction | undefined, configStatus?
 function shouldRenderSecretField(fieldKey: string, action?: PluginAuthAction) {
   if (!action?.store_mappings) return true;
   return !(fieldKey in action.store_mappings);
+}
+
+function renderLinkedText(text: string) {
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  return text.split("\n").map((line, lineIndex) => (
+    <Fragment key={`line-${lineIndex}`}>
+      {line.split(urlPattern).map((part, partIndex) => {
+        if (urlPattern.test(part)) {
+          urlPattern.lastIndex = 0;
+          return (
+            <a
+              key={`part-${lineIndex}-${partIndex}`}
+              className={styles.inlineLink}
+              href={part}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {part}
+            </a>
+          );
+        }
+        urlPattern.lastIndex = 0;
+        return <Fragment key={`part-${lineIndex}-${partIndex}`}>{part}</Fragment>;
+      })}
+      {lineIndex < text.split("\n").length - 1 && <br />}
+    </Fragment>
+  ));
 }
 
 export function PluginConfigModal({
@@ -118,7 +146,7 @@ export function PluginConfigModal({
           {authAction && (
             <div className={styles.notes}>
               {localizedText(locale, authAction.description_i18n, authAction.description) && (
-                <p>{localizedText(locale, authAction.description_i18n, authAction.description)}</p>
+                <p>{renderLinkedText(localizedText(locale, authAction.description_i18n, authAction.description))}</p>
               )}
               {authAction.fields.map((field) => (
                 <label key={field.key} className={styles.field}>
