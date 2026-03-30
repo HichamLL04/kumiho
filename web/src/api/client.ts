@@ -271,8 +271,8 @@ export const seriesAPI = {
     api.delete<{ deleted: boolean; id: string }>(`/series/${seriesId}/characters/${characterId}`),
   reorderCharacters: (seriesId: string, orderedIds: string[]) =>
     api.post<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters/reorder`, { ordered_ids: orderedIds }),
-  importCharacters: (seriesId: string, characters: MetadataCharacter[]) =>
-    api.post<{ added: SeriesCharacter[]; count: number }>(`/series/${seriesId}/characters/import`, { characters }),
+  importCharacters: (seriesId: string, characters: MetadataCharacter[], sourceProvider?: string) =>
+    api.post<{ added: SeriesCharacter[]; count: number }>(`/series/${seriesId}/characters/import`, { characters, source_provider: sourceProvider }),
   uploadCharacterImage: (seriesId: string, characterId: string, file: File) => {
     const formData = new FormData();
     formData.append("image", file);

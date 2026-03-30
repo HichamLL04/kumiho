@@ -108,7 +108,7 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
       const response = await seriesAPI.metadataApply(series.id, filterMetadataResult(result, applyFields));
       let importedCount = 0;
       if (result.characters?.length) {
-        const importResponse = await seriesAPI.importCharacters(series.id, result.characters);
+        const importResponse = await seriesAPI.importCharacters(series.id, result.characters, fetched?.plugin_id);
         importedCount = importResponse.data.count || 0;
         if (importedCount > 0) {
           onCharactersImported?.(importedCount);

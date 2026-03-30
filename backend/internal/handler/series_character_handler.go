@@ -44,7 +44,8 @@ type reorderSeriesCharactersRequest struct {
 }
 
 type importSeriesCharactersRequest struct {
-	Characters []sdktypes.MetadataCharacter `json:"characters"`
+	Characters     []sdktypes.MetadataCharacter `json:"characters"`
+	SourceProvider string                        `json:"source_provider,omitempty"`
 }
 
 func NewSeriesCharacterHandler(seriesRepo *repository.SeriesRepository, characterRepo *repository.SeriesCharacterRepository, cfg *config.Config) *SeriesCharacterHandler {
@@ -83,8 +84,14 @@ func (h *SeriesCharacterHandler) Create(c *fiber.Ctx) error {
 	}
 	name := strings.TrimSpace(req.Name)
 	normalizedName := repository.NormalizeSeriesCharacterName(name)
+	tx, err := database.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to start transaction"})
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	if normalizedName != "" {
-		exists, err := h.characterRepo.ExistsNormalizedName(nil, series.ID, normalizedName)
+		exists, err := h.characterRepo.ExistsNormalizedName(tx, series.ID, normalizedName, "")
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check existing character"})
 		}
@@ -92,7 +99,7 @@ func (h *SeriesCharacterHandler) Create(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "character already exists"})
 		}
 	}
-	if err := h.characterRepo.ShiftSortOrders(nil, series.ID, 1); err != nil {
+	if err := h.characterRepo.ShiftSortOrders(tx, series.ID, 1); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to allocate sort order"})
 	}
 
@@ -103,8 +110,11 @@ func (h *SeriesCharacterHandler) Create(c *fiber.Ctx) error {
 		Role:             strings.TrimSpace(req.Role),
 		ExternalImageURL: strings.TrimSpace(req.ImageURL),
 	}
-	if err := h.characterRepo.Create(nil, item); err != nil {
+	if err := h.characterRepo.Create(tx, item); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create character"})
+	}
+	if err := tx.Commit(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to commit transaction"})
 	}
 	h.assignImageURL(series.ID, item)
 	return c.JSON(item)
@@ -127,14 +137,12 @@ func (h *SeriesCharacterHandler) Update(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name is required"})
 		}
 		normalizedName := repository.NormalizeSeriesCharacterName(item.Name)
-		existing, err := h.characterRepo.ListBySeriesID(nil, series.ID)
+		exists, err := h.characterRepo.ExistsNormalizedName(nil, series.ID, normalizedName, item.ID)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to validate character"})
 		}
-		for _, current := range existing {
-			if current.ID != item.ID && current.NormalizedName == normalizedName {
-				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "character already exists"})
-			}
+		if exists {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "character already exists"})
 		}
 	}
 	if req.Role != nil {
@@ -195,8 +203,17 @@ func (h *SeriesCharacterHandler) Reorder(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ordered_ids contains unknown character"})
 		}
 	}
-	if err := h.characterRepo.Reorder(nil, series.ID, req.OrderedIDs); err != nil {
+	reorderTx, err := database.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to start transaction"})
+	}
+	defer func() { _ = reorderTx.Rollback() }()
+
+	if err := h.characterRepo.Reorder(reorderTx, series.ID, req.OrderedIDs); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to reorder characters"})
+	}
+	if err := reorderTx.Commit(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to commit reorder"})
 	}
 	items, err = h.characterRepo.ListBySeriesID(nil, series.ID)
 	if err != nil {
@@ -249,6 +266,7 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 		pending = append(pending, character)
 	}
 
+	sourceProvider := strings.TrimSpace(req.SourceProvider)
 	sortMetadataCharacters(pending)
 	for _, character := range pending {
 		item := model.SeriesCharacter{
@@ -257,16 +275,19 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 			Role:             strings.TrimSpace(character.Role),
 			SortOrder:        nextSortOrder,
 			ExternalImageURL: coverURLFromMetadataCharacter(character),
-			SourceProvider:   "kitsu",
+			SourceProvider:   sourceProvider,
 		}
 		if character.ID != "" {
 			item.SourceCharacterID = character.ID
 		}
-		if relationID := strings.TrimSpace(character.Identifiers["kitsu_media_character_id"]); relationID != "" {
-			item.SourceRelationID = relationID
-		}
-		if sourceID := strings.TrimSpace(character.Identifiers["kitsu_character_id"]); sourceID != "" {
-			item.SourceCharacterID = sourceID
+		switch sourceProvider {
+		case "kumiho-plugin-metadata-kitsu":
+			if relationID := strings.TrimSpace(character.Identifiers["kitsu_media_character_id"]); relationID != "" {
+				item.SourceRelationID = relationID
+			}
+			if sourceID := strings.TrimSpace(character.Identifiers["kitsu_character_id"]); sourceID != "" {
+				item.SourceCharacterID = sourceID
+			}
 		}
 		if err := h.characterRepo.Create(tx, &item); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to import characters"})

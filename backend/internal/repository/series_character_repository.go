@@ -99,22 +99,19 @@ func (r *SeriesCharacterRepository) FindByID(db database.Queryer, seriesID strin
 	return &item, nil
 }
 
-func (r *SeriesCharacterRepository) ExistsNormalizedName(db database.Queryer, seriesID string, normalizedName string) (bool, error) {
+func (r *SeriesCharacterRepository) ExistsNormalizedName(db database.Queryer, seriesID string, normalizedName string, excludeID string) (bool, error) {
 	db = database.GetQueryer(db)
 	var count int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM series_characters WHERE series_id = ? AND normalized_name = ?`, seriesID, normalizedName).Scan(&count); err != nil {
-		return false, err
+	if excludeID != "" {
+		if err := db.QueryRow(`SELECT COUNT(*) FROM series_characters WHERE series_id = ? AND normalized_name = ? AND id != ?`, seriesID, normalizedName, excludeID).Scan(&count); err != nil {
+			return false, err
+		}
+	} else {
+		if err := db.QueryRow(`SELECT COUNT(*) FROM series_characters WHERE series_id = ? AND normalized_name = ?`, seriesID, normalizedName).Scan(&count); err != nil {
+			return false, err
+		}
 	}
 	return count > 0, nil
-}
-
-func (r *SeriesCharacterRepository) NextSortOrder(db database.Queryer, seriesID string) (int, error) {
-	db = database.GetQueryer(db)
-	var next int
-	if err := db.QueryRow(`SELECT COALESCE(MAX(sort_order), -1) + 1 FROM series_characters WHERE series_id = ?`, seriesID).Scan(&next); err != nil {
-		return 0, err
-	}
-	return next, nil
 }
 
 func (r *SeriesCharacterRepository) ShiftSortOrders(db database.Queryer, seriesID string, delta int) error {

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -434,14 +435,8 @@ func candidateVolumeNumber(title string) (int, bool) {
 		return 0, false
 	}
 
-	var volume int
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			return 0, false
-		}
-		volume = (volume * 10) + int(r-'0')
-	}
-	if volume <= 0 {
+	volume, err := strconv.Atoi(value)
+	if err != nil || volume <= 0 {
 		return 0, false
 	}
 	return volume, true

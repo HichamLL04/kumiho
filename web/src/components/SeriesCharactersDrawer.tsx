@@ -378,29 +378,12 @@ function sortCharactersForDisplay(items: SeriesCharacter[], pendingNewIds: strin
       return leftPending ? -1 : 1;
     }
 
-    const leftMain = isMainRole(left.role);
-    const rightMain = isMainRole(right.role);
-    if (leftMain !== rightMain) {
-      return leftMain ? -1 : 1;
-    }
-
-    const leftName = left.name.trim();
-    const rightName = right.name.trim();
-    if (leftName !== "" || rightName !== "") {
-      if (leftName === "") return 1;
-      if (rightName === "") return -1;
-      const compared = leftName.localeCompare(rightName, undefined, { sensitivity: "base" });
-      if (compared !== 0) {
-        return compared;
-      }
+    if (left.sort_order !== right.sort_order) {
+      return left.sort_order - right.sort_order;
     }
 
     return left.created_at.localeCompare(right.created_at);
   });
-}
-
-function isMainRole(role?: string) {
-  return role?.trim().toLowerCase() === "main";
 }
 
 function isManagedImageURL(value?: string) {
