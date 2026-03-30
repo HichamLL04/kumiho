@@ -622,6 +622,7 @@
       "preview": "Fetched Metadata",
       "empty_candidates": "No metadata candidates yet.",
       "empty_preview": "Fetched metadata will appear here.",
+      "character_count": "{{count}} total",
       "fields": {
         "title": "Title",
         "original_title": "Original Title",
@@ -631,6 +632,7 @@
         "language": "Language",
         "description": "Description",
         "tags": "Tags",
+        "characters": "Characters",
         "identifiers": "Identifiers"
       },
       "toast": {
@@ -639,8 +641,39 @@
         "fetch_success": "Metadata details loaded.",
         "fetch_failed": "Failed to fetch metadata details.",
         "apply_success": "Applied {{count}} fields.",
+        "apply_success_with_characters": "Applied {{count}} fields and added {{characters}} characters.",
         "apply_no_changes": "No metadata changes to apply.",
         "apply_failed": "Failed to apply metadata."
+      }
+    },
+    "characters": {
+      "title": "Characters",
+      "desc": "Manage series characters, images, and ordering.",
+      "add": "Add Character",
+      "reorder": "Reorder",
+      "role_display": "Role: {{role}}",
+      "empty": "No characters saved yet.",
+      "save": "Save Changes",
+      "save_new": "Save",
+      "cancel": "Cancel",
+      "upload": "Upload File",
+      "reset_image": "Reset Image",
+      "new_name": "New Character",
+      "fields": {
+        "name": "Name",
+        "role": "Role",
+        "image_url": "Image URL"
+      },
+      "toast": {
+        "load_failed": "Failed to load characters.",
+        "create_failed": "Failed to add character.",
+        "save_success": "Character saved.",
+        "save_failed": "Failed to save character.",
+        "delete_failed": "Failed to delete character.",
+        "reorder_failed": "Failed to reorder characters.",
+        "image_updated": "Character image updated.",
+        "image_failed": "Failed to update character image.",
+        "name_required": "Character name is required."
       }
     },
     "count": "Total <strong>{{count}}</strong> volumes",

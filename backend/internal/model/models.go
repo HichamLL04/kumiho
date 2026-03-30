@@ -91,6 +91,24 @@ type SeriesMetadata struct {
 	ISBN            string `json:"isbn" db:"isbn"`
 }
 
+// SeriesCharacter 시리즈 등장인물 모델
+type SeriesCharacter struct {
+	ID                string    `json:"id" db:"id"`
+	SeriesID          string    `json:"series_id" db:"series_id"`
+	Name              string    `json:"name" db:"name"`
+	NormalizedName    string    `json:"-" db:"normalized_name"`
+	SortOrder         int       `json:"sort_order" db:"sort_order"`
+	Role              string    `json:"role" db:"role"`
+	ExternalImageURL  string    `json:"-" db:"external_image_url"`
+	ImagePath         string    `json:"-" db:"image_path"`
+	ImageURL          string    `json:"image_url" db:"-"`
+	SourceProvider    string    `json:"source_provider" db:"source_provider"`
+	SourceCharacterID string    `json:"source_character_id" db:"source_character_id"`
+	SourceRelationID  string    `json:"source_relation_id" db:"source_relation_id"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
+}
+
 // Volume 볼륨(권) 모델
 type Volume struct {
 	ID              string    `json:"id"`

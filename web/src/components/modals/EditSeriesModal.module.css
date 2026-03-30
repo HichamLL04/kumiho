@@ -35,6 +35,18 @@
   flex-direction: column;
 }
 
+.modalContentCharactersOnly {
+  max-width: 1180px;
+}
+
+.modalContentMetadataOnly {
+  max-width: 1180px;
+}
+
+.modalContentDualPane {
+  max-width: 1180px;
+}
+
 .modalHeader {
   display: flex;
   align-items: center;
@@ -80,7 +92,12 @@
 
 .toolbarRow {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.metadataButtonRight {
+  margin-left: auto;
 }
 
 .metadataButton {
@@ -94,6 +111,8 @@
   color: #d1d5db;
   cursor: pointer;
   font-weight: 600;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .metadataButton:hover {
@@ -110,6 +129,11 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.workspaceWithCharacters,
+.workspaceWithMetadata {
+  min-height: 0;
 }
 
 .formPane {
@@ -346,6 +370,12 @@
   padding-left: 1.25rem;
 }
 
+.charactersPane {
+  min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding-right: 1.25rem;
+}
+
 .btnPrimary {
   display: flex;
   align-items: center;
@@ -387,6 +417,12 @@
     padding-left: 0;
     padding-top: 0;
   }
+
+  .modalContentExpanded .charactersPane {
+    order: -1;
+    border-right: none;
+    padding-right: 0;
+  }
 }
 
 @media (min-width: 1200px) {
@@ -405,12 +441,44 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 520px) minmax(0, 1fr);
     gap: 1.5rem;
   }
 
+  .modalContentExpanded .workspace {
+    grid-template-columns: minmax(0, 520px);
+  }
+
+  .modalContentExpanded .workspace.workspaceWithCharacters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .modalContentExpanded .workspace.workspaceWithMetadata {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .modalContentExpanded .workspace.workspaceWithCharacters.workspaceWithMetadata {
+    grid-template-columns: minmax(0, 360px) minmax(0, 520px) minmax(0, 1fr);
+  }
+
+  .modalContentExpanded .charactersPane,
   .modalContentExpanded .formPane,
   .modalContentExpanded .metadataPane {
+    min-height: 0;
+  }
+
+  .modalContentExpanded .charactersPane,
+  .modalContentExpanded .formPane {
+    min-height: 0;
+  }
+
+  .modalContentExpanded .charactersPane {
+    display: flex;
+    overflow: hidden;
+  }
+
+  .modalContentExpanded .charactersPane > * {
+    flex: 1;
+    height: 100%;
     min-height: 0;
   }
 

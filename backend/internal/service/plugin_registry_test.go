@@ -134,6 +134,60 @@ func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
 	}
 }
 
+func TestPluginInstallServiceInstallUsesLocalFileArtifactDirectly(t *testing.T) {
+	artifactDir := t.TempDir()
+	artifactPath := filepath.Join(artifactDir, "plugin-sample-service")
+	artifactBytes := []byte("#!/bin/sh\necho local-service-plugin\n")
+	if err := os.WriteFile(artifactPath, artifactBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	catalogPath := filepath.Join(artifactDir, "index.json")
+	catalog := PluginCatalog{
+		Plugins: []sdkmanifest.Manifest{
+			{
+				ID:                 "plugin-sample-service",
+				Name:               "Sample Service Plugin",
+				Version:            "0.1.0",
+				RuntimeType:        sdkmanifest.RuntimeTypeService,
+				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxDocker},
+				MinCoreVersion:     "0.1.0",
+				Artifacts: []sdkmanifest.Artifact{
+					{Platform: sdkmanifest.PlatformLinuxDocker, URL: "file://" + artifactPath, Checksum: checksum},
+				},
+			},
+		},
+	}
+	rawCatalog, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(catalogPath, rawCatalog, 0o644); err != nil {
+		t.Fatalf("WriteFile(catalog) error = %v", err)
+	}
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "file://" + catalogPath,
+	}
+	manager := pluginengine.NewManager(pluginengine.NewMemoryStore())
+	svc := NewPluginInstallService(cfg, nil, manager, nil)
+
+	result, err := svc.Install(context.Background(), "plugin-sample-service")
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if result.InstallPath != artifactPath {
+		t.Fatalf("install path = %q, want %q", result.InstallPath, artifactPath)
+	}
+	if _, err := os.Stat(artifactPath); err != nil {
+		t.Fatalf("artifact stat error = %v", err)
+	}
+}
+
 func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,6 +283,43 @@ func TestPluginInstallServiceUninstallRemovesArtifactAndRecord(t *testing.T) {
 		t.Fatalf("Get() error = %v", err)
 	} else if ok {
 		t.Fatal("record should be deleted")
+	}
+}
+
+func TestPluginInstallServiceUninstallKeepsExternalLocalArtifact(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "https://example.com/index.json",
+	}
+	store := pluginengine.NewMemoryStore()
+	manager := pluginengine.NewManager(store)
+	svc := NewPluginInstallService(cfg, nil, manager, nil)
+
+	externalDir := t.TempDir()
+	externalPath := filepath.Join(externalDir, "plugin-sample")
+	if err := os.WriteFile(externalPath, []byte("plugin"), 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
+		ID:          "plugin-sample",
+		Name:        "Sample Plugin",
+		Version:     "0.1.0",
+		RuntimeType: sdkmanifest.RuntimeTypeBinary,
+	}, externalPath)
+	if err != nil {
+		t.Fatalf("RegisterInstalled() error = %v", err)
+	}
+	if _, markErr := manager.MarkRegistered(record.ID); markErr != nil {
+		t.Fatalf("MarkRegistered() error = %v", markErr)
+	}
+
+	if _, err := svc.Uninstall(context.Background(), "plugin-sample"); err != nil {
+		t.Fatalf("Uninstall() error = %v", err)
+	}
+	if _, err := os.Stat(externalPath); err != nil {
+		t.Fatalf("external artifact should remain, stat error = %v", err)
 	}
 }
 

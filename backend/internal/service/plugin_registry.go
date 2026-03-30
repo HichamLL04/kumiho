@@ -106,15 +106,9 @@ func (s *PluginInstallService) Install(ctx context.Context, pluginID string) (*I
 		return nil, removeErr
 	}
 
-	installDir := filepath.Join(s.cfg.PluginDir, entry.ID, entry.Version)
-	if mkdirErr := os.MkdirAll(installDir, 0o755); mkdirErr != nil {
-		return nil, mkdirErr
-	}
-
-	filename := artifactFilename(entry, artifact)
-	installPath := filepath.Join(installDir, filename)
-	if downloadErr := s.downloadArtifact(ctx, artifact, installPath); downloadErr != nil {
-		return nil, downloadErr
+	installPath, err := s.prepareInstallPath(ctx, entry, artifact)
+	if err != nil {
+		return nil, err
 	}
 	if entry.RuntimeType == sdkmanifest.RuntimeTypeBinary || entry.RuntimeType == sdkmanifest.RuntimeTypeService {
 		if chmodErr := os.Chmod(installPath, 0o755); chmodErr != nil {
@@ -131,6 +125,47 @@ func (s *PluginInstallService) Install(ctx context.Context, pluginID string) (*I
 		return nil, err
 	}
 
+	return &InstallPluginResult{
+		Record:          record,
+		ArtifactURL:     artifact.URL,
+		InstallPath:     installPath,
+		RestartRequired: false,
+	}, nil
+}
+
+func (s *PluginInstallService) SyncLocalDevelopmentInstallPath(ctx context.Context, pluginID string) (*InstallPluginResult, error) {
+	catalog, err := s.ListCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	entry, ok := findPluginManifest(catalog.Plugins, pluginID)
+	if !ok {
+		return nil, ErrPluginCatalogEntryNotFound
+	}
+	artifact, err := selectArtifact(entry)
+	if err != nil {
+		return nil, err
+	}
+	installPath, isLocalFile, err := s.resolveLocalFileInstallPath(artifact)
+	if err != nil {
+		return nil, err
+	}
+	if !isLocalFile {
+		return nil, nil
+	}
+	if entry.RuntimeType == sdkmanifest.RuntimeTypeBinary || entry.RuntimeType == sdkmanifest.RuntimeTypeService {
+		if chmodErr := os.Chmod(installPath, 0o755); chmodErr != nil {
+			return nil, chmodErr
+		}
+	}
+	record, err := s.manager.RegisterInstalled(entry, installPath)
+	if err != nil {
+		return nil, err
+	}
+	record, err = s.manager.MarkRegistered(record.ID)
+	if err != nil {
+		return nil, err
+	}
 	return &InstallPluginResult{
 		Record:          record,
 		ArtifactURL:     artifact.URL,
@@ -165,6 +200,58 @@ func (s *PluginInstallService) getJSON(ctx context.Context, endpoint string, out
 	}
 	defer func() { _ = reader.Close() }()
 	return json.NewDecoder(reader).Decode(out)
+}
+
+func (s *PluginInstallService) prepareInstallPath(ctx context.Context, entry sdkmanifest.Manifest, artifact sdkmanifest.Artifact) (string, error) {
+	if installPath, isLocalFile, err := s.resolveLocalFileInstallPath(artifact); err != nil {
+		return "", err
+	} else if isLocalFile {
+		return installPath, nil
+	}
+
+	installDir := filepath.Join(s.cfg.PluginDir, entry.ID, entry.Version)
+	if mkdirErr := os.MkdirAll(installDir, 0o755); mkdirErr != nil {
+		return "", mkdirErr
+	}
+
+	filename := artifactFilename(entry, artifact)
+	installPath := filepath.Join(installDir, filename)
+	if downloadErr := s.downloadArtifact(ctx, artifact, installPath); downloadErr != nil {
+		return "", downloadErr
+	}
+	return installPath, nil
+}
+
+func (s *PluginInstallService) resolveLocalFileInstallPath(artifact sdkmanifest.Artifact) (string, bool, error) {
+	parsed, err := url.Parse(strings.TrimSpace(artifact.URL))
+	if err != nil {
+		return "", false, err
+	}
+	if parsed.Scheme != "file" {
+		return "", false, nil
+	}
+	installPath := filepath.Clean(parsed.Path)
+	if !filepath.IsAbs(installPath) {
+		absPath, err := filepath.Abs(installPath)
+		if err != nil {
+			return "", false, err
+		}
+		installPath = absPath
+	}
+	file, err := os.Open(installPath)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = file.Close() }()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", false, err
+	}
+	if err := verifyChecksum(hex.EncodeToString(hasher.Sum(nil)), artifact.Checksum); err != nil {
+		return "", false, err
+	}
+	return installPath, true, nil
 }
 
 func (s *PluginInstallService) downloadArtifact(ctx context.Context, artifact sdkmanifest.Artifact, installPath string) error {
@@ -311,7 +398,7 @@ func (s *PluginInstallService) removeRecordAndArtifacts(ctx context.Context, rec
 		}
 	}
 
-	if err := removeInstallArtifacts(record.InstallPath); err != nil {
+	if err := s.removeInstallArtifacts(record.InstallPath); err != nil {
 		return err
 	}
 	if s.secretService != nil && !preserveSecrets {
@@ -322,10 +409,18 @@ func (s *PluginInstallService) removeRecordAndArtifacts(ctx context.Context, rec
 	return s.manager.Remove(record.ID)
 }
 
-func removeInstallArtifacts(installPath string) error {
+func (s *PluginInstallService) removeInstallArtifacts(installPath string) error {
 	installPath = strings.TrimSpace(installPath)
 	if installPath == "" {
 		return nil
+	}
+	if strings.TrimSpace(s.cfg.PluginDir) != "" {
+		cleanPluginDir := filepath.Clean(s.cfg.PluginDir)
+		cleanInstallPath := filepath.Clean(installPath)
+		rel, err := filepath.Rel(cleanPluginDir, cleanInstallPath)
+		if err != nil || strings.HasPrefix(rel, "..") || rel == "." {
+			return nil
+		}
 	}
 
 	if err := os.Remove(installPath); err != nil && !errors.Is(err, os.ErrNotExist) {

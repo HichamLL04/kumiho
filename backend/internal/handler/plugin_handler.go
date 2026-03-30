@@ -152,6 +152,14 @@ func (h *PluginHandler) Activate(c *fiber.Ctx) error {
 		ctx = context.Background()
 	}
 
+	if h.installService != nil {
+		if _, err := h.installService.SyncLocalDevelopmentInstallPath(ctx, c.Params("id")); err != nil &&
+			!errors.Is(err, service.ErrPluginCatalogEntryNotFound) &&
+			!errors.Is(err, service.ErrPluginRegistryNotConfigured) {
+			return writePluginError(c, err)
+		}
+	}
+
 	record, err := h.manager.Activate(ctx, c.Params("id"))
 	if err != nil {
 		return writePluginError(c, err)

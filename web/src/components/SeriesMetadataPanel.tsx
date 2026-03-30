@@ -12,6 +12,8 @@ import styles from "./SeriesMetadataPanel.module.css";
 interface SeriesMetadataPanelProps {
   series: Series;
   onApplied: (response: import("../types/plugin").MetadataApplyResponse) => void;
+  onFetched?: (response: MetadataFetchResponse | null) => void;
+  onCharactersImported?: (count: number) => void;
   compact?: boolean;
 }
 
@@ -27,7 +29,7 @@ const DEFAULT_APPLY_FIELDS: Record<ApplyFieldKey, boolean> = {
   tags: true,
 };
 
-export function SeriesMetadataPanel({ series, onApplied, compact = false }: SeriesMetadataPanelProps) {
+export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharactersImported, compact = false }: SeriesMetadataPanelProps) {
   const { t, i18n } = useTranslation();
   const [searchResult, setSearchResult] = useState<MetadataSearchResult | null>(null);
   const [fetched, setFetched] = useState<MetadataFetchResponse | null>(null);
@@ -63,6 +65,7 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
   const handleSearch = async () => {
     setBusy("search");
     setFetched(null);
+    onFetched?.(null);
     try {
       const response = await seriesAPI.metadataSearch(series.id, { title: searchTitle.trim() || undefined });
       setSearchResult(response.data);
@@ -87,6 +90,7 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
         source: item.candidate.source,
       });
       setFetched(response.data);
+      onFetched?.(response.data);
       setApplyFields(DEFAULT_APPLY_FIELDS);
       setStatus({ type: "success", message: t("series.metadata.toast.fetch_success") });
     } catch (error: unknown) {
@@ -102,11 +106,24 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
     setBusy("apply");
     try {
       const response = await seriesAPI.metadataApply(series.id, filterMetadataResult(result, applyFields));
+      let importedCount = 0;
+      if (result.characters?.length) {
+        const importResponse = await seriesAPI.importCharacters(series.id, result.characters);
+        importedCount = importResponse.data.count || 0;
+        if (importedCount > 0) {
+          onCharactersImported?.(importedCount);
+        }
+      }
       onApplied(response.data);
       setStatus({
         type: "success",
         message: response.data.updated_fields.length > 0
-          ? t("series.metadata.toast.apply_success", { count: response.data.updated_fields.length })
+          ? importedCount > 0
+            ? t("series.metadata.toast.apply_success_with_characters", {
+              count: response.data.updated_fields.length,
+              characters: importedCount,
+            })
+            : t("series.metadata.toast.apply_success", { count: response.data.updated_fields.length })
           : t("series.metadata.toast.apply_no_changes"),
       });
     } catch (error: unknown) {
@@ -359,6 +376,14 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
                   />
                 </div>
                 <p className={styles.metadataPreviewValue}>{fetched.result.tags?.join(", ") || "-"}</p>
+              </div>
+              <div className={styles.metadataPreviewSection}>
+                <div className={styles.metadataPreviewLabelRow}>
+                  <label>{t("series.metadata.fields.characters")}</label>
+                </div>
+                <p className={styles.metadataPreviewValue}>
+                  {t("series.metadata.character_count", { count: fetched.result.characters?.length || 0 })}
+                </p>
               </div>
               <button type="button" className={commonStyles.settingsSelect} onClick={() => void handleApply(fetched.result)} disabled={busy !== null || !hasSelectedApplyField}>
                 {busy === "apply" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Sparkles size={14} />}

@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-import { ChevronDown, Link, RotateCcw, Save, Search, Upload, X } from "lucide-react";
+import { ChevronDown, Link, RotateCcw, Save, Search, Upload, Users, X } from "lucide-react";
 import type { Series } from "../../types/series";
 import { seriesAPI } from "../../api/client";
 import type { MetadataApplyResponse } from "../../types/plugin";
 import { SeriesMetadataPanel } from "../SeriesMetadataPanel";
+import { SeriesCharactersDrawer } from "../SeriesCharactersDrawer";
 import { AlertModal, type AlertType } from "./AlertModal";
 import styles from "./EditSeriesModal.module.css";
 
@@ -36,6 +37,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const [isDragging, setIsDragging] = useState(false);
   const [isOriginalTitleMenuOpen, setIsOriginalTitleMenuOpen] = useState(false);
   const [isMetadataOpen, setIsMetadataOpen] = useState(false);
+  const [isCharactersOpen, setIsCharactersOpen] = useState(false);
+  const [charactersReloadToken, setCharactersReloadToken] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const originalTitleMenuRef = useRef<HTMLDivElement>(null);
 
@@ -100,6 +103,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       setIsDragging(false);
       setIsOriginalTitleMenuOpen(false);
       setIsMetadataOpen(false);
+      setIsCharactersOpen(false);
+      setCharactersReloadToken(0);
     }
   }, [isOpen, series]);
 
@@ -312,7 +317,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
           onClick={onClose}
         >
           <div
-            className={`${styles.modalContent} ${isMetadataOpen ? styles.modalContentExpanded : ""}`}
+            className={`${styles.modalContent} ${(isMetadataOpen || isCharactersOpen) ? styles.modalContentExpanded : ""} ${isCharactersOpen && !isMetadataOpen ? styles.modalContentCharactersOnly : ""} ${isMetadataOpen && !isCharactersOpen ? styles.modalContentMetadataOnly : ""} ${isMetadataOpen && isCharactersOpen ? styles.modalContentDualPane : ""}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className={styles.modalHeader}>
@@ -347,18 +352,54 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
               onSubmit={handleSubmit}
               className={styles.editForm}
             >
-              <div className={styles.toolbarRow}>
+              <div
+                className={`${styles.toolbarRow} ${isCharactersOpen ? styles.toolbarWithCharacters : ""} ${isMetadataOpen ? styles.toolbarWithMetadata : ""}`}
+              >
                 <button
                   type="button"
-                  className={`${styles.metadataButton} ${isMetadataOpen ? styles.metadataButtonActive : ""}`}
-                  onClick={() => setIsMetadataOpen((prev) => !prev)}
+                  className={`${styles.metadataButton} ${isCharactersOpen ? styles.metadataButtonActive : ""}`}
+                  onClick={() => {
+                    setIsCharactersOpen((prev) => {
+                      const next = !prev;
+                      if (next) {
+                        setIsMetadataOpen(false);
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  <Users size={16} />
+                  <span>{t("series.characters.title")}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.metadataButton} ${styles.metadataButtonRight} ${isMetadataOpen ? styles.metadataButtonActive : ""}`}
+                  onClick={() => {
+                    setIsMetadataOpen((prev) => {
+                      const next = !prev;
+                      if (next) {
+                        setIsCharactersOpen(false);
+                      }
+                      return next;
+                    });
+                  }}
                 >
                   <Search size={16} />
                   <span>{t("series.metadata.title")}</span>
                 </button>
               </div>
 
-              <div className={styles.workspace}>
+              <div
+                className={`${styles.workspace} ${isCharactersOpen ? styles.workspaceWithCharacters : ""} ${isMetadataOpen ? styles.workspaceWithMetadata : ""}`}
+              >
+                {isCharactersOpen && (
+                  <aside className={styles.charactersPane}>
+                    <SeriesCharactersDrawer
+                      series={series}
+                      reloadToken={charactersReloadToken}
+                    />
+                  </aside>
+                )}
                 <div className={styles.formPane}>
                   <div className={styles.editFormGrid}>
                 <div className={styles.editFormLeft}>
@@ -583,6 +624,11 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                     <SeriesMetadataPanel
                       series={series}
                       onApplied={handleMetadataApplied}
+                      onCharactersImported={(count) => {
+                        if (count > 0) {
+                          setCharactersReloadToken((prev) => prev + 1);
+                        }
+                      }}
                       compact
                     />
                   </aside>

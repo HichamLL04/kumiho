@@ -239,6 +239,19 @@ export interface MetadataResult {
     width?: number;
     height?: number;
   };
+  characters?: MetadataCharacter[];
+}
+
+export interface MetadataCharacter {
+  id?: string;
+  name: string;
+  role?: string;
+  image?: {
+    url: string;
+    width?: number;
+    height?: number;
+  };
+  identifiers?: Record<string, string>;
 }
 
 export interface MetadataFetchResponse {

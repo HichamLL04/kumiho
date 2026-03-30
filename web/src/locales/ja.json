@@ -622,6 +622,7 @@
       "preview": "取得したメタデータ",
       "empty_candidates": "まだ検索した候補がありません。",
       "empty_preview": "候補を取得するとここで結果を確認できます。",
+      "character_count": "全{{count}}人",
       "fields": {
         "title": "タイトル",
         "original_title": "原題",
@@ -631,6 +632,7 @@
         "language": "言語",
         "description": "説明",
         "tags": "タグ",
+        "characters": "登場人物",
         "identifiers": "識別子"
       },
       "toast": {
@@ -639,8 +641,39 @@
         "fetch_success": "メタデータ詳細を読み込みました。",
         "fetch_failed": "メタデータ詳細の取得に失敗しました。",
         "apply_success": "{{count}}個のフィールドを適用しました。",
+        "apply_success_with_characters": "{{count}}個のフィールドを適用し、登場人物を{{characters}}人登録しました。",
         "apply_no_changes": "適用する変更がありません。",
         "apply_failed": "メタデータの適用に失敗しました。"
+      }
+    },
+    "characters": {
+      "title": "登場人物",
+      "desc": "シリーズの登場人物、画像、並び順を管理します。",
+      "add": "登場人物を追加",
+      "reorder": "並び替え",
+      "role_display": "役割: {{role}}",
+      "empty": "保存された登場人物がありません。",
+      "save": "変更を保存",
+      "save_new": "保存",
+      "cancel": "キャンセル",
+      "upload": "ファイルアップロード",
+      "reset_image": "画像をリセット",
+      "new_name": "新しい登場人物",
+      "fields": {
+        "name": "名前",
+        "role": "役割",
+        "image_url": "画像URL"
+      },
+      "toast": {
+        "load_failed": "登場人物一覧の読み込みに失敗しました。",
+        "create_failed": "登場人物の追加に失敗しました。",
+        "save_success": "登場人物を保存しました。",
+        "save_failed": "登場人物の保存に失敗しました。",
+        "delete_failed": "登場人物の削除に失敗しました。",
+        "reorder_failed": "登場人物の並び替えに失敗しました。",
+        "image_updated": "登場人物の画像を更新しました。",
+        "image_failed": "登場人物の画像変更に失敗しました。",
+        "name_required": "登場人物名を入力してください。"
       }
     },
     "count": "全 <strong>{{count}}</strong> 巻",
