@@ -7,9 +7,12 @@ export interface ToastProps {
   message: string;
   onClose: () => void;
   duration?: number;
+  anchored?: boolean;
+  inline?: boolean;
+  sticky?: boolean;
 }
 
-export function Toast({ type, message, onClose, duration = 2000 }: ToastProps) {
+export function Toast({ type, message, onClose, duration = 2000, anchored = false, inline = false, sticky = false }: ToastProps) {
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
@@ -30,7 +33,7 @@ export function Toast({ type, message, onClose, duration = 2000 }: ToastProps) {
       aria-live={type === "error" ? "assertive" : "polite"}
       className={`${styles.statusMessage} ${
         type === "success" ? styles.success : type === "info" ? styles.info : styles.error
-      }`}
+      } ${anchored ? styles.anchored : ""} ${inline ? styles.inline : ""} ${sticky ? styles.sticky : ""}`}
       onClick={onClose}
     >
       {type === "success" ? <Check size={14} /> : type === "info" ? <Info size={14} /> : <AlertCircle size={14} />}

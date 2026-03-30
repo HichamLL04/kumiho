@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Database, Download, Loader2, Search, Sparkles } from "lucide-react";
+import { Database, Loader2, Search, Sparkles } from "lucide-react";
 import { seriesAPI } from "../api/client";
 import type { Series } from "../types/series";
 import type { MetadataCandidateItem, MetadataFetchResponse, MetadataResult, MetadataSearchResult } from "../types/plugin";
@@ -24,10 +24,6 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [searchTitle, setSearchTitle] = useState("");
 
-  const selectedCandidate = useMemo(() => {
-    if (!selectedKey || !searchResult) return null;
-    return searchResult.candidates.find((item) => candidateKey(item) === selectedKey) || null;
-  }, [searchResult, selectedKey]);
   const candidatesByProvider = useMemo(() => {
     const grouped = new Map<string, MetadataCandidateItem[]>();
     for (const item of searchResult?.candidates || []) {
@@ -67,13 +63,14 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
     }
   };
 
-  const handleFetch = async () => {
-    if (!selectedCandidate) return;
+  const handleCandidateClick = async (item: MetadataCandidateItem) => {
+    const key = candidateKey(item);
+    setSelectedKey(key);
     setBusy("fetch");
     try {
       const response = await seriesAPI.metadataFetch(series.id, {
-        plugin_id: selectedCandidate.plugin_id,
-        source: selectedCandidate.candidate.source,
+        plugin_id: item.plugin_id,
+        source: item.candidate.source,
       });
       setFetched(response.data);
       setStatus({ type: "success", message: t("series.metadata.toast.fetch_success") });
@@ -113,6 +110,7 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
           type={status.type}
           message={status.message}
           onClose={() => setStatus(null)}
+          sticky
         />
       )}
 
@@ -129,6 +127,7 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
             placeholder={series.title}
           />
           <button
+            type="button"
             className={`${commonStyles.settingsSelect} ${styles.metadataSearchButton}`}
             onClick={() => void handleSearch()}
             disabled={busy !== null}
@@ -176,7 +175,13 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
                       const key = candidateKey(item);
                       const isSelected = selectedKey === key;
                       return (
-                        <button key={key} className={`${styles.metadataCandidate} ${isSelected ? styles.selected : ""}`} onClick={() => setSelectedKey(key)}>
+                        <button
+                          key={key}
+                          type="button"
+                          className={`${styles.metadataCandidate} ${isSelected ? styles.selected : ""}`}
+                          onClick={() => void handleCandidateClick(item)}
+                          disabled={busy !== null}
+                        >
                           <div className={styles.metadataCandidateBody}>
                             {item.candidate.cover_url ? (
                               <img
@@ -212,10 +217,6 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
               <div className={styles.metadataEmpty}>{t("series.metadata.empty_candidates")}</div>
             )}
           </div>
-          <button className={commonStyles.settingsSelect} onClick={() => void handleFetch()} disabled={!selectedCandidate || busy !== null}>
-            {busy === "fetch" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Download size={14} />}
-            <span>{t("series.metadata.fetch")}</span>
-          </button>
         </div>
 
         <div className={styles.metadataColumn}>
@@ -271,7 +272,7 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
                 <label>{t("series.metadata.fields.identifiers")}</label>
                 <p className={styles.metadataIdentifiers}>{formatIdentifiers(fetched.result.identifiers)}</p>
               </div>
-              <button className={commonStyles.settingsSelect} onClick={() => void handleApply(fetched.result)} disabled={busy !== null}>
+              <button type="button" className={commonStyles.settingsSelect} onClick={() => void handleApply(fetched.result)} disabled={busy !== null}>
                 {busy === "apply" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Sparkles size={14} />}
                 <span>{t("series.metadata.apply")}</span>
               </button>

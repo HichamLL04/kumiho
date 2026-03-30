@@ -11,6 +11,7 @@
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  overscroll-behavior: contain;
 }
 
 .modalContent {
@@ -22,6 +23,7 @@
   padding: 0;
   max-height: 90vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   color: white;
 }
@@ -29,6 +31,8 @@
 .modalContentExpanded {
   max-width: 1180px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .modalHeader {
@@ -367,7 +371,9 @@
   }
 
   .modalContentExpanded .editForm {
+    flex: 1;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
   }
 
@@ -382,7 +388,25 @@
   .modalContentExpanded .formPane,
   .modalContentExpanded .metadataPane {
     min-height: 0;
+  }
+
+  .modalContentExpanded .formPane {
     overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.25rem;
+  }
+
+  .modalContentExpanded .metadataPane {
+    display: flex;
+    overflow: hidden;
+  }
+
+  .modalContentExpanded .metadataPane > * {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding-right: 0.25rem;
   }
 }
