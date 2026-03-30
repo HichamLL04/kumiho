@@ -9,6 +9,7 @@ export interface EbookMetadata {
   tags: string;
   publication_year: string;
   original_title: string;
+  original_titles?: string;
   publisher: string;
   published_at: string;
   isbn: string;

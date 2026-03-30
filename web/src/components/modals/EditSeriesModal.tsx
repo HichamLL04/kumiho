@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-import { X, Save, Upload, Link, RotateCcw } from "lucide-react";
+import { ChevronDown, Link, RotateCcw, Save, Upload, X } from "lucide-react";
 import type { Series } from "../../types/series";
 import { seriesAPI } from "../../api/client";
 import { AlertModal, type AlertType } from "./AlertModal";
@@ -32,7 +32,9 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const [thumbnailMode, setThumbnailMode] = useState<"file" | "url">("file");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [isOriginalTitleMenuOpen, setIsOriginalTitleMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const originalTitleMenuRef = useRef<HTMLDivElement>(null);
 
   // AlertModal 상태
   const [alertModal, setAlertModal] = useState<{
@@ -93,8 +95,52 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       setThumbnailMode("file");
       setThumbnailUrl("");
       setIsDragging(false);
+      setIsOriginalTitleMenuOpen(false);
     }
   }, [isOpen, series]);
+
+  const originalTitleOptions = useMemo(() => {
+    if (!series.metadata?.original_titles) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(series.metadata.original_titles);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return [];
+      }
+
+      const entries = [
+        { key: "ko", value: typeof parsed.ko === "string" ? parsed.ko.trim() : "" },
+        { key: "en", value: typeof parsed.en === "string" ? parsed.en.trim() : "" },
+        { key: "ja", value: typeof parsed.ja === "string" ? parsed.ja.trim() : "" },
+      ];
+
+      return entries.filter((entry, index, array) => {
+        if (!entry.value) {
+          return false;
+        }
+        return array.findIndex((candidate) => candidate.value === entry.value) === index;
+      });
+    } catch {
+      return [];
+    }
+  }, [series.metadata?.original_titles]);
+
+  useEffect(() => {
+    if (!isOriginalTitleMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!originalTitleMenuRef.current?.contains(event.target as Node)) {
+        setIsOriginalTitleMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [isOriginalTitleMenuOpen]);
 
   useEffect(() => {
     const handleWindowDragEvent = (e: DragEvent) => {
@@ -120,6 +166,11 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const applyOriginalTitleOption = (value: string) => {
+    setFormData((prev) => ({ ...prev, original_title: value }));
+    setIsOriginalTitleMenuOpen(false);
   };
 
   const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -336,13 +387,48 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                   <div className={styles.formRow}>
                     <div className={styles.formGroup}>
                       <label>{t("series.edit.form.original_title")}</label>
-                      <input
-                        type="text"
-                        name="original_title"
-                        value={formData.original_title}
-                        onChange={handleChange}
-                        placeholder={t("series.edit.form.original_title_placeholder")}
-                      />
+                      <div
+                        className={styles.inlineSelectField}
+                        ref={originalTitleMenuRef}
+                      >
+                        <input
+                          type="text"
+                          name="original_title"
+                          value={formData.original_title}
+                          onChange={handleChange}
+                          placeholder={t("series.edit.form.original_title_placeholder")}
+                        />
+                        {originalTitleOptions.length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.inlineSelectButton}
+                              onClick={() => setIsOriginalTitleMenuOpen((prev) => !prev)}
+                              aria-label={t("series.edit.form.original_title")}
+                              aria-expanded={isOriginalTitleMenuOpen}
+                            >
+                              <ChevronDown size={16} />
+                            </button>
+                            {isOriginalTitleMenuOpen && (
+                              <div className={styles.inlineSelectMenu}>
+                                {originalTitleOptions.map((option) => (
+                                  <button
+                                    key={option.key}
+                                    type="button"
+                                    className={styles.inlineSelectOption}
+                                    onClick={() => applyOriginalTitleOption(option.value)}
+                                  >
+                                    <span className={styles.inlineSelectOptionLabel}>
+                                      {t(`settings.general.language.${option.key}`)}
+                                    </span>
+                                    <span className={styles.inlineSelectOptionValue}>{option.value}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div className={styles.formGroup}>
                       <label>{t("series.edit.form.publisher")}</label>

@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 37
+const latestMigrationVersion = 38
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -294,6 +294,7 @@ func Migrate() error {
 		tags TEXT DEFAULT '',
 		publication_year TEXT DEFAULT '',
 		original_title TEXT DEFAULT '',
+		original_titles TEXT DEFAULT '',
 		publisher TEXT DEFAULT '',
 		published_at TEXT DEFAULT '',
 		isbn TEXT DEFAULT ''
@@ -599,6 +600,7 @@ func Migrate() error {
 		{35, "멀티 폴더 지원 (library_paths 테이블)", migrateMultiFolderPaths},
 		{36, "플러그인 설치 상태 테이블 추가", migratePluginInstallations},
 		{37, "플러그인 비밀 설정 테이블 추가", migratePluginSecrets},
+		{38, "시리즈 메타데이터 다국어 원제 컬럼 추가", migrateSeriesMetadataOriginalTitles},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -771,6 +773,7 @@ func migrateSeriesMetadata() error {
 			tags TEXT DEFAULT '',
 			publication_year TEXT DEFAULT '',
 			original_title TEXT DEFAULT '',
+			original_titles TEXT DEFAULT '',
 			publisher TEXT DEFAULT '',
 			published_at TEXT DEFAULT '',
 			isbn TEXT DEFAULT ''
@@ -1123,6 +1126,11 @@ func migrateSeriesMetadataColumns() error {
 		return err
 	}
 	return addColumn("series_metadata", "isbn", "TEXT DEFAULT ''")
+}
+
+// #38 migrateSeriesMetadataOriginalTitles series_metadata 테이블에 다국어 원제 컬럼 추가
+func migrateSeriesMetadataOriginalTitles() error {
+	return addColumn("series_metadata", "original_titles", "TEXT DEFAULT ''")
 }
 
 // #14 migrateChapterCompletions chapter_completions 테이블 추가

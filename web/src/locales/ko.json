@@ -16,6 +16,7 @@
     "loading_settings": "설정을 불러오는 중...",
     "loading": "로딩 중...",
     "checking": "확인 중...",
+    "select": "선택",
     "unit": {
       "pages": "페이지",
       "hours": "시간"

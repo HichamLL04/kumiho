@@ -85,6 +85,7 @@ type SeriesMetadata struct {
 	Tags            string `json:"tags" db:"tags"`       // JSON string or comma-separated
 	PublicationYear string `json:"publication_year" db:"publication_year"`
 	OriginalTitle   string `json:"original_title" db:"original_title"`
+	OriginalTitles  string `json:"original_titles" db:"original_titles"`
 	Publisher       string `json:"publisher" db:"publisher"`
 	PublishedAt     string `json:"published_at" db:"published_at"`
 	ISBN            string `json:"isbn" db:"isbn"`

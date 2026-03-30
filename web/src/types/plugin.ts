@@ -223,6 +223,7 @@ export interface MetadataResult {
   source: MetadataSourceRef;
   title: string;
   original_title?: string;
+  original_titles?: Record<string, string>;
   authors?: string[];
   description?: string;
   tags?: string[];

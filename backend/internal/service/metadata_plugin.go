@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -265,6 +266,9 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	}
 	if applyString(&series.Metadata.OriginalTitle, strings.TrimSpace(result.OriginalTitle), "original_title", &updatedFields) {
 	}
+	if originalTitles := encodeOriginalTitles(result.OriginalTitles); originalTitles != "" {
+		applyString(&series.Metadata.OriginalTitles, originalTitles, "original_titles", &updatedFields)
+	}
 	if applyString(&series.Metadata.Publisher, strings.TrimSpace(result.Publisher), "publisher", &updatedFields) {
 	}
 	if applyString(&series.Metadata.PublishedAt, strings.TrimSpace(result.PublicationDate), "published_at", &updatedFields) {
@@ -353,6 +357,9 @@ func applyFetchedTitle(series *model.Series, result *sdktypes.MetadataResult, up
 	if series == nil || result == nil || series.Metadata == nil {
 		return
 	}
+	if strings.TrimSpace(result.OriginalTitle) != "" || len(result.OriginalTitles) > 0 {
+		return
+	}
 
 	fetchedTitle := strings.TrimSpace(result.Title)
 	if fetchedTitle == "" {
@@ -360,6 +367,31 @@ func applyFetchedTitle(series *model.Series, result *sdktypes.MetadataResult, up
 	}
 
 	applyString(&series.Metadata.OriginalTitle, fetchedTitle, "original_title", updatedFields)
+}
+
+func encodeOriginalTitles(values map[string]string) string {
+	if len(values) == 0 {
+		return ""
+	}
+
+	normalized := make(map[string]string, len(values))
+	for key, value := range values {
+		trimmedKey := strings.ToLower(strings.TrimSpace(key))
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		normalized[trimmedKey] = trimmedValue
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+
+	payload, err := json.Marshal(normalized)
+	if err != nil {
+		return ""
+	}
+	return string(payload)
 }
 
 func filterNonEmpty(values []string) []string {
@@ -488,12 +520,6 @@ func (s *MetadataService) applySeriesThumbnail(ctx context.Context, series *mode
 		return false, nil
 	}
 	if series == nil || strings.TrimSpace(series.Path) == "" {
-		return false, nil
-	}
-	if series.ThumbnailPath != nil && strings.TrimSpace(*series.ThumbnailPath) != "" {
-		return false, nil
-	}
-	if series.ThumbnailURL != nil && strings.TrimSpace(*series.ThumbnailURL) != "" {
 		return false, nil
 	}
 

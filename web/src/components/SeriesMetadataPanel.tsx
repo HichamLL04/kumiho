@@ -4,6 +4,7 @@ import { Database, Download, Loader2, Search, Sparkles } from "lucide-react";
 import { seriesAPI } from "../api/client";
 import type { Series } from "../types/series";
 import type { MetadataCandidateItem, MetadataFetchResponse, MetadataResult, MetadataSearchResult } from "../types/plugin";
+import { localizedOriginalTitle } from "../utils/originalTitles";
 import { Toast } from "./common/Toast";
 import commonStyles from "./settings/SettingsComponents.module.css";
 import styles from "./SeriesMetadataPanel.module.css";
@@ -14,7 +15,7 @@ interface SeriesMetadataPanelProps {
 }
 
 export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [searchResult, setSearchResult] = useState<MetadataSearchResult | null>(null);
   const [fetched, setFetched] = useState<MetadataFetchResponse | null>(null);
   const [busy, setBusy] = useState<"search" | "fetch" | "apply" | null>(null);
@@ -42,6 +43,11 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
       }))
       .sort((left, right) => left.pluginName.localeCompare(right.pluginName));
   }, [searchResult]);
+  const previewOriginalTitle = localizedOriginalTitle(
+    fetched?.result.original_titles,
+    i18n.language || "ko",
+    fetched?.result.original_title || "",
+  );
 
   const handleSearch = async () => {
     setBusy("search");
@@ -234,7 +240,7 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
               </div>
               <div className={styles.metadataPreviewSection}>
                 <label>{t("series.metadata.fields.original_title")}</label>
-                <p>{fetched.result.original_title || "-"}</p>
+                <p>{previewOriginalTitle || "-"}</p>
               </div>
               <div className={styles.metadataPreviewSection}>
                 <label>{t("series.metadata.fields.authors")}</label>

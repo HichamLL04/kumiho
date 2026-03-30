@@ -204,6 +204,87 @@
   font-size: 0.95rem;
 }
 
+.inlineSelectField {
+  position: relative;
+}
+
+.inlineSelectField input {
+  width: 100%;
+  padding-right: 2.75rem;
+}
+
+.inlineSelectButton {
+  position: absolute;
+  top: 50%;
+  right: 0.4rem;
+  transform: translateY(-50%);
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d1d5db;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.inlineSelectButton:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.inlineSelectButton svg {
+  flex-shrink: 0;
+  stroke-width: 2.3;
+}
+
+.inlineSelectMenu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 20;
+  min-width: 240px;
+  padding: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: #111827;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+}
+
+.inlineSelectOption {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.inlineSelectOption:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.inlineSelectOptionLabel {
+  font-size: 0.78rem;
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.inlineSelectOptionValue {
+  font-size: 0.88rem;
+  color: #e5e7eb;
+  word-break: break-word;
+}
+
 .formGroup input:focus,
 .formGroup select:focus,
 .formGroup textarea:focus {

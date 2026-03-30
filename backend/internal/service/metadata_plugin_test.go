@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -201,6 +202,45 @@ func TestMetadataServiceApplySeriesMetadataStoresFetchedTitleAsOriginalTitle(t *
 	}
 }
 
+func TestMetadataServiceApplySeriesMetadataStoresOriginalTitlesMap(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		Title:         "강철의 연금술사",
+		OriginalTitle: "Fullmetal Alchemist",
+		OriginalTitles: map[string]string{
+			"ko": "강철의 연금술사",
+			"en": "Fullmetal Alchemist",
+			"ja": "鋼の錬金術師",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	if updated.Metadata.OriginalTitle != "Fullmetal Alchemist" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
+
+	var originalTitles map[string]string
+	if err := json.Unmarshal([]byte(updated.Metadata.OriginalTitles), &originalTitles); err != nil {
+		t.Fatalf("Unmarshal(OriginalTitles) error = %v", err)
+	}
+	if originalTitles["ko"] != "강철의 연금술사" || originalTitles["en"] != "Fullmetal Alchemist" || originalTitles["ja"] != "鋼の錬金術師" {
+		t.Fatalf("OriginalTitles = %#v", originalTitles)
+	}
+}
+
 func TestMetadataServiceApplySeriesMetadataDownloadsThumbnail(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
@@ -246,7 +286,7 @@ func TestMetadataServiceApplySeriesMetadataDownloadsThumbnail(t *testing.T) {
 	}
 }
 
-func TestMetadataServiceApplySeriesMetadataKeepsExistingThumbnail(t *testing.T) {
+func TestMetadataServiceApplySeriesMetadataReplacesExistingThumbnail(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
 	series := seedMetadataSeries(t, seriesRepo)
@@ -282,19 +322,27 @@ func TestMetadataServiceApplySeriesMetadataKeepsExistingThumbnail(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ApplySeriesMetadata() error = %v", err)
 	}
-	if serverHit {
-		t.Fatal("cover should not be downloaded when thumbnail already exists")
+	if !serverHit {
+		t.Fatal("cover should be downloaded when metadata is applied again")
 	}
 	if result.Series == nil || result.Series.ThumbnailPath == nil {
 		t.Fatal("ThumbnailPath should remain set")
 	}
-	if *result.Series.ThumbnailPath != existingThumb {
-		t.Fatalf("ThumbnailPath = %q", *result.Series.ThumbnailPath)
+	if *result.Series.ThumbnailPath == existingThumb {
+		t.Fatalf("ThumbnailPath = %q, expected a replaced thumbnail path", *result.Series.ThumbnailPath)
 	}
+	if _, err := os.Stat(*result.Series.ThumbnailPath); err != nil {
+		t.Fatalf("replaced thumbnail file stat error = %v", err)
+	}
+	found := false
 	for _, field := range result.UpdatedFields {
 		if field == "thumbnail" {
-			t.Fatalf("UpdatedFields = %v, thumbnail should not be included", result.UpdatedFields)
+			found = true
+			break
 		}
+	}
+	if !found {
+		t.Fatalf("UpdatedFields = %v, want thumbnail included", result.UpdatedFields)
 	}
 }
 

@@ -7,6 +7,7 @@ import { EditVolumeModal } from "./modals/EditVolumeModal";
 import { AlertModal, type AlertType } from "./modals/AlertModal";
 import { seriesAPI, volumeAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
+import { localizedOriginalTitle } from "../utils/originalTitles";
 import { calculateProgressDisplay } from "../utils/progressUtils";
 import { useAuthStore } from "../stores/authStore";
 import { Tooltip } from "./common/Tooltip";
@@ -39,7 +40,7 @@ export function SeriesInfoCard({
   onAlert,
   onDownload,
 }: SeriesInfoCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const incognitoMenuId = useId();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -64,6 +65,9 @@ export function SeriesInfoCard({
   });
 
   const isVolumeType = type === "volume";
+  const displayedOriginalTitle =
+    series.metadata?.original_title?.trim() ||
+    localizedOriginalTitle(series.metadata?.original_titles, i18n.language || "ko", "");
   const displayPath = (isVolumeType ? volume?.path : series.path) || "";
   const lowerDisplayPath = displayPath.toLowerCase();
   const isTextFile = lowerDisplayPath.endsWith(".txt") || (!isVolumeType && series.extension === "TXT");
@@ -362,10 +366,10 @@ export function SeriesInfoCard({
                 )}
                 {series.metadata?.publication_year}
               </div>
-              {series.metadata?.original_title && (
+              {displayedOriginalTitle && (
                 <div className={styles.seriesExtraMeta}>
                   <span className={styles.seriesExtraMetaLabel}>{t("series.metainfo.original_title")}</span>
-                  <span>{series.metadata.original_title}</span>
+                  <span>{displayedOriginalTitle}</span>
                 </div>
               )}
             </>
