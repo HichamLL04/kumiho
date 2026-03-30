@@ -7,6 +7,10 @@
   backdrop-filter: blur(12px);
 }
 
+.compact {
+  margin: 0;
+}
+
 .metadataPanelHeader {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(420px, 760px);
@@ -291,6 +295,50 @@
   border: 1px dashed rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
+}
+
+.compact .metadataPanelHeader {
+  grid-template-columns: 1fr;
+}
+
+.compact .metadataSearchControls {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 132px;
+}
+
+.compact .metadataSearchButton {
+  width: 132px;
+  min-width: 132px;
+}
+
+.compact .metadataGrid {
+  grid-template-columns: 1fr;
+}
+
+.compact .metadataProviderGrid {
+  grid-template-columns: 1fr;
+}
+
+.compact .metadataCandidateTop {
+  align-items: flex-start;
+}
+
+.compact .metadataCandidateTop strong {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+
+@media (max-width: 1200px) {
+  .compact .metadataSearchControls {
+    grid-template-columns: 1fr;
+  }
+
+  .compact .metadataSearchButton {
+    width: 100%;
+    min-width: 0;
+  }
 }
 
 @media (max-width: 900px) {

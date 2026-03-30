@@ -211,8 +211,8 @@ func TestPluginInstallServiceUninstallRemovesArtifactAndRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RegisterInstalled() error = %v", err)
 	}
-	if _, err := manager.MarkRegistered(record.ID); err != nil {
-		t.Fatalf("MarkRegistered() error = %v", err)
+	if _, markErr := manager.MarkRegistered(record.ID); markErr != nil {
+		t.Fatalf("MarkRegistered() error = %v", markErr)
 	}
 
 	result, err := svc.Uninstall(context.Background(), "plugin-sample")
@@ -303,8 +303,8 @@ func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing
 	if result.Record.Manifest.Version != "0.1.1" {
 		t.Fatalf("version = %q, want 0.1.1", result.Record.Manifest.Version)
 	}
-	if _, err := os.Stat(oldInstallPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("old artifact stat error = %v, want not exist", err)
+	if _, statErr := os.Stat(oldInstallPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("old artifact stat error = %v, want not exist", statErr)
 	}
 	contents, err := os.ReadFile(result.InstallPath)
 	if err != nil {

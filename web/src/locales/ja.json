@@ -613,8 +613,8 @@
   },
   "series": {
     "metadata": {
-      "title": "メタデータテスト",
-      "desc": "現在のシリーズ基準で provider の search, fetch, apply フローを確認します。",
+      "title": "メタデータ検索",
+      "desc": "現在のシリーズを基準にメタデータ候補を検索して適用できます。",
       "search": "候補検索",
       "fetch": "選択候補取得",
       "apply": "シリーズへ適用",

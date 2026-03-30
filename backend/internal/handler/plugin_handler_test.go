@@ -141,8 +141,8 @@ func TestDeleteConfigReturnsReactivationRequiredForActivePlugin(t *testing.T) {
 		Config               service.PluginConfigStatus `json:"config"`
 		ReactivationRequired bool                       `json:"reactivation_required"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("Decode() error = %v", err)
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&payload); decodeErr != nil {
+		t.Fatalf("Decode() error = %v", decodeErr)
 	}
 	if !payload.ReactivationRequired {
 		t.Fatal("reactivation_required = false, want true")

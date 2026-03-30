@@ -262,17 +262,13 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 
 	var updatedFields []string
 	applyFetchedTitle(series, result, &updatedFields)
-	if applyString(&series.Description, sanitizeDescription(result.Description), "description", &updatedFields) {
-	}
-	if applyString(&series.Metadata.OriginalTitle, strings.TrimSpace(result.OriginalTitle), "original_title", &updatedFields) {
-	}
+	applyString(&series.Description, sanitizeDescription(result.Description), "description", &updatedFields)
+	applyString(&series.Metadata.OriginalTitle, strings.TrimSpace(result.OriginalTitle), "original_title", &updatedFields)
 	if originalTitles := encodeOriginalTitles(result.OriginalTitles); originalTitles != "" {
 		applyString(&series.Metadata.OriginalTitles, originalTitles, "original_titles", &updatedFields)
 	}
-	if applyString(&series.Metadata.Publisher, strings.TrimSpace(result.Publisher), "publisher", &updatedFields) {
-	}
-	if applyString(&series.Metadata.PublishedAt, strings.TrimSpace(result.PublicationDate), "published_at", &updatedFields) {
-	}
+	applyString(&series.Metadata.Publisher, strings.TrimSpace(result.Publisher), "publisher", &updatedFields)
+	applyString(&series.Metadata.PublishedAt, strings.TrimSpace(result.PublicationDate), "published_at", &updatedFields)
 	if publicationYear := yearFromDate(result.PublicationDate); publicationYear != "" {
 		applyString(&series.Metadata.PublicationYear, publicationYear, "publication_year", &updatedFields)
 	}
@@ -546,8 +542,8 @@ func (s *MetadataService) applySeriesThumbnail(ctx context.Context, series *mode
 	}
 
 	thumbnailsDir := filepath.Join(s.cfg.DataDir, "thumbnails", "series")
-	if err := os.MkdirAll(thumbnailsDir, 0o755); err != nil {
-		return false, err
+	if mkdirErr := os.MkdirAll(thumbnailsDir, 0o755); mkdirErr != nil {
+		return false, mkdirErr
 	}
 
 	hash := md5.Sum([]byte(series.Path))

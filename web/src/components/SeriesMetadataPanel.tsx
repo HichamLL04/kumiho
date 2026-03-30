@@ -11,10 +11,11 @@ import styles from "./SeriesMetadataPanel.module.css";
 
 interface SeriesMetadataPanelProps {
   series: Series;
-  onApplied: (updated: Series) => void;
+  onApplied: (response: import("../types/plugin").MetadataApplyResponse) => void;
+  compact?: boolean;
 }
 
-export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelProps) {
+export function SeriesMetadataPanel({ series, onApplied, compact = false }: SeriesMetadataPanelProps) {
   const { t, i18n } = useTranslation();
   const [searchResult, setSearchResult] = useState<MetadataSearchResult | null>(null);
   const [fetched, setFetched] = useState<MetadataFetchResponse | null>(null);
@@ -45,7 +46,7 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
   }, [searchResult]);
   const previewOriginalTitle = localizedOriginalTitle(
     fetched?.result.original_titles,
-    i18n.language || "ko",
+    i18n?.language || "ko",
     fetched?.result.original_title || "",
   );
 
@@ -89,7 +90,7 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
     setBusy("apply");
     try {
       const response = await seriesAPI.metadataApply(series.id, result);
-      onApplied(response.data.series);
+      onApplied(response.data);
       setStatus({
         type: "success",
         message: response.data.updated_fields.length > 0
@@ -106,7 +107,7 @@ export function SeriesMetadataPanel({ series, onApplied }: SeriesMetadataPanelPr
   };
 
   return (
-    <section className={styles.metadataPanel}>
+    <section className={`${styles.metadataPanel} ${compact ? styles.compact : ""}`}>
       {status && (
         <Toast
           type={status.type}

@@ -457,7 +457,7 @@ export function SeriesPage() {
             {user?.role === "MASTER" && (
               <SeriesMetadataPanel
                 series={series}
-                onApplied={(updated) => setSeries(updated)}
+                onApplied={(response) => setSeries(response.series)}
               />
             )}
 

@@ -613,8 +613,8 @@
   },
   "series": {
     "metadata": {
-      "title": "Metadata Test",
-      "desc": "Run provider search, fetch, and apply flows for the current series.",
+      "title": "Metadata Search",
+      "desc": "Search and apply metadata candidates for the current series.",
       "search": "Search Candidates",
       "fetch": "Fetch Selected Candidate",
       "apply": "Apply To Series",

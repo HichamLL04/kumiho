@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-import { ChevronDown, Link, RotateCcw, Save, Upload, X } from "lucide-react";
+import { ChevronDown, Link, RotateCcw, Save, Search, Upload, X } from "lucide-react";
 import type { Series } from "../../types/series";
 import { seriesAPI } from "../../api/client";
+import type { MetadataApplyResponse } from "../../types/plugin";
+import { SeriesMetadataPanel } from "../SeriesMetadataPanel";
 import { AlertModal, type AlertType } from "./AlertModal";
 import styles from "./EditSeriesModal.module.css";
 
@@ -33,6 +35,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [isOriginalTitleMenuOpen, setIsOriginalTitleMenuOpen] = useState(false);
+  const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const originalTitleMenuRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +99,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       setThumbnailUrl("");
       setIsDragging(false);
       setIsOriginalTitleMenuOpen(false);
+      setIsMetadataOpen(false);
     }
   }, [isOpen, series]);
 
@@ -261,6 +265,28 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
 
   if (!isOpen) return null;
 
+  const handleMetadataApplied = (response: MetadataApplyResponse) => {
+    onUpdate(response.series);
+
+    const updatedFieldSet = new Set(response.updated_fields);
+    if (updatedFieldSet.size === 0) {
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      title: updatedFieldSet.has("title") ? response.series.title || "" : prev.title,
+      authors: updatedFieldSet.has("authors") ? response.series.metadata?.authors || "" : prev.authors,
+      tags: updatedFieldSet.has("tags") ? response.series.metadata?.tags || "" : prev.tags,
+      description: updatedFieldSet.has("description") ? response.series.description || "" : prev.description,
+      publication_year: updatedFieldSet.has("publication_year") ? response.series.metadata?.publication_year || "" : prev.publication_year,
+      original_title: updatedFieldSet.has("original_title") ? response.series.metadata?.original_title || "" : prev.original_title,
+      publisher: updatedFieldSet.has("publisher") ? response.series.metadata?.publisher || "" : prev.publisher,
+      published_at: updatedFieldSet.has("published_at") ? response.series.metadata?.published_at || "" : prev.published_at,
+      isbn: updatedFieldSet.has("isbn") ? response.series.metadata?.isbn || "" : prev.isbn,
+    }));
+  };
+
   return (
     <>
       {createPortal(
@@ -269,24 +295,55 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
           onClick={onClose}
         >
           <div
-            className={styles.modalContent}
+            className={`${styles.modalContent} ${isMetadataOpen ? styles.modalContentExpanded : ""}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className={styles.modalHeader}>
               <h2>{t("series.edit.title")}</h2>
-              <button
-                className={styles.btnIcon}
-                onClick={onClose}
-              >
-                <X size={20} />
-              </button>
+              <div className={styles.headerActions}>
+                <button
+                  type="submit"
+                  form="edit-series-form"
+                  className={styles.btnPrimary}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    t("series.edit.actions.saving")
+                  ) : (
+                    <>
+                      <Save size={18} /> {t("series.edit.actions.save")}
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnIcon}
+                  onClick={onClose}
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             <form
+              id="edit-series-form"
               onSubmit={handleSubmit}
               className={styles.editForm}
             >
-              <div className={styles.editFormGrid}>
+              <div className={styles.toolbarRow}>
+                <button
+                  type="button"
+                  className={`${styles.metadataButton} ${isMetadataOpen ? styles.metadataButtonActive : ""}`}
+                  onClick={() => setIsMetadataOpen((prev) => !prev)}
+                >
+                  <Search size={16} />
+                  <span>{t("series.metadata.title")}</span>
+                </button>
+              </div>
+
+              <div className={styles.workspace}>
+                <div className={styles.formPane}>
+                  <div className={styles.editFormGrid}>
                 <div className={styles.editFormLeft}>
                   <div className={styles.formGroup}>
                     <label>{t("series.edit.thumbnail.label")}</label>
@@ -479,10 +536,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                         <option value="CANCELLED">{t("series.edit.form.status_options.cancelled")}</option>
                       </select>
                     </div>
-                    <div
-                      className={styles.formGroup}
-                      style={{ flex: 1 }}
-                    >
+                    <div className={styles.formGroup}>
                       <label>{t("series.edit.form.tags")}</label>
                       <input
                         type="text"
@@ -493,9 +547,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                       />
                     </div>
                   </div>
-                </div>
 
-                <div className={styles.editFormRight}>
                   <div className={`${styles.formGroup} ${styles.hFull}`}>
                     <label>{t("series.edit.form.description")}</label>
                     <textarea
@@ -506,40 +558,18 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                     />
                   </div>
                 </div>
-              </div>
+                  </div>
+                </div>
 
-              <div className={styles.modalFooter}>
-                <div className={styles.syncOption}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      disabled
+                {isMetadataOpen && (
+                  <aside className={styles.metadataPane}>
+                    <SeriesMetadataPanel
+                      series={series}
+                      onApplied={handleMetadataApplied}
+                      compact
                     />
-                    <span style={{ marginLeft: "8px", color: "#a0aec0" }}>{t("series.edit.form.sync_file")}</span>
-                  </label>
-                </div>
-                <div className={styles.modalActions}>
-                  <button
-                    type="button"
-                    className={styles.btnSecondary}
-                    onClick={onClose}
-                  >
-                    {t("series.edit.actions.cancel")}
-                  </button>
-                  <button
-                    type="submit"
-                    className={styles.btnPrimary}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      t("series.edit.actions.saving")
-                    ) : (
-                      <>
-                        <Save size={18} /> {t("series.edit.actions.save")}
-                      </>
-                    )}
-                  </button>
-                </div>
+                  </aside>
+                )}
               </div>
             </form>
           </div>

@@ -51,21 +51,21 @@ func TestManagerBootstrapReactivatesPreviouslyActivePlugin(t *testing.T) {
 	}
 	_ = installFile.Close()
 	now := time.Now()
-	if err := store.Save(Record{
+	if saveErr := store.Save(Record{
 		ID:          "running-plugin",
 		Manifest:    sdkmanifest.Manifest{ID: "running-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
 		State:       sdkstate.Active,
 		InstallPath: installFile.Name(),
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	}); err != nil {
-		t.Fatalf("Save() error = %v", err)
+	}); saveErr != nil {
+		t.Fatalf("Save() error = %v", saveErr)
 	}
 
 	rt := &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
 	manager := NewManager(store, rt)
-	if err := manager.Bootstrap(context.Background()); err != nil {
-		t.Fatalf("Bootstrap() error = %v", err)
+	if bootstrapErr := manager.Bootstrap(context.Background()); bootstrapErr != nil {
+		t.Fatalf("Bootstrap() error = %v", bootstrapErr)
 	}
 
 	record, ok, err := manager.Get("running-plugin")
@@ -91,22 +91,22 @@ func TestManagerBootstrapMarksErrorWhenReactivationFails(t *testing.T) {
 	}
 	_ = installFile.Close()
 	now := time.Now()
-	if err := store.Save(Record{
+	if saveErr := store.Save(Record{
 		ID:          "running-plugin",
 		Manifest:    sdkmanifest.Manifest{ID: "running-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
 		State:       sdkstate.Active,
 		InstallPath: installFile.Name(),
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	}); err != nil {
-		t.Fatalf("Save() error = %v", err)
+	}); saveErr != nil {
+		t.Fatalf("Save() error = %v", saveErr)
 	}
 
 	manager := NewManager(store, &fakeRuntime{
 		runtimeType: sdkmanifest.RuntimeTypeBinary,
 		startErr:    errors.New("start failed"),
 	})
-	if err := manager.Bootstrap(context.Background()); err == nil {
+	if bootstrapErr := manager.Bootstrap(context.Background()); bootstrapErr == nil {
 		t.Fatal("Bootstrap() error = nil")
 	}
 

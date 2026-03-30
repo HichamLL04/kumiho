@@ -102,23 +102,23 @@ func (s *PluginInstallService) Install(ctx context.Context, pluginID string) (*I
 		return nil, err
 	}
 
-	if err := s.removeExistingInstallation(ctx, pluginID, true); err != nil {
-		return nil, err
+	if removeErr := s.removeExistingInstallation(ctx, pluginID, true); removeErr != nil {
+		return nil, removeErr
 	}
 
 	installDir := filepath.Join(s.cfg.PluginDir, entry.ID, entry.Version)
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
-		return nil, err
+	if mkdirErr := os.MkdirAll(installDir, 0o755); mkdirErr != nil {
+		return nil, mkdirErr
 	}
 
 	filename := artifactFilename(entry, artifact)
 	installPath := filepath.Join(installDir, filename)
-	if err := s.downloadArtifact(ctx, artifact, installPath); err != nil {
-		return nil, err
+	if downloadErr := s.downloadArtifact(ctx, artifact, installPath); downloadErr != nil {
+		return nil, downloadErr
 	}
 	if entry.RuntimeType == sdkmanifest.RuntimeTypeBinary || entry.RuntimeType == sdkmanifest.RuntimeTypeService {
-		if err := os.Chmod(installPath, 0o755); err != nil {
-			return nil, err
+		if chmodErr := os.Chmod(installPath, 0o755); chmodErr != nil {
+			return nil, chmodErr
 		}
 	}
 

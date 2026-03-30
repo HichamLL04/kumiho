@@ -514,8 +514,8 @@ func (h *PluginHandler) DeleteAuthAction(c *fiber.Ctx) error {
 
 	status, reactivationRequired, err := h.mutatePluginSecrets(ctx, c.Params("id"), func() (*service.PluginConfigStatus, error) {
 		for targetKey := range action.StoreMappings {
-			if _, err := h.secretService.DeleteSecret(c.Params("id"), manifest, targetKey); err != nil {
-				return nil, err
+			if _, deleteErr := h.secretService.DeleteSecret(c.Params("id"), manifest, targetKey); deleteErr != nil {
+				return nil, deleteErr
 			}
 		}
 		return h.secretService.Status(c.Params("id"), manifest)
@@ -541,8 +541,8 @@ func (h *PluginHandler) mutatePluginSecrets(ctx context.Context, pluginID string
 
 	reactivationRequired := ok && record.State == sdkstate.Active
 	if reactivationRequired {
-		if _, err := h.manager.Deactivate(ctx, record.ID); err != nil {
-			return nil, false, err
+		if _, deactivateErr := h.manager.Deactivate(ctx, record.ID); deactivateErr != nil {
+			return nil, false, deactivateErr
 		}
 	}
 

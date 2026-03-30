@@ -613,8 +613,8 @@
   },
   "series": {
     "metadata": {
-      "title": "메타데이터 테스트",
-      "desc": "현재 시리즈 기준으로 provider search, fetch, apply 흐름을 직접 확인합니다.",
+      "title": "메타데이터 검색",
+      "desc": "현재 시리즈를 기준으로 메타데이터 후보를 검색하고 적용할 수 있습니다.",
       "search": "후보 검색",
       "fetch": "선택 후보 가져오기",
       "apply": "현재 시리즈에 적용",
@@ -728,7 +728,7 @@
         "label": "썸네일 변경",
         "tab_file": "파일 업로드",
         "tab_url": "URL 입력",
-        "reset": "초기화",
+        "reset": "썸네일 초기화",
         "reset_tooltip": "썸네일 초기화",
         "drag_drop": "클릭하거나 이미지를 드래그하세요",
         "url_placeholder": "이미지 URL 입력",
