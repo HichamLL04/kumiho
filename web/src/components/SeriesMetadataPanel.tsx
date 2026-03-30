@@ -4,7 +4,7 @@ import { Database, Loader2, Search, Sparkles } from "lucide-react";
 import { seriesAPI } from "../api/client";
 import type { Series } from "../types/series";
 import type { MetadataCandidateItem, MetadataFetchResponse, MetadataResult, MetadataSearchResult } from "../types/plugin";
-import { localizedOriginalTitle } from "../utils/originalTitles";
+import { orderedOriginalTitles } from "../utils/originalTitles";
 import { Toast } from "./common/Toast";
 import commonStyles from "./settings/SettingsComponents.module.css";
 import styles from "./SeriesMetadataPanel.module.css";
@@ -15,6 +15,18 @@ interface SeriesMetadataPanelProps {
   compact?: boolean;
 }
 
+type ApplyFieldKey = "thumbnail" | "original_title" | "authors" | "publisher" | "publication_date" | "description" | "tags";
+
+const DEFAULT_APPLY_FIELDS: Record<ApplyFieldKey, boolean> = {
+  thumbnail: true,
+  original_title: true,
+  authors: true,
+  publisher: true,
+  publication_date: true,
+  description: true,
+  tags: true,
+};
+
 export function SeriesMetadataPanel({ series, onApplied, compact = false }: SeriesMetadataPanelProps) {
   const { t, i18n } = useTranslation();
   const [searchResult, setSearchResult] = useState<MetadataSearchResult | null>(null);
@@ -23,6 +35,7 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [searchTitle, setSearchTitle] = useState("");
+  const [applyFields, setApplyFields] = useState<Record<ApplyFieldKey, boolean>>(DEFAULT_APPLY_FIELDS);
 
   const candidatesByProvider = useMemo(() => {
     const grouped = new Map<string, MetadataCandidateItem[]>();
@@ -40,11 +53,12 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
       }))
       .sort((left, right) => left.pluginName.localeCompare(right.pluginName));
   }, [searchResult]);
-  const previewOriginalTitle = localizedOriginalTitle(
+  const previewOriginalTitles = orderedOriginalTitles(
     fetched?.result.original_titles,
     i18n?.language || "ko",
     fetched?.result.original_title || "",
   );
+  const hasSelectedApplyField = Object.values(applyFields).some(Boolean);
 
   const handleSearch = async () => {
     setBusy("search");
@@ -73,6 +87,7 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
         source: item.candidate.source,
       });
       setFetched(response.data);
+      setApplyFields(DEFAULT_APPLY_FIELDS);
       setStatus({ type: "success", message: t("series.metadata.toast.fetch_success") });
     } catch (error: unknown) {
       console.error("Failed to fetch metadata:", error);
@@ -86,7 +101,7 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
   const handleApply = async (result: MetadataResult) => {
     setBusy("apply");
     try {
-      const response = await seriesAPI.metadataApply(series.id, result);
+      const response = await seriesAPI.metadataApply(series.id, filterMetadataResult(result, applyFields));
       onApplied(response.data);
       setStatus({
         type: "success",
@@ -101,6 +116,10 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleApplyFieldToggle = (field: ApplyFieldKey) => {
+    setApplyFields((prev) => ({ ...prev, [field]: !prev[field] }));
   };
 
   return (
@@ -226,53 +245,122 @@ export function SeriesMetadataPanel({ series, onApplied, compact = false }: Seri
           </div>
           {fetched?.result ? (
             <div className={styles.metadataPreview}>
-              {fetched.result.cover?.url && (
-                <div className={styles.metadataPreviewCoverSection}>
-                  <img
-                    className={styles.metadataPreviewCover}
-                    src={fetched.result.cover.url}
-                    alt={fetched.result.title}
-                    loading="lazy"
+              <div className={styles.metadataPreviewHeader}>
+                {fetched.result.cover?.url && (
+                  <div className={`${styles.metadataPreviewCoverSection} ${!applyFields.thumbnail ? styles.metadataPreviewSectionDisabled : ""}`}>
+                    <div className={styles.metadataPreviewLabelRow}>
+                      <label htmlFor="apply-field-thumbnail">썸네일</label>
+                      <input
+                        id="apply-field-thumbnail"
+                        type="checkbox"
+                        checked={applyFields.thumbnail}
+                        onChange={() => handleApplyFieldToggle("thumbnail")}
+                        className={styles.metadataApplyCheckbox}
+                      />
+                    </div>
+                    <img
+                      className={styles.metadataPreviewCover}
+                      src={fetched.result.cover.url}
+                      alt={fetched.result.title}
+                      loading="lazy"
+                    />
+                  </div>
+                )}
+                <div className={styles.metadataPreviewHeaderContent}>
+                  <div className={`${styles.metadataPreviewSection} ${styles.metadataPreviewHeroSection} ${!applyFields.original_title ? styles.metadataPreviewSectionDisabled : ""}`}>
+                    <div className={styles.metadataPreviewLabelRow}>
+                      <label htmlFor="apply-field-original-title">{t("series.metadata.fields.original_title")}</label>
+                      <input
+                        id="apply-field-original-title"
+                        type="checkbox"
+                        checked={applyFields.original_title}
+                        onChange={() => handleApplyFieldToggle("original_title")}
+                        className={styles.metadataApplyCheckbox}
+                      />
+                    </div>
+                    {previewOriginalTitles.length ? (
+                      <div className={styles.metadataOriginalTitleList}>
+                        {previewOriginalTitles.map((item) => (
+                          <div key={`${item.language}:${item.title}`} className={styles.metadataOriginalTitleItem}>
+                            <span className={styles.metadataOriginalTitleLang}>{t(`settings.general.language.${item.language}`)}</span>
+                            <p>{item.title}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                  <div className={styles.metadataPreviewHeroMeta}>
+                    <div className={`${styles.metadataPreviewMetaBlock} ${!applyFields.authors ? styles.metadataPreviewSectionDisabled : ""}`}>
+                      <div className={styles.metadataPreviewLabelRow}>
+                        <label htmlFor="apply-field-authors">{t("series.metadata.fields.authors")}</label>
+                        <input
+                          id="apply-field-authors"
+                          type="checkbox"
+                          checked={applyFields.authors}
+                          onChange={() => handleApplyFieldToggle("authors")}
+                          className={styles.metadataApplyCheckbox}
+                        />
+                      </div>
+                      <p className={styles.metadataPreviewValue}>{fetched.result.authors?.join(", ") || "-"}</p>
+                    </div>
+                    <div className={`${styles.metadataPreviewMetaBlock} ${!applyFields.publisher ? styles.metadataPreviewSectionDisabled : ""}`}>
+                      <div className={styles.metadataPreviewLabelRow}>
+                        <label htmlFor="apply-field-publisher">{t("series.metadata.fields.publisher")}</label>
+                        <input
+                          id="apply-field-publisher"
+                          type="checkbox"
+                          checked={applyFields.publisher}
+                          onChange={() => handleApplyFieldToggle("publisher")}
+                          className={styles.metadataApplyCheckbox}
+                        />
+                      </div>
+                      <p className={styles.metadataPreviewValue}>{fetched.result.publisher || "-"}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className={`${styles.metadataPreviewSection} ${!applyFields.publication_date ? styles.metadataPreviewSectionDisabled : ""}`}>
+                <div className={styles.metadataPreviewLabelRow}>
+                  <label htmlFor="apply-field-publication-date">{t("series.metadata.fields.publication_date")}</label>
+                  <input
+                    id="apply-field-publication-date"
+                    type="checkbox"
+                    checked={applyFields.publication_date}
+                    onChange={() => handleApplyFieldToggle("publication_date")}
+                    className={styles.metadataApplyCheckbox}
                   />
                 </div>
-              )}
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.title")}</label>
-                <p>{fetched.result.title}</p>
+                <p className={styles.metadataPreviewValue}>{fetched.result.publication_date || "-"}</p>
               </div>
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.original_title")}</label>
-                <p>{previewOriginalTitle || "-"}</p>
+              <div className={`${styles.metadataPreviewSection} ${!applyFields.description ? styles.metadataPreviewSectionDisabled : ""}`}>
+                <div className={styles.metadataPreviewLabelRow}>
+                  <label htmlFor="apply-field-description">{t("series.metadata.fields.description")}</label>
+                  <input
+                    id="apply-field-description"
+                    type="checkbox"
+                    checked={applyFields.description}
+                    onChange={() => handleApplyFieldToggle("description")}
+                    className={styles.metadataApplyCheckbox}
+                  />
+                </div>
+                <p className={styles.metadataPreviewValue}>{fetched.result.description || "-"}</p>
               </div>
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.authors")}</label>
-                <p>{fetched.result.authors?.join(", ") || "-"}</p>
+              <div className={`${styles.metadataPreviewSection} ${!applyFields.tags ? styles.metadataPreviewSectionDisabled : ""}`}>
+                <div className={styles.metadataPreviewLabelRow}>
+                  <label htmlFor="apply-field-tags">{t("series.metadata.fields.tags")}</label>
+                  <input
+                    id="apply-field-tags"
+                    type="checkbox"
+                    checked={applyFields.tags}
+                    onChange={() => handleApplyFieldToggle("tags")}
+                    className={styles.metadataApplyCheckbox}
+                  />
+                </div>
+                <p className={styles.metadataPreviewValue}>{fetched.result.tags?.join(", ") || "-"}</p>
               </div>
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.publisher")}</label>
-                <p>{fetched.result.publisher || "-"}</p>
-              </div>
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.publication_date")}</label>
-                <p>{fetched.result.publication_date || "-"}</p>
-              </div>
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.language")}</label>
-                <p>{fetched.result.language || "-"}</p>
-              </div>
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.description")}</label>
-                <p>{fetched.result.description || "-"}</p>
-              </div>
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.tags")}</label>
-                <p>{fetched.result.tags?.join(", ") || "-"}</p>
-              </div>
-              <div className={styles.metadataPreviewSection}>
-                <label>{t("series.metadata.fields.identifiers")}</label>
-                <p className={styles.metadataIdentifiers}>{formatIdentifiers(fetched.result.identifiers)}</p>
-              </div>
-              <button type="button" className={commonStyles.settingsSelect} onClick={() => void handleApply(fetched.result)} disabled={busy !== null}>
+              <button type="button" className={commonStyles.settingsSelect} onClick={() => void handleApply(fetched.result)} disabled={busy !== null || !hasSelectedApplyField}>
                 {busy === "apply" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Sparkles size={14} />}
                 <span>{t("series.metadata.apply")}</span>
               </button>
@@ -290,10 +378,16 @@ function candidateKey(item: MetadataCandidateItem) {
   return `${item.plugin_id}:${item.candidate.source.id}`;
 }
 
-function formatIdentifiers(identifiers?: Record<string, string>) {
-  if (!identifiers) return "-";
-  const entries = Object.entries(identifiers)
-    .filter(([, value]) => value && value.trim() !== "")
-    .map(([key, value]) => `${key}: ${value}`);
-  return entries.length ? entries.join("\n") : "-";
+function filterMetadataResult(result: MetadataResult, applyFields: Record<ApplyFieldKey, boolean>): MetadataResult {
+  return {
+    ...result,
+    original_title: applyFields.original_title ? result.original_title : undefined,
+    original_titles: applyFields.original_title ? result.original_titles : undefined,
+    authors: applyFields.authors ? result.authors : undefined,
+    publisher: applyFields.publisher ? result.publisher : undefined,
+    publication_date: applyFields.publication_date ? result.publication_date : undefined,
+    description: applyFields.description ? result.description : undefined,
+    tags: applyFields.tags ? result.tags : undefined,
+    cover: applyFields.thumbnail ? result.cover : undefined,
+  };
 }
