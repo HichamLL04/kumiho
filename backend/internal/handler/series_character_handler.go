@@ -79,7 +79,7 @@ func (h *SeriesCharacterHandler) Create(c *fiber.Ctx) error {
 	}
 
 	var req createSeriesCharacterRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err = c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 	name := strings.TrimSpace(req.Name)
@@ -181,7 +181,7 @@ func (h *SeriesCharacterHandler) Reorder(c *fiber.Ctx) error {
 		return err
 	}
 	var req reorderSeriesCharactersRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err = c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 	if len(req.OrderedIDs) == 0 {
@@ -209,10 +209,10 @@ func (h *SeriesCharacterHandler) Reorder(c *fiber.Ctx) error {
 	}
 	defer func() { _ = reorderTx.Rollback() }()
 
-	if err := h.characterRepo.Reorder(reorderTx, series.ID, req.OrderedIDs); err != nil {
+	if err = h.characterRepo.Reorder(reorderTx, series.ID, req.OrderedIDs); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to reorder characters"})
 	}
-	if err := reorderTx.Commit(); err != nil {
+	if err = reorderTx.Commit(); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to commit reorder"})
 	}
 	items, err = h.characterRepo.ListBySeriesID(nil, series.ID)
@@ -230,7 +230,7 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 		return err
 	}
 	var req importSeriesCharactersRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err = c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 	if len(req.Characters) == 0 {

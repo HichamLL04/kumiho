@@ -232,7 +232,8 @@ func (s *PluginInstallService) resolveLocalFileInstallPath(artifact sdkmanifest.
 	}
 	installPath := filepath.Clean(parsed.Path)
 	if !filepath.IsAbs(installPath) {
-		absPath, err := filepath.Abs(installPath)
+		var absPath string
+		absPath, err = filepath.Abs(installPath)
 		if err != nil {
 			return "", false, err
 		}

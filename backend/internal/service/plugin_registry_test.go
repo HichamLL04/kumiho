@@ -164,7 +164,7 @@ func TestPluginInstallServiceInstallUsesLocalFileArtifactDirectly(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
-	if err := os.WriteFile(catalogPath, rawCatalog, 0o644); err != nil {
+	if err = os.WriteFile(catalogPath, rawCatalog, 0o644); err != nil {
 		t.Fatalf("WriteFile(catalog) error = %v", err)
 	}
 
