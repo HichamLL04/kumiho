@@ -212,7 +212,7 @@ func (h *PluginHandler) Catalog(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "plugin install service is not configured"})
 	}
 
-	catalog, err := h.installService.ListCatalog(ctx)
+	catalog, err := h.installService.ListResolvedCatalog(ctx)
 	if err != nil {
 		return writePluginError(c, err)
 	}
@@ -358,14 +358,12 @@ func (h *PluginHandler) resolveManifest(ctx context.Context, pluginID string) (s
 		return record.Manifest, nil
 	}
 	if h.installService != nil {
-		catalog, err := h.installService.ListCatalog(ctx)
-		if err != nil {
+		manifest, err := h.installService.LoadManifestFromCatalog(ctx, pluginID)
+		if err != nil && !errors.Is(err, service.ErrPluginCatalogEntryNotFound) {
 			return sdkmanifest.Manifest{}, err
 		}
-		for _, plugin := range catalog.Plugins {
-			if plugin.ID == pluginID {
-				return plugin, nil
-			}
+		if err == nil {
+			return manifest, nil
 		}
 	}
 	return sdkmanifest.Manifest{}, pluginengine.ErrPluginNotFound

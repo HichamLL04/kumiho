@@ -19,6 +19,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/kumiho-plugin/kumiho-plugin-sdk/capability"
 	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
@@ -34,8 +35,8 @@ func TestPluginInstallServiceInstall(t *testing.T) {
 		switch r.URL.Path {
 		case "/index.json":
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
-				Plugins: []sdkmanifest.Manifest{
-					{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
 						ID:                 "plugin-sample",
 						Name:               "Sample Plugin",
 						Version:            "0.1.0",
@@ -45,7 +46,7 @@ func TestPluginInstallServiceInstall(t *testing.T) {
 						Artifacts: []sdkmanifest.Artifact{
 							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
 						},
-					},
+					}},
 				},
 			})
 		case "/artifact":
@@ -89,8 +90,8 @@ func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
 		switch r.URL.Path {
 		case "/index.json":
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
-				Plugins: []sdkmanifest.Manifest{
-					{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
 						ID:                 "plugin-sample-service",
 						Name:               "Sample Service Plugin",
 						Version:            "0.1.0",
@@ -100,7 +101,7 @@ func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
 						Artifacts: []sdkmanifest.Artifact{
 							{Platform: sdkmanifest.PlatformLinuxDocker, URL: server.URL + "/artifact", Checksum: checksum},
 						},
-					},
+					}},
 				},
 			})
 		case "/artifact":
@@ -146,8 +147,8 @@ func TestPluginInstallServiceInstallUsesLocalFileArtifactDirectly(t *testing.T) 
 
 	catalogPath := filepath.Join(artifactDir, "index.json")
 	catalog := PluginCatalog{
-		Plugins: []sdkmanifest.Manifest{
-			{
+		Plugins: []RegistryEntry{
+			{Manifest: sdkmanifest.Manifest{
 				ID:                 "plugin-sample-service",
 				Name:               "Sample Service Plugin",
 				Version:            "0.1.0",
@@ -157,7 +158,7 @@ func TestPluginInstallServiceInstallUsesLocalFileArtifactDirectly(t *testing.T) 
 				Artifacts: []sdkmanifest.Artifact{
 					{Platform: sdkmanifest.PlatformLinuxDocker, URL: "file://" + artifactPath, Checksum: checksum},
 				},
-			},
+			}},
 		},
 	}
 	rawCatalog, err := json.Marshal(catalog)
@@ -194,8 +195,8 @@ func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
 		switch r.URL.Path {
 		case "/index.json":
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
-				Plugins: []sdkmanifest.Manifest{
-					{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
 						ID:                 "plugin-sample",
 						Name:               "Sample Plugin",
 						Version:            "0.1.0",
@@ -205,7 +206,7 @@ func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
 						Artifacts: []sdkmanifest.Artifact{
 							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: "sha256:deadbeef"},
 						},
-					},
+					}},
 				},
 			})
 		case "/artifact":
@@ -234,6 +235,173 @@ func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
 	}
 	if pluginErr.Code != pluginerrors.ErrCodeChecksumMismatch {
 		t.Fatalf("error code = %q", pluginErr.Code)
+	}
+}
+
+func TestPluginInstallServiceInstallUsesManifestURL(t *testing.T) {
+	artifactBytes := []byte("#!/bin/sh\necho plugin\n")
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{
+						ManifestURL: server.URL + "/manifest.json",
+						Manifest: sdkmanifest.Manifest{
+							// ID is required for registry lookup
+							// config_schema/auth/i18n are intentionally absent (they come from manifest_url)
+							ID: "plugin-sample",
+							Artifacts: []sdkmanifest.Artifact{
+								{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
+							},
+						},
+					},
+				},
+			})
+		case "/manifest.json":
+			_ = json.NewEncoder(w).Encode(sdkmanifest.Manifest{
+				ID:                 "plugin-sample",
+				Name:               "Sample Plugin",
+				Version:            "0.1.0",
+				RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+				MinCoreVersion:     "0.1.0",
+			})
+		case "/artifact":
+			_, _ = w.Write(artifactBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	result, err := svc.Install(context.Background(), "plugin-sample")
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if result.Record.ID != "plugin-sample" {
+		t.Fatalf("record id = %q, want plugin-sample", result.Record.ID)
+	}
+	if result.Record.Manifest.Version != "0.1.0" {
+		t.Fatalf("manifest version = %q (should come from manifest_url)", result.Record.Manifest.Version)
+	}
+}
+
+func TestPluginInstallServiceListResolvedCatalogUsesManifestURL(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{
+						ManifestURL: server.URL + "/manifest.json",
+						Manifest: sdkmanifest.Manifest{
+							ID:      "plugin-sample",
+							Version: "0.0.1",
+							Artifacts: []sdkmanifest.Artifact{
+								{Platform: sdkmanifest.PlatformLinuxDocker, URL: server.URL + "/artifact", Checksum: "sha256:deadbeef"},
+							},
+						},
+					},
+				},
+			})
+		case "/manifest.json":
+			_ = json.NewEncoder(w).Encode(sdkmanifest.Manifest{
+				ID:                 "plugin-sample",
+				Name:               "Sample Plugin",
+				Description:        "Resolved from manifest_url",
+				Version:            "0.1.0",
+				RuntimeType:        sdkmanifest.RuntimeTypeService,
+				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxDocker},
+				Capabilities:       []capability.Capability{capability.MetadataSearch},
+				MinCoreVersion:     "0.1.0",
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	catalog, err := svc.ListResolvedCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("ListResolvedCatalog() error = %v", err)
+	}
+	if len(catalog.Plugins) != 1 {
+		t.Fatalf("len(catalog.Plugins) = %d, want 1", len(catalog.Plugins))
+	}
+	if catalog.Plugins[0].Version != "0.1.0" {
+		t.Fatalf("catalog.Plugins[0].Version = %q, want 0.1.0", catalog.Plugins[0].Version)
+	}
+	if catalog.Plugins[0].Description != "Resolved from manifest_url" {
+		t.Fatalf("catalog.Plugins[0].Description = %q", catalog.Plugins[0].Description)
+	}
+	if len(catalog.Plugins[0].Artifacts) != 1 || catalog.Plugins[0].Artifacts[0].Checksum != "sha256:deadbeef" {
+		t.Fatalf("catalog.Plugins[0].Artifacts = %#v", catalog.Plugins[0].Artifacts)
+	}
+}
+
+func TestPluginInstallServiceInstallManifestURLFetchFailureReturnsError(t *testing.T) {
+	artifactBytes := []byte("#!/bin/sh\necho plugin\n")
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{
+						ManifestURL: server.URL + "/manifest.json",
+						Manifest: sdkmanifest.Manifest{
+							ID: "plugin-sample",
+							Artifacts: []sdkmanifest.Artifact{
+								{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
+							},
+						},
+					},
+				},
+			})
+		case "/manifest.json":
+			// manifest_url이 있는데 fetch 실패 → 실패 처리 (inline fallback 없음)
+			w.WriteHeader(http.StatusNotFound)
+		case "/artifact":
+			_, _ = w.Write(artifactBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	_, err := svc.Install(context.Background(), "plugin-sample")
+	if err == nil {
+		t.Fatal("Install() should fail when manifest_url fetch returns 404")
 	}
 }
 
@@ -334,8 +502,8 @@ func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing
 		switch r.URL.Path {
 		case "/index.json":
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
-				Plugins: []sdkmanifest.Manifest{
-					{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
 						ID:                 "plugin-sample",
 						Name:               "Sample Plugin",
 						Version:            "0.1.1",
@@ -345,7 +513,7 @@ func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing
 						Artifacts: []sdkmanifest.Artifact{
 							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
 						},
-					},
+					}},
 				},
 			})
 		case "/artifact":
@@ -416,8 +584,8 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 		switch r.URL.Path {
 		case "/index.json":
 			_ = json.NewEncoder(w).Encode(PluginCatalog{
-				Plugins: []sdkmanifest.Manifest{
-					{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
 						ID:          kitsuPluginID,
 						Name:        "Kitsu Manga",
 						Version:     "0.1.1",
@@ -434,7 +602,7 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 						Artifacts: []sdkmanifest.Artifact{
 							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
 						},
-					},
+					}},
 				},
 			})
 		case "/artifact":

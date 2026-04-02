@@ -30,14 +30,19 @@ var (
 )
 
 type PluginCatalog struct {
+	Plugins []RegistryEntry `json:"plugins"`
+}
+
+type ResolvedPluginCatalog struct {
 	Plugins []sdkmanifest.Manifest `json:"plugins"`
 }
 
 type PluginInstallService struct {
-	cfg           *config.Config
-	client        *http.Client
-	manager       *pluginengine.Manager
-	secretService *PluginSecretService
+	cfg            *config.Config
+	client         *http.Client
+	manager        *pluginengine.Manager
+	secretService  *PluginSecretService
+	manifestLoader ManifestLoader
 }
 
 type InstallPluginRequest struct {
@@ -60,12 +65,28 @@ func NewPluginInstallService(cfg *config.Config, client *http.Client, manager *p
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &PluginInstallService{
+	svc := &PluginInstallService{
 		cfg:           cfg,
 		client:        client,
 		manager:       manager,
 		secretService: secretService,
 	}
+	svc.manifestLoader = newManifestLoader(svc)
+	return svc
+}
+
+// LoadManifestFromCatalog fetches the registry catalog, finds the entry for pluginID,
+// and resolves its full manifest (via manifest_url or inline fields).
+func (s *PluginInstallService) LoadManifestFromCatalog(ctx context.Context, pluginID string) (sdkmanifest.Manifest, error) {
+	catalog, err := s.ListCatalog(ctx)
+	if err != nil {
+		return sdkmanifest.Manifest{}, err
+	}
+	entry, ok := findRegistryEntry(catalog.Plugins, pluginID)
+	if !ok {
+		return sdkmanifest.Manifest{}, ErrPluginCatalogEntryNotFound
+	}
+	return s.manifestLoader.Load(ctx, entry)
 }
 
 func (s *PluginInstallService) ListCatalog(ctx context.Context) (*PluginCatalog, error) {
@@ -80,24 +101,47 @@ func (s *PluginInstallService) ListCatalog(ctx context.Context) (*PluginCatalog,
 	return &catalog, nil
 }
 
+func (s *PluginInstallService) ListResolvedCatalog(ctx context.Context) (*ResolvedPluginCatalog, error) {
+	catalog, err := s.ListCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	plugins := make([]sdkmanifest.Manifest, 0, len(catalog.Plugins))
+	for _, entry := range catalog.Plugins {
+		manifest, err := s.manifestLoader.Load(ctx, entry)
+		if err != nil {
+			return nil, err
+		}
+		plugins = append(plugins, manifest)
+	}
+
+	return &ResolvedPluginCatalog{Plugins: plugins}, nil
+}
+
 func (s *PluginInstallService) Install(ctx context.Context, pluginID string) (*InstallPluginResult, error) {
 	catalog, err := s.ListCatalog(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	entry, ok := findPluginManifest(catalog.Plugins, pluginID)
+	registryEntry, ok := findRegistryEntry(catalog.Plugins, pluginID)
 	if !ok {
 		return nil, ErrPluginCatalogEntryNotFound
 	}
 
-	if compatible, compatErr := sdkversion.IsCompatible(coreversion.Version, entry.MinCoreVersion, entry.MaxCoreVersion); compatErr != nil {
+	manifest, err := s.manifestLoader.Load(ctx, registryEntry)
+	if err != nil {
+		return nil, err
+	}
+
+	if compatible, compatErr := sdkversion.IsCompatible(coreversion.Version, manifest.MinCoreVersion, manifest.MaxCoreVersion); compatErr != nil {
 		return nil, compatErr
 	} else if !compatible {
 		return nil, pluginerrors.New(pluginerrors.ErrCodeIncompatibleVersion, "plugin is not compatible with this core version")
 	}
 
-	artifact, err := selectArtifact(entry)
+	artifact, err := selectArtifact(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -106,17 +150,17 @@ func (s *PluginInstallService) Install(ctx context.Context, pluginID string) (*I
 		return nil, removeErr
 	}
 
-	installPath, err := s.prepareInstallPath(ctx, entry, artifact)
+	installPath, err := s.prepareInstallPath(ctx, manifest, artifact)
 	if err != nil {
 		return nil, err
 	}
-	if entry.RuntimeType == sdkmanifest.RuntimeTypeBinary || entry.RuntimeType == sdkmanifest.RuntimeTypeService {
+	if manifest.RuntimeType == sdkmanifest.RuntimeTypeBinary || manifest.RuntimeType == sdkmanifest.RuntimeTypeService {
 		if chmodErr := os.Chmod(installPath, 0o755); chmodErr != nil {
 			return nil, chmodErr
 		}
 	}
 
-	record, err := s.manager.RegisterInstalled(entry, installPath)
+	record, err := s.manager.RegisterInstalled(manifest, installPath)
 	if err != nil {
 		return nil, err
 	}
@@ -138,11 +182,15 @@ func (s *PluginInstallService) SyncLocalDevelopmentInstallPath(ctx context.Conte
 	if err != nil {
 		return nil, err
 	}
-	entry, ok := findPluginManifest(catalog.Plugins, pluginID)
+	registryEntry, ok := findRegistryEntry(catalog.Plugins, pluginID)
 	if !ok {
 		return nil, ErrPluginCatalogEntryNotFound
 	}
-	artifact, err := selectArtifact(entry)
+	manifest, err := s.manifestLoader.Load(ctx, registryEntry)
+	if err != nil {
+		return nil, err
+	}
+	artifact, err := selectArtifact(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -153,12 +201,12 @@ func (s *PluginInstallService) SyncLocalDevelopmentInstallPath(ctx context.Conte
 	if !isLocalFile {
 		return nil, nil
 	}
-	if entry.RuntimeType == sdkmanifest.RuntimeTypeBinary || entry.RuntimeType == sdkmanifest.RuntimeTypeService {
+	if manifest.RuntimeType == sdkmanifest.RuntimeTypeBinary || manifest.RuntimeType == sdkmanifest.RuntimeTypeService {
 		if chmodErr := os.Chmod(installPath, 0o755); chmodErr != nil {
 			return nil, chmodErr
 		}
 	}
-	record, err := s.manager.RegisterInstalled(entry, installPath)
+	record, err := s.manager.RegisterInstalled(manifest, installPath)
 	if err != nil {
 		return nil, err
 	}
@@ -319,13 +367,13 @@ func (s *PluginInstallService) openURL(ctx context.Context, rawURL string) (io.R
 	}
 }
 
-func findPluginManifest(plugins []sdkmanifest.Manifest, pluginID string) (sdkmanifest.Manifest, bool) {
+func findRegistryEntry(plugins []RegistryEntry, pluginID string) (RegistryEntry, bool) {
 	for _, entry := range plugins {
 		if entry.ID == pluginID {
 			return entry, true
 		}
 	}
-	return sdkmanifest.Manifest{}, false
+	return RegistryEntry{}, false
 }
 
 func selectArtifact(manifest sdkmanifest.Manifest) (sdkmanifest.Artifact, error) {
