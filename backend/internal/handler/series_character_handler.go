@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -45,7 +46,7 @@ type reorderSeriesCharactersRequest struct {
 
 type importSeriesCharactersRequest struct {
 	Characters     []sdktypes.MetadataCharacter `json:"characters"`
-	SourceProvider string                        `json:"source_provider,omitempty"`
+	SourceProvider string                       `json:"source_provider,omitempty"`
 }
 
 func NewSeriesCharacterHandler(seriesRepo *repository.SeriesRepository, characterRepo *repository.SeriesCharacterRepository, cfg *config.Config) *SeriesCharacterHandler {
@@ -83,6 +84,9 @@ func (h *SeriesCharacterHandler) Create(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name is required"})
+	}
 	normalizedName := repository.NormalizeSeriesCharacterName(name)
 	tx, err := database.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -247,53 +251,99 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load existing characters"})
 	}
-	known := make(map[string]struct{}, len(existing))
+	existingByNormalized := make(map[string]model.SeriesCharacter, len(existing))
+	allByID := make(map[string]model.SeriesCharacter, len(existing))
+	existingBySourceKey := make(map[string]model.SeriesCharacter, len(existing)*2)
 	for _, item := range existing {
-		known[item.NormalizedName] = struct{}{}
+		existingByNormalized[item.NormalizedName] = item
+		allByID[item.ID] = item
+		for _, key := range seriesCharacterSourceKeys(item) {
+			existingBySourceKey[key] = item
+		}
 	}
-	nextSortOrder := len(existing)
 	added := make([]model.SeriesCharacter, 0)
 	pending := make([]sdktypes.MetadataCharacter, 0)
+	pendingKnown := make(map[string]struct{}, len(req.Characters))
 	for _, character := range req.Characters {
 		normalized := repository.NormalizeSeriesCharacterName(character.Name)
 		if normalized == "" {
 			continue
 		}
-		if _, ok := known[normalized]; ok {
+		if _, ok := pendingKnown[normalized]; ok {
 			continue
 		}
-		known[normalized] = struct{}{}
+		pendingKnown[normalized] = struct{}{}
 		pending = append(pending, character)
 	}
 
 	sourceProvider := strings.TrimSpace(req.SourceProvider)
+	seenExistingIDs := make(map[string]struct{}, len(existing))
+	incomingSourceKeys := make(map[string]struct{}, len(pending)*2)
 	sortMetadataCharacters(pending)
 	for _, character := range pending {
-		item := model.SeriesCharacter{
-			SeriesID:         series.ID,
-			Name:             strings.TrimSpace(character.Name),
-			Role:             strings.TrimSpace(character.Role),
-			SortOrder:        nextSortOrder,
-			ExternalImageURL: coverURLFromMetadataCharacter(character),
-			SourceProvider:   sourceProvider,
+		for _, key := range metadataCharacterSourceKeys(character, sourceProvider) {
+			incomingSourceKeys[key] = struct{}{}
 		}
-		if character.ID != "" {
-			item.SourceCharacterID = character.ID
-		}
-		switch sourceProvider {
-		case "kumiho-plugin-metadata-kitsu":
-			if relationID := strings.TrimSpace(character.Identifiers["kitsu_media_character_id"]); relationID != "" {
-				item.SourceRelationID = relationID
+
+		normalized := repository.NormalizeSeriesCharacterName(character.Name)
+		existingItem, ok := findExistingCharacter(existingBySourceKey, existingByNormalized, character, sourceProvider)
+		if ok {
+			applyMetadataCharacter(&existingItem, character, sourceProvider)
+			if err := h.characterRepo.Update(tx, &existingItem); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update imported character"})
 			}
-			if sourceID := strings.TrimSpace(character.Identifiers["kitsu_character_id"]); sourceID != "" {
-				item.SourceCharacterID = sourceID
+			seenExistingIDs[existingItem.ID] = struct{}{}
+			allByID[existingItem.ID] = existingItem
+			existingByNormalized[normalized] = existingItem
+			for _, key := range seriesCharacterSourceKeys(existingItem) {
+				existingBySourceKey[key] = existingItem
 			}
+			continue
 		}
+
+		item := model.SeriesCharacter{SeriesID: series.ID}
+		applyMetadataCharacter(&item, character, sourceProvider)
 		if err := h.characterRepo.Create(tx, &item); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to import characters"})
 		}
+		existingByNormalized[item.NormalizedName] = item
+		allByID[item.ID] = item
+		for _, key := range seriesCharacterSourceKeys(item) {
+			existingBySourceKey[key] = item
+		}
 		added = append(added, item)
-		nextSortOrder++
+	}
+
+	for _, item := range existing {
+		if item.SourceProvider != sourceProvider || sourceProvider == "" {
+			continue
+		}
+		if _, ok := seenExistingIDs[item.ID]; ok {
+			continue
+		}
+		if shouldRetainImportedCharacter(item, incomingSourceKeys) {
+			continue
+		}
+		if item.ImagePath != "" {
+			_ = os.Remove(item.ImagePath)
+		}
+		if err := h.characterRepo.Delete(tx, series.ID, item.ID); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to remove stale imported character"})
+		}
+		delete(allByID, item.ID)
+	}
+
+	all := make([]model.SeriesCharacter, 0, len(allByID))
+	for _, item := range allByID {
+		all = append(all, item)
+	}
+	sortSeriesCharactersForMetadata(all)
+	orderedIDs := make([]string, 0, len(all))
+	for _, item := range all {
+		orderedIDs = append(orderedIDs, item.ID)
+	}
+	if err := h.characterRepo.Reorder(tx, series.ID, orderedIDs); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to reorder imported characters"})
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -468,11 +518,140 @@ func coverURLFromMetadataCharacter(character sdktypes.MetadataCharacter) string 
 func sortMetadataCharacters(items []sdktypes.MetadataCharacter) {
 	for i := 0; i < len(items); i++ {
 		for j := i + 1; j < len(items); j++ {
-			if strings.ToLower(strings.TrimSpace(items[j].Name)) < strings.ToLower(strings.TrimSpace(items[i].Name)) {
+			if metadataCharacterLess(items[j], items[i]) {
 				items[i], items[j] = items[j], items[i]
 			}
 		}
 	}
+}
+
+func applyMetadataCharacter(item *model.SeriesCharacter, character sdktypes.MetadataCharacter, sourceProvider string) {
+	item.Name = strings.TrimSpace(character.Name)
+	item.Role = strings.TrimSpace(character.Role)
+	item.ExternalImageURL = coverURLFromMetadataCharacter(character)
+	item.SourceProvider = sourceProvider
+	item.SourceCharacterID = strings.TrimSpace(character.ID)
+	item.SourceRelationID = ""
+
+	switch sourceProvider {
+	case "kumiho-plugin-metadata-kitsu":
+		if relationID := strings.TrimSpace(character.Identifiers["kitsu_media_character_id"]); relationID != "" {
+			item.SourceRelationID = relationID
+		}
+		if sourceID := strings.TrimSpace(character.Identifiers["kitsu_character_id"]); sourceID != "" {
+			item.SourceCharacterID = sourceID
+		}
+	}
+}
+
+func findExistingCharacter(
+	existingBySourceKey map[string]model.SeriesCharacter,
+	existingByNormalized map[string]model.SeriesCharacter,
+	character sdktypes.MetadataCharacter,
+	sourceProvider string,
+) (model.SeriesCharacter, bool) {
+	for _, key := range metadataCharacterSourceKeys(character, sourceProvider) {
+		if item, ok := existingBySourceKey[key]; ok {
+			return item, true
+		}
+	}
+
+	normalized := repository.NormalizeSeriesCharacterName(character.Name)
+	item, ok := existingByNormalized[normalized]
+	return item, ok
+}
+
+func metadataCharacterSourceKeys(character sdktypes.MetadataCharacter, sourceProvider string) []string {
+	keys := make([]string, 0, 3)
+	if sourceProvider == "kumiho-plugin-metadata-kitsu" {
+		if relationID := strings.TrimSpace(character.Identifiers["kitsu_media_character_id"]); relationID != "" {
+			keys = append(keys, sourceProvider+":relation:"+relationID)
+		}
+		if sourceID := strings.TrimSpace(character.Identifiers["kitsu_character_id"]); sourceID != "" {
+			keys = append(keys, sourceProvider+":character:"+sourceID)
+		}
+	}
+	if normalized := repository.NormalizeSeriesCharacterName(character.Name); normalized != "" {
+		keys = append(keys, sourceProvider+":name:"+normalized)
+	}
+	return keys
+}
+
+func seriesCharacterSourceKeys(item model.SeriesCharacter) []string {
+	keys := make([]string, 0, 3)
+	if item.SourceProvider != "" && item.SourceRelationID != "" {
+		keys = append(keys, item.SourceProvider+":relation:"+strings.TrimSpace(item.SourceRelationID))
+	}
+	if item.SourceProvider != "" && item.SourceCharacterID != "" {
+		keys = append(keys, item.SourceProvider+":character:"+strings.TrimSpace(item.SourceCharacterID))
+	}
+	if normalized := repository.NormalizeSeriesCharacterName(item.Name); normalized != "" {
+		keys = append(keys, item.SourceProvider+":name:"+normalized)
+	}
+	return keys
+}
+
+func shouldRetainImportedCharacter(item model.SeriesCharacter, incomingSourceKeys map[string]struct{}) bool {
+	for _, key := range seriesCharacterSourceKeys(item) {
+		if _, ok := incomingSourceKeys[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func metadataCharacterLess(left, right sdktypes.MetadataCharacter) bool {
+	leftMain := isMainCharacterRole(left.Role)
+	rightMain := isMainCharacterRole(right.Role)
+	if leftMain != rightMain {
+		return leftMain
+	}
+
+	leftName := strings.ToLower(strings.TrimSpace(left.Name))
+	rightName := strings.ToLower(strings.TrimSpace(right.Name))
+	if leftName != rightName {
+		if leftName == "" {
+			return false
+		}
+		if rightName == "" {
+			return true
+		}
+		return leftName < rightName
+	}
+
+	return strings.TrimSpace(left.ID) < strings.TrimSpace(right.ID)
+}
+
+func isMainCharacterRole(role string) bool {
+	return strings.EqualFold(strings.TrimSpace(role), "main")
+}
+
+func sortSeriesCharactersForMetadata(items []model.SeriesCharacter) {
+	sort.SliceStable(items, func(i, j int) bool {
+		leftMain := isMainCharacterRole(items[i].Role)
+		rightMain := isMainCharacterRole(items[j].Role)
+		if leftMain != rightMain {
+			return leftMain
+		}
+
+		leftName := strings.ToLower(strings.TrimSpace(items[i].Name))
+		rightName := strings.ToLower(strings.TrimSpace(items[j].Name))
+		if leftName != rightName {
+			if leftName == "" {
+				return false
+			}
+			if rightName == "" {
+				return true
+			}
+			return leftName < rightName
+		}
+
+		if !items[i].CreatedAt.Equal(items[j].CreatedAt) {
+			return items[i].CreatedAt.Before(items[j].CreatedAt)
+		}
+
+		return items[i].ID < items[j].ID
+	})
 }
 
 func deleteHashFiles(dir string, hash string) {

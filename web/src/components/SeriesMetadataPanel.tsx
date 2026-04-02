@@ -110,9 +110,7 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
       if (result.characters?.length) {
         const importResponse = await seriesAPI.importCharacters(series.id, result.characters, fetched?.plugin_id);
         importedCount = importResponse.data.count || 0;
-        if (importedCount > 0) {
-          onCharactersImported?.(importedCount);
-        }
+        onCharactersImported?.(importedCount);
       }
       onApplied(response.data);
       setStatus({

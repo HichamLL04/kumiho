@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Loader2, Plus, RotateCcw, Save, Settings2, Trash2, Upload, Users, X } from "lucide-react";
 import { seriesAPI } from "../api/client";
@@ -13,6 +14,7 @@ interface SeriesCharactersDrawerProps {
 }
 
 type BusyAction = "load" | null;
+const NEW_CHARACTER_PREFIX = "new:";
 
 export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharactersDrawerProps) {
   const { t } = useTranslation();
@@ -39,7 +41,11 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
     if (pendingIds.length === 0) {
       return;
     }
-    void Promise.allSettled(pendingIds.map((id) => seriesAPI.deleteCharacter(seriesIdRef.current, id)));
+    const persistedPendingIds = pendingIds.filter((id) => !isPendingCharacter(id));
+    if (persistedPendingIds.length === 0) {
+      return;
+    }
+    void Promise.allSettled(persistedPendingIds.map((id) => seriesAPI.deleteCharacter(seriesIdRef.current, id)));
   }, []);
 
   useEffect(() => {
@@ -84,22 +90,32 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
   };
 
   const handleAdd = async () => {
-    try {
-      const response = await seriesAPI.createCharacter(series.id, {
-        name: "",
-      });
-      const item = response.data;
-      setCharacters((prev) => [item, ...prev]);
-      setDrafts((prev) => ({
-        ...prev,
-        [item.id]: { name: "", role: item.role || "", image_url: item.image_url || "" },
-      }));
-      setEditingId(item.id);
-      setPendingNewIds((prev) => [item.id, ...prev]);
-    } catch (error) {
-      console.error("Failed to create character:", error);
-      setStatus({ type: "error", message: t("series.characters.toast.create_failed") });
+    if (pendingNewIds.length > 0) {
+      setEditingId(pendingNewIds[0]);
+      return;
     }
+
+    const tempId = `${NEW_CHARACTER_PREFIX}${Date.now()}`;
+    const item: SeriesCharacter = {
+      id: tempId,
+      series_id: series.id,
+      name: "",
+      sort_order: -1,
+      role: "",
+      image_url: "",
+      source_provider: "",
+      source_character_id: "",
+      source_relation_id: "",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setCharacters((prev) => [item, ...prev]);
+    setDrafts((prev) => ({
+      ...prev,
+      [item.id]: { name: "", role: "", image_url: "" },
+    }));
+    setEditingId(item.id);
+    setPendingNewIds((prev) => [item.id, ...prev]);
   };
 
   const handleSave = async (characterId: string) => {
@@ -111,24 +127,39 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
     }
     setSaving(characterId, true);
     try {
-      const response = await seriesAPI.updateCharacter(series.id, characterId, {
-        name: draft.name.trim(),
-        role: draft.role.trim() || undefined,
-        image_url: draft.image_url.trim() || (current && !isManagedImageURL(current.image_url) ? "" : undefined),
-      });
-      syncCharacter(response.data);
+      const response = isPendingCharacter(characterId)
+        ? await seriesAPI.createCharacter(series.id, {
+          name: draft.name.trim(),
+          role: draft.role.trim() || undefined,
+          image_url: draft.image_url.trim() || undefined,
+        })
+        : await seriesAPI.updateCharacter(series.id, characterId, {
+          name: draft.name.trim(),
+          role: draft.role.trim() || undefined,
+          image_url: draft.image_url.trim() || (current && !isManagedImageURL(current.image_url) ? "" : undefined),
+        });
+      if (isPendingCharacter(characterId)) {
+        replacePendingCharacter(characterId, response.data, setCharacters, setDrafts);
+      } else {
+        syncCharacter(response.data);
+      }
       setEditingId(null);
       setPendingNewIds((prev) => prev.filter((id) => id !== characterId));
       setStatus({ type: "success", message: t("series.characters.toast.save_success") });
     } catch (error) {
       console.error("Failed to save character:", error);
-      setStatus({ type: "error", message: t("series.characters.toast.save_failed") });
+      const err = error as { response?: { data?: { error?: string } } };
+      setStatus({ type: "error", message: err.response?.data?.error || t("series.characters.toast.save_failed") });
     } finally {
       setSaving(characterId, false);
     }
   };
 
   const handleDelete = async (characterId: string) => {
+    if (isPendingCharacter(characterId)) {
+      removePendingCharacter(characterId, setCharacters, setDrafts, setEditingId, setPendingNewIds);
+      return;
+    }
     try {
       await seriesAPI.deleteCharacter(series.id, characterId);
       setCharacters((prev) => prev.filter((item) => item.id !== characterId));
@@ -146,26 +177,14 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
   };
 
   const handleCancelNew = async (characterId: string) => {
-    setSaving(characterId, true);
-    try {
-      await seriesAPI.deleteCharacter(series.id, characterId);
-      setCharacters((prev) => prev.filter((item) => item.id !== characterId));
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[characterId];
-        return next;
-      });
-      setEditingId((prev) => (prev === characterId ? null : prev));
-      setPendingNewIds((prev) => prev.filter((id) => id !== characterId));
-    } catch (error) {
-      console.error("Failed to cancel new character:", error);
-      setStatus({ type: "error", message: t("series.characters.toast.delete_failed") });
-    } finally {
-      setSaving(characterId, false);
-    }
+    removePendingCharacter(characterId, setCharacters, setDrafts, setEditingId, setPendingNewIds);
   };
 
   const handleUpload = async (characterId: string, file: File) => {
+    if (isPendingCharacter(characterId)) {
+      setStatus({ type: "error", message: t("series.characters.toast.save_failed") });
+      return;
+    }
     setSaving(characterId, true);
     try {
       const response = await seriesAPI.uploadCharacterImage(series.id, characterId, file);
@@ -180,6 +199,13 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
   };
 
   const handleResetImage = async (characterId: string) => {
+    if (isPendingCharacter(characterId)) {
+      setDrafts((prev) => ({
+        ...prev,
+        [characterId]: { ...(prev[characterId] || { name: "", role: "", image_url: "" }), image_url: "" },
+      }));
+      return;
+    }
     setSaving(characterId, true);
     try {
       const response = await seriesAPI.deleteCharacterImage(series.id, characterId);
@@ -363,6 +389,46 @@ function buildDrafts(items: SeriesCharacter[]) {
     role: item.role || "",
     image_url: isManagedImageURL(item.image_url) ? "" : item.image_url || "",
   }]));
+}
+
+function isPendingCharacter(id: string) {
+  return id.startsWith(NEW_CHARACTER_PREFIX);
+}
+
+function replacePendingCharacter(
+  tempId: string,
+  item: SeriesCharacter,
+  setCharacters: Dispatch<SetStateAction<SeriesCharacter[]>>,
+  setDrafts: Dispatch<SetStateAction<Record<string, { name: string; role: string; image_url: string }>>>,
+) {
+  setCharacters((prev) => prev.map((current) => (current.id === tempId ? item : current)));
+  setDrafts((prev) => {
+    const next = { ...prev };
+    delete next[tempId];
+    next[item.id] = {
+      name: item.name,
+      role: item.role || "",
+      image_url: isManagedImageURL(item.image_url) ? "" : item.image_url || "",
+    };
+    return next;
+  });
+}
+
+function removePendingCharacter(
+  characterId: string,
+  setCharacters: Dispatch<SetStateAction<SeriesCharacter[]>>,
+  setDrafts: Dispatch<SetStateAction<Record<string, { name: string; role: string; image_url: string }>>>,
+  setEditingId: Dispatch<SetStateAction<string | null>>,
+  setPendingNewIds: Dispatch<SetStateAction<string[]>>,
+) {
+  setCharacters((prev) => prev.filter((item) => item.id !== characterId));
+  setDrafts((prev) => {
+    const next = { ...prev };
+    delete next[characterId];
+    return next;
+  });
+  setEditingId((prev) => (prev === characterId ? null : prev));
+  setPendingNewIds((prev) => prev.filter((id) => id !== characterId));
 }
 
 function sortCharactersForDisplay(items: SeriesCharacter[], pendingNewIds: string[]) {

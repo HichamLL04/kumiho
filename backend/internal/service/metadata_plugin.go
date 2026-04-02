@@ -337,7 +337,7 @@ func mapContentType(libraryType string) sdktypes.ContentType {
 	case string(sdktypes.ContentTypeAudiobook):
 		return sdktypes.ContentTypeAudiobook
 	default:
-		return sdktypes.ContentTypeBook
+		return ""
 	}
 }
 

@@ -624,10 +624,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                     <SeriesMetadataPanel
                       series={series}
                       onApplied={handleMetadataApplied}
-                      onCharactersImported={(count) => {
-                        if (count > 0) {
-                          setCharactersReloadToken((prev) => prev + 1);
-                        }
+                      onCharactersImported={() => {
+                        setCharactersReloadToken((prev) => prev + 1);
                       }}
                       compact
                     />

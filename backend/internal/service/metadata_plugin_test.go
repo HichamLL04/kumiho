@@ -120,6 +120,36 @@ func TestMetadataServiceSearchSeriesUsesOverrideTitle(t *testing.T) {
 	}
 }
 
+func TestMetadataServiceSearchSeriesDoesNotForceBookContentType(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+
+	rt := &metadataRuntime{
+		searchResp: &sdktypes.SearchResponse{
+			Candidates: []sdktypes.SearchCandidate{
+				{Source: sdktypes.SourceRef{ID: "src-1", Name: "sample"}, Title: "Naruto", Score: 0.95, Confidence: 0.9},
+			},
+		},
+	}
+	manager := newActiveMetadataManager(t, rt)
+	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+
+	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{Title: "Naruto"})
+	if err != nil {
+		t.Fatalf("SearchSeries() error = %v", err)
+	}
+	if len(result.Candidates) != 1 {
+		t.Fatalf("candidates len = %d, want 1", len(result.Candidates))
+	}
+	if rt.lastSearchReq == nil {
+		t.Fatal("runtime should receive search request")
+	}
+	if rt.lastSearchReq.ContentType != "" {
+		t.Fatalf("search content type = %q, want empty", rt.lastSearchReq.ContentType)
+	}
+}
+
 func TestMetadataServiceApplySeriesMetadataUpdatesDatabase(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
@@ -441,8 +471,9 @@ func newActiveMetadataManager(t *testing.T, rt *metadataRuntime) *pluginengine.M
 }
 
 type metadataRuntime struct {
-	searchResp *sdktypes.SearchResponse
-	fetchResp  *sdktypes.FetchResponse
+	searchResp    *sdktypes.SearchResponse
+	fetchResp     *sdktypes.FetchResponse
+	lastSearchReq *sdktypes.SearchRequest
 }
 
 func (r *metadataRuntime) Type() sdkmanifest.RuntimeType {
@@ -461,7 +492,11 @@ func (r *metadataRuntime) Healthcheck(context.Context, pluginruntime.Instance) (
 	return &healthcheck.Response{Status: healthcheck.StatusOK}, nil
 }
 
-func (r *metadataRuntime) Search(context.Context, pluginruntime.Instance, *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+func (r *metadataRuntime) Search(_ context.Context, _ pluginruntime.Instance, req *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+	if req != nil {
+		reqCopy := *req
+		r.lastSearchReq = &reqCopy
+	}
 	return r.searchResp, nil
 }
 
