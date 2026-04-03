@@ -18,7 +18,6 @@ import type { Series, Volume, Library, ReadingProgress, SeriesProgressSummary, C
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
 import { AlertModal, type AlertType } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
-import { SeriesMetadataPanel } from "../components/SeriesMetadataPanel";
 
 export function SeriesPage() {
   const { id } = useParams<{ id: string }>();
@@ -453,13 +452,6 @@ export function SeriesPage() {
               }}
               onDownload={canDownload ? handleDownloadSeries : undefined}
             />
-
-            {user?.role === "MASTER" && (
-              <SeriesMetadataPanel
-                series={series}
-                onApplied={(response) => setSeries(response.series)}
-              />
-            )}
 
             <div className={styles.volumeCount}>
               <Trans
