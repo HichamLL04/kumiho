@@ -51,6 +51,9 @@ export function SeriesInfoCard({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
+  const characterModalRef = useRef<HTMLDivElement | null>(null);
+  const characterModalCloseRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!isCharacterModalOpen) {
@@ -59,13 +62,60 @@ export function SeriesInfoCard({
 
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
+    characterModalCloseRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsCharacterModalOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const root = characterModalRef.current;
+      if (!root) {
+        return;
+      }
+
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.style.overflow = previousHtmlOverflow;
+      previousFocusRef.current?.focus();
     };
   }, [isCharacterModalOpen]);
   const [imageError, setImageError] = useState(false);
@@ -639,6 +689,7 @@ export function SeriesInfoCard({
             role="dialog"
             aria-modal="true"
             aria-labelledby={characterModalTitleId}
+            ref={characterModalRef}
             onClick={(e) => e.stopPropagation()}
           >
             <div className={styles.characterModalHeader}>
@@ -647,6 +698,7 @@ export function SeriesInfoCard({
                 className={styles.characterModalClose}
                 onClick={() => setIsCharacterModalOpen(false)}
                 aria-label={t("common.close")}
+                ref={characterModalCloseRef}
               >
                 ✕
               </button>

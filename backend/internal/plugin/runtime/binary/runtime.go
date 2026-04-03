@@ -72,6 +72,10 @@ func newProcessLifecycle() (chan error, chan error, context.Context, context.Can
 	return exited, ready, procCtx, cancel
 }
 
+func newReadyChannel() chan error {
+	return make(chan error, 1)
+}
+
 func newAttemptLifecycle() (chan error, context.Context, context.CancelFunc) {
 	exited := make(chan error, 1)
 	procCtx, cancel := context.WithCancel(context.Background())
@@ -148,13 +152,13 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 			}
 			return nil
 		}
-		_, ready, _, _ := newProcessLifecycle()
+		ready := newReadyChannel()
 		r.processes[inst.ID] = processState{ready: ready}
 		r.mu.Unlock()
 
 		return r.startFresh(ctx, inst, ready)
 	}
-	_, ready, _, _ := newProcessLifecycle()
+	ready := newReadyChannel()
 	r.processes[inst.ID] = processState{ready: ready}
 	r.mu.Unlock()
 

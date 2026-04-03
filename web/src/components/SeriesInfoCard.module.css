@@ -309,7 +309,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-modal, 1400);
   animation: backdropFadeIn 0.2s ease-out;
 }
 
@@ -356,6 +356,13 @@
   border-radius: 6px;
   transition: all 0.15s;
   line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .characterModalBackdrop,
+  .characterModalBox {
+    animation: none;
+  }
 }
 
 .characterModalClose:hover {
