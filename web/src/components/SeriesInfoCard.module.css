@@ -373,6 +373,7 @@
 .characterModalScroll {
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
   flex: 1;
   /* 상하: 패딩으로만 스케일 여백 확보 (마이너스 마진 금지 — 헤더 클릭 차단됨) */
   /* 좌우: 마이너스 마진으로 확장 후 hidden으로 클립 */
@@ -400,7 +401,7 @@
 }
 
 .characterModalItem:hover {
-  transform: scale(1.6);
+  transform: scale(1.5);
   z-index: 10;
 }
 
