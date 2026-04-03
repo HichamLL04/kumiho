@@ -20,9 +20,9 @@ func TestPluginInstallServiceCheckUpdates(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(PluginCatalog{
-			Plugins: []sdkmanifest.Manifest{
-				{ID: "plugin-a", Name: "Plugin A", Version: "0.2.0"},
-				{ID: "plugin-b", Name: "Plugin B", Version: "0.1.0"},
+			Plugins: []RegistryEntry{
+				{Manifest: sdkmanifest.Manifest{ID: "plugin-a", Name: "Plugin A", Version: "0.2.0"}},
+				{Manifest: sdkmanifest.Manifest{ID: "plugin-b", Name: "Plugin B", Version: "0.1.0"}},
 			},
 		})
 	}))

@@ -37,6 +37,8 @@ var (
 	candidateVolumePattern    = regexp.MustCompile(`(?i)(?:^|[\s._:-])(?:vol(?:ume)?\.?\s*)?(\d{1,3})(?:$|[\s._:-])`)
 )
 
+const lowConfidenceProviderOrderThreshold = 0.35
+
 type MetadataPluginFailure struct {
 	PluginID   string `json:"plugin_id"`
 	PluginName string `json:"plugin_name"`
@@ -176,6 +178,9 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 		if left.Confidence != right.Confidence {
 			return left.Confidence > right.Confidence
 		}
+		if left.Confidence <= lowConfidenceProviderOrderThreshold {
+			return false
+		}
 
 		leftVolume, leftHasVolume := candidateVolumeNumber(left.Title)
 		rightVolume, rightHasVolume := candidateVolumeNumber(right.Title)
@@ -189,8 +194,7 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 		if left.Score != right.Score {
 			return left.Score > right.Score
 		}
-
-		return strings.ToLower(left.Title) < strings.ToLower(right.Title)
+		return false
 	})
 
 	return result, nil

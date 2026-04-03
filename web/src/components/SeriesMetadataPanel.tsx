@@ -17,7 +17,7 @@ interface SeriesMetadataPanelProps {
   compact?: boolean;
 }
 
-type ApplyFieldKey = "thumbnail" | "original_title" | "authors" | "publisher" | "publication_date" | "description" | "tags";
+type ApplyFieldKey = "thumbnail" | "original_title" | "authors" | "publisher" | "publication_date" | "description" | "tags" | "characters";
 
 const DEFAULT_APPLY_FIELDS: Record<ApplyFieldKey, boolean> = {
   thumbnail: true,
@@ -27,6 +27,7 @@ const DEFAULT_APPLY_FIELDS: Record<ApplyFieldKey, boolean> = {
   publication_date: true,
   description: true,
   tags: true,
+  characters: true,
 };
 
 export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharactersImported, compact = false }: SeriesMetadataPanelProps) {
@@ -107,22 +108,28 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
     try {
       const response = await seriesAPI.metadataApply(series.id, filterMetadataResult(result, applyFields));
       let importedCount = 0;
-      if (result.characters?.length) {
+      if (applyFields.characters && result.characters?.length) {
         const importResponse = await seriesAPI.importCharacters(series.id, result.characters, fetched?.plugin_id);
         importedCount = importResponse.data.count || 0;
         onCharactersImported?.(importedCount);
       }
       onApplied(response.data);
+      const updatedFieldCount = response.data.updated_fields.length;
       setStatus({
         type: "success",
-        message: response.data.updated_fields.length > 0
+        message: updatedFieldCount > 0
           ? importedCount > 0
             ? t("series.metadata.toast.apply_success_with_characters", {
-              count: response.data.updated_fields.length,
+              count: updatedFieldCount,
               characters: importedCount,
             })
-            : t("series.metadata.toast.apply_success", { count: response.data.updated_fields.length })
-          : t("series.metadata.toast.apply_no_changes"),
+            : t("series.metadata.toast.apply_success", { count: updatedFieldCount })
+          : importedCount > 0
+            ? t("series.metadata.toast.apply_success_with_characters", {
+              count: updatedFieldCount,
+              characters: importedCount,
+            })
+            : t("series.metadata.toast.apply_no_changes"),
       });
     } catch (error: unknown) {
       console.error("Failed to apply metadata:", error);
@@ -375,13 +382,26 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
                 </div>
                 <p className={styles.metadataPreviewValue}>{fetched.result.tags?.join(", ") || "-"}</p>
               </div>
-              <div className={styles.metadataPreviewSection}>
+              <div className={`${styles.metadataPreviewSection} ${!applyFields.characters ? styles.metadataPreviewSectionDisabled : ""}`}>
                 <div className={styles.metadataPreviewLabelRow}>
-                  <label>{t("series.metadata.fields.characters")}</label>
+                  <label htmlFor="apply-field-characters">{t("series.metadata.fields.characters")}</label>
+                  <input
+                    id="apply-field-characters"
+                    type="checkbox"
+                    checked={applyFields.characters}
+                    onChange={() => handleApplyFieldToggle("characters")}
+                    className={styles.metadataApplyCheckbox}
+                  />
                 </div>
                 <p className={styles.metadataPreviewValue}>
                   {t("series.metadata.character_count", { count: fetched.result.characters?.length || 0 })}
                 </p>
+                {Boolean(fetched.result.characters?.length) && (
+                  <p className={styles.metadataPreviewValue}>
+                    {fetched.result.characters?.slice(0, 5).map((character) => character.name).join(", ")}
+                    {(fetched.result.characters?.length || 0) > 5 ? " ..." : ""}
+                  </p>
+                )}
               </div>
               <button type="button" className={commonStyles.settingsSelect} onClick={() => void handleApply(fetched.result)} disabled={busy !== null || !hasSelectedApplyField}>
                 {busy === "apply" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Sparkles size={14} />}

@@ -120,6 +120,42 @@ func TestMetadataServiceSearchSeriesUsesOverrideTitle(t *testing.T) {
 	}
 }
 
+func TestMetadataServiceSearchSeriesKeepsProviderOrderForLowConfidenceTies(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+
+	rt := &metadataRuntime{
+		searchResp: &sdktypes.SearchResponse{
+			Candidates: []sdktypes.SearchCandidate{
+				{Source: sdktypes.SourceRef{ID: "src-b", Name: "sample"}, Title: "Zulu Story", Score: 0.92, Confidence: 0.35},
+				{Source: sdktypes.SourceRef{ID: "src-a", Name: "sample"}, Title: "Alpha Story", Score: 0.84, Confidence: 0.35},
+				{Source: sdktypes.SourceRef{ID: "src-c", Name: "sample"}, Title: "Beta Story", Score: 0.76, Confidence: 0.35},
+			},
+		},
+	}
+	manager := newActiveMetadataManager(t, rt)
+	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+
+	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{})
+	if err != nil {
+		t.Fatalf("SearchSeries() error = %v", err)
+	}
+
+	if len(result.Candidates) != 3 {
+		t.Fatalf("candidates len = %d, want 3", len(result.Candidates))
+	}
+	if result.Candidates[0].Candidate.Title != "Zulu Story" {
+		t.Fatalf("first candidate title = %q", result.Candidates[0].Candidate.Title)
+	}
+	if result.Candidates[1].Candidate.Title != "Alpha Story" {
+		t.Fatalf("second candidate title = %q", result.Candidates[1].Candidate.Title)
+	}
+	if result.Candidates[2].Candidate.Title != "Beta Story" {
+		t.Fatalf("third candidate title = %q", result.Candidates[2].Candidate.Title)
+	}
+}
+
 func TestMetadataServiceSearchSeriesDoesNotForceBookContentType(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
