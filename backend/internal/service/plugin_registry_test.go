@@ -1,11 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -367,6 +369,109 @@ func TestPluginInstallServiceListResolvedCatalogUsesManifestURL(t *testing.T) {
 	}
 	if len(catalog.Plugins[0].Artifacts) != 1 || catalog.Plugins[0].Artifacts[0].Checksum != "sha256:deadbeef" {
 		t.Fatalf("catalog.Plugins[0].Artifacts = %#v", catalog.Plugins[0].Artifacts)
+	}
+	if len(catalog.Failures) != 0 {
+		t.Fatalf("catalog.Failures = %#v, want empty", catalog.Failures)
+	}
+}
+
+func TestPluginInstallServiceListResolvedCatalogCollectsPartialFailures(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{
+						ManifestURL: server.URL + "/manifest-good.json",
+						Manifest: sdkmanifest.Manifest{
+							ID: "plugin-good",
+							Artifacts: []sdkmanifest.Artifact{
+								{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: "sha256:deadbeef"},
+							},
+						},
+					},
+					{
+						ManifestURL: server.URL + "/manifest-bad.json",
+						Manifest: sdkmanifest.Manifest{
+							ID: "plugin-bad",
+						},
+					},
+				},
+			})
+		case "/manifest-good.json":
+			_ = json.NewEncoder(w).Encode(sdkmanifest.Manifest{
+				ID:                 "plugin-good",
+				Name:               "Good Plugin",
+				Version:            "0.1.0",
+				RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+			})
+		case "/manifest-bad.json":
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	catalog, err := svc.ListResolvedCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("ListResolvedCatalog() error = %v", err)
+	}
+	if len(catalog.Plugins) != 1 || catalog.Plugins[0].ID != "plugin-good" {
+		t.Fatalf("catalog.Plugins = %#v", catalog.Plugins)
+	}
+	if len(catalog.Failures) != 1 {
+		t.Fatalf("catalog.Failures len = %d, want 1", len(catalog.Failures))
+	}
+	if catalog.Failures[0].PluginID != "plugin-bad" {
+		t.Fatalf("catalog.Failures[0].PluginID = %q", catalog.Failures[0].PluginID)
+	}
+	if catalog.Failures[0].ManifestURL != server.URL+"/manifest-bad.json" {
+		t.Fatalf("catalog.Failures[0].ManifestURL = %q", catalog.Failures[0].ManifestURL)
+	}
+}
+
+func TestPluginInstallServiceListResolvedCatalogReturnsContextErrors(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "https://example.com/index.json",
+	}
+	svc := NewPluginInstallService(cfg, nil, pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+	svc.manifestLoader = manifestLoaderFunc(func(context.Context, RegistryEntry) (sdkmanifest.Manifest, error) {
+		return sdkmanifest.Manifest{}, context.Canceled
+	})
+
+	svc.client = &http.Client{
+		Transport: pluginRegistryRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			payload, err := json.Marshal(PluginCatalog{
+				Plugins: []RegistryEntry{{
+					Manifest: sdkmanifest.Manifest{ID: "plugin-canceled"},
+				}},
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewReader(payload)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	_, err := svc.ListResolvedCatalog(context.Background())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ListResolvedCatalog() error = %v, want context.Canceled", err)
 	}
 }
 
@@ -828,4 +933,16 @@ func (r *testPluginSecretRepo) DeleteByPlugin(_ database.Queryer, pluginID strin
 		}
 	}
 	return nil
+}
+
+type manifestLoaderFunc func(context.Context, RegistryEntry) (sdkmanifest.Manifest, error)
+
+func (f manifestLoaderFunc) Load(ctx context.Context, entry RegistryEntry) (sdkmanifest.Manifest, error) {
+	return f(ctx, entry)
+}
+
+type pluginRegistryRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f pluginRegistryRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

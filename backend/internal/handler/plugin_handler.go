@@ -60,6 +60,21 @@ type pluginAuthActionRequest struct {
 
 type pluginConfigMutation func() (*service.PluginConfigStatus, error)
 
+type pluginMutationError struct {
+	err                  error
+	pluginState          sdkstate.State
+	reactivationRequired bool
+	restoreFailed        bool
+}
+
+func (e *pluginMutationError) Error() string {
+	return e.err.Error()
+}
+
+func (e *pluginMutationError) Unwrap() error {
+	return e.err
+}
+
 func NewPluginHandler(manager *pluginengine.Manager, installService *service.PluginInstallService, secretService *service.PluginSecretService) *PluginHandler {
 	return &PluginHandler{
 		manager:        manager,
@@ -555,10 +570,29 @@ func (h *PluginHandler) mutatePluginSecrets(ctx context.Context, pluginID string
 	if err != nil {
 		if reactivationRequired {
 			if _, reactivateErr := h.manager.Activate(ctx, pluginID); reactivateErr != nil {
-				return nil, false, fmt.Errorf("plugin config mutation failed: %w (also failed to restore active state: %v)", err, reactivateErr)
+				pluginState := sdkstate.State("")
+				if current, currentOK, getErr := h.manager.Get(pluginID); getErr == nil && currentOK {
+					pluginState = current.State
+				}
+				return nil, false, &pluginMutationError{
+					err:                  fmt.Errorf("plugin config mutation failed: %w (also failed to restore active state: %v)", err, reactivateErr),
+					pluginState:          pluginState,
+					reactivationRequired: true,
+					restoreFailed:        true,
+				}
 			}
 		}
-		return nil, false, err
+		pluginState := sdkstate.State("")
+		if reactivationRequired {
+			pluginState = sdkstate.Active
+		} else if ok {
+			pluginState = record.State
+		}
+		return nil, false, &pluginMutationError{
+			err:                  err,
+			pluginState:          pluginState,
+			reactivationRequired: reactivationRequired,
+		}
 	}
 
 	return status, reactivationRequired, nil
@@ -580,11 +614,28 @@ func toPluginRecordResponse(record pluginengine.Record, includePath bool) plugin
 }
 
 func writePluginError(c *fiber.Ctx, err error) error {
+	var mutationErr *pluginMutationError
+	_ = errors.As(err, &mutationErr)
+	body := func(message string, code ...string) fiber.Map {
+		payload := fiber.Map{"error": message}
+		if len(code) > 0 && code[0] != "" {
+			payload["code"] = code[0]
+		}
+		if mutationErr != nil {
+			if mutationErr.pluginState != "" {
+				payload["plugin_state"] = string(mutationErr.pluginState)
+			}
+			payload["reactivation_required"] = mutationErr.reactivationRequired
+			payload["restore_failed"] = mutationErr.restoreFailed
+		}
+		return payload
+	}
+
 	switch {
 	case errors.Is(err, pluginengine.ErrPluginNotFound):
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusNotFound).JSON(body(err.Error()))
 	case errors.Is(err, pluginruntime.ErrNotRunning):
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusConflict).JSON(body(err.Error()))
 	default:
 		var pluginErr *pluginerrors.PluginError
 		if errors.As(err, &pluginErr) {
@@ -595,14 +646,14 @@ func writePluginError(c *fiber.Ctx, err error) error {
 			case pluginerrors.ErrCodeChecksumMismatch, pluginerrors.ErrCodeIncompatibleVersion:
 				status = fiber.StatusConflict
 			}
-			return c.Status(status).JSON(fiber.Map{"error": pluginErr.Message, "code": pluginErr.Code})
+			return c.Status(status).JSON(body(pluginErr.Message, string(pluginErr.Code)))
 		}
 		switch {
 		case errors.Is(err, service.ErrPluginRegistryNotConfigured):
-			return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
+			return c.Status(fiber.StatusNotImplemented).JSON(body(err.Error()))
 		case errors.Is(err, service.ErrPluginCatalogEntryNotFound):
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+			return c.Status(fiber.StatusNotFound).JSON(body(err.Error()))
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(body(err.Error()))
 	}
 }
