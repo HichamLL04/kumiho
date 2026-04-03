@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -10,9 +11,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
@@ -99,7 +102,15 @@ func (s *PluginSecretService) SetSecret(pluginID string, manifest sdkmanifest.Ma
 }
 
 func (s *PluginSecretService) SetSecrets(pluginID string, manifest sdkmanifest.Manifest, values map[string]string) (*PluginConfigStatus, error) {
-	for fieldKey, value := range values {
+	type pendingSecret struct {
+		fieldKey  string
+		encrypted string
+	}
+
+	fieldKeys := sortedKeys(values)
+	pending := make([]pendingSecret, 0, len(fieldKeys))
+	for _, fieldKey := range fieldKeys {
+		value := values[fieldKey]
 		spec, ok := findConfigSpec(manifest, fieldKey)
 		if !ok {
 			return nil, pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "unsupported plugin config field")
@@ -116,9 +127,18 @@ func (s *PluginSecretService) SetSecrets(pluginID string, manifest sdkmanifest.M
 		if err != nil {
 			return nil, err
 		}
-		if err := s.repo.Upsert(nil, pluginID, spec.FieldKey, encrypted); err != nil {
-			return nil, err
+		pending = append(pending, pendingSecret{fieldKey: spec.FieldKey, encrypted: encrypted})
+	}
+
+	if err := s.withTransaction(context.Background(), func(q database.Queryer) error {
+		for _, item := range pending {
+			if err := s.repo.Upsert(q, pluginID, item.fieldKey, item.encrypted); err != nil {
+				return err
+			}
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return s.Status(pluginID, manifest)
 }
@@ -128,6 +148,28 @@ func (s *PluginSecretService) DeleteSecret(pluginID string, manifest sdkmanifest
 		return nil, pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "unsupported plugin config field")
 	}
 	if err := s.repo.Delete(nil, pluginID, fieldKey); err != nil {
+		return nil, err
+	}
+	return s.Status(pluginID, manifest)
+}
+
+func (s *PluginSecretService) DeleteSecrets(pluginID string, manifest sdkmanifest.Manifest, fieldKeys []string) (*PluginConfigStatus, error) {
+	sortedFieldKeys := append([]string(nil), fieldKeys...)
+	sort.Strings(sortedFieldKeys)
+	for _, fieldKey := range sortedFieldKeys {
+		if _, ok := findConfigSpec(manifest, fieldKey); !ok {
+			return nil, pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "unsupported plugin config field")
+		}
+	}
+
+	if err := s.withTransaction(context.Background(), func(q database.Queryer) error {
+		for _, fieldKey := range sortedFieldKeys {
+			if err := s.repo.Delete(q, pluginID, fieldKey); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 	return s.Status(pluginID, manifest)
@@ -309,4 +351,29 @@ func maskSecret(value string) string {
 		return "••••"
 	}
 	return "••••" + value[len(value)-4:]
+}
+
+func (s *PluginSecretService) withTransaction(ctx context.Context, fn func(q database.Queryer) error) error {
+	if database.DB == nil {
+		return fn(nil)
+	}
+
+	tx, err := database.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+func sortedKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }

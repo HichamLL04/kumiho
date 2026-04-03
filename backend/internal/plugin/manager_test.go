@@ -63,7 +63,7 @@ func TestManagerBootstrapReactivatesPreviouslyActivePlugin(t *testing.T) {
 		t.Fatalf("Save() error = %v", saveErr)
 	}
 
-	rt := &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
+	rt := &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary, healthErr: runtime.ErrNotRunning}
 	manager := NewManager(store, rt)
 	if bootstrapErr := manager.Bootstrap(context.Background()); bootstrapErr != nil {
 		t.Fatalf("Bootstrap() error = %v", bootstrapErr)
@@ -106,6 +106,7 @@ func TestManagerBootstrapMarksErrorWhenReactivationFails(t *testing.T) {
 	manager := NewManager(store, &fakeRuntime{
 		runtimeType: sdkmanifest.RuntimeTypeBinary,
 		startErr:    errors.New("start failed"),
+		healthErr:   runtime.ErrNotRunning,
 	})
 	if bootstrapErr := manager.Bootstrap(context.Background()); bootstrapErr != nil {
 		t.Fatalf("Bootstrap() error = %v", bootstrapErr)
@@ -260,6 +261,36 @@ func TestManagerActivateReturnsStartErrorAndMarksState(t *testing.T) {
 	}
 }
 
+func TestManagerActivateReturnsExistingRecordWhenAlreadyActive(t *testing.T) {
+	store := NewMemoryStore()
+	now := time.Now()
+	record := Record{
+		ID:          "active-plugin",
+		Manifest:    sdkmanifest.Manifest{ID: "active-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:       sdkstate.Active,
+		InstallPath: "/plugins/active",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := store.Save(record); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	rt := &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
+	manager := NewManager(store, rt)
+
+	got, err := manager.Activate(context.Background(), record.ID)
+	if err != nil {
+		t.Fatalf("Activate() error = %v", err)
+	}
+	if got.State != sdkstate.Active {
+		t.Fatalf("state = %q, want %q", got.State, sdkstate.Active)
+	}
+	if rt.startCalls != 0 {
+		t.Fatalf("startCalls = %d, want 0", rt.startCalls)
+	}
+}
+
 func TestManagerActivateRollsBackRuntimeWhenSaveActiveFails(t *testing.T) {
 	store := &failingStore{
 		Store:       NewMemoryStore(),
@@ -381,6 +412,7 @@ type fakeRuntime struct {
 	runtimeType sdkmanifest.RuntimeType
 	startErr    error
 	stopErr     error
+	healthErr   error
 	startCalls  int
 	stopCalls   int
 	lastInst    runtime.Instance
@@ -436,7 +468,10 @@ func (r *fakeRuntime) Stop(context.Context, runtime.Instance) error {
 }
 
 func (r *fakeRuntime) Healthcheck(context.Context, runtime.Instance) (*healthcheck.Response, error) {
-	return nil, runtime.ErrNotImplemented
+	if r.healthErr != nil {
+		return nil, r.healthErr
+	}
+	return &healthcheck.Response{Status: "ok"}, nil
 }
 
 func (r *fakeRuntime) Search(context.Context, runtime.Instance, *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
