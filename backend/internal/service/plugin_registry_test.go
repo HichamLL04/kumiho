@@ -1,11 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -435,6 +437,41 @@ func TestPluginInstallServiceListResolvedCatalogCollectsPartialFailures(t *testi
 	}
 	if catalog.Failures[0].ManifestURL != server.URL+"/manifest-bad.json" {
 		t.Fatalf("catalog.Failures[0].ManifestURL = %q", catalog.Failures[0].ManifestURL)
+	}
+}
+
+func TestPluginInstallServiceListResolvedCatalogReturnsContextErrors(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "https://example.com/index.json",
+	}
+	svc := NewPluginInstallService(cfg, nil, pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+	svc.manifestLoader = manifestLoaderFunc(func(context.Context, RegistryEntry) (sdkmanifest.Manifest, error) {
+		return sdkmanifest.Manifest{}, context.Canceled
+	})
+
+	svc.client = &http.Client{
+		Transport: pluginRegistryRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			payload, err := json.Marshal(PluginCatalog{
+				Plugins: []RegistryEntry{{
+					Manifest: sdkmanifest.Manifest{ID: "plugin-canceled"},
+				}},
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewReader(payload)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	_, err := svc.ListResolvedCatalog(context.Background())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ListResolvedCatalog() error = %v, want context.Canceled", err)
 	}
 }
 
@@ -896,4 +933,16 @@ func (r *testPluginSecretRepo) DeleteByPlugin(_ database.Queryer, pluginID strin
 		}
 	}
 	return nil
+}
+
+type manifestLoaderFunc func(context.Context, RegistryEntry) (sdkmanifest.Manifest, error)
+
+func (f manifestLoaderFunc) Load(ctx context.Context, entry RegistryEntry) (sdkmanifest.Manifest, error) {
+	return f(ctx, entry)
+}
+
+type pluginRegistryRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f pluginRegistryRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

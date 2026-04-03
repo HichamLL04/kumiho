@@ -122,6 +122,9 @@ func (s *PluginInstallService) ListResolvedCatalog(ctx context.Context) (*Resolv
 	for _, entry := range catalog.Plugins {
 		manifest, err := s.manifestLoader.Load(ctx, entry)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
 			failures = append(failures, ResolvedCatalogFailure{
 				PluginID:    strings.TrimSpace(entry.ID),
 				ManifestURL: strings.TrimSpace(entry.ManifestURL),
