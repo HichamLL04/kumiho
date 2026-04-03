@@ -73,7 +73,7 @@ function renderLinkedText(text: string) {
               className={styles.inlineLink}
               href={part}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
             >
               {part}
             </a>

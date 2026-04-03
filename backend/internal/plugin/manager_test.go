@@ -570,10 +570,19 @@ func TestInstallPathExists(t *testing.T) {
 	}
 	_ = file.Close()
 
-	if !installPathExists(file.Name()) {
+	exists, statErr := installPathExists(file.Name())
+	if statErr != nil {
+		t.Fatalf("installPathExists() error = %v", statErr)
+	}
+	if !exists {
 		t.Fatal("installPathExists() = false, want true")
 	}
-	if installPathExists("/path/does/not/exist") {
+
+	exists, statErr = installPathExists("/path/does/not/exist")
+	if statErr != nil {
+		t.Fatalf("installPathExists() error = %v", statErr)
+	}
+	if exists {
 		t.Fatal("installPathExists() = true, want false")
 	}
 }

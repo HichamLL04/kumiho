@@ -238,13 +238,21 @@ func (m *Manager) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	for _, record := range records {
-		if shouldCheckInstallPath(record) && !installPathExists(record.InstallPath) {
-			if _, err := m.MarkError(record.ID, "installed artifact is missing"); err != nil {
-				return err
+		if shouldCheckInstallPath(record) {
+			exists, statErr := installPathExists(record.InstallPath)
+			if statErr != nil {
+				if _, err := m.MarkError(record.ID, fmt.Sprintf("failed to stat install path: %v", statErr)); err != nil {
+					return err
+				}
+				continue
 			}
-			continue
+			if !exists {
+				if _, err := m.MarkError(record.ID, "installed artifact is missing"); err != nil {
+					return err
+				}
+				continue
+			}
 		}
-
 		switch record.State {
 		case sdkstate.Installed, sdkstate.Unhealthy:
 			if _, err := m.transition(record.ID, sdkstate.Registered, ""); err != nil {
@@ -313,11 +321,17 @@ func shouldCheckInstallPath(record Record) bool {
 	return sdkstate.IsInstalled(record.State)
 }
 
-func installPathExists(installPath string) bool {
+func installPathExists(installPath string) (bool, error) {
 	installPath = strings.TrimSpace(installPath)
 	if installPath == "" {
-		return false
+		return false, nil
 	}
 	_, err := os.Stat(installPath)
-	return err == nil
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
