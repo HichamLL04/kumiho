@@ -26,6 +26,7 @@ export function SeriesPage() {
   const location = useLocation();
   const viewerFrom = `${location.pathname}${location.search}`;
   const [series, setSeries] = useState<Series | null>(null);
+  const [characters, setCharacters] = useState<SeriesCharacter[]>([]);
 
   const refreshCharacters = useCallback(() => {
     if (!id) return;
@@ -53,7 +54,6 @@ export function SeriesPage() {
   const [progress, setProgress] = useState<ReadingProgress | undefined>(undefined);
   const [summary, setSummary] = useState<SeriesProgressSummary | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
-  const [characters, setCharacters] = useState<SeriesCharacter[]>([]);
 
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);

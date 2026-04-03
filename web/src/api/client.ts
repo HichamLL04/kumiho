@@ -479,7 +479,7 @@ export const pluginAPI = {
   deleteAuthAction: (pluginId: string, actionId: string) =>
     api.delete<PluginAuthDeleteResponse>(`/plugins/${pluginId}/auth/${actionId}`).then((res) => res.data),
   deleteConfig: (pluginId: string, field: string) =>
-    api.delete<{ config: PluginConfigStatus }>(`/plugins/${pluginId}/config/${field}`).then((res) => res.data),
+    api.delete<PluginConfigUpdateResponse>(`/plugins/${pluginId}/config/${field}`).then((res) => res.data),
   activate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/activate`).then((res) => res.data),
   deactivate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/deactivate`).then((res) => res.data),
   health: (pluginId: string) => api.get<{ status: string; version?: string; message?: string }>(`/plugins/${pluginId}/health`).then((res) => res.data),
