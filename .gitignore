@@ -43,6 +43,7 @@ desktop.ini
 # 환경 설정 (민감 정보)
 # =============
 .env
+.envrc
 .env.local
 .env.*.local
 *.env
