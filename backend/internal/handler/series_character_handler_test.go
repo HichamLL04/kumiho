@@ -67,3 +67,17 @@ func TestShouldRetainImportedCharacterUsesProviderIdentifiers(t *testing.T) {
 		t.Fatal("expected imported character to be removed when identifiers are absent")
 	}
 }
+
+func TestIsAllowedCharacterImageContentType(t *testing.T) {
+	for _, contentType := range []string{"image/jpeg", "image/png", "image/gif", "image/webp"} {
+		if !isAllowedCharacterImageContentType(contentType) {
+			t.Fatalf("contentType %q should be allowed", contentType)
+		}
+	}
+
+	for _, contentType := range []string{"image/svg+xml", "text/plain", "", " application/pdf "} {
+		if isAllowedCharacterImageContentType(contentType) {
+			t.Fatalf("contentType %q should be rejected", contentType)
+		}
+	}
+}

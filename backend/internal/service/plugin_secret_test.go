@@ -15,8 +15,11 @@ const kitsuPluginID = "kumiho-plugin-metadata-kitsu"
 
 func TestPluginSecretServiceStoresEncryptedSecretAndBuildsEnv(t *testing.T) {
 	repo := newFakePluginSecretRepo()
-	cfg := &config.Config{JWTSecret: "test-secret"}
-	svc := NewPluginSecretService(cfg, repo)
+	cfg := &config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}
+	svc, err := NewPluginSecretService(cfg, repo)
+	if err != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", err)
+	}
 
 	manifest := kitsuSecretManifest()
 	status, err := svc.SetSecret(kitsuPluginID, manifest, "access_token", "abc123456")
@@ -45,8 +48,11 @@ func TestPluginSecretServiceStoresEncryptedSecretAndBuildsEnv(t *testing.T) {
 
 func TestPluginSecretServiceFallsBackToProcessEnv(t *testing.T) {
 	repo := newFakePluginSecretRepo()
-	cfg := &config.Config{JWTSecret: "test-secret"}
-	svc := NewPluginSecretService(cfg, repo)
+	cfg := &config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}
+	svc, err := NewPluginSecretService(cfg, repo)
+	if err != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", err)
+	}
 	manifest := kitsuSecretManifest()
 
 	t.Setenv("KITSU_ACCESS_TOKEN", "env-secret")
@@ -73,15 +79,18 @@ func TestPluginSecretServiceFallsBackToProcessEnv(t *testing.T) {
 
 func TestPluginSecretServiceDeleteSecret(t *testing.T) {
 	repo := newFakePluginSecretRepo()
-	cfg := &config.Config{JWTSecret: "test-secret"}
-	svc := NewPluginSecretService(cfg, repo)
+	cfg := &config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}
+	svc, err := NewPluginSecretService(cfg, repo)
+	if err != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", err)
+	}
 	manifest := kitsuSecretManifest()
 
-	if _, err := svc.SetSecret(kitsuPluginID, manifest, "access_token", "abc123456"); err != nil {
-		t.Fatalf("SetSecret() error = %v", err)
+	if _, setErr := svc.SetSecret(kitsuPluginID, manifest, "access_token", "abc123456"); setErr != nil {
+		t.Fatalf("SetSecret() error = %v", setErr)
 	}
-	if _, err := svc.DeleteSecret(kitsuPluginID, manifest, "access_token"); err != nil {
-		t.Fatalf("DeleteSecret() error = %v", err)
+	if _, deleteErr := svc.DeleteSecret(kitsuPluginID, manifest, "access_token"); deleteErr != nil {
+		t.Fatalf("DeleteSecret() error = %v", deleteErr)
 	}
 
 	env, err := svc.EnvironmentForPlugin(kitsuPluginID, manifest)
@@ -95,8 +104,11 @@ func TestPluginSecretServiceDeleteSecret(t *testing.T) {
 
 func TestPluginSecretServiceRejectsSecretFieldWithoutEnvKey(t *testing.T) {
 	repo := newFakePluginSecretRepo()
-	cfg := &config.Config{JWTSecret: "test-secret"}
-	svc := NewPluginSecretService(cfg, repo)
+	cfg := &config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}
+	svc, err := NewPluginSecretService(cfg, repo)
+	if err != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", err)
+	}
 
 	manifest := sdkmanifest.Manifest{
 		ID: kitsuPluginID,
@@ -113,6 +125,15 @@ func TestPluginSecretServiceRejectsSecretFieldWithoutEnvKey(t *testing.T) {
 	}
 	if err := svc.ValidateActivation(kitsuPluginID, manifest); err == nil {
 		t.Fatal("ValidateActivation() error = nil, want config invalid error")
+	}
+}
+
+func TestPluginSecretServiceRequiresDedicatedSecretKey(t *testing.T) {
+	repo := newFakePluginSecretRepo()
+
+	svc, err := NewPluginSecretService(&config.Config{JWTSecret: "test-secret"}, repo)
+	if err == nil {
+		t.Fatalf("NewPluginSecretService() error = nil, svc = %#v", svc)
 	}
 }
 

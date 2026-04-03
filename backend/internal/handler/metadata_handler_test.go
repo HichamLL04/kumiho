@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
+	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 )
 
 func TestWriteMetadataErrorReturnsNotFoundForMissingPlugin(t *testing.T) {
@@ -31,5 +32,33 @@ func TestWriteMetadataErrorReturnsNotFoundForMissingPlugin(t *testing.T) {
 	}
 	if payload["error"] != pluginengine.ErrPluginNotFound.Error() {
 		t.Fatalf("error = %q, want %q", payload["error"], pluginengine.ErrPluginNotFound.Error())
+	}
+}
+
+func TestWriteMetadataErrorMapsRateLimitAndTimeout(t *testing.T) {
+	app := fiber.New()
+	app.Get("/rate-limited", func(c *fiber.Ctx) error {
+		return writeMetadataError(c, pluginerrors.New(pluginerrors.ErrCodeRateLimited, "too many requests"))
+	})
+	app.Get("/timeout", func(c *fiber.Ctx) error {
+		return writeMetadataError(c, pluginerrors.New(pluginerrors.ErrCodeTimeout, "plugin timed out"))
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/rate-limited", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("rate-limited app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusTooManyRequests {
+		t.Fatalf("rate-limited status = %d, want %d", resp.StatusCode, fiber.StatusTooManyRequests)
+	}
+
+	req = httptest.NewRequest(fiber.MethodGet, "/timeout", nil)
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("timeout app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusGatewayTimeout {
+		t.Fatalf("timeout status = %d, want %d", resp.StatusCode, fiber.StatusGatewayTimeout)
 	}
 }

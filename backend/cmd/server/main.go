@@ -96,10 +96,13 @@ func main() {
 		binaryruntime.NewRuntime(),
 		serviceruntime.NewRuntime(),
 	)
-	pluginSecretSvc := service.NewPluginSecretService(cfg, pluginSecretRepo)
+	pluginSecretSvc, secretSvcErr := service.NewPluginSecretService(cfg, pluginSecretRepo)
+	if secretSvcErr != nil {
+		log.Fatalf("Failed to initialize plugin secret service: %v", secretSvcErr)
+	}
 	pluginManager.SetEnvProvider(pluginSecretSvc)
-	if err := pluginManager.Bootstrap(ctx); err != nil {
-		log.Fatalf("Failed to bootstrap plugin manager: %v", err)
+	if bootstrapErr := pluginManager.Bootstrap(ctx); bootstrapErr != nil {
+		log.Fatalf("Failed to bootstrap plugin manager: %v", bootstrapErr)
 	}
 	pluginRecords, err := pluginManager.List()
 	if err != nil {

@@ -623,20 +623,23 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 	store := pluginengine.NewMemoryStore()
 	manager := pluginengine.NewManager(store)
 	secretRepo := newTestPluginSecretRepo()
-	secretSvc := NewPluginSecretService(cfg, secretRepo)
+	secretSvc, secretSvcErr := NewPluginSecretService(cfg, secretRepo)
+	if secretSvcErr != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", secretSvcErr)
+	}
 	svc := NewPluginInstallService(cfg, server.Client(), manager, secretSvc)
 
 	oldInstallDir := filepath.Join(cfg.PluginDir, kitsuPluginID, "0.1.0")
-	if err := os.MkdirAll(oldInstallDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
+	if mkdirErr := os.MkdirAll(oldInstallDir, 0o755); mkdirErr != nil {
+		t.Fatalf("MkdirAll() error = %v", mkdirErr)
 	}
 	oldInstallPath := filepath.Join(oldInstallDir, kitsuPluginID)
-	if err := os.WriteFile(oldInstallPath, []byte("old plugin"), 0o755); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
+	if writeErr := os.WriteFile(oldInstallPath, []byte("old plugin"), 0o755); writeErr != nil {
+		t.Fatalf("WriteFile() error = %v", writeErr)
 	}
 
 	now := time.Now()
-	if err := store.Save(pluginengine.Record{
+	if saveErr := store.Save(pluginengine.Record{
 		ID: kitsuPluginID,
 		Manifest: sdkmanifest.Manifest{
 			ID:          kitsuPluginID,
@@ -655,11 +658,11 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 		InstallPath: oldInstallPath,
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	}); err != nil {
-		t.Fatalf("Save() error = %v", err)
+	}); saveErr != nil {
+		t.Fatalf("Save() error = %v", saveErr)
 	}
 
-	if _, err := secretSvc.SetSecret(kitsuPluginID, sdkmanifest.Manifest{
+	if _, setErr := secretSvc.SetSecret(kitsuPluginID, sdkmanifest.Manifest{
 		ID: kitsuPluginID,
 		ConfigSchema: &sdkconfig.Schema{
 			Version: "1",
@@ -668,12 +671,12 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 				{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
 			},
 		},
-	}, "access_token", "test-access-token"); err != nil {
-		t.Fatalf("SetSecret() error = %v", err)
+	}, "access_token", "test-access-token"); setErr != nil {
+		t.Fatalf("SetSecret() error = %v", setErr)
 	}
 
-	if _, err := svc.Install(context.Background(), kitsuPluginID); err != nil {
-		t.Fatalf("Install() error = %v", err)
+	if _, installErr := svc.Install(context.Background(), kitsuPluginID); installErr != nil {
+		t.Fatalf("Install() error = %v", installErr)
 	}
 
 	status, err := secretSvc.Status(kitsuPluginID, sdkmanifest.Manifest{
@@ -705,16 +708,19 @@ func TestPluginInstallServiceUninstallKeepsArtifactWhenSecretDeletionFails(t *te
 	manager := pluginengine.NewManager(store)
 	secretRepo := &testPluginSecretRepo{items: make(map[string]model.PluginSecret)}
 	secretRepo.deleteByPluginErr = errors.New("delete secrets failed")
-	secretSvc := NewPluginSecretService(cfg, secretRepo)
+	secretSvc, secretSvcErr := NewPluginSecretService(cfg, secretRepo)
+	if secretSvcErr != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", secretSvcErr)
+	}
 	svc := NewPluginInstallService(cfg, nil, manager, secretSvc)
 
 	installDir := filepath.Join(cfg.PluginDir, kitsuPluginID, "0.1.0")
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
+	if mkdirErr := os.MkdirAll(installDir, 0o755); mkdirErr != nil {
+		t.Fatalf("MkdirAll() error = %v", mkdirErr)
 	}
 	installPath := filepath.Join(installDir, kitsuPluginID)
-	if err := os.WriteFile(installPath, []byte("plugin"), 0o755); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
+	if writeErr := os.WriteFile(installPath, []byte("plugin"), 0o755); writeErr != nil {
+		t.Fatalf("WriteFile() error = %v", writeErr)
 	}
 
 	now := time.Now()
@@ -737,15 +743,15 @@ func TestPluginInstallServiceUninstallKeepsArtifactWhenSecretDeletionFails(t *te
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := store.Save(record); err != nil {
-		t.Fatalf("Save() error = %v", err)
+	if saveErr := store.Save(record); saveErr != nil {
+		t.Fatalf("Save() error = %v", saveErr)
 	}
-	if _, err := secretSvc.SetSecret(kitsuPluginID, record.Manifest, "access_token", "test-token"); err != nil {
-		t.Fatalf("SetSecret() error = %v", err)
+	if _, setErr := secretSvc.SetSecret(kitsuPluginID, record.Manifest, "access_token", "test-token"); setErr != nil {
+		t.Fatalf("SetSecret() error = %v", setErr)
 	}
 
-	_, err := svc.Uninstall(context.Background(), kitsuPluginID)
-	if err == nil {
+	_, uninstallErr := svc.Uninstall(context.Background(), kitsuPluginID)
+	if uninstallErr == nil {
 		t.Fatal("Uninstall() error = nil")
 	}
 

@@ -42,10 +42,16 @@ type pluginSecretSpec struct {
 type PluginSecretService struct {
 	cfg  *config.Config
 	repo repository.PluginSecretRepository
+	key  []byte
 }
 
-func NewPluginSecretService(cfg *config.Config, repo repository.PluginSecretRepository) *PluginSecretService {
-	return &PluginSecretService{cfg: cfg, repo: repo}
+func NewPluginSecretService(cfg *config.Config, repo repository.PluginSecretRepository) (*PluginSecretService, error) {
+	seed := strings.TrimSpace(cfg.PluginSecretKey)
+	if seed == "" {
+		return nil, errors.New("PLUGIN_SECRET_KEY is required for plugin secret encryption")
+	}
+	sum := sha256.Sum256([]byte(seed))
+	return &PluginSecretService{cfg: cfg, repo: repo, key: sum[:]}, nil
 }
 
 func (s *PluginSecretService) Status(pluginID string, manifest sdkmanifest.Manifest) (*PluginConfigStatus, error) {
@@ -256,12 +262,7 @@ func (s *PluginSecretService) decrypt(valueEncrypted string) (string, error) {
 }
 
 func (s *PluginSecretService) secretKey() []byte {
-	seed := strings.TrimSpace(s.cfg.PluginSecretKey)
-	if seed == "" {
-		seed = s.cfg.JWTSecret
-	}
-	sum := sha256.Sum256([]byte(seed))
-	return sum[:]
+	return s.key
 }
 
 func configSpecsForManifest(manifest sdkmanifest.Manifest) []pluginSecretSpec {

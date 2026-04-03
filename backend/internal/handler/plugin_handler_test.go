@@ -139,10 +139,13 @@ func TestUpdateConfigReactivatesPluginWhenSecretMutationFails(t *testing.T) {
 	repo := &handlerTestSecretRepo{
 		items: map[string]model.PluginSecret{},
 	}
-	secretSvc := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret"}, repo)
+	secretSvc, secretSvcErr := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}, repo)
+	if secretSvcErr != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", secretSvcErr)
+	}
 	manager.SetEnvProvider(secretSvc)
-	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-kitsu", record.Manifest, "access_token", "existing-token"); err != nil {
-		t.Fatalf("SetSecret() error = %v", err)
+	if _, setErr := secretSvc.SetSecret("kumiho-plugin-metadata-kitsu", record.Manifest, "access_token", "existing-token"); setErr != nil {
+		t.Fatalf("SetSecret() error = %v", setErr)
 	}
 	repo.upsertErr = errors.New("upsert failed")
 
@@ -208,10 +211,13 @@ func TestDeleteConfigReturnsReactivationRequiredForActivePlugin(t *testing.T) {
 	repo := &handlerTestSecretRepo{
 		items: map[string]model.PluginSecret{},
 	}
-	secretSvc := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret"}, repo)
+	secretSvc, secretSvcErr := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}, repo)
+	if secretSvcErr != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", secretSvcErr)
+	}
 	manager.SetEnvProvider(secretSvc)
-	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-kitsu", record.Manifest, "access_token", "existing-token"); err != nil {
-		t.Fatalf("SetSecret() error = %v", err)
+	if _, setErr := secretSvc.SetSecret("kumiho-plugin-metadata-kitsu", record.Manifest, "access_token", "existing-token"); setErr != nil {
+		t.Fatalf("SetSecret() error = %v", setErr)
 	}
 
 	handler := NewPluginHandler(manager, nil, secretSvc)

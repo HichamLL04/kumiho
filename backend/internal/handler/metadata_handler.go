@@ -107,8 +107,10 @@ func writeMetadataError(c *fiber.Ctx, err error) error {
 			status = fiber.StatusNotFound
 		case pluginerrors.ErrCodeUnauthorized:
 			status = fiber.StatusUnauthorized
-		case pluginerrors.ErrCodeTimeout, pluginerrors.ErrCodeRateLimited:
-			status = fiber.StatusBadGateway
+		case pluginerrors.ErrCodeRateLimited:
+			status = fiber.StatusTooManyRequests
+		case pluginerrors.ErrCodeTimeout:
+			status = fiber.StatusGatewayTimeout
 		}
 		return c.Status(status).JSON(fiber.Map{"error": pluginErr.Message, "code": pluginErr.Code})
 	}

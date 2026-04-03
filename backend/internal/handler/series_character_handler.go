@@ -49,6 +49,15 @@ type importSeriesCharactersRequest struct {
 	SourceProvider string                       `json:"source_provider,omitempty"`
 }
 
+func isAllowedCharacterImageContentType(contentType string) bool {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "image/jpeg", "image/png", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
 func NewSeriesCharacterHandler(seriesRepo *repository.SeriesRepository, characterRepo *repository.SeriesCharacterRepository, cfg *config.Config) *SeriesCharacterHandler {
 	return &SeriesCharacterHandler{
 		seriesRepo:    seriesRepo,
@@ -376,8 +385,8 @@ func (h *SeriesCharacterHandler) UploadImage(c *fiber.Ctx) error {
 	}
 	_, _ = src.Seek(0, 0)
 	contentType := http.DetectContentType(buffer)
-	if !strings.HasPrefix(contentType, "image/") {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid file type: only images are allowed"})
+	if !isAllowedCharacterImageContentType(contentType) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid file type: only PNG, JPEG, GIF, and WebP images are allowed"})
 	}
 	dir := filepath.Join(h.cfg.DataDir, "thumbnails", "series-characters")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
