@@ -42,6 +42,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const [isCharactersOpen, setIsCharactersOpen] = useState(false);
   const [charactersReloadToken, setCharactersReloadToken] = useState(0);
+  const wasOpenRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const originalTitleMenuRef = useRef<HTMLDivElement>(null);
 
@@ -101,15 +102,21 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
         published_at: series.metadata?.published_at || "",
         isbn: series.metadata?.isbn || "",
       });
-      setThumbnailMode("file");
       setThumbnailUrl("");
+    }
+  }, [isOpen, series]);
+
+  useEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
+      setThumbnailMode("file");
       setIsDragging(false);
       setIsOriginalTitleMenuOpen(false);
       setIsMetadataOpen(false);
       setIsCharactersOpen(false);
       setCharactersReloadToken(0);
     }
-  }, [isOpen, series]);
+    wasOpenRef.current = isOpen;
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {

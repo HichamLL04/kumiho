@@ -78,9 +78,7 @@ func normalize(raw string) string {
 	base = trailingVolumeSet.ReplaceAllString(base, " ")
 	base = spacePattern.ReplaceAllString(base, " ")
 	base = strings.TrimSpace(base)
-	base = stripTrailingIssueNumber(base)
-	base = spacePattern.ReplaceAllString(base, " ")
-	return strings.TrimSpace(base)
+	return stripTrailingIssueNumber(base)
 }
 
 func stripOrdinalHints(value string) string {
