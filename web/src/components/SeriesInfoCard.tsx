@@ -374,7 +374,8 @@ export function SeriesInfoCard({
               {character.image_url ? (
                 <img
                   src={getAuthenticatedImageUrl(character.image_url)}
-                  alt={character.name}
+                  alt=""
+                  aria-hidden="true"
                   className={styles.characterAvatarImage}
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).style.display = "none";
@@ -384,6 +385,7 @@ export function SeriesInfoCard({
               ) : null}
               <span
                 className={styles.characterAvatarInitial}
+                aria-hidden="true"
                 style={character.image_url ? { display: "none" } : undefined}
               >
                 {character.name.charAt(0)}
@@ -657,7 +659,8 @@ export function SeriesInfoCard({
                     {character.image_url ? (
                       <img
                         src={getAuthenticatedImageUrl(character.image_url)}
-                        alt={character.name}
+                        alt=""
+                        aria-hidden="true"
                         className={styles.characterModalImage}
                         onError={(e) => {
                           (e.currentTarget as HTMLImageElement).style.display = "none";
@@ -667,6 +670,7 @@ export function SeriesInfoCard({
                     ) : null}
                     <span
                       className={styles.characterModalInitial}
+                      aria-hidden="true"
                       style={character.image_url ? { display: "none" } : undefined}
                     >
                       {character.name.charAt(0)}
