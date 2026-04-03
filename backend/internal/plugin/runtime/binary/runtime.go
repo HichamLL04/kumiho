@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -68,6 +70,38 @@ func newProcessLifecycle() (chan error, chan error, context.Context, context.Can
 	ready := make(chan error, 1)
 	procCtx, cancel := context.WithCancel(context.Background())
 	return exited, ready, procCtx, cancel
+}
+
+func buildCommandEnv(host string, port int, overrides map[string]string) []string {
+	envMap := make(map[string]string)
+	for _, entry := range os.Environ() {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok || key == "" {
+			continue
+		}
+		envMap[key] = value
+	}
+
+	envMap[EnvPluginHost] = host
+	envMap[EnvPluginPort] = strconv.Itoa(port)
+	for key, value := range overrides {
+		if key == "" {
+			continue
+		}
+		envMap[key] = value
+	}
+
+	keys := make([]string, 0, len(envMap))
+	for key := range envMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	env := make([]string, 0, len(keys))
+	for _, key := range keys {
+		env = append(env, key+"="+envMap[key])
+	}
+	return env
 }
 
 func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
@@ -152,13 +186,7 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 		baseURL := fmt.Sprintf("http://%s:%d", host, port)
 
 		cmd := exec.CommandContext(procCtx, absPath)
-		cmd.Env = append(os.Environ(),
-			EnvPluginHost+"="+host,
-			EnvPluginPort+"="+strconv.Itoa(port),
-		)
-		for key, value := range inst.Env {
-			cmd.Env = append(cmd.Env, key+"="+value)
-		}
+		cmd.Env = buildCommandEnv(host, port, inst.Env)
 		cmd.Stdout = log.Writer()
 		cmd.Stderr = log.Writer()
 

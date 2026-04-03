@@ -256,34 +256,34 @@ export const seriesAPI = {
   updateViewerSettings: (seriesId: string, data: Record<string, unknown>) =>
     api.patch(`/series/${seriesId}/viewer-settings`, data).then((res) => res.data),
   metadataSearch: (seriesId: string, data?: MetadataSearchRequest) =>
-    api.post<MetadataSearchResult>(`/series/${seriesId}/metadata/search`, data ?? {}),
+    api.post<MetadataSearchResult>(`/series/${seriesId}/metadata/search`, data ?? {}).then((res) => res.data),
   metadataFetch: (seriesId: string, data: { plugin_id: string; source: { id: string; name: string; url?: string } }) =>
-    api.post<MetadataFetchResponse>(`/series/${seriesId}/metadata/fetch`, data),
+    api.post<MetadataFetchResponse>(`/series/${seriesId}/metadata/fetch`, data).then((res) => res.data),
   metadataApply: (seriesId: string, result: MetadataResult) =>
-    api.post<MetadataApplyResponse>(`/series/${seriesId}/metadata/apply`, { result }),
+    api.post<MetadataApplyResponse>(`/series/${seriesId}/metadata/apply`, { result }).then((res) => res.data),
   getCharacters: (seriesId: string) =>
-    api.get<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters`),
+    api.get<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters`).then((res) => res.data),
   createCharacter: (seriesId: string, data: { name: string; role?: string; image_url?: string }) =>
-    api.post<SeriesCharacter>(`/series/${seriesId}/characters`, data),
+    api.post<SeriesCharacter>(`/series/${seriesId}/characters`, data).then((res) => res.data),
   updateCharacter: (seriesId: string, characterId: string, data: { name?: string; role?: string; image_url?: string }) =>
-    api.patch<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}`, data),
+    api.patch<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}`, data).then((res) => res.data),
   deleteCharacter: (seriesId: string, characterId: string) =>
-    api.delete<{ deleted: boolean; id: string }>(`/series/${seriesId}/characters/${characterId}`),
+    api.delete<{ deleted: boolean; id: string }>(`/series/${seriesId}/characters/${characterId}`).then((res) => res.data),
   reorderCharacters: (seriesId: string, orderedIds: string[]) =>
-    api.post<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters/reorder`, { ordered_ids: orderedIds }),
+    api.post<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters/reorder`, { ordered_ids: orderedIds }).then((res) => res.data),
   importCharacters: (seriesId: string, characters: MetadataCharacter[], sourceProvider?: string) =>
-    api.post<{ added: SeriesCharacter[]; count: number }>(`/series/${seriesId}/characters/import`, { characters, source_provider: sourceProvider }),
+    api.post<{ added: SeriesCharacter[]; count: number }>(`/series/${seriesId}/characters/import`, { characters, source_provider: sourceProvider }).then((res) => res.data),
   uploadCharacterImage: (seriesId: string, characterId: string, file: File) => {
     const formData = new FormData();
     formData.append("image", file);
     return api.post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
-    });
+    }).then((res) => res.data);
   },
   updateCharacterImageUrl: (seriesId: string, characterId: string, url: string) =>
-    api.post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image/url`, { url }),
+    api.post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image/url`, { url }).then((res) => res.data),
   deleteCharacterImage: (seriesId: string, characterId: string) =>
-    api.delete<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image`),
+    api.delete<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image`).then((res) => res.data),
 };
 
 // Volume API

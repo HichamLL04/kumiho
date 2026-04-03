@@ -71,8 +71,8 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
     onFetched?.(null);
     try {
       const response = await seriesAPI.metadataSearch(series.id, { title: searchTitle.trim() || undefined });
-      setSearchResult(response.data);
-      setSelectedKey(response.data.candidates[0] ? candidateKey(response.data.candidates[0]) : null);
+      setSearchResult(response);
+      setSelectedKey(response.candidates[0] ? candidateKey(response.candidates[0]) : null);
       setStatus({ type: "success", message: t("series.metadata.toast.search_success") });
     } catch (error: unknown) {
       console.error("Failed to search metadata:", error);
@@ -92,8 +92,8 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
         plugin_id: item.plugin_id,
         source: item.candidate.source,
       });
-      setFetched(response.data);
-      onFetched?.(response.data);
+      setFetched(response);
+      onFetched?.(response);
       setApplyFields(DEFAULT_APPLY_FIELDS);
       setStatus({ type: "success", message: t("series.metadata.toast.fetch_success") });
     } catch (error: unknown) {
@@ -112,11 +112,11 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
       let importedCount = 0;
       if (applyFields.characters && result.characters?.length) {
         const importResponse = await seriesAPI.importCharacters(series.id, result.characters, fetched?.plugin_id);
-        importedCount = importResponse.data.count || 0;
+        importedCount = importResponse.count || 0;
         onCharactersImported?.(importedCount);
       }
-      onApplied(response.data);
-      const updatedFieldCount = response.data.updated_fields.length;
+      onApplied(response);
+      const updatedFieldCount = response.updated_fields.length;
       setStatus({
         type: "success",
         message: updatedFieldCount > 0

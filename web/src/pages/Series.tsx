@@ -30,7 +30,7 @@ export function SeriesPage() {
   const refreshCharacters = useCallback(() => {
     if (!id) return;
     seriesAPI.getCharacters(id).then((res) => {
-      setCharacters(res.data.characters || []);
+      setCharacters(res.characters || []);
     }).catch(() => setCharacters([]));
   }, [id]);
 

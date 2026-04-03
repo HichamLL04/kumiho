@@ -1,6 +1,6 @@
 import { KeyRound, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Fragment } from "react";
+import { Fragment, useId } from "react";
 import type { PluginAuthAction, PluginConfigSchemaField, PluginConfigStatus, PluginLocalizedString, PluginManifest } from "../../types/plugin";
 import styles from "./PluginConfigModal.module.css";
 
@@ -59,12 +59,14 @@ function shouldRenderSecretField(fieldKey: string, action?: PluginAuthAction) {
 }
 
 function renderLinkedText(text: string) {
-  const urlPattern = /(https?:\/\/[^\s]+)/g;
-  return text.split("\n").map((line, lineIndex) => (
+  const lines = text.split("\n");
+  const splitPattern = /(https?:\/\/[^\s]+)/g;
+  const linkPattern = /^https?:\/\/[^\s]+$/;
+
+  return lines.map((line, lineIndex) => (
     <Fragment key={`line-${lineIndex}`}>
-      {line.split(urlPattern).map((part, partIndex) => {
-        if (urlPattern.test(part)) {
-          urlPattern.lastIndex = 0;
+      {line.split(splitPattern).map((part, partIndex) => {
+        if (linkPattern.test(part)) {
           return (
             <a
               key={`part-${lineIndex}-${partIndex}`}
@@ -77,10 +79,9 @@ function renderLinkedText(text: string) {
             </a>
           );
         }
-        urlPattern.lastIndex = 0;
         return <Fragment key={`part-${lineIndex}-${partIndex}`}>{part}</Fragment>;
       })}
-      {lineIndex < text.split("\n").length - 1 && <br />}
+      {lineIndex < lines.length - 1 && <br />}
     </Fragment>
   ));
 }
@@ -100,6 +101,7 @@ export function PluginConfigModal({
   onDeleteAuthAction,
 }: PluginConfigModalProps) {
   const { t, i18n } = useTranslation();
+  const titleId = useId();
   const locale = i18n.language || "ko";
   const secretFields = configStatus?.fields.filter((field) => field.type === "secret") || [];
   const authAction = plugin.auth?.actions?.[0];
@@ -119,12 +121,12 @@ export function PluginConfigModal({
         className={styles.modal}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="plugin-config-title"
+        aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
         <div className={styles.header}>
           <div>
-            <h5 id="plugin-config-title">{plugin.name} {t("settings.plugins.secret.title")}</h5>
+            <h5 id={titleId}>{plugin.name} {t("settings.plugins.secret.title")}</h5>
             <p>{modalDescription}</p>
           </div>
           <div className={styles.headerActions}>

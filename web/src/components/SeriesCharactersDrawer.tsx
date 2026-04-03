@@ -55,7 +55,7 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
       try {
         const response = await seriesAPI.getCharacters(series.id);
         if (cancelled) return;
-        const next = response.data.characters || [];
+        const next = response.characters || [];
         setCharacters(next);
         setDrafts(buildDrafts(next));
         setEditingId((prev) => (prev && next.some((item) => item.id === prev) ? prev : null));
@@ -139,9 +139,9 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
           image_url: draft.image_url.trim() || (current && !isManagedImageURL(current.image_url) ? "" : undefined),
         });
       if (isPendingCharacter(characterId)) {
-        replacePendingCharacter(characterId, response.data, setCharacters, setDrafts);
+        replacePendingCharacter(characterId, response, setCharacters, setDrafts);
       } else {
-        syncCharacter(response.data);
+        syncCharacter(response);
       }
       setEditingId(null);
       setPendingNewIds((prev) => prev.filter((id) => id !== characterId));
@@ -188,7 +188,7 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
     setSaving(characterId, true);
     try {
       const response = await seriesAPI.uploadCharacterImage(series.id, characterId, file);
-      syncCharacter(response.data);
+      syncCharacter(response);
       setStatus({ type: "success", message: t("series.characters.toast.image_updated") });
     } catch (error) {
       console.error("Failed to upload character image:", error);
@@ -209,7 +209,7 @@ export function SeriesCharactersDrawer({ series, reloadToken = 0 }: SeriesCharac
     setSaving(characterId, true);
     try {
       const response = await seriesAPI.deleteCharacterImage(series.id, characterId);
-      syncCharacter(response.data);
+      syncCharacter(response);
     } catch (error) {
       console.error("Failed to delete character image:", error);
       setStatus({ type: "error", message: t("series.characters.toast.image_failed") });
