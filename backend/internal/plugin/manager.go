@@ -102,7 +102,11 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 	instance := toInstance(record)
 	if m.envProvider != nil {
 		if err := m.envProvider.ValidateActivation(record.ID, record.Manifest); err != nil {
-			return Record{}, err
+			errorRecord, markErr := m.MarkError(id, err.Error())
+			if markErr != nil {
+				return Record{}, fmt.Errorf("validate activation: %w (also failed to mark error state: %v)", err, markErr)
+			}
+			return errorRecord, fmt.Errorf("validate activation: %w", err)
 		}
 		env, err := m.envProvider.EnvironmentForPlugin(record.ID, record.Manifest)
 		if err != nil {

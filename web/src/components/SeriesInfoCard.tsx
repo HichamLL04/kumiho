@@ -45,6 +45,7 @@ export function SeriesInfoCard({
 }: SeriesInfoCardProps) {
   const { t, i18n } = useTranslation();
   const incognitoMenuId = useId();
+  const characterModalTitleId = useId();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -633,10 +634,13 @@ export function SeriesInfoCard({
         >
           <div
             className={styles.characterModalBox}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={characterModalTitleId}
             onClick={(e) => e.stopPropagation()}
           >
             <div className={styles.characterModalHeader}>
-              <span>{t("series.characters.title")}</span>
+              <span id={characterModalTitleId}>{t("series.characters.title")}</span>
               <button
                 className={styles.characterModalClose}
                 onClick={() => setIsCharacterModalOpen(false)}

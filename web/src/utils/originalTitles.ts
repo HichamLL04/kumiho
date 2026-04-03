@@ -1,21 +1,36 @@
 export type OriginalTitlesValue = Record<string, string> | string | null | undefined;
+export type OriginalTitleLanguage = "ko" | "ja" | "en" | "unknown";
+
+function normalizeOriginalTitles(
+  value: Record<string, unknown>,
+): Record<Exclude<OriginalTitleLanguage, "unknown">, string> | Partial<Record<Exclude<OriginalTitleLanguage, "unknown">, string>> {
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entry]) => {
+      if ((key !== "ko" && key !== "ja" && key !== "en") || typeof entry !== "string") {
+        return [];
+      }
+
+      const normalized = entry.trim();
+      return normalized ? [[key, normalized]] : [];
+    }),
+  );
+}
 
 function parseOriginalTitles(value: OriginalTitlesValue): Record<string, string> {
   if (!value) {
     return {};
   }
   if (typeof value === "object") {
-    return value;
+    if (Array.isArray(value)) {
+      return {};
+    }
+    return normalizeOriginalTitles(value);
   }
 
   try {
     const parsed = JSON.parse(value);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return Object.fromEntries(
-        Object.entries(parsed).filter(
-          (entry): entry is [string, string] => typeof entry[0] === "string" && typeof entry[1] === "string",
-        ),
-      );
+      return normalizeOriginalTitles(parsed);
     }
   } catch {
     return {};
@@ -64,10 +79,10 @@ export function orderedOriginalTitles(
   value: OriginalTitlesValue,
   locale: string,
   fallback = "",
-): Array<{ language: "ko" | "ja" | "en"; title: string }> {
+): Array<{ language: OriginalTitleLanguage; title: string }> {
   const titles = parseOriginalTitles(value);
   const order = preferredLanguageOrder(locale);
-  const items: Array<{ language: "ko" | "ja" | "en"; title: string }> = [];
+  const items: Array<{ language: OriginalTitleLanguage; title: string }> = [];
   const seen = new Set<string>();
 
   for (const language of order) {
@@ -81,7 +96,7 @@ export function orderedOriginalTitles(
 
   const normalizedFallback = fallback.trim();
   if (normalizedFallback && !seen.has(normalizedFallback)) {
-    items.push({ language: order[0], title: normalizedFallback });
+    items.push({ language: "unknown", title: normalizedFallback });
   }
 
   return items;
