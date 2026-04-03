@@ -53,7 +53,7 @@ func (r *pluginSecretRepository) ListByPlugin(q database.Queryer, pluginID strin
 		}
 		secrets = append(secrets, item)
 	}
-	return secrets, nil
+	return secrets, rows.Err()
 }
 
 func (r *pluginSecretRepository) Upsert(q database.Queryer, pluginID, fieldKey, valueEncrypted string) error {
