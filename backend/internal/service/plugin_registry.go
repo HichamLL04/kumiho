@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
@@ -28,6 +29,8 @@ var (
 	ErrPluginRegistryNotConfigured = errors.New("plugin registry url is not configured")
 	ErrPluginCatalogEntryNotFound  = errors.New("plugin catalog entry not found")
 )
+
+const defaultPluginInstallTimeout = 30 * time.Second
 
 type PluginCatalog struct {
 	Plugins []RegistryEntry `json:"plugins"`
@@ -63,7 +66,7 @@ type InstallPluginResult struct {
 
 func NewPluginInstallService(cfg *config.Config, client *http.Client, manager *pluginengine.Manager, secretService *PluginSecretService) *PluginInstallService {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: defaultPluginInstallTimeout}
 	}
 	svc := &PluginInstallService{
 		cfg:           cfg,

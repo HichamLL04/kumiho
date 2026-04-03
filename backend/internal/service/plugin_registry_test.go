@@ -81,6 +81,16 @@ func TestPluginInstallServiceInstall(t *testing.T) {
 	}
 }
 
+func TestNewPluginInstallServiceUsesTimeoutForDefaultClient(t *testing.T) {
+	service := NewPluginInstallService(&config.Config{}, nil, pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+	if service.client == nil {
+		t.Fatal("client = nil")
+	}
+	if service.client.Timeout != defaultPluginInstallTimeout {
+		t.Fatalf("timeout = %v, want %v", service.client.Timeout, defaultPluginInstallTimeout)
+	}
+}
+
 func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
 	artifactBytes := []byte("#!/bin/sh\necho service-plugin\n")
 	sum := sha256.Sum256(artifactBytes)
