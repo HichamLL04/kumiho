@@ -3,7 +3,7 @@ export type OriginalTitleLanguage = "ko" | "ja" | "en" | "unknown";
 
 function normalizeOriginalTitles(
   value: Record<string, unknown>,
-): Record<Exclude<OriginalTitleLanguage, "unknown">, string> | Partial<Record<Exclude<OriginalTitleLanguage, "unknown">, string>> {
+): Partial<Record<Exclude<OriginalTitleLanguage, "unknown">, string>> {
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, entry]) => {
       if ((key !== "ko" && key !== "ja" && key !== "en") || typeof entry !== "string") {
