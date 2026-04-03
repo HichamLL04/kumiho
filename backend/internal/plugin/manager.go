@@ -98,9 +98,6 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	if record.State == sdkstate.ActivationPending {
-		return record, nil
-	}
 
 	instance := toInstance(record)
 	if m.envProvider != nil {
@@ -131,7 +128,7 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 		}
 		return errorRecord, runtimeErr
 	}
-	if record.State == sdkstate.Active {
+	if record.State == sdkstate.ActivationPending || record.State == sdkstate.Active {
 		if _, err := rt.Healthcheck(ctx, instance); err == nil {
 			return record, nil
 		}

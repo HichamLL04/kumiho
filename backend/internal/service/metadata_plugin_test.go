@@ -20,8 +20,10 @@ import (
 	pluginruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/capability"
+	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/healthcheck"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
+	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
 	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
 )
 
@@ -186,6 +188,54 @@ func TestMetadataServiceSearchSeriesDoesNotForceBookContentType(t *testing.T) {
 	}
 	if rt.lastSearchReq.ContentType != "" {
 		t.Fatalf("search content type = %q, want empty", rt.lastSearchReq.ContentType)
+	}
+}
+
+func TestMetadataServiceFetchSeriesMetadataReturnsPluginNotReadyForInactivePlugin(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	manager := newMetadataManagerWithState(t, &metadataRuntime{}, sdkstate.Registered, []capability.Capability{capability.MetadataSearch, capability.MetadataFetch})
+	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+
+	_, err := svc.FetchSeriesMetadata(context.Background(), series.ID, "", MetadataFetchSelection{
+		PluginID: "plugin-sample",
+		Source:   sdktypes.SourceRef{ID: "src-1", Name: "sample"},
+	})
+	if err == nil {
+		t.Fatal("FetchSeriesMetadata() error = nil")
+	}
+
+	var pluginErr *pluginerrors.PluginError
+	if !errors.As(err, &pluginErr) {
+		t.Fatalf("error type = %T, want PluginError", err)
+	}
+	if pluginErr.Code != pluginerrors.ErrCodePluginNotReady {
+		t.Fatalf("code = %q, want %q", pluginErr.Code, pluginerrors.ErrCodePluginNotReady)
+	}
+}
+
+func TestMetadataServiceFetchSeriesMetadataReturnsUnsupportedForMissingFetchCapability(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	manager := newMetadataManagerWithState(t, &metadataRuntime{}, sdkstate.Active, []capability.Capability{capability.MetadataSearch})
+	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+
+	_, err := svc.FetchSeriesMetadata(context.Background(), series.ID, "", MetadataFetchSelection{
+		PluginID: "plugin-sample",
+		Source:   sdktypes.SourceRef{ID: "src-1", Name: "sample"},
+	})
+	if err == nil {
+		t.Fatal("FetchSeriesMetadata() error = nil")
+	}
+
+	var pluginErr *pluginerrors.PluginError
+	if !errors.As(err, &pluginErr) {
+		t.Fatalf("error type = %T, want PluginError", err)
+	}
+	if pluginErr.Code != pluginerrors.ErrCodeUnsupported {
+		t.Fatalf("code = %q, want %q", pluginErr.Code, pluginerrors.ErrCodeUnsupported)
 	}
 }
 
@@ -521,21 +571,37 @@ func seedMetadataSeries(t *testing.T, seriesRepo *repository.SeriesRepository) *
 func newActiveMetadataManager(t *testing.T, rt *metadataRuntime) *pluginengine.Manager {
 	t.Helper()
 
+	return newMetadataManagerWithState(t, rt, sdkstate.Active, []capability.Capability{capability.MetadataSearch, capability.MetadataFetch})
+}
+
+func newMetadataManagerWithState(t *testing.T, rt *metadataRuntime, state sdkstate.State, capabilities []capability.Capability) *pluginengine.Manager {
+	t.Helper()
+
 	manager := pluginengine.NewManager(pluginengine.NewMemoryStore(), rt)
 	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
 		ID:           "plugin-sample",
 		Name:         "Sample Plugin",
 		RuntimeType:  sdkmanifest.RuntimeTypeBinary,
-		Capabilities: []capability.Capability{capability.MetadataSearch, capability.MetadataFetch},
+		Capabilities: capabilities,
 	}, "/plugins/sample")
 	if err != nil {
 		t.Fatalf("RegisterInstalled() error = %v", err)
 	}
-	if _, err := manager.MarkRegistered(record.ID); err != nil {
-		t.Fatalf("MarkRegistered() error = %v", err)
-	}
-	if _, err := manager.Activate(context.Background(), record.ID); err != nil {
-		t.Fatalf("Activate() error = %v", err)
+	switch state {
+	case sdkstate.Installed:
+	case sdkstate.Registered:
+		if _, err := manager.MarkRegistered(record.ID); err != nil {
+			t.Fatalf("MarkRegistered() error = %v", err)
+		}
+	case sdkstate.Active:
+		if _, err := manager.MarkRegistered(record.ID); err != nil {
+			t.Fatalf("MarkRegistered() error = %v", err)
+		}
+		if _, err := manager.Activate(context.Background(), record.ID); err != nil {
+			t.Fatalf("Activate() error = %v", err)
+		}
+	default:
+		t.Fatalf("unsupported manager state for test helper: %q", state)
 	}
 	return manager
 }

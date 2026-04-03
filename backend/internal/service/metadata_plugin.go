@@ -24,6 +24,7 @@ import (
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/capability"
+	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
 	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
@@ -223,10 +224,10 @@ func (s *MetadataService) FetchSeriesMetadata(ctx context.Context, seriesID stri
 		return nil, pluginengine.ErrPluginNotFound
 	}
 	if record.State != sdkstate.Active {
-		return nil, fmt.Errorf("plugin %q is not active", selection.PluginID)
+		return nil, pluginerrors.Newf(pluginerrors.ErrCodePluginNotReady, "plugin %q is not active", selection.PluginID)
 	}
 	if !hasCapability(record.Manifest, capability.MetadataFetch) {
-		return nil, fmt.Errorf("plugin %q does not support metadata.fetch", selection.PluginID)
+		return nil, pluginerrors.Newf(pluginerrors.ErrCodeUnsupported, "plugin %q does not support metadata.fetch", selection.PluginID)
 	}
 
 	resp, err := s.manager.Fetch(ctx, selection.PluginID, &sdktypes.FetchRequest{Source: selection.Source})

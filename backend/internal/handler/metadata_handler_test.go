@@ -64,6 +64,34 @@ func TestWriteMetadataErrorMapsRateLimitAndTimeout(t *testing.T) {
 	}
 }
 
+func TestWriteMetadataErrorMapsPluginReadinessAndUnsupportedErrors(t *testing.T) {
+	app := fiber.New()
+	app.Get("/inactive", func(c *fiber.Ctx) error {
+		return writeMetadataError(c, pluginerrors.New(pluginerrors.ErrCodePluginNotReady, "plugin is not active"))
+	})
+	app.Get("/unsupported", func(c *fiber.Ctx) error {
+		return writeMetadataError(c, pluginerrors.New(pluginerrors.ErrCodeUnsupported, "plugin does not support metadata.fetch"))
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/inactive", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("inactive app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("inactive status = %d, want %d", resp.StatusCode, fiber.StatusConflict)
+	}
+
+	req = httptest.NewRequest(fiber.MethodGet, "/unsupported", nil)
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("unsupported app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("unsupported status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+}
+
 func TestMetadataHandlerFetchReturnsBadRequestForMissingRequiredFields(t *testing.T) {
 	handler := NewMetadataHandler(nil)
 	app := fiber.New()
