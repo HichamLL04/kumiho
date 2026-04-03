@@ -14,7 +14,7 @@ import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import { buildViewerRouteState } from "../utils/viewerRouteState";
 import styles from "./Series.module.css";
 
-import type { Series, Volume, Library, ReadingProgress, SeriesProgressSummary, Chapter } from "../types/series";
+import type { Series, Volume, Library, ReadingProgress, SeriesProgressSummary, Chapter, SeriesCharacter } from "../types/series";
 import { SeriesInfoCard } from "../components/SeriesInfoCard";
 import { AlertModal, type AlertType } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
@@ -46,6 +46,7 @@ export function SeriesPage() {
   const [progress, setProgress] = useState<ReadingProgress | undefined>(undefined);
   const [summary, setSummary] = useState<SeriesProgressSummary | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
+  const [characters, setCharacters] = useState<SeriesCharacter[]>([]);
 
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -149,7 +150,12 @@ export function SeriesPage() {
         setSummary(undefined);
       }
 
-      // 2. 라이브러리 정보는 시리즈 데이터 로드 후 비동기로 처리 (병목 방지)
+      // 2. 등장인물 정보 비동기 로드
+      seriesAPI.getCharacters(id!).then((res) => {
+        setCharacters(res.data.characters || []);
+      }).catch(() => setCharacters([]));
+
+      // 3. 라이브러리 정보는 시리즈 데이터 로드 후 비동기로 처리 (병목 방지)
       if (seriesData.library_id) {
         api
           .get(`/libraries/${seriesData.library_id}`)
@@ -384,6 +390,7 @@ export function SeriesPage() {
           <>
             <SeriesInfoCard
               series={series}
+              characters={characters}
               progress={progress}
               summary={summary}
               preferPercentLabel={preferPercentLabel}

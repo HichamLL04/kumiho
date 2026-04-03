@@ -40,9 +40,17 @@
     gap: 2.5rem;
   }
 
-  .seriesThumbnailContainer {
+  .seriesThumbnailColumn {
     width: 200px;
     flex-shrink: 0;
+    max-width: unset;
+    margin: 0;
+  }
+
+  .seriesThumbnailContainer {
+    width: 100%;
+    max-width: unset;
+    margin: 0;
   }
 
   .seriesContent {
@@ -69,6 +77,16 @@
     width: 48px;
     height: 48px;
   }
+}
+
+.seriesThumbnailColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto;
 }
 
 .seriesThumbnailContainer {
@@ -188,6 +206,52 @@
 }
 .statusHIATUS {
   background: rgba(241, 196, 15, 0.9);
+}
+
+.characterAvatars {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.characterAvatar {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.characterAvatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.characterAvatarInitial {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.characterAvatarMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .seriesContent {

@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen } from "lucide-react";
-import type { Series, Volume, ReadingProgress, SeriesProgressSummary } from "../types/series";
+import type { Series, Volume, ReadingProgress, SeriesProgressSummary, SeriesCharacter } from "../types/series";
 import { EditSeriesModal } from "./modals/EditSeriesModal";
 import { EditVolumeModal } from "./modals/EditVolumeModal";
 import { AlertModal, type AlertType } from "./modals/AlertModal";
@@ -20,6 +20,7 @@ interface SeriesInfoCardProps {
   progress?: ReadingProgress;
   summary?: SeriesProgressSummary;
   preferPercentLabel?: boolean;
+  characters?: SeriesCharacter[];
   onUpdate?: (updated: Series | Volume) => void;
   onPlay: (incognito?: boolean) => void | Promise<void>;
   onRefresh?: () => void;
@@ -34,6 +35,7 @@ export function SeriesInfoCard({
   progress,
   summary,
   preferPercentLabel = false,
+  characters,
   onUpdate,
   onPlay,
   onRefresh,
@@ -253,7 +255,8 @@ export function SeriesInfoCard({
         )}
       </div>
 
-      {/* 썸네일 */}
+      {/* 썸네일 + 등장인물 */}
+      <div className={styles.seriesThumbnailColumn}>
       <div className={styles.seriesThumbnailContainer}>
         {thumbnailUrl && !imageError ? (
           isAudiobook ? (
@@ -339,6 +342,42 @@ export function SeriesInfoCard({
                   : series.metadata?.status}
           </div>
         )}
+      </div>
+
+      {!isVolumeType && characters && characters.length > 0 && (
+        <div className={styles.characterAvatars}>
+          {characters.slice(0, 5).map((character) => (
+            <div
+              key={character.id}
+              className={styles.characterAvatar}
+              title={character.name}
+            >
+              {character.image_url ? (
+                <img
+                  src={getAuthenticatedImageUrl(character.image_url)}
+                  alt={character.name}
+                  className={styles.characterAvatarImage}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                    (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "flex");
+                  }}
+                />
+              ) : null}
+              <span
+                className={styles.characterAvatarInitial}
+                style={character.image_url ? { display: "none" } : undefined}
+              >
+                {character.name.charAt(0)}
+              </span>
+            </div>
+          ))}
+          {characters.length > 5 && (
+            <div className={`${styles.characterAvatar} ${styles.characterAvatarMore}`}>
+              +{characters.length - 5}
+            </div>
+          )}
+        </div>
+      )}
       </div>
 
       {/* 콘텐츠 */}
