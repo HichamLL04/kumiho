@@ -12,14 +12,12 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.10
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
-	github.com/kumiho-plugin/kumiho-plugin-sdk v0.1.2
+	github.com/kumiho-plugin/kumiho-plugin-sdk v0.1.3
 	github.com/mattn/go-sqlite3 v1.14.33
 	golang.org/x/crypto v0.47.0
 	golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8
 	golang.org/x/sync v0.19.0
 )
-
-replace github.com/kumiho-plugin/kumiho-plugin-sdk => ../../kumiho-plugin/kumiho-plugin-sdk
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
