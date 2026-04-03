@@ -16,7 +16,7 @@ function normalizeOriginalTitles(
   );
 }
 
-function parseOriginalTitles(value: OriginalTitlesValue): Record<string, string> {
+function parseOriginalTitles(value: OriginalTitlesValue): Partial<Record<Exclude<OriginalTitleLanguage, "unknown">, string>> {
   if (!value) {
     return {};
   }

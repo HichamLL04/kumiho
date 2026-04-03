@@ -129,11 +129,11 @@ export function SettingsPage() {
                 <button
                   key={tab.id}
                   className={`${styles.navItem} ${activeTab === tab.id ? styles.active : ""}`}
-                  aria-label={
+                  aria-label={`${t(tab.label)}${
                     (tab.id === "system" && hasSystemUpdate) || (tab.id === "plugins" && hasPluginUpdate)
-                      ? `${t(tab.label)} - ${t("header.new_update_available")}`
-                      : undefined
-                  }
+                      ? ` - ${t("header.new_update_available")}`
+                      : ""
+                  }`}
                   onClick={() => {
                     const nextParams = new URLSearchParams(searchParams);
                     nextParams.set("tab", tab.id);
