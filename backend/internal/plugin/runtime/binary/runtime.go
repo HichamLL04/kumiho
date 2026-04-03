@@ -72,6 +72,12 @@ func newProcessLifecycle() (chan error, chan error, context.Context, context.Can
 	return exited, ready, procCtx, cancel
 }
 
+func newAttemptLifecycle() (chan error, context.Context, context.CancelFunc) {
+	exited := make(chan error, 1)
+	procCtx, cancel := context.WithCancel(context.Background())
+	return exited, procCtx, cancel
+}
+
 func buildCommandEnv(host string, port int, overrides map[string]string) []string {
 	envMap := make(map[string]string)
 	for _, entry := range os.Environ() {
@@ -142,21 +148,20 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 			}
 			return nil
 		}
-		exited, ready, procCtx, cancel := newProcessLifecycle()
-		r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
+		_, ready, _, _ := newProcessLifecycle()
+		r.processes[inst.ID] = processState{ready: ready}
 		r.mu.Unlock()
 
-		return r.startFresh(ctx, procCtx, cancel, inst, exited, ready)
+		return r.startFresh(ctx, inst, ready)
 	}
-	exited, ready, procCtx, cancel := newProcessLifecycle()
-	r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
+	_, ready, _, _ := newProcessLifecycle()
+	r.processes[inst.ID] = processState{ready: ready}
 	r.mu.Unlock()
 
-	return r.startFresh(ctx, procCtx, cancel, inst, exited, ready)
+	return r.startFresh(ctx, inst, ready)
 }
 
-func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cancel context.CancelFunc, inst runtime.Instance, exited chan error, ready chan error) error {
-
+func (r *Runtime) startFresh(ctx context.Context, inst runtime.Instance, ready chan error) error {
 	absPath, err := filepath.Abs(inst.InstallPath)
 	if err != nil {
 		r.finishStart(inst.ID, fmt.Errorf("resolve install path: %w", err))
@@ -185,6 +190,7 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 		}
 		baseURL := fmt.Sprintf("http://%s:%d", host, port)
 
+		exited, procCtx, cancel := newAttemptLifecycle()
 		cmd := exec.CommandContext(procCtx, absPath)
 		cmd.Env = buildCommandEnv(host, port, inst.Env)
 		cmd.Stdout = log.Writer()
@@ -222,9 +228,8 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 			lastErr = err
 			_ = r.Stop(context.Background(), inst)
 			if attempt < maxStartAttempts {
-				exited = make(chan error, 1)
 				r.mu.Lock()
-				r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
+				r.processes[inst.ID] = processState{ready: ready}
 				r.mu.Unlock()
 				time.Sleep(150 * time.Millisecond)
 				continue

@@ -1,6 +1,7 @@
 package binary
 
 import (
+	"context"
 	"slices"
 	"testing"
 )
@@ -33,5 +34,32 @@ func TestBuildCommandEnvOverridesExistingValues(t *testing.T) {
 	}
 	if !slices.Contains(env, "EXTRA_VALUE=extra") {
 		t.Fatalf("env missing extra override: %v", env)
+	}
+}
+
+func TestNewAttemptLifecycleIsIndependentPerRetry(t *testing.T) {
+	firstExited, firstCtx, firstCancel := newAttemptLifecycle()
+	firstCancel()
+
+	select {
+	case <-firstCtx.Done():
+	default:
+		t.Fatal("first attempt context should be canceled")
+	}
+
+	secondExited, secondCtx, secondCancel := newAttemptLifecycle()
+	defer secondCancel()
+
+	select {
+	case <-secondCtx.Done():
+		t.Fatal("second attempt context should be independent from first cancellation")
+	default:
+	}
+
+	if firstExited == secondExited {
+		t.Fatal("attempt lifecycles should not reuse the same exited channel")
+	}
+	if err := secondCtx.Err(); err != nil && err != context.Canceled {
+		t.Fatalf("unexpected second context error: %v", err)
 	}
 }
