@@ -157,6 +157,12 @@ export function PluginConfigModal({
         return;
       }
 
+      if (!root.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+
       if (active === last) {
         event.preventDefault();
         first.focus();

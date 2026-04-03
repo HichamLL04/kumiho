@@ -103,6 +103,12 @@ export function SeriesInfoCard({
         return;
       }
 
+      if (!root.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+
       if (active === last) {
         event.preventDefault();
         first.focus();
