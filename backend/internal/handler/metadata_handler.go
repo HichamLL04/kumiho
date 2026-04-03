@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
+	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
@@ -92,6 +93,8 @@ func writeMetadataError(c *fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 	case errors.Is(err, service.ErrNoActiveMetadataPlugin):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
+	case errors.Is(err, pluginengine.ErrPluginNotFound):
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	var pluginErr *pluginerrors.PluginError

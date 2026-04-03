@@ -557,9 +557,11 @@ func (s *MetadataService) applySeriesThumbnail(ctx context.Context, series *mode
 
 	if _, err := io.Copy(outFile, io.LimitReader(resp.Body, 10*1024*1024)); err != nil {
 		_ = outFile.Close()
+		_ = os.Remove(path)
 		return false, err
 	}
 	if err := outFile.Close(); err != nil {
+		_ = os.Remove(path)
 		return false, err
 	}
 

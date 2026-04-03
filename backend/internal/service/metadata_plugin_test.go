@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -352,6 +355,37 @@ func TestMetadataServiceApplySeriesMetadataDownloadsThumbnail(t *testing.T) {
 	}
 }
 
+func TestMetadataServiceApplySeriesMetadataRemovesPartialThumbnailOnWriteFailure(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+
+	cfg := (&configForMetadataTests{DataDir: t.TempDir()}).Config()
+	client := &http.Client{
+		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"image/png"}},
+				Body:       &failingReadCloser{err: errors.New("read failed")},
+			}, nil
+		}),
+	}
+	svc := NewMetadataService(cfg, client, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		Cover: &sdktypes.CoverInfo{URL: "http://example.com/cover.png"},
+	})
+	if err == nil {
+		t.Fatal("ApplySeriesMetadata() error = nil")
+	}
+
+	hash := md5.Sum([]byte(series.Path))
+	thumbnailPath := filepath.Join(cfg.DataDir, "thumbnails", "series", hex.EncodeToString(hash[:])+".png")
+	if _, statErr := os.Stat(thumbnailPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("thumbnail stat error = %v, want not exist", statErr)
+	}
+}
+
 func TestMetadataServiceApplySeriesMetadataReplacesExistingThumbnail(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
@@ -538,4 +572,30 @@ func (r *metadataRuntime) Search(_ context.Context, _ pluginruntime.Instance, re
 
 func (r *metadataRuntime) Fetch(context.Context, pluginruntime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
 	return r.fetchResp, nil
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+type failingReadCloser struct {
+	read bool
+	err  error
+}
+
+func (r *failingReadCloser) Read(p []byte) (int, error) {
+	if !r.read {
+		r.read = true
+		if len(p) > 0 {
+			p[0] = 0x89
+			return 1, nil
+		}
+	}
+	return 0, r.err
+}
+
+func (r *failingReadCloser) Close() error {
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,8 +107,8 @@ func TestManagerBootstrapMarksErrorWhenReactivationFails(t *testing.T) {
 		runtimeType: sdkmanifest.RuntimeTypeBinary,
 		startErr:    errors.New("start failed"),
 	})
-	if bootstrapErr := manager.Bootstrap(context.Background()); bootstrapErr == nil {
-		t.Fatal("Bootstrap() error = nil")
+	if bootstrapErr := manager.Bootstrap(context.Background()); bootstrapErr != nil {
+		t.Fatalf("Bootstrap() error = %v", bootstrapErr)
 	}
 
 	record, ok, err := manager.Get("running-plugin")
@@ -119,6 +120,80 @@ func TestManagerBootstrapMarksErrorWhenReactivationFails(t *testing.T) {
 	}
 	if record.State != sdkstate.Error {
 		t.Fatalf("state = %q, want %q", record.State, sdkstate.Error)
+	}
+}
+
+func TestManagerBootstrapContinuesAfterActivationFailure(t *testing.T) {
+	store := NewMemoryStore()
+	failedInstallFile, err := os.CreateTemp(t.TempDir(), "plugin-failed-*")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	_ = failedInstallFile.Close()
+	healthyInstallFile, err := os.CreateTemp(t.TempDir(), "plugin-healthy-*")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	_ = healthyInstallFile.Close()
+
+	now := time.Now()
+	for _, record := range []Record{
+		{
+			ID:          "failed-plugin",
+			Manifest:    sdkmanifest.Manifest{ID: "failed-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+			State:       sdkstate.Active,
+			InstallPath: failedInstallFile.Name(),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+		{
+			ID:          "healthy-plugin",
+			Manifest:    sdkmanifest.Manifest{ID: "healthy-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+			State:       sdkstate.Active,
+			InstallPath: healthyInstallFile.Name(),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+	} {
+		if saveErr := store.Save(record); saveErr != nil {
+			t.Fatalf("Save() error = %v", saveErr)
+		}
+	}
+
+	rt := &selectiveFakeRuntime{
+		runtimeType: sdkmanifest.RuntimeTypeBinary,
+		startErrByID: map[string]error{
+			"failed-plugin": errors.New("start failed"),
+		},
+	}
+	manager := NewManager(store, rt)
+	if bootstrapErr := manager.Bootstrap(context.Background()); bootstrapErr != nil {
+		t.Fatalf("Bootstrap() error = %v", bootstrapErr)
+	}
+
+	failedRecord, ok, err := manager.Get("failed-plugin")
+	if err != nil {
+		t.Fatalf("Get(failed-plugin) error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get(failed-plugin) ok = false")
+	}
+	if failedRecord.State != sdkstate.Error {
+		t.Fatalf("failed-plugin state = %q, want %q", failedRecord.State, sdkstate.Error)
+	}
+
+	healthyRecord, ok, err := manager.Get("healthy-plugin")
+	if err != nil {
+		t.Fatalf("Get(healthy-plugin) error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get(healthy-plugin) ok = false")
+	}
+	if healthyRecord.State != sdkstate.Active {
+		t.Fatalf("healthy-plugin state = %q, want %q", healthyRecord.State, sdkstate.Active)
+	}
+	if rt.startCallsByID["healthy-plugin"] != 1 {
+		t.Fatalf("healthy-plugin startCalls = %d, want 1", rt.startCallsByID["healthy-plugin"])
 	}
 }
 
@@ -270,6 +345,38 @@ func TestManagerActivateInjectsPluginEnvironment(t *testing.T) {
 	}
 }
 
+func TestManagerActivatePreservesStartErrorWhenMarkErrorFails(t *testing.T) {
+	store := &failingStore{
+		Store:       NewMemoryStore(),
+		failOnSaveN: 3,
+	}
+	manager := NewManager(store, &fakeRuntime{
+		runtimeType: sdkmanifest.RuntimeTypeBinary,
+		startErr:    errors.New("start failed"),
+	})
+
+	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
+		ID:          "failing-plugin",
+		Name:        "Failing",
+		Version:     "0.1.0",
+		RuntimeType: sdkmanifest.RuntimeTypeBinary,
+	}, "/plugins/failing")
+	if err != nil {
+		t.Fatalf("RegisterInstalled() error = %v", err)
+	}
+
+	_, err = manager.Activate(context.Background(), record.ID)
+	if err == nil {
+		t.Fatal("Activate() error = nil")
+	}
+	if !strings.Contains(err.Error(), "plugin start failed: start failed") {
+		t.Fatalf("error = %q, want original start failure", err)
+	}
+	if !strings.Contains(err.Error(), "also failed to mark error state: save failed") {
+		t.Fatalf("error = %q, want mark error failure", err)
+	}
+}
+
 type fakeRuntime struct {
 	runtimeType sdkmanifest.RuntimeType
 	startErr    error
@@ -277,6 +384,40 @@ type fakeRuntime struct {
 	startCalls  int
 	stopCalls   int
 	lastInst    runtime.Instance
+}
+
+type selectiveFakeRuntime struct {
+	runtimeType    sdkmanifest.RuntimeType
+	startErrByID   map[string]error
+	startCallsByID map[string]int
+}
+
+func (r *selectiveFakeRuntime) Type() sdkmanifest.RuntimeType {
+	return r.runtimeType
+}
+
+func (r *selectiveFakeRuntime) Start(_ context.Context, inst runtime.Instance) error {
+	if r.startCallsByID == nil {
+		r.startCallsByID = make(map[string]int)
+	}
+	r.startCallsByID[inst.ID]++
+	return r.startErrByID[inst.ID]
+}
+
+func (r *selectiveFakeRuntime) Stop(context.Context, runtime.Instance) error {
+	return nil
+}
+
+func (r *selectiveFakeRuntime) Healthcheck(context.Context, runtime.Instance) (*healthcheck.Response, error) {
+	return nil, runtime.ErrNotImplemented
+}
+
+func (r *selectiveFakeRuntime) Search(context.Context, runtime.Instance, *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+	return nil, runtime.ErrNotImplemented
+}
+
+func (r *selectiveFakeRuntime) Fetch(context.Context, runtime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
+	return nil, runtime.ErrNotImplemented
 }
 
 func (r *fakeRuntime) Type() sdkmanifest.RuntimeType {

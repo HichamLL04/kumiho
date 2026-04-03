@@ -23,6 +23,7 @@ import (
 	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
+	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
 )
 
 func TestPluginInstallServiceInstall(t *testing.T) {
@@ -693,8 +694,74 @@ func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
 	}
 }
 
+func TestPluginInstallServiceUninstallKeepsArtifactWhenSecretDeletionFails(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "https://example.com/index.json",
+		PluginSecretKey:   "test-secret-key",
+	}
+	store := pluginengine.NewMemoryStore()
+	manager := pluginengine.NewManager(store)
+	secretRepo := &testPluginSecretRepo{items: make(map[string]model.PluginSecret)}
+	secretRepo.deleteByPluginErr = errors.New("delete secrets failed")
+	secretSvc := NewPluginSecretService(cfg, secretRepo)
+	svc := NewPluginInstallService(cfg, nil, manager, secretSvc)
+
+	installDir := filepath.Join(cfg.PluginDir, kitsuPluginID, "0.1.0")
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	installPath := filepath.Join(installDir, kitsuPluginID)
+	if err := os.WriteFile(installPath, []byte("plugin"), 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	now := time.Now()
+	record := pluginengine.Record{
+		ID: kitsuPluginID,
+		Manifest: sdkmanifest.Manifest{
+			ID:          kitsuPluginID,
+			Name:        "Kitsu Manga",
+			Version:     "0.1.0",
+			RuntimeType: sdkmanifest.RuntimeTypeBinary,
+			ConfigSchema: &sdkconfig.Schema{
+				Version: "1",
+				Fields: []sdkconfig.ConfigField{
+					{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+				},
+			},
+		},
+		State:       sdkstate.Disabled,
+		InstallPath: installPath,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := store.Save(record); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if _, err := secretSvc.SetSecret(kitsuPluginID, record.Manifest, "access_token", "test-token"); err != nil {
+		t.Fatalf("SetSecret() error = %v", err)
+	}
+
+	_, err := svc.Uninstall(context.Background(), kitsuPluginID)
+	if err == nil {
+		t.Fatal("Uninstall() error = nil")
+	}
+
+	if _, statErr := os.Stat(installPath); statErr != nil {
+		t.Fatalf("artifact stat error = %v, want file to remain", statErr)
+	}
+	if _, ok, getErr := manager.Get(kitsuPluginID); getErr != nil {
+		t.Fatalf("Get() error = %v", getErr)
+	} else if !ok {
+		t.Fatal("record should remain when secret deletion fails")
+	}
+}
+
 type testPluginSecretRepo struct {
-	items map[string]model.PluginSecret
+	items             map[string]model.PluginSecret
+	deleteByPluginErr error
 }
 
 func newTestPluginSecretRepo() repository.PluginSecretRepository {
@@ -736,6 +803,9 @@ func (r *testPluginSecretRepo) Delete(_ database.Queryer, pluginID, fieldKey str
 }
 
 func (r *testPluginSecretRepo) DeleteByPlugin(_ database.Queryer, pluginID string) error {
+	if r.deleteByPluginErr != nil {
+		return r.deleteByPluginErr
+	}
 	for key, item := range r.items {
 		if item.PluginID == pluginID {
 			delete(r.items, key)

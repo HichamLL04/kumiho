@@ -447,13 +447,13 @@ func (s *PluginInstallService) removeRecordAndArtifacts(ctx context.Context, rec
 		}
 	}
 
-	if err := s.removeInstallArtifacts(record.InstallPath); err != nil {
-		return err
-	}
 	if s.secretService != nil && !preserveSecrets {
 		if err := s.secretService.DeleteAllForPlugin(record.ID); err != nil {
 			return err
 		}
+	}
+	if err := s.removeInstallArtifacts(record.InstallPath); err != nil {
+		return err
 	}
 	return s.manager.Remove(record.ID)
 }

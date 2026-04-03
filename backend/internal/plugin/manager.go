@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -115,7 +116,7 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 		runtimeErr := fmt.Errorf("runtime %q is not registered", record.Manifest.RuntimeType)
 		errorRecord, markErr := m.MarkError(id, runtimeErr.Error())
 		if markErr != nil {
-			return Record{}, markErr
+			return Record{}, fmt.Errorf("%w (also failed to mark error state: %v)", runtimeErr, markErr)
 		}
 		return errorRecord, runtimeErr
 	}
@@ -130,7 +131,7 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 	if err := rt.Start(ctx, instance); err != nil {
 		errorRecord, markErr := m.MarkError(id, err.Error())
 		if markErr != nil {
-			return Record{}, markErr
+			return Record{}, fmt.Errorf("plugin start failed: %w (also failed to mark error state: %v)", err, markErr)
 		}
 		return errorRecord, fmt.Errorf("plugin start failed: %w", err)
 	}
@@ -243,7 +244,8 @@ func (m *Manager) Bootstrap(ctx context.Context) error {
 			}
 		case sdkstate.ActivationPending, sdkstate.Active:
 			if _, err := m.Activate(ctx, record.ID); err != nil {
-				return err
+				log.Printf("plugin %s failed to activate during bootstrap: %v", record.ID, err)
+				continue
 			}
 		}
 	}
