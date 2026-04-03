@@ -32,6 +32,8 @@ const DEFAULT_APPLY_FIELDS: Record<ApplyFieldKey, boolean> = {
 
 export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharactersImported, compact = false }: SeriesMetadataPanelProps) {
   const { t, i18n } = useTranslation();
+  const originalTitleLanguageLabel = (language: string) =>
+    language === "unknown" ? t("common.unknown") : t(`settings.general.language.${language}`);
   const [searchResult, setSearchResult] = useState<MetadataSearchResult | null>(null);
   const [fetched, setFetched] = useState<MetadataFetchResponse | null>(null);
   const [busy, setBusy] = useState<"search" | "fetch" | "apply" | null>(null);
@@ -304,7 +306,7 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
                       <div className={styles.metadataOriginalTitleList}>
                         {previewOriginalTitles.map((item) => (
                           <div key={`${item.language}:${item.title}`} className={styles.metadataOriginalTitleItem}>
-                            <span className={styles.metadataOriginalTitleLang}>{t(`settings.general.language.${item.language}`)}</span>
+                            <span className={styles.metadataOriginalTitleLang}>{originalTitleLanguageLabel(item.language)}</span>
                             <p>{item.title}</p>
                           </div>
                         ))}

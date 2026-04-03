@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -23,6 +24,95 @@ import (
 	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
 	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
 )
+
+func TestPluginListMasksInstallPathForNonMaster(t *testing.T) {
+	store := pluginengine.NewMemoryStore()
+	now := time.Now()
+	record := pluginengine.Record{
+		ID:          "kumiho-plugin-metadata-kitsu",
+		Manifest:    sdkmanifest.Manifest{ID: "kumiho-plugin-metadata-kitsu", Name: "Kitsu Manga", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:       sdkstate.Registered,
+		InstallPath: "/opt/kumiho/plugins/kitsu",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := store.Save(record); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	handler := NewPluginHandler(pluginengine.NewManager(store), nil, nil)
+	app := newPluginHandlerTestApp(model.RoleUser)
+	app.Get("/plugins", handler.List)
+
+	req := httptest.NewRequest(fiber.MethodGet, "/plugins", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var payload struct {
+		Plugins []map[string]any `json:"plugins"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if len(payload.Plugins) != 1 {
+		t.Fatalf("plugins len = %d, want 1", len(payload.Plugins))
+	}
+	if _, exists := payload.Plugins[0]["install_path"]; exists {
+		t.Fatal("install_path should be masked for non-master")
+	}
+}
+
+func TestPluginGetReturnsNotFound(t *testing.T) {
+	handler := NewPluginHandler(pluginengine.NewManager(pluginengine.NewMemoryStore()), nil, nil)
+	app := fiber.New()
+	app.Get("/plugins/:id", handler.Get)
+
+	req := httptest.NewRequest(fiber.MethodGet, "/plugins/missing-plugin", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestPluginHealthcheckMapsNotRunningToConflict(t *testing.T) {
+	store := pluginengine.NewMemoryStore()
+	now := time.Now()
+	record := pluginengine.Record{
+		ID:        "kumiho-plugin-metadata-kitsu",
+		Manifest:  sdkmanifest.Manifest{ID: "kumiho-plugin-metadata-kitsu", Name: "Kitsu Manga", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:     sdkstate.Active,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := store.Save(record); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	rt := &handlerTestRuntime{
+		runtimeType:    sdkmanifest.RuntimeTypeBinary,
+		healthcheckErr: pluginruntime.ErrNotRunning,
+	}
+	handler := NewPluginHandler(pluginengine.NewManager(store, rt), nil, nil)
+	app := fiber.New()
+	app.Get("/plugins/:id/health", handler.Healthcheck)
+
+	req := httptest.NewRequest(fiber.MethodGet, "/plugins/kumiho-plugin-metadata-kitsu/health", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+}
 
 func TestUpdateConfigReactivatesPluginWhenSecretMutationFails(t *testing.T) {
 	store := pluginengine.NewMemoryStore()
@@ -169,6 +259,7 @@ type handlerTestRuntime struct {
 	stopCalls   int
 	startErr    error
 	stopErr     error
+	healthcheckErr error
 }
 
 func (r *handlerTestRuntime) Type() sdkmanifest.RuntimeType { return r.runtimeType }
@@ -184,6 +275,9 @@ func (r *handlerTestRuntime) Stop(context.Context, pluginruntime.Instance) error
 }
 
 func (r *handlerTestRuntime) Healthcheck(context.Context, pluginruntime.Instance) (*healthcheck.Response, error) {
+	if r.healthcheckErr != nil {
+		return nil, r.healthcheckErr
+	}
 	return &healthcheck.Response{Status: healthcheck.StatusOK}, nil
 }
 
@@ -261,4 +355,13 @@ func (r *handlerTestSecretRepo) DeleteByPlugin(_ database.Queryer, pluginID stri
 		}
 	}
 	return nil
+}
+
+func newPluginHandlerTestApp(role model.Role) *fiber.App {
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("role", role)
+		return c.Next()
+	})
+	return app
 }

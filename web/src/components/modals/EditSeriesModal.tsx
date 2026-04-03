@@ -20,6 +20,8 @@ interface EditSeriesModalProps {
 
 export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSeriesModalProps) {
   const { t, i18n } = useTranslation();
+  const originalTitleLanguageLabel = (language: string) =>
+    language === "unknown" ? t("common.unknown") : t(`settings.general.language.${language}`);
   const [formData, setFormData] = useState({
     title: "",
     authors: "",
@@ -518,7 +520,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                                     onClick={() => applyOriginalTitleOption(option.value)}
                                   >
                                     <span className={styles.inlineSelectOptionLabel}>
-                                      {t(`settings.general.language.${option.key}`)}
+                                      {originalTitleLanguageLabel(option.key)}
                                     </span>
                                     <span className={styles.inlineSelectOptionValue}>{option.value}</span>
                                   </button>

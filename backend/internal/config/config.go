@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 )
 
 type Config struct {
@@ -22,11 +23,11 @@ func Load() *Config {
 	dataDir := getEnv("DATA_DIR", "./data")
 	return &Config{
 		Port:              getEnv("PORT", "9999"),
-		DatabasePath:      getEnv("DATABASE_PATH", "./data/kumiho.db"),
+		DatabasePath:      getEnv("DATABASE_PATH", filepath.Join(dataDir, "kumiho.db")),
 		JWTSecret:         getEnv("JWT_SECRET", "your-super-secret-key-change-in-production"),
 		PluginSecretKey:   getEnv("PLUGIN_SECRET_KEY", ""),
 		DataDir:           dataDir,
-		PluginDir:         getEnv("PLUGIN_DIR", dataDir+"/plugins"),
+		PluginDir:         getEnv("PLUGIN_DIR", filepath.Join(dataDir, "plugins")),
 		PluginRegistryURL: getEnv("PLUGIN_REGISTRY_URL", ""),
 		Environment:       env,
 		CookieDomain:      getEnv("COOKIE_DOMAIN", ""),
