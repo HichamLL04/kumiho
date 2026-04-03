@@ -125,6 +125,12 @@
   animation: pluginPulse 3.2s ease-in-out infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .pluginCardActive {
+    animation: none;
+  }
+}
+
 .pluginCardError {
   border-color: rgba(248, 113, 113, 0.45);
   box-shadow:

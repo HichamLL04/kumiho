@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -83,7 +85,7 @@ func (s *PluginAuthService) executePasswordGrant(ctx context.Context, action sdk
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, pluginerrors.NewRetryable(pluginerrors.ErrCodeTimeout, err.Error())
+		return nil, classifyPluginAuthError(err)
 	}
 	defer resp.Body.Close()
 
@@ -145,4 +147,17 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func classifyPluginAuthError(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return pluginerrors.NewRetryable(pluginerrors.ErrCodeTimeout, err.Error())
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return pluginerrors.NewRetryable(pluginerrors.ErrCodeTimeout, err.Error())
+	}
+
+	return pluginerrors.NewRetryable(pluginerrors.ErrCodeProviderError, err.Error())
 }
