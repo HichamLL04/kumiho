@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -61,6 +62,12 @@ func (h *MetadataHandler) Fetch(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
+	if strings.TrimSpace(req.PluginID) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "plugin_id is required"})
+	}
+	if strings.TrimSpace(req.Source.ID) == "" || strings.TrimSpace(req.Source.Name) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "source.id and source.name are required"})
+	}
 
 	result, err := h.metadataSvc.FetchSeriesMetadata(ctx, c.Params("id"), middleware.GetUserID(c), req)
 	if err != nil {
@@ -78,6 +85,9 @@ func (h *MetadataHandler) Apply(c *fiber.Ctx) error {
 	var req metadataApplyRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if req.Result == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "result is required"})
 	}
 
 	result, err := h.metadataSvc.ApplySeriesMetadata(ctx, c.Params("id"), middleware.GetUserID(c), req.Result)

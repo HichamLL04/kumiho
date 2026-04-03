@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
@@ -32,9 +33,11 @@ type tokenResponse struct {
 	Description  string `json:"error_description"`
 }
 
+const defaultPluginAuthTimeout = 15 * time.Second
+
 func NewPluginAuthService(client *http.Client) *PluginAuthService {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: defaultPluginAuthTimeout}
 	}
 	return &PluginAuthService{client: client}
 }

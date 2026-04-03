@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
@@ -60,5 +61,47 @@ func TestWriteMetadataErrorMapsRateLimitAndTimeout(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusGatewayTimeout {
 		t.Fatalf("timeout status = %d, want %d", resp.StatusCode, fiber.StatusGatewayTimeout)
+	}
+}
+
+func TestMetadataHandlerFetchReturnsBadRequestForMissingRequiredFields(t *testing.T) {
+	handler := NewMetadataHandler(nil)
+	app := fiber.New()
+	app.Post("/series/:id/metadata/fetch", handler.Fetch)
+
+	req := httptest.NewRequest(
+		fiber.MethodPost,
+		"/series/series-1/metadata/fetch",
+		bytes.NewBufferString(`{"plugin_id":"","source":{"id":"","name":""}}`),
+	)
+	req.Header.Set("Content-Type", fiber.MIMEApplicationJSON)
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+}
+
+func TestMetadataHandlerApplyReturnsBadRequestForMissingResult(t *testing.T) {
+	handler := NewMetadataHandler(nil)
+	app := fiber.New()
+	app.Post("/series/:id/metadata/apply", handler.Apply)
+
+	req := httptest.NewRequest(
+		fiber.MethodPost,
+		"/series/series-1/metadata/apply",
+		bytes.NewBufferString(`{"result":null}`),
+	)
+	req.Header.Set("Content-Type", fiber.MIMEApplicationJSON)
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
 	}
 }
