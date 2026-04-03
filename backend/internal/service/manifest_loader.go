@@ -109,6 +109,6 @@ func (l *defaultManifestLoader) Load(ctx context.Context, entry RegistryEntry) (
 	}
 	// Artifacts live in the registry entry (deployment index), not in manifest.json.
 	// Always overwrite to ensure the registry's download URLs and checksums are used.
-	m.Artifacts = entry.Artifacts
+	m.Artifacts = entry.Manifest.Artifacts
 	return m, nil
 }

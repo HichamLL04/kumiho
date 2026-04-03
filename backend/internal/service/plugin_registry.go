@@ -369,7 +369,7 @@ func (s *PluginInstallService) openURL(ctx context.Context, rawURL string) (io.R
 
 func findRegistryEntry(plugins []RegistryEntry, pluginID string) (RegistryEntry, bool) {
 	for _, entry := range plugins {
-		if entry.ID == pluginID {
+		if entry.Manifest.ID == pluginID {
 			return entry, true
 		}
 	}

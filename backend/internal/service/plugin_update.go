@@ -36,8 +36,8 @@ func (s *PluginInstallService) CheckUpdates(ctx context.Context) (*PluginUpdateS
 	catalogByID := make(map[string]string, len(catalog.Plugins))
 	catalogNames := make(map[string]string, len(catalog.Plugins))
 	for _, plugin := range catalog.Plugins {
-		catalogByID[plugin.ID] = plugin.Version
-		catalogNames[plugin.ID] = plugin.Name
+		catalogByID[plugin.Manifest.ID] = plugin.Manifest.Version
+		catalogNames[plugin.Manifest.ID] = plugin.Manifest.Name
 	}
 
 	items := make([]PluginUpdateItem, 0, len(records))
