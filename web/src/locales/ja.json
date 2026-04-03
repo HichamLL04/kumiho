@@ -850,8 +850,8 @@
     },
     "toc": {
       "title": "目次",
-    "close": "閉じる",
-    "unknown": "不明",
+      "close": "閉じる",
+      "unknown": "不明",
       "empty": "目次がありません。"
     },
     "settings": {

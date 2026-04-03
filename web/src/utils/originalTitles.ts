@@ -57,12 +57,6 @@ function preferredLanguageOrder(locale: string): Array<"ko" | "ja" | "en"> {
 
 export function localizedOriginalTitle(value: OriginalTitlesValue, locale: string, fallback = ""): string {
   const titles = parseOriginalTitles(value);
-  const normalizedFallback = fallback.trim();
-
-  if (normalizedFallback && !Object.values(titles).some((current) => current.trim() === normalizedFallback)) {
-    return normalizedFallback;
-  }
-
   const order = preferredLanguageOrder(locale);
 
   for (const key of order) {
@@ -72,6 +66,7 @@ export function localizedOriginalTitle(value: OriginalTitlesValue, locale: strin
     }
   }
 
+  const normalizedFallback = fallback.trim();
   return normalizedFallback;
 }
 

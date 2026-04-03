@@ -19,4 +19,9 @@ describe("originalTitles utils", () => {
       { language: "unknown", title: "Original Title" },
     ]);
   });
+
+  it("prefers localized titles before using a fallback title", () => {
+    expect(localizedOriginalTitle({ ko: "현지 제목" }, "ko", "Fallback Title")).toBe("현지 제목");
+    expect(localizedOriginalTitle({}, "ko", "Fallback Title")).toBe("Fallback Title");
+  });
 });

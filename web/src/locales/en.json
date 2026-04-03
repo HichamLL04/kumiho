@@ -849,8 +849,8 @@
     },
     "toc": {
       "title": "Table of Contents",
-    "close": "Close",
-    "unknown": "Unknown",
+      "close": "Close",
+      "unknown": "Unknown",
       "empty": "No table of contents available."
     },
     "settings": {
