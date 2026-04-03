@@ -570,9 +570,13 @@ func (h *PluginHandler) mutatePluginSecrets(ctx context.Context, pluginID string
 	if err != nil {
 		if reactivationRequired {
 			if _, reactivateErr := h.manager.Activate(ctx, pluginID); reactivateErr != nil {
+				pluginState := sdkstate.State("")
+				if current, currentOK, getErr := h.manager.Get(pluginID); getErr == nil && currentOK {
+					pluginState = current.State
+				}
 				return nil, false, &pluginMutationError{
 					err:                  fmt.Errorf("plugin config mutation failed: %w (also failed to restore active state: %v)", err, reactivateErr),
-					pluginState:          sdkstate.Disabled,
+					pluginState:          pluginState,
 					reactivationRequired: true,
 					restoreFailed:        true,
 				}

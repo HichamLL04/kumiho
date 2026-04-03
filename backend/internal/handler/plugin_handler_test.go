@@ -214,7 +214,10 @@ func TestUpdateConfigReturnsPluginStateWhenRestoreFails(t *testing.T) {
 	repo := &handlerTestSecretRepo{
 		items: map[string]model.PluginSecret{},
 	}
-	secretSvc := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret"}, repo)
+	secretSvc, secretSvcErr := service.NewPluginSecretService(&config.Config{JWTSecret: "test-secret", DataDir: t.TempDir()}, repo)
+	if secretSvcErr != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", secretSvcErr)
+	}
 	manager.SetEnvProvider(secretSvc)
 	if _, err := secretSvc.SetSecret("kumiho-plugin-metadata-kitsu", record.Manifest, "access_token", "existing-token"); err != nil {
 		t.Fatalf("SetSecret() error = %v", err)
@@ -244,8 +247,8 @@ func TestUpdateConfigReturnsPluginStateWhenRestoreFails(t *testing.T) {
 	if decodeErr := json.NewDecoder(resp.Body).Decode(&payload); decodeErr != nil {
 		t.Fatalf("Decode() error = %v", decodeErr)
 	}
-	if payload["plugin_state"] != string(sdkstate.Disabled) {
-		t.Fatalf("plugin_state = %#v, want %q", payload["plugin_state"], sdkstate.Disabled)
+	if payload["plugin_state"] != string(sdkstate.Error) {
+		t.Fatalf("plugin_state = %#v, want %q", payload["plugin_state"], sdkstate.Error)
 	}
 	if payload["reactivation_required"] != true {
 		t.Fatalf("reactivation_required = %#v, want true", payload["reactivation_required"])

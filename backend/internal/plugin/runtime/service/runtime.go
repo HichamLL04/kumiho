@@ -535,7 +535,7 @@ func (r *Runtime) doJSON(ctx context.Context, id string, method string, path str
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return pluginruntime.DecodePluginError(resp.Body, resp.StatusCode)
+		return fmt.Errorf("%s returned status %d", path, resp.StatusCode)
 	}
 	if target == nil || resp.StatusCode == http.StatusNoContent {
 		return nil
