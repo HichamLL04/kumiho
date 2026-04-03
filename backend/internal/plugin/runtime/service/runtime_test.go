@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 )
@@ -61,5 +62,21 @@ func TestNewAttemptLifecycleIsIndependentPerRetry(t *testing.T) {
 	}
 	if err := secondCtx.Err(); err != nil && err != context.Canceled {
 		t.Fatalf("unexpected second context error: %v", err)
+	}
+}
+
+func TestExitedErrorUsesRecordedExitWithoutConsumingSignal(t *testing.T) {
+	rt := NewRuntime()
+	exited := make(chan struct{})
+	close(exited)
+
+	rt.processes["plugin-a"] = processState{exited: exited}
+	rt.lastExit["plugin-a"] = errors.New("process crashed")
+
+	if err := rt.exitedError("plugin-a"); err == nil || err.Error() != "process crashed" {
+		t.Fatalf("first exitedError() = %v, want process crashed", err)
+	}
+	if err := rt.exitedError("plugin-a"); err == nil || err.Error() != "process crashed" {
+		t.Fatalf("second exitedError() = %v, want process crashed", err)
 	}
 }

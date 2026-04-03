@@ -36,8 +36,15 @@ type PluginCatalog struct {
 	Plugins []RegistryEntry `json:"plugins"`
 }
 
+type ResolvedCatalogFailure struct {
+	PluginID    string `json:"plugin_id"`
+	ManifestURL string `json:"manifest_url,omitempty"`
+	Message     string `json:"message"`
+}
+
 type ResolvedPluginCatalog struct {
-	Plugins []sdkmanifest.Manifest `json:"plugins"`
+	Plugins  []sdkmanifest.Manifest   `json:"plugins"`
+	Failures []ResolvedCatalogFailure `json:"failures,omitempty"`
 }
 
 type PluginInstallService struct {
@@ -111,15 +118,21 @@ func (s *PluginInstallService) ListResolvedCatalog(ctx context.Context) (*Resolv
 	}
 
 	plugins := make([]sdkmanifest.Manifest, 0, len(catalog.Plugins))
+	failures := make([]ResolvedCatalogFailure, 0)
 	for _, entry := range catalog.Plugins {
 		manifest, err := s.manifestLoader.Load(ctx, entry)
 		if err != nil {
-			return nil, err
+			failures = append(failures, ResolvedCatalogFailure{
+				PluginID:    strings.TrimSpace(entry.ID),
+				ManifestURL: strings.TrimSpace(entry.ManifestURL),
+				Message:     err.Error(),
+			})
+			continue
 		}
 		plugins = append(plugins, manifest)
 	}
 
-	return &ResolvedPluginCatalog{Plugins: plugins}, nil
+	return &ResolvedPluginCatalog{Plugins: plugins, Failures: failures}, nil
 }
 
 func (s *PluginInstallService) Install(ctx context.Context, pluginID string) (*InstallPluginResult, error) {

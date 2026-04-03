@@ -368,6 +368,74 @@ func TestPluginInstallServiceListResolvedCatalogUsesManifestURL(t *testing.T) {
 	if len(catalog.Plugins[0].Artifacts) != 1 || catalog.Plugins[0].Artifacts[0].Checksum != "sha256:deadbeef" {
 		t.Fatalf("catalog.Plugins[0].Artifacts = %#v", catalog.Plugins[0].Artifacts)
 	}
+	if len(catalog.Failures) != 0 {
+		t.Fatalf("catalog.Failures = %#v, want empty", catalog.Failures)
+	}
+}
+
+func TestPluginInstallServiceListResolvedCatalogCollectsPartialFailures(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{
+						ManifestURL: server.URL + "/manifest-good.json",
+						Manifest: sdkmanifest.Manifest{
+							ID: "plugin-good",
+							Artifacts: []sdkmanifest.Artifact{
+								{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: "sha256:deadbeef"},
+							},
+						},
+					},
+					{
+						ManifestURL: server.URL + "/manifest-bad.json",
+						Manifest: sdkmanifest.Manifest{
+							ID: "plugin-bad",
+						},
+					},
+				},
+			})
+		case "/manifest-good.json":
+			_ = json.NewEncoder(w).Encode(sdkmanifest.Manifest{
+				ID:                 "plugin-good",
+				Name:               "Good Plugin",
+				Version:            "0.1.0",
+				RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+			})
+		case "/manifest-bad.json":
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	catalog, err := svc.ListResolvedCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("ListResolvedCatalog() error = %v", err)
+	}
+	if len(catalog.Plugins) != 1 || catalog.Plugins[0].ID != "plugin-good" {
+		t.Fatalf("catalog.Plugins = %#v", catalog.Plugins)
+	}
+	if len(catalog.Failures) != 1 {
+		t.Fatalf("catalog.Failures len = %d, want 1", len(catalog.Failures))
+	}
+	if catalog.Failures[0].PluginID != "plugin-bad" {
+		t.Fatalf("catalog.Failures[0].PluginID = %q", catalog.Failures[0].PluginID)
+	}
+	if catalog.Failures[0].ManifestURL != server.URL+"/manifest-bad.json" {
+		t.Fatalf("catalog.Failures[0].ManifestURL = %q", catalog.Failures[0].ManifestURL)
+	}
 }
 
 func TestPluginInstallServiceInstallManifestURLFetchFailureReturnsError(t *testing.T) {

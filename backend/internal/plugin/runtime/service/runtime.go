@@ -37,7 +37,7 @@ type processState struct {
 	cmd     *exec.Cmd
 	cancel  context.CancelFunc
 	baseURL string
-	exited  chan error
+	exited  chan struct{}
 	ready   chan error
 }
 
@@ -51,6 +51,7 @@ type Runtime struct {
 
 	mu        sync.RWMutex
 	processes map[string]processState
+	lastExit  map[string]error
 }
 
 func NewRuntime() *Runtime {
@@ -60,6 +61,7 @@ func NewRuntime() *Runtime {
 		},
 		stopGrace: 3 * time.Second,
 		processes: make(map[string]processState),
+		lastExit:  make(map[string]error),
 	}
 }
 
@@ -67,15 +69,15 @@ func (r *Runtime) Type() sdkmanifest.RuntimeType {
 	return sdkmanifest.RuntimeTypeService
 }
 
-func newProcessLifecycle() (chan error, chan error, context.Context, context.CancelFunc) {
-	exited := make(chan error, 1)
+func newProcessLifecycle() (chan struct{}, chan error, context.Context, context.CancelFunc) {
+	exited := make(chan struct{})
 	ready := make(chan error, 1)
 	procCtx, cancel := context.WithCancel(context.Background())
 	return exited, ready, procCtx, cancel
 }
 
-func newAttemptLifecycle() (chan error, context.Context, context.CancelFunc) {
-	exited := make(chan error, 1)
+func newAttemptLifecycle() (chan struct{}, context.Context, context.CancelFunc) {
+	exited := make(chan struct{})
 	procCtx, cancel := context.WithCancel(context.Background())
 	return exited, procCtx, cancel
 }
@@ -128,15 +130,16 @@ func (r *Runtime) Start(ctx context.Context, inst pluginruntime.Instance) error 
 		}
 
 		select {
-		case err, ok := <-state.exited:
+		case <-state.exited:
 			r.mu.Lock()
 			current, exists := r.processes[inst.ID]
 			if exists && current.exited == state.exited {
 				delete(r.processes, inst.ID)
 			}
+			exitErr := r.lastExit[inst.ID]
 			r.mu.Unlock()
-			if ok && err != nil {
-				log.Printf("service plugin process %s exited before restart: %v", inst.ID, err)
+			if exitErr != nil {
+				log.Printf("service plugin process %s exited before restart: %v", inst.ID, exitErr)
 			}
 		default:
 			return nil
@@ -150,12 +153,14 @@ func (r *Runtime) Start(ctx context.Context, inst pluginruntime.Instance) error 
 			}
 			return nil
 		}
+		delete(r.lastExit, inst.ID)
 		_, ready, _, _ := newProcessLifecycle()
 		r.processes[inst.ID] = processState{ready: ready}
 		r.mu.Unlock()
 
 		return r.startFresh(ctx, inst, ready)
 	}
+	delete(r.lastExit, inst.ID)
 	_, ready, _, _ := newProcessLifecycle()
 	r.processes[inst.ID] = processState{ready: ready}
 	r.mu.Unlock()
@@ -209,9 +214,11 @@ func (r *Runtime) startFresh(ctx context.Context, inst pluginruntime.Instance, r
 		r.mu.Unlock()
 
 		cmdExited := exited
-		go func(cmd *exec.Cmd, exited chan error, id string) {
+		go func(cmd *exec.Cmd, exited chan struct{}, id string) {
 			err := cmd.Wait()
-			exited <- err
+			r.mu.Lock()
+			r.lastExit[id] = err
+			r.mu.Unlock()
 			close(exited)
 			r.mu.Lock()
 			if current, exists := r.processes[id]; exists && current.exited == exited {
@@ -231,6 +238,7 @@ func (r *Runtime) startFresh(ctx context.Context, inst pluginruntime.Instance, r
 			_ = r.Stop(context.Background(), inst)
 			if attempt < maxStartAttempts {
 				r.mu.Lock()
+				delete(r.lastExit, inst.ID)
 				r.processes[inst.ID] = processState{ready: ready}
 				r.mu.Unlock()
 				time.Sleep(150 * time.Millisecond)
@@ -442,14 +450,23 @@ func (r *Runtime) remove(id string) {
 func (r *Runtime) exitedError(id string) error {
 	state, ok := r.get(id)
 	if !ok {
+		r.mu.RLock()
+		err, exists := r.lastExit[id]
+		r.mu.RUnlock()
+		if exists {
+			if err == nil {
+				return pluginruntime.ErrNotRunning
+			}
+			return err
+		}
 		return pluginruntime.ErrNotRunning
 	}
 
 	select {
-	case err, ok := <-state.exited:
-		if !ok {
-			return pluginruntime.ErrNotRunning
-		}
+	case <-state.exited:
+		r.mu.RLock()
+		err := r.lastExit[id]
+		r.mu.RUnlock()
 		if err == nil {
 			return pluginruntime.ErrNotRunning
 		}
@@ -485,23 +502,31 @@ func allocatePort(host string) (int, error) {
 	return tcpAddr.Port, nil
 }
 
-func (r *Runtime) doJSON(ctx context.Context, id string, method string, path string, requestBody any, out any) error {
+func (r *Runtime) doJSON(ctx context.Context, id string, method string, path string, payload any, target any) error {
 	state, ok := r.get(id)
 	if !ok || state.baseURL == "" {
 		return pluginruntime.ErrNotRunning
 	}
 
-	body, err := json.Marshal(requestBody)
-	if err != nil {
-		return err
+	var body *bytes.Reader
+	if payload == nil {
+		body = bytes.NewReader(nil)
+	} else {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(raw)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, state.baseURL+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, state.baseURL+path, body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set(sdkservice.HeaderAccept, sdkservice.ContentTypeJSON)
-	req.Header.Set(sdkservice.HeaderContentType, sdkservice.ContentTypeJSON)
+	if payload != nil {
+		req.Header.Set(sdkservice.HeaderContentType, sdkservice.ContentTypeJSON)
+	}
 
 	resp, err := r.client.Do(req)
 	if err != nil {
@@ -509,9 +534,11 @@ func (r *Runtime) doJSON(ctx context.Context, id string, method string, path str
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != sdkservice.StatusOK {
-		return fmt.Errorf("%s returned status %d", path, resp.StatusCode)
+	if resp.StatusCode >= 400 {
+		return pluginruntime.DecodePluginError(resp.Body, resp.StatusCode)
 	}
-
-	return json.NewDecoder(resp.Body).Decode(out)
+	if target == nil || resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	return json.NewDecoder(resp.Body).Decode(target)
 }
