@@ -641,7 +641,7 @@
         "fetch_success": "Metadata details loaded.",
         "fetch_failed": "Failed to fetch metadata details.",
         "apply_success": "Applied {{count}} fields.",
-        "apply_success_with_characters": "Applied {{count}} fields and added {{characters}} characters.",
+        "apply_success_with_character_sync": "Applied {{count}} fields and synced {{characters}} character changes.",
         "apply_no_changes": "No metadata changes to apply.",
         "apply_failed": "Failed to apply metadata."
       }

@@ -68,6 +68,37 @@ func TestShouldRetainImportedCharacterUsesProviderIdentifiers(t *testing.T) {
 	}
 }
 
+func TestStaleImportedCharactersForSyncRemovesOnlyMatchingProviderCharacters(t *testing.T) {
+	existing := []model.SeriesCharacter{
+		{ID: "imported-1", SourceProvider: "kumiho-plugin-metadata-kitsu", SourceCharacterID: "char-1"},
+		{ID: "imported-2", SourceProvider: "kumiho-plugin-metadata-kitsu", SourceRelationID: "rel-1"},
+		{ID: "manual-1", SourceProvider: ""},
+		{ID: "other-1", SourceProvider: "other-provider", SourceCharacterID: "char-9"},
+	}
+
+	stale := staleImportedCharactersForSync(existing, "kumiho-plugin-metadata-kitsu", map[string]struct{}{}, map[string]struct{}{})
+	if len(stale) != 2 {
+		t.Fatalf("stale count = %d, want 2", len(stale))
+	}
+
+	got := map[string]struct{}{}
+	for _, item := range stale {
+		got[item.ID] = struct{}{}
+	}
+	if _, ok := got["imported-1"]; !ok {
+		t.Fatal("expected imported-1 to be stale")
+	}
+	if _, ok := got["imported-2"]; !ok {
+		t.Fatal("expected imported-2 to be stale")
+	}
+	if _, ok := got["manual-1"]; ok {
+		t.Fatal("manual character should not be stale")
+	}
+	if _, ok := got["other-1"]; ok {
+		t.Fatal("other provider character should not be stale")
+	}
+}
+
 func TestIsAllowedCharacterImageContentType(t *testing.T) {
 	for _, contentType := range []string{"image/jpeg", "image/png", "image/gif", "image/webp"} {
 		if !isAllowedCharacterImageContentType(contentType) {

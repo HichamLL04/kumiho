@@ -641,7 +641,7 @@
         "fetch_success": "メタデータ詳細を読み込みました。",
         "fetch_failed": "メタデータ詳細の取得に失敗しました。",
         "apply_success": "{{count}}個のフィールドを適用しました。",
-        "apply_success_with_characters": "{{count}}個のフィールドを適用し、登場人物を{{characters}}人登録しました。",
+        "apply_success_with_character_sync": "{{count}}個のフィールドを適用し、登場人物の変更を{{characters}}件同期しました。",
         "apply_no_changes": "適用する変更がありません。",
         "apply_failed": "メタデータの適用に失敗しました。"
       }

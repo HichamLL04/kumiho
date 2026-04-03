@@ -49,6 +49,15 @@ type importSeriesCharactersRequest struct {
 	SourceProvider string                       `json:"source_provider,omitempty"`
 }
 
+type importSeriesCharactersResponse struct {
+	Added        []model.SeriesCharacter `json:"added"`
+	Count        int                     `json:"count"`
+	AddedCount   int                     `json:"added_count"`
+	UpdatedCount int                     `json:"updated_count"`
+	RemovedCount int                     `json:"removed_count"`
+	ChangedCount int                     `json:"changed_count"`
+}
+
 func isAllowedCharacterImageContentType(contentType string) bool {
 	switch strings.ToLower(strings.TrimSpace(contentType)) {
 	case "image/jpeg", "image/png", "image/gif", "image/webp":
@@ -246,8 +255,9 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 	if err = c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
-	if len(req.Characters) == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "characters is required"})
+	sourceProvider := strings.TrimSpace(req.SourceProvider)
+	if len(req.Characters) == 0 && sourceProvider == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "source_provider is required when syncing empty characters"})
 	}
 
 	tx, err := database.DB.BeginTx(ctx, nil)
@@ -285,9 +295,9 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 		pending = append(pending, character)
 	}
 
-	sourceProvider := strings.TrimSpace(req.SourceProvider)
 	seenExistingIDs := make(map[string]struct{}, len(existing))
 	incomingSourceKeys := make(map[string]struct{}, len(pending)*2)
+	updatedCount := 0
 	sortMetadataCharacters(pending)
 	for _, character := range pending {
 		for _, key := range metadataCharacterSourceKeys(character, sourceProvider) {
@@ -297,9 +307,11 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 		normalized := repository.NormalizeSeriesCharacterName(character.Name)
 		existingItem, ok := findExistingCharacter(existingBySourceKey, existingByNormalized, character, sourceProvider)
 		if ok {
-			applyMetadataCharacter(&existingItem, character, sourceProvider)
-			if err := h.characterRepo.Update(tx, &existingItem); err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update imported character"})
+			if applyMetadataCharacter(&existingItem, character, sourceProvider) {
+				if err := h.characterRepo.Update(tx, &existingItem); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update imported character"})
+				}
+				updatedCount++
 			}
 			seenExistingIDs[existingItem.ID] = struct{}{}
 			allByID[existingItem.ID] = existingItem
@@ -323,16 +335,8 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 		added = append(added, item)
 	}
 
-	for _, item := range existing {
-		if item.SourceProvider != sourceProvider || sourceProvider == "" {
-			continue
-		}
-		if _, ok := seenExistingIDs[item.ID]; ok {
-			continue
-		}
-		if shouldRetainImportedCharacter(item, incomingSourceKeys) {
-			continue
-		}
+	removedCount := 0
+	for _, item := range staleImportedCharactersForSync(existing, sourceProvider, seenExistingIDs, incomingSourceKeys) {
 		if item.ImagePath != "" {
 			_ = os.Remove(item.ImagePath)
 		}
@@ -340,6 +344,7 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to remove stale imported character"})
 		}
 		delete(allByID, item.ID)
+		removedCount++
 	}
 
 	all := make([]model.SeriesCharacter, 0, len(allByID))
@@ -359,7 +364,14 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to commit import"})
 	}
 	h.assignImageURLs(series.ID, added)
-	return c.JSON(fiber.Map{"added": added, "count": len(added)})
+	return c.JSON(importSeriesCharactersResponse{
+		Added:        added,
+		Count:        len(added),
+		AddedCount:   len(added),
+		UpdatedCount: updatedCount,
+		RemovedCount: removedCount,
+		ChangedCount: len(added) + updatedCount + removedCount,
+	})
 }
 
 func (h *SeriesCharacterHandler) UploadImage(c *fiber.Ctx) error {
@@ -534,23 +546,45 @@ func sortMetadataCharacters(items []sdktypes.MetadataCharacter) {
 	}
 }
 
-func applyMetadataCharacter(item *model.SeriesCharacter, character sdktypes.MetadataCharacter, sourceProvider string) {
-	item.Name = strings.TrimSpace(character.Name)
-	item.Role = strings.TrimSpace(character.Role)
-	item.ExternalImageURL = coverURLFromMetadataCharacter(character)
-	item.SourceProvider = sourceProvider
-	item.SourceCharacterID = strings.TrimSpace(character.ID)
-	item.SourceRelationID = ""
+func applyMetadataCharacter(item *model.SeriesCharacter, character sdktypes.MetadataCharacter, sourceProvider string) bool {
+	changed := false
+	if next := strings.TrimSpace(character.Name); item.Name != next {
+		item.Name = next
+		changed = true
+	}
+	if next := strings.TrimSpace(character.Role); item.Role != next {
+		item.Role = next
+		changed = true
+	}
+	if next := coverURLFromMetadataCharacter(character); item.ExternalImageURL != next {
+		item.ExternalImageURL = next
+		changed = true
+	}
+	if item.SourceProvider != sourceProvider {
+		item.SourceProvider = sourceProvider
+		changed = true
+	}
 
+	nextCharacterID := strings.TrimSpace(character.ID)
+	nextRelationID := ""
 	switch sourceProvider {
 	case "kumiho-plugin-metadata-kitsu":
 		if relationID := strings.TrimSpace(character.Identifiers["kitsu_media_character_id"]); relationID != "" {
-			item.SourceRelationID = relationID
+			nextRelationID = relationID
 		}
 		if sourceID := strings.TrimSpace(character.Identifiers["kitsu_character_id"]); sourceID != "" {
-			item.SourceCharacterID = sourceID
+			nextCharacterID = sourceID
 		}
 	}
+	if item.SourceCharacterID != nextCharacterID {
+		item.SourceCharacterID = nextCharacterID
+		changed = true
+	}
+	if item.SourceRelationID != nextRelationID {
+		item.SourceRelationID = nextRelationID
+		changed = true
+	}
+	return changed
 }
 
 func findExistingCharacter(
@@ -607,6 +641,27 @@ func shouldRetainImportedCharacter(item model.SeriesCharacter, incomingSourceKey
 		}
 	}
 	return false
+}
+
+func staleImportedCharactersForSync(existing []model.SeriesCharacter, sourceProvider string, seenExistingIDs map[string]struct{}, incomingSourceKeys map[string]struct{}) []model.SeriesCharacter {
+	if sourceProvider == "" {
+		return nil
+	}
+
+	stale := make([]model.SeriesCharacter, 0)
+	for _, item := range existing {
+		if item.SourceProvider != sourceProvider {
+			continue
+		}
+		if _, ok := seenExistingIDs[item.ID]; ok {
+			continue
+		}
+		if shouldRetainImportedCharacter(item, incomingSourceKeys) {
+			continue
+		}
+		stale = append(stale, item)
+	}
+	return stale
 }
 
 func metadataCharacterLess(left, right sdktypes.MetadataCharacter) bool {

@@ -641,7 +641,7 @@
         "fetch_success": "메타데이터 상세 정보를 불러왔습니다.",
         "fetch_failed": "메타데이터 상세 정보를 불러오지 못했습니다.",
         "apply_success": "{{count}}개 필드를 적용했습니다.",
-        "apply_success_with_characters": "{{count}}개 필드를 적용하고 등장인물 {{characters}}명을 등록했습니다.",
+        "apply_success_with_character_sync": "{{count}}개 필드를 적용하고 등장인물 {{characters}}건을 동기화했습니다.",
         "apply_no_changes": "변경할 메타데이터가 없습니다.",
         "apply_failed": "메타데이터 적용에 실패했습니다."
       }

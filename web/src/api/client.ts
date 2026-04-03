@@ -19,6 +19,7 @@ import type {
   MetadataResult,
   MetadataSearchRequest,
   MetadataSearchResult,
+  SeriesCharacterImportResponse,
   PluginAuthActionResponse,
   PluginAuthDeleteResponse,
   PluginCatalogResponse,
@@ -272,7 +273,7 @@ export const seriesAPI = {
   reorderCharacters: (seriesId: string, orderedIds: string[]) =>
     api.post<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters/reorder`, { ordered_ids: orderedIds }).then((res) => res.data),
   importCharacters: (seriesId: string, characters: MetadataCharacter[], sourceProvider?: string) =>
-    api.post<{ added: SeriesCharacter[]; count: number }>(`/series/${seriesId}/characters/import`, { characters, source_provider: sourceProvider }).then((res) => res.data),
+    api.post<SeriesCharacterImportResponse>(`/series/${seriesId}/characters/import`, { characters, source_provider: sourceProvider }).then((res) => res.data),
   uploadCharacterImage: (seriesId: string, characterId: string, file: File) => {
     const formData = new FormData();
     formData.append("image", file);

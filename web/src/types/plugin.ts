@@ -172,6 +172,15 @@ export interface PluginUninstallResponse {
   removed: boolean;
 }
 
+export interface SeriesCharacterImportResponse {
+  added: import("./series").SeriesCharacter[];
+  count: number;
+  added_count: number;
+  updated_count: number;
+  removed_count: number;
+  changed_count: number;
+}
+
 export interface MetadataSourceRef {
   id: string;
   name: string;

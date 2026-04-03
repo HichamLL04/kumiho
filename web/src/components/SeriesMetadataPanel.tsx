@@ -109,29 +109,24 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
     setBusy("apply");
     try {
       const response = await seriesAPI.metadataApply(series.id, filterMetadataResult(result, applyFields));
-      let importedCount = 0;
-      if (applyFields.characters && result.characters?.length) {
-        const importResponse = await seriesAPI.importCharacters(series.id, result.characters, fetched?.plugin_id);
-        importedCount = importResponse.count || 0;
-        onCharactersImported?.(importedCount);
+      let characterChangeCount = 0;
+      if (applyFields.characters && fetched?.plugin_id) {
+        const importResponse = await seriesAPI.importCharacters(series.id, result.characters || [], fetched.plugin_id);
+        characterChangeCount = importResponse.changed_count || 0;
+        onCharactersImported?.(characterChangeCount);
       }
       onApplied(response);
       const updatedFieldCount = response.updated_fields.length;
       setStatus({
         type: "success",
-        message: updatedFieldCount > 0
-          ? importedCount > 0
-            ? t("series.metadata.toast.apply_success_with_characters", {
+        message: updatedFieldCount > 0 || characterChangeCount > 0
+          ? characterChangeCount > 0
+            ? t("series.metadata.toast.apply_success_with_character_sync", {
               count: updatedFieldCount,
-              characters: importedCount,
+              characters: characterChangeCount,
             })
             : t("series.metadata.toast.apply_success", { count: updatedFieldCount })
-          : importedCount > 0
-            ? t("series.metadata.toast.apply_success_with_characters", {
-              count: updatedFieldCount,
-              characters: importedCount,
-            })
-            : t("series.metadata.toast.apply_no_changes"),
+          : t("series.metadata.toast.apply_no_changes"),
       });
     } catch (error: unknown) {
       console.error("Failed to apply metadata:", error);
