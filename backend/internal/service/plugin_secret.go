@@ -186,8 +186,8 @@ func (s *PluginSecretService) ValidateActivation(id string, manifest sdkmanifest
 }
 
 func (s *PluginSecretService) resolveFieldStatus(pluginID string, spec pluginSecretSpec) (configured bool, source string, masked string, err error) {
-	if err := validateSecretSpec(spec); err != nil {
-		return false, "", "", err
+	if validateErr := validateSecretSpec(spec); validateErr != nil {
+		return false, "", "", validateErr
 	}
 	secret, err := s.repo.GetByKey(nil, pluginID, spec.FieldKey)
 	if err != nil {
