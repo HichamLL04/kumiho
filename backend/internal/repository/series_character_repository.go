@@ -193,9 +193,37 @@ func (r *SeriesCharacterRepository) Delete(db database.Queryer, seriesID string,
 }
 
 func (r *SeriesCharacterRepository) Reorder(db database.Queryer, seriesID string, orderedIDs []string) error {
-	db = database.GetQueryer(db)
+	queryer := database.GetQueryer(db)
+	if tx, ok := queryer.(*sql.Tx); ok {
+		return r.reorderWithQueryer(tx, seriesID, orderedIDs)
+	}
+
+	sqlDB, ok := queryer.(*sql.DB)
+	if !ok {
+		return r.reorderWithQueryer(queryer, seriesID, orderedIDs)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		return err
+	}
+
+	if err := r.reorderWithQueryer(tx, seriesID, orderedIDs); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return nil
+}
+
+func (r *SeriesCharacterRepository) reorderWithQueryer(queryer database.Queryer, seriesID string, orderedIDs []string) error {
+	now := time.Now()
 	for index, id := range orderedIDs {
-		if _, err := db.Exec(`UPDATE series_characters SET sort_order = ?, updated_at = ? WHERE series_id = ? AND id = ?`, index, time.Now(), seriesID, id); err != nil {
+		if _, err := queryer.Exec(`UPDATE series_characters SET sort_order = ?, updated_at = ? WHERE series_id = ? AND id = ?`, index, now, seriesID, id); err != nil {
 			return err
 		}
 	}

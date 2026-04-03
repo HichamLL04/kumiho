@@ -130,6 +130,14 @@ func (m *Manager) Activate(ctx context.Context, id string) (Record, error) {
 	}
 	if record.State == sdkstate.ActivationPending || record.State == sdkstate.Active {
 		if _, err := rt.Healthcheck(ctx, instance); err == nil {
+			if record.State == sdkstate.ActivationPending {
+				record.State = sdkstate.Active
+				record.LastError = ""
+				record.UpdatedAt = time.Now()
+				if err := m.store.Save(record); err != nil {
+					return Record{}, err
+				}
+			}
 			return record, nil
 		}
 	}

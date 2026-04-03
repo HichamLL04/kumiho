@@ -124,6 +124,47 @@ func TestManagerBootstrapReactivatesPersistedActivationPendingPlugin(t *testing.
 	}
 }
 
+func TestManagerActivatePromotesRunningActivationPendingPlugin(t *testing.T) {
+	store := NewMemoryStore()
+	now := time.Now()
+	record := Record{
+		ID:          "pending-plugin",
+		Manifest:    sdkmanifest.Manifest{ID: "pending-plugin", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:       sdkstate.ActivationPending,
+		InstallPath: "/plugins/pending",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := store.Save(record); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	rt := &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary}
+	manager := NewManager(store, rt)
+
+	got, err := manager.Activate(context.Background(), record.ID)
+	if err != nil {
+		t.Fatalf("Activate() error = %v", err)
+	}
+	if got.State != sdkstate.Active {
+		t.Fatalf("state = %q, want %q", got.State, sdkstate.Active)
+	}
+	if rt.startCalls != 0 {
+		t.Fatalf("startCalls = %d, want 0", rt.startCalls)
+	}
+
+	persisted, ok, err := manager.Get(record.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false")
+	}
+	if persisted.State != sdkstate.Active {
+		t.Fatalf("persisted state = %q, want %q", persisted.State, sdkstate.Active)
+	}
+}
+
 func TestManagerBootstrapMarksErrorWhenReactivationFails(t *testing.T) {
 	store := NewMemoryStore()
 	installFile, err := os.CreateTemp(t.TempDir(), "plugin-*")
