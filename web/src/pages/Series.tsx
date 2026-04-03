@@ -27,17 +27,24 @@ export function SeriesPage() {
   const viewerFrom = `${location.pathname}${location.search}`;
   const [series, setSeries] = useState<Series | null>(null);
 
+  const refreshCharacters = useCallback(() => {
+    if (!id) return;
+    seriesAPI.getCharacters(id).then((res) => {
+      setCharacters(res.data.characters || []);
+    }).catch(() => setCharacters([]));
+  }, [id]);
+
   const handleUpdate = (updated: Series | Volume) => {
     // 서재 페이지에서는 Series만 다룸
     if (!("volume_number" in updated)) {
       const updatedSeries = updated as Series;
       setSeries(updatedSeries);
+      // 메타데이터 업데이트 시 등장인물도 재조회
+      refreshCharacters();
       // 오디오 플레이어 스토어 동기화
       const audioStore = useAudioPlayerStore.getState();
       if (audioStore.currentSeries?.id === updatedSeries.id) {
         audioStore.updateCurrentSeries(updatedSeries);
-        // 만약 업데이트된 객체에 volumes/chapters 정보가 포함되어 있다면 함께 갱신 (선택적)
-        // 여기서는 Series 타입에 직접적인 chapters 배열이 없을 수도 있으므로 체크 필요
       }
     }
   };
@@ -151,9 +158,7 @@ export function SeriesPage() {
       }
 
       // 2. 등장인물 정보 비동기 로드
-      seriesAPI.getCharacters(id!).then((res) => {
-        setCharacters(res.data.characters || []);
-      }).catch(() => setCharacters([]));
+      refreshCharacters();
 
       // 3. 라이브러리 정보는 시리즈 데이터 로드 후 비동기로 처리 (병목 방지)
       if (seriesData.library_id) {
@@ -169,7 +174,7 @@ export function SeriesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, refreshCharacters]);
 
   useEffect(() => {
     if (id) loadData();

@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen } from "lucide-react";
 import type { Series, Volume, ReadingProgress, SeriesProgressSummary, SeriesCharacter } from "../types/series";
@@ -48,6 +49,18 @@ export function SeriesInfoCard({
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (isCharacterModalOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isCharacterModalOpen]);
   const [imageError, setImageError] = useState(false);
   const splitButtonRef = useRef<HTMLDivElement | null>(null);
   const user = useAuthStore((state) => state.user);
@@ -346,11 +359,10 @@ export function SeriesInfoCard({
 
       {!isVolumeType && characters && characters.length > 0 && (
         <div className={styles.characterAvatars}>
-          {characters.slice(0, 5).map((character) => (
+          {characters.slice(0, 4).map((character) => (
             <div
               key={character.id}
               className={styles.characterAvatar}
-              title={character.name}
             >
               {character.image_url ? (
                 <img
@@ -369,11 +381,15 @@ export function SeriesInfoCard({
               >
                 {character.name.charAt(0)}
               </span>
+              <span className={styles.characterAvatarName}>{character.name}</span>
             </div>
           ))}
-          {characters.length > 5 && (
-            <div className={`${styles.characterAvatar} ${styles.characterAvatarMore}`}>
-              +{characters.length - 5}
+          {characters.length > 4 && (
+            <div
+              className={`${styles.characterAvatar} ${styles.characterAvatarMore}`}
+              onClick={() => setIsCharacterModalOpen(true)}
+            >
+              +{characters.length - 4}
             </div>
           )}
         </div>
@@ -600,6 +616,58 @@ export function SeriesInfoCard({
           series={series}
           onUpdate={onUpdate as (updatedVolume: Volume) => void}
         />
+      )}
+
+      {isCharacterModalOpen && characters && createPortal(
+        <div
+          className={styles.characterModalBackdrop}
+          onClick={() => setIsCharacterModalOpen(false)}
+        >
+          <div
+            className={styles.characterModalBox}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.characterModalHeader}>
+              <span>등장인물</span>
+              <button
+                className={styles.characterModalClose}
+                onClick={() => setIsCharacterModalOpen(false)}
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.characterModalScroll}>
+            <div className={styles.characterModalGrid}>
+              {characters.map((character) => (
+                <div key={character.id} className={styles.characterModalItem}>
+                  <div className={styles.characterModalAvatar}>
+                    {character.image_url ? (
+                      <img
+                        src={getAuthenticatedImageUrl(character.image_url)}
+                        alt={character.name}
+                        className={styles.characterModalImage}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = "none";
+                          (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "flex");
+                        }}
+                      />
+                    ) : null}
+                    <span
+                      className={styles.characterModalInitial}
+                      style={character.image_url ? { display: "none" } : undefined}
+                    >
+                      {character.name.charAt(0)}
+                    </span>
+                  </div>
+                  <span className={styles.characterModalName}>{character.name}</span>
+                </div>
+              ))}
+            </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       <AlertModal
