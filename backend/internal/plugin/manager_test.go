@@ -455,11 +455,12 @@ type failingStore struct {
 
 type fakeEnvProvider struct {
 	env         map[string]string
+	envErr      error
 	validateErr error
 }
 
 func (p fakeEnvProvider) EnvironmentForPlugin(string, sdkmanifest.Manifest) (map[string]string, error) {
-	return p.env, nil
+	return p.env, p.envErr
 }
 
 func (p fakeEnvProvider) ValidateActivation(string, sdkmanifest.Manifest) error {
@@ -493,6 +494,36 @@ func TestManagerActivateMarksErrorWhenActivationValidationFails(t *testing.T) {
 	}
 	if record.LastError != "missing secret" {
 		t.Fatalf("LastError = %q, want %q", record.LastError, "missing secret")
+	}
+}
+
+func TestManagerActivateMarksErrorWhenBuildingEnvironmentFails(t *testing.T) {
+	store := NewMemoryStore()
+	manager := NewManager(store, &fakeRuntime{runtimeType: sdkmanifest.RuntimeTypeBinary})
+	manager.SetEnvProvider(fakeEnvProvider{envErr: errors.New("secret decryption failed")})
+
+	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
+		ID:          "env-failing-plugin",
+		Name:        "Env Failing",
+		Version:     "0.1.0",
+		RuntimeType: sdkmanifest.RuntimeTypeBinary,
+	}, "/plugins/env-failing")
+	if err != nil {
+		t.Fatalf("RegisterInstalled() error = %v", err)
+	}
+
+	record, err = manager.Activate(context.Background(), record.ID)
+	if err == nil {
+		t.Fatal("Activate() error = nil")
+	}
+	if !strings.Contains(err.Error(), "build plugin environment") {
+		t.Fatalf("Activate() error = %v, want environment context", err)
+	}
+	if record.State != sdkstate.Error {
+		t.Fatalf("state = %q, want %q", record.State, sdkstate.Error)
+	}
+	if record.LastError != "secret decryption failed" {
+		t.Fatalf("LastError = %q, want %q", record.LastError, "secret decryption failed")
 	}
 }
 

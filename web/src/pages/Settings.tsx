@@ -81,8 +81,7 @@ export function SettingsPage() {
     };
 
     void loadUpdates();
-    const interval = setInterval(loadUpdates, 30 * 60 * 1000);
-    return () => clearInterval(interval);
+    return undefined;
   }, [user?.role]);
 
   // 콘텐츠 렌더링
