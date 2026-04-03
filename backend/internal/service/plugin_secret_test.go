@@ -132,6 +132,32 @@ func TestPluginSecretServiceRejectsSecretFieldWithoutEnvKey(t *testing.T) {
 	}
 }
 
+func TestPluginSecretServiceRejectsReservedRuntimeEnvKey(t *testing.T) {
+	repo := newFakePluginSecretRepo()
+	cfg := &config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}
+	svc, err := NewPluginSecretService(cfg, repo)
+	if err != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", err)
+	}
+
+	manifest := sdkmanifest.Manifest{
+		ID: kitsuPluginID,
+		ConfigSchema: &sdkconfig.Schema{
+			Version: "1",
+			Fields: []sdkconfig.ConfigField{
+				{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KUMIHO_PLUGIN_PORT", Required: true},
+			},
+		},
+	}
+
+	if _, err := svc.EnvironmentForPlugin(kitsuPluginID, manifest); err == nil {
+		t.Fatal("EnvironmentForPlugin() error = nil, want config invalid error")
+	}
+	if err := svc.ValidateActivation(kitsuPluginID, manifest); err == nil {
+		t.Fatal("ValidateActivation() error = nil, want config invalid error")
+	}
+}
+
 func TestPluginSecretServiceRequiresDedicatedSecretKey(t *testing.T) {
 	repo := newFakePluginSecretRepo()
 

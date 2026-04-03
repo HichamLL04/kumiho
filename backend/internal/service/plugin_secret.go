@@ -42,6 +42,11 @@ type pluginSecretSpec struct {
 	Required bool
 }
 
+var reservedPluginEnvKeys = map[string]struct{}{
+	"KUMIHO_PLUGIN_HOST": {},
+	"KUMIHO_PLUGIN_PORT": {},
+}
+
 type PluginSecretService struct {
 	cfg  *config.Config
 	repo repository.PluginSecretRepository
@@ -338,6 +343,9 @@ func findConfigSpec(manifest sdkmanifest.Manifest, fieldKey string) (pluginSecre
 func validateSecretSpec(spec pluginSecretSpec) error {
 	if spec.EnvKey == "" {
 		return pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "secret config field is missing env_key")
+	}
+	if _, reserved := reservedPluginEnvKeys[strings.ToUpper(spec.EnvKey)]; reserved {
+		return pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "secret config field uses reserved env_key")
 	}
 	return nil
 }
