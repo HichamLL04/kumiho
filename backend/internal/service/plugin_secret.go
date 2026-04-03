@@ -101,7 +101,7 @@ func (s *PluginSecretService) SetSecret(pluginID string, manifest sdkmanifest.Ma
 	return s.Status(pluginID, manifest)
 }
 
-func (s *PluginSecretService) SetSecrets(pluginID string, manifest sdkmanifest.Manifest, values map[string]string) (*PluginConfigStatus, error) {
+func (s *PluginSecretService) SetSecrets(ctx context.Context, pluginID string, manifest sdkmanifest.Manifest, values map[string]string) (*PluginConfigStatus, error) {
 	type pendingSecret struct {
 		fieldKey  string
 		encrypted string
@@ -130,7 +130,7 @@ func (s *PluginSecretService) SetSecrets(pluginID string, manifest sdkmanifest.M
 		pending = append(pending, pendingSecret{fieldKey: spec.FieldKey, encrypted: encrypted})
 	}
 
-	if err := s.withTransaction(context.Background(), func(q database.Queryer) error {
+	if err := s.withTransaction(ctx, func(q database.Queryer) error {
 		for _, item := range pending {
 			if err := s.repo.Upsert(q, pluginID, item.fieldKey, item.encrypted); err != nil {
 				return err
@@ -153,7 +153,7 @@ func (s *PluginSecretService) DeleteSecret(pluginID string, manifest sdkmanifest
 	return s.Status(pluginID, manifest)
 }
 
-func (s *PluginSecretService) DeleteSecrets(pluginID string, manifest sdkmanifest.Manifest, fieldKeys []string) (*PluginConfigStatus, error) {
+func (s *PluginSecretService) DeleteSecrets(ctx context.Context, pluginID string, manifest sdkmanifest.Manifest, fieldKeys []string) (*PluginConfigStatus, error) {
 	sortedFieldKeys := append([]string(nil), fieldKeys...)
 	sort.Strings(sortedFieldKeys)
 	for _, fieldKey := range sortedFieldKeys {
@@ -162,7 +162,7 @@ func (s *PluginSecretService) DeleteSecrets(pluginID string, manifest sdkmanifes
 		}
 	}
 
-	if err := s.withTransaction(context.Background(), func(q database.Queryer) error {
+	if err := s.withTransaction(ctx, func(q database.Queryer) error {
 		for _, fieldKey := range sortedFieldKeys {
 			if err := s.repo.Delete(q, pluginID, fieldKey); err != nil {
 				return err

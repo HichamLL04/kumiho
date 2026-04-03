@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -149,7 +150,7 @@ func TestPluginSecretServiceSetSecretsDoesNotPartiallyApplyOnValidationError(t *
 	}
 
 	manifest := kitsuSecretManifest()
-	if _, setErr := svc.SetSecrets(kitsuPluginID, manifest, map[string]string{
+	if _, setErr := svc.SetSecrets(context.Background(), kitsuPluginID, manifest, map[string]string{
 		"access_token": "abc123456",
 		"unknown":      "should-fail",
 	}); setErr == nil {
@@ -190,7 +191,7 @@ func TestPluginSecretServiceDeleteSecretsRollsBackOnDeleteError(t *testing.T) {
 		t.Fatalf("SetSecret(refresh_token) error = %v", setErr)
 	}
 
-	if _, deleteErr := svc.DeleteSecrets(kitsuPluginID, manifest, []string{"access_token", "refresh_token"}); deleteErr == nil {
+	if _, deleteErr := svc.DeleteSecrets(context.Background(), kitsuPluginID, manifest, []string{"access_token", "refresh_token"}); deleteErr == nil {
 		t.Fatal("DeleteSecrets() error = nil")
 	}
 
@@ -207,6 +208,54 @@ func TestPluginSecretServiceDeleteSecretsRollsBackOnDeleteError(t *testing.T) {
 	}
 	if refresh == nil {
 		t.Fatal("refresh_token should remain after rollback")
+	}
+}
+
+func TestPluginSecretServiceSetSecretsHonorsCanceledContext(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "plugin-secrets.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	cfg := &config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}
+	svc, err := NewPluginSecretService(cfg, repository.NewPluginSecretRepository())
+	if err != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := svc.SetSecrets(ctx, kitsuPluginID, kitsuSecretManifest(), map[string]string{
+		"access_token": "abc123456",
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("SetSecrets() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestPluginSecretServiceDeleteSecretsHonorsCanceledContext(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "plugin-secrets.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	cfg := &config.Config{JWTSecret: "test-secret", PluginSecretKey: "plugin-secret-key"}
+	svc, err := NewPluginSecretService(cfg, repository.NewPluginSecretRepository())
+	if err != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", err)
+	}
+	manifest := kitsuSecretManifest()
+	if _, err := svc.SetSecret(kitsuPluginID, manifest, "access_token", "abc123456"); err != nil {
+		t.Fatalf("SetSecret() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := svc.DeleteSecrets(ctx, kitsuPluginID, manifest, []string{"access_token"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("DeleteSecrets() error = %v, want context.Canceled", err)
 	}
 }
 

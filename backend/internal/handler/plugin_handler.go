@@ -483,7 +483,7 @@ func (h *PluginHandler) AuthAction(c *fiber.Ctx) error {
 	}
 
 	status, reactivationRequired, err := h.mutatePluginSecrets(ctx, c.Params("id"), func() (*service.PluginConfigStatus, error) {
-		return h.secretService.SetSecrets(c.Params("id"), manifest, result.Secrets)
+		return h.secretService.SetSecrets(ctx, c.Params("id"), manifest, result.Secrets)
 	})
 	if err != nil {
 		return writePluginError(c, err)
@@ -523,7 +523,7 @@ func (h *PluginHandler) DeleteAuthAction(c *fiber.Ctx) error {
 		for targetKey := range action.StoreMappings {
 			fieldKeys = append(fieldKeys, targetKey)
 		}
-		return h.secretService.DeleteSecrets(c.Params("id"), manifest, fieldKeys)
+		return h.secretService.DeleteSecrets(ctx, c.Params("id"), manifest, fieldKeys)
 	})
 	if err != nil {
 		return writePluginError(c, err)
