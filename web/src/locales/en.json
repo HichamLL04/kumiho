@@ -148,6 +148,10 @@
         "apply_hint": "Saving a secret deactivates the currently running plugin. Activate it again to apply the new setting.",
         "flow_hint": "Removing the plugin also removes the stored secrets."
       },
+      "plugin_key_warning": {
+        "title": "Plugin Secret Key Not Configured",
+        "message": "PLUGIN_SECRET_KEY is not set — an auto-generated key is in use. If the server is reinstalled or the data directory is wiped, you may need to re-enter plugin API keys."
+      },
       "toast": {
         "load_failed": "Failed to load plugin information.",
         "install_success": "Plugin installed successfully.",

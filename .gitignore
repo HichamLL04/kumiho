@@ -93,6 +93,7 @@ docker-data/
 *.db
 *.db-shm
 *.db-wal
+backend/data/
 backend/internal/frontend/dist/
 
 # =============

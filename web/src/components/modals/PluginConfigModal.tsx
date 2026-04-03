@@ -105,7 +105,12 @@ export function PluginConfigModal({
   const modalRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
   const locale = i18n.language || "ko";
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   const secretFields = configStatus?.fields.filter((field) => field.type === "secret") || [];
   const authAction = plugin.auth?.actions?.[0];
   const actionConfigured = configuredForAction(authAction, configStatus);
@@ -125,7 +130,7 @@ export function PluginConfigModal({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -174,7 +179,7 @@ export function PluginConfigModal({
       document.removeEventListener("keydown", handleKeyDown);
       previousFocusRef.current?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className={styles.overlay} onClick={onClose} role="presentation">

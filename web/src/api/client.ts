@@ -464,6 +464,7 @@ export const downloadAPI = {
 // System API
 export const systemAPI = {
   getVersion: (force = false) => api.get(`/system/version?force=${force}`).then((res) => res.data),
+  getPluginKeyStatus: () => api.get<{ auto_generated: boolean }>("/system/plugin-key-status").then((res) => res.data),
 };
 
 export const pluginAPI = {

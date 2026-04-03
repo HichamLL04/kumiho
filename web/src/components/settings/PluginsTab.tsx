@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Blocks, Download, HeartPulse, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
-import { pluginAPI } from "../../api/client";
+import { pluginAPI, systemAPI } from "../../api/client";
+import { AlertModal } from "../modals/AlertModal";
 import type { PluginAuthAction, PluginConfigStatus, PluginLocalizedString, PluginManifest, PluginRecord, PluginUpdateSummary } from "../../types/plugin";
 import { PluginConfigModal } from "../modals/PluginConfigModal";
 import { UpdateBadge } from "../common/UpdateBadge";
@@ -137,6 +138,7 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
   const [configDrafts, setConfigDrafts] = useState<Record<string, Record<string, string>>>({});
   const [authDrafts, setAuthDrafts] = useState<Record<string, Record<string, string>>>({});
   const [updateSummary, setUpdateSummary] = useState<PluginUpdateSummary | null>(null);
+  const [showPluginKeyWarning, setShowPluginKeyWarning] = useState(false);
 
   const installedById = useMemo(() => new Map(installed.map((item) => [item.id, item])), [installed]);
   const updateById = useMemo(
@@ -197,6 +199,16 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void systemAPI.getPluginKeyStatus()
+      .then((res) => {
+        if (res.auto_generated) {
+          setShowPluginKeyWarning(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -422,6 +434,13 @@ export function PluginsTab({ onUpdateStateChange }: PluginsTabProps) {
 
   return (
     <div className={styles.tabContent}>
+      <AlertModal
+        isOpen={showPluginKeyWarning}
+        type="warning"
+        title={t("settings.plugins.plugin_key_warning.title")}
+        message={t("settings.plugins.plugin_key_warning.message")}
+        onConfirm={() => setShowPluginKeyWarning(false)}
+      />
       {status && (
         <Toast
           type={status.type}
