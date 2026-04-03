@@ -701,6 +701,7 @@ export function SeriesInfoCard({
             <div className={styles.characterModalHeader}>
               <span id={characterModalTitleId}>{t("series.characters.title")}</span>
               <button
+                type="button"
                 className={styles.characterModalClose}
                 onClick={() => setIsCharacterModalOpen(false)}
                 aria-label={t("common.close")}
