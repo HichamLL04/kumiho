@@ -15,4 +15,5 @@ services:
     environment:
       - TZ=Asia/Seoul
       - PORT=9999
+      - PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/kumiho-plugin/kumiho-plugin-registry/main/index.json
     restart: unless-stopped
