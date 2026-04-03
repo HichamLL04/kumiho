@@ -1,6 +1,6 @@
 import { KeyRound, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Fragment, useId } from "react";
+import { Fragment, useEffect, useId, useRef } from "react";
 import type { PluginAuthAction, PluginConfigSchemaField, PluginConfigStatus, PluginLocalizedString, PluginManifest } from "../../types/plugin";
 import styles from "./PluginConfigModal.module.css";
 
@@ -102,6 +102,9 @@ export function PluginConfigModal({
 }: PluginConfigModalProps) {
   const { t, i18n } = useTranslation();
   const titleId = useId();
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const locale = i18n.language || "ko";
   const secretFields = configStatus?.fields.filter((field) => field.type === "secret") || [];
   const authAction = plugin.auth?.actions?.[0];
@@ -115,6 +118,58 @@ export function PluginConfigModal({
   const fieldLabel = (field: PluginConfigSchemaField) => localizedText(locale, field.label_i18n, field.label || humanizeConfigField(field.key));
   const fieldPlaceholder = (field: PluginConfigSchemaField) => localizedText(locale, field.placeholder_i18n, field.placeholder || localizedText(locale, field.description_i18n, field.description));
 
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const root = modalRef.current;
+      if (!root) {
+        return;
+      }
+
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [onClose]);
+
   return (
     <div className={styles.overlay} onClick={onClose} role="presentation">
       <div
@@ -122,6 +177,7 @@ export function PluginConfigModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        ref={modalRef}
         onClick={(event) => event.stopPropagation()}
       >
         <div className={styles.header}>
@@ -138,6 +194,7 @@ export function PluginConfigModal({
               className={styles.close}
               onClick={onClose}
               aria-label={t("common.close")}
+              ref={closeButtonRef}
             >
               ×
             </button>

@@ -65,13 +65,6 @@ func (r *Runtime) Type() sdkmanifest.RuntimeType {
 	return sdkmanifest.RuntimeTypeBinary
 }
 
-func newProcessLifecycle() (chan error, chan error, context.Context, context.CancelFunc) {
-	exited := make(chan error, 1)
-	ready := make(chan error, 1)
-	procCtx, cancel := context.WithCancel(context.Background())
-	return exited, ready, procCtx, cancel
-}
-
 func newReadyChannel() chan error {
 	return make(chan error, 1)
 }
