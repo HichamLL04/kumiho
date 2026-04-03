@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { LogOut, Menu, Settings, ChevronDown, User, Search, X, ChevronRight, FileText } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
-import { seriesAPI, systemAPI } from "../../api/client";
+import { pluginAPI, seriesAPI, systemAPI } from "../../api/client";
 import { useSSE } from "../../hooks/useSSE";
 import type { Series } from "../../types/series";
 import { ScanProgressBar } from "../ScanProgressBar";
 import { AtmosphereSettings } from "../Atmosphere/AtmosphereSettings";
+import { UpdateBadge } from "../common/UpdateBadge";
 import styles from "./Header.module.css";
 
 interface HeaderProps {
@@ -28,7 +29,8 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
   const [otherUserCount, setOtherUserCount] = useState(0);
-  const [hasUpdate, setHasUpdate] = useState(false);
+  const [hasSystemUpdate, setHasSystemUpdate] = useState(false);
+  const [hasPluginUpdate, setHasPluginUpdate] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const { subscribe } = useSSE();
 
@@ -71,19 +73,23 @@ export function Header({ onMenuClick }: HeaderProps) {
     });
 
     // 2. 시스템 업데이트 확인 (MASTER 권한만, 30분 폴링)
-    const checkVersion = async () => {
+    const checkUpdates = async () => {
       if (user?.role !== "MASTER") return;
 
       try {
-        const info = await systemAPI.getVersion();
-        setHasUpdate(info.needs_update);
+        const [systemInfo, pluginInfo] = await Promise.all([
+          systemAPI.getVersion(),
+          pluginAPI.getUpdates(),
+        ]);
+        setHasSystemUpdate(systemInfo.needs_update);
+        setHasPluginUpdate(pluginInfo.has_updates);
       } catch (error) {
-        console.error("Failed to check system version:", error);
+        console.error("Failed to check update status:", error);
       }
     };
-    checkVersion();
+    checkUpdates();
 
-    const versionInterval = setInterval(checkVersion, 30 * 60 * 1000);
+    const versionInterval = setInterval(checkUpdates, 30 * 60 * 1000);
 
     return () => {
       unsubscribe();
@@ -343,15 +349,13 @@ export function Header({ onMenuClick }: HeaderProps) {
             <span className={styles.userIconWrapper}>
               <User size={18} />
               {user?.role === "MASTER" ? (
-                hasUpdate ? (
-                  <span
-                    className={`${styles.badge} ${styles.updateBadge}`}
-                    aria-label={t("header.new_update_available")}
-                    aria-live="polite"
-                    aria-atomic="true"
-                  >
-                    UP
-                  </span>
+                hasSystemUpdate || hasPluginUpdate ? (
+                  <UpdateBadge
+                    className={styles.badge}
+                    size="sm"
+                    ariaLabel={t("header.new_update_available")}
+                    ariaLive="polite"
+                  />
                 ) : otherUserCount > 0 ? (
                   <span
                     className={`${styles.badge} ${styles.countBadge}`}

@@ -9,9 +9,24 @@ export interface EbookMetadata {
   tags: string;
   publication_year: string;
   original_title: string;
+  original_titles?: string;
   publisher: string;
   published_at: string;
   isbn: string;
+}
+
+export interface SeriesCharacter {
+  id: string;
+  series_id: string;
+  name: string;
+  sort_order: number;
+  role: string;
+  image_url: string;
+  source_provider: string;
+  source_character_id: string;
+  source_relation_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Series {

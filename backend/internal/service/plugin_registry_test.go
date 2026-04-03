@@ -1,0 +1,831 @@
+package service
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/aha-hyeong/kumiho/backend/internal/config"
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
+	"github.com/aha-hyeong/kumiho/backend/internal/model"
+	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
+	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/kumiho-plugin/kumiho-plugin-sdk/capability"
+	sdkconfig "github.com/kumiho-plugin/kumiho-plugin-sdk/config"
+	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
+	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
+	sdkstate "github.com/kumiho-plugin/kumiho-plugin-sdk/state"
+)
+
+func TestPluginInstallServiceInstall(t *testing.T) {
+	artifactBytes := []byte("#!/bin/sh\necho plugin\n")
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
+						ID:                 "plugin-sample",
+						Name:               "Sample Plugin",
+						Version:            "0.1.0",
+						RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+						MinCoreVersion:     "0.1.0",
+						Artifacts: []sdkmanifest.Artifact{
+							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
+						},
+					}},
+				},
+			})
+		case "/artifact":
+			_, _ = w.Write(artifactBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	manager := pluginengine.NewManager(pluginengine.NewMemoryStore())
+	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
+
+	result, err := svc.Install(context.Background(), "plugin-sample")
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if result.Record.ID != "plugin-sample" {
+		t.Fatalf("record id = %q", result.Record.ID)
+	}
+	if result.InstallPath == "" {
+		t.Fatal("install path should not be empty")
+	}
+	if _, err := os.Stat(result.InstallPath); err != nil {
+		t.Fatalf("installed artifact stat error = %v", err)
+	}
+}
+
+func TestNewPluginInstallServiceUsesTimeoutForDefaultClient(t *testing.T) {
+	service := NewPluginInstallService(&config.Config{}, nil, pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+	if service.client == nil {
+		t.Fatal("client = nil")
+	}
+	if service.client.Timeout != defaultPluginInstallTimeout {
+		t.Fatalf("timeout = %v, want %v", service.client.Timeout, defaultPluginInstallTimeout)
+	}
+}
+
+func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
+	artifactBytes := []byte("#!/bin/sh\necho service-plugin\n")
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
+						ID:                 "plugin-sample-service",
+						Name:               "Sample Service Plugin",
+						Version:            "0.1.0",
+						RuntimeType:        sdkmanifest.RuntimeTypeService,
+						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxDocker},
+						MinCoreVersion:     "0.1.0",
+						Artifacts: []sdkmanifest.Artifact{
+							{Platform: sdkmanifest.PlatformLinuxDocker, URL: server.URL + "/artifact", Checksum: checksum},
+						},
+					}},
+				},
+			})
+		case "/artifact":
+			_, _ = w.Write(artifactBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	manager := pluginengine.NewManager(pluginengine.NewMemoryStore())
+	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
+
+	result, err := svc.Install(context.Background(), "plugin-sample-service")
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+
+	info, err := os.Stat(result.InstallPath)
+	if err != nil {
+		t.Fatalf("installed artifact stat error = %v", err)
+	}
+
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+		t.Fatalf("service artifact mode = %v, want executable bit set", info.Mode().Perm())
+	}
+}
+
+func TestPluginInstallServiceInstallUsesLocalFileArtifactDirectly(t *testing.T) {
+	artifactDir := t.TempDir()
+	artifactPath := filepath.Join(artifactDir, "plugin-sample-service")
+	artifactBytes := []byte("#!/bin/sh\necho local-service-plugin\n")
+	if err := os.WriteFile(artifactPath, artifactBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	catalogPath := filepath.Join(artifactDir, "index.json")
+	catalog := PluginCatalog{
+		Plugins: []RegistryEntry{
+			{Manifest: sdkmanifest.Manifest{
+				ID:                 "plugin-sample-service",
+				Name:               "Sample Service Plugin",
+				Version:            "0.1.0",
+				RuntimeType:        sdkmanifest.RuntimeTypeService,
+				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxDocker},
+				MinCoreVersion:     "0.1.0",
+				Artifacts: []sdkmanifest.Artifact{
+					{Platform: sdkmanifest.PlatformLinuxDocker, URL: "file://" + artifactPath, Checksum: checksum},
+				},
+			}},
+		},
+	}
+	rawCatalog, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err = os.WriteFile(catalogPath, rawCatalog, 0o644); err != nil {
+		t.Fatalf("WriteFile(catalog) error = %v", err)
+	}
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "file://" + catalogPath,
+	}
+	manager := pluginengine.NewManager(pluginengine.NewMemoryStore())
+	svc := NewPluginInstallService(cfg, nil, manager, nil)
+
+	result, err := svc.Install(context.Background(), "plugin-sample-service")
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if result.InstallPath != artifactPath {
+		t.Fatalf("install path = %q, want %q", result.InstallPath, artifactPath)
+	}
+	if _, err := os.Stat(artifactPath); err != nil {
+		t.Fatalf("artifact stat error = %v", err)
+	}
+}
+
+func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
+						ID:                 "plugin-sample",
+						Name:               "Sample Plugin",
+						Version:            "0.1.0",
+						RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+						MinCoreVersion:     "0.1.0",
+						Artifacts: []sdkmanifest.Artifact{
+							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: "sha256:deadbeef"},
+						},
+					}},
+				},
+			})
+		case "/artifact":
+			_, _ = w.Write([]byte("invalid"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	_, err := svc.Install(context.Background(), "plugin-sample")
+	if err == nil {
+		t.Fatal("Install() error = nil")
+	}
+
+	var pluginErr *pluginerrors.PluginError
+	if !errors.As(err, &pluginErr) {
+		t.Fatalf("expected PluginError, got %T", err)
+	}
+	if pluginErr.Code != pluginerrors.ErrCodeChecksumMismatch {
+		t.Fatalf("error code = %q", pluginErr.Code)
+	}
+}
+
+func TestPluginInstallServiceInstallUsesManifestURL(t *testing.T) {
+	artifactBytes := []byte("#!/bin/sh\necho plugin\n")
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{
+						ManifestURL: server.URL + "/manifest.json",
+						Manifest: sdkmanifest.Manifest{
+							// ID is required for registry lookup
+							// config_schema/auth/i18n are intentionally absent (they come from manifest_url)
+							ID: "plugin-sample",
+							Artifacts: []sdkmanifest.Artifact{
+								{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
+							},
+						},
+					},
+				},
+			})
+		case "/manifest.json":
+			_ = json.NewEncoder(w).Encode(sdkmanifest.Manifest{
+				ID:                 "plugin-sample",
+				Name:               "Sample Plugin",
+				Version:            "0.1.0",
+				RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+				MinCoreVersion:     "0.1.0",
+			})
+		case "/artifact":
+			_, _ = w.Write(artifactBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	result, err := svc.Install(context.Background(), "plugin-sample")
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if result.Record.ID != "plugin-sample" {
+		t.Fatalf("record id = %q, want plugin-sample", result.Record.ID)
+	}
+	if result.Record.Manifest.Version != "0.1.0" {
+		t.Fatalf("manifest version = %q (should come from manifest_url)", result.Record.Manifest.Version)
+	}
+}
+
+func TestPluginInstallServiceListResolvedCatalogUsesManifestURL(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{
+						ManifestURL: server.URL + "/manifest.json",
+						Manifest: sdkmanifest.Manifest{
+							ID:      "plugin-sample",
+							Version: "0.0.1",
+							Artifacts: []sdkmanifest.Artifact{
+								{Platform: sdkmanifest.PlatformLinuxDocker, URL: server.URL + "/artifact", Checksum: "sha256:deadbeef"},
+							},
+						},
+					},
+				},
+			})
+		case "/manifest.json":
+			_ = json.NewEncoder(w).Encode(sdkmanifest.Manifest{
+				ID:                 "plugin-sample",
+				Name:               "Sample Plugin",
+				Description:        "Resolved from manifest_url",
+				Version:            "0.1.0",
+				RuntimeType:        sdkmanifest.RuntimeTypeService,
+				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxDocker},
+				Capabilities:       []capability.Capability{capability.MetadataSearch},
+				MinCoreVersion:     "0.1.0",
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	catalog, err := svc.ListResolvedCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("ListResolvedCatalog() error = %v", err)
+	}
+	if len(catalog.Plugins) != 1 {
+		t.Fatalf("len(catalog.Plugins) = %d, want 1", len(catalog.Plugins))
+	}
+	if catalog.Plugins[0].Version != "0.1.0" {
+		t.Fatalf("catalog.Plugins[0].Version = %q, want 0.1.0", catalog.Plugins[0].Version)
+	}
+	if catalog.Plugins[0].Description != "Resolved from manifest_url" {
+		t.Fatalf("catalog.Plugins[0].Description = %q", catalog.Plugins[0].Description)
+	}
+	if len(catalog.Plugins[0].Artifacts) != 1 || catalog.Plugins[0].Artifacts[0].Checksum != "sha256:deadbeef" {
+		t.Fatalf("catalog.Plugins[0].Artifacts = %#v", catalog.Plugins[0].Artifacts)
+	}
+}
+
+func TestPluginInstallServiceInstallManifestURLFetchFailureReturnsError(t *testing.T) {
+	artifactBytes := []byte("#!/bin/sh\necho plugin\n")
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{
+						ManifestURL: server.URL + "/manifest.json",
+						Manifest: sdkmanifest.Manifest{
+							ID: "plugin-sample",
+							Artifacts: []sdkmanifest.Artifact{
+								{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
+							},
+						},
+					},
+				},
+			})
+		case "/manifest.json":
+			// manifest_url이 있는데 fetch 실패 → 실패 처리 (inline fallback 없음)
+			w.WriteHeader(http.StatusNotFound)
+		case "/artifact":
+			_, _ = w.Write(artifactBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), pluginengine.NewManager(pluginengine.NewMemoryStore()), nil)
+
+	_, err := svc.Install(context.Background(), "plugin-sample")
+	if err == nil {
+		t.Fatal("Install() should fail when manifest_url fetch returns 404")
+	}
+}
+
+func TestPluginInstallServiceUninstallRemovesArtifactAndRecord(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "https://example.com/index.json",
+	}
+	store := pluginengine.NewMemoryStore()
+	manager := pluginengine.NewManager(store)
+	svc := NewPluginInstallService(cfg, nil, manager, nil)
+
+	installDir := filepath.Join(cfg.PluginDir, "plugin-sample", "0.1.0")
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	installPath := filepath.Join(installDir, "plugin-sample")
+	if err := os.WriteFile(installPath, []byte("plugin"), 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
+		ID:          "plugin-sample",
+		Name:        "Sample Plugin",
+		Version:     "0.1.0",
+		RuntimeType: sdkmanifest.RuntimeTypeBinary,
+	}, installPath)
+	if err != nil {
+		t.Fatalf("RegisterInstalled() error = %v", err)
+	}
+	if _, markErr := manager.MarkRegistered(record.ID); markErr != nil {
+		t.Fatalf("MarkRegistered() error = %v", markErr)
+	}
+
+	result, err := svc.Uninstall(context.Background(), "plugin-sample")
+	if err != nil {
+		t.Fatalf("Uninstall() error = %v", err)
+	}
+	if !result.Removed {
+		t.Fatal("Removed = false, want true")
+	}
+	if _, err := os.Stat(installPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("artifact stat error = %v, want not exist", err)
+	}
+	if _, ok, err := manager.Get("plugin-sample"); err != nil {
+		t.Fatalf("Get() error = %v", err)
+	} else if ok {
+		t.Fatal("record should be deleted")
+	}
+}
+
+func TestPluginInstallServiceUninstallKeepsExternalLocalArtifact(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "https://example.com/index.json",
+	}
+	store := pluginengine.NewMemoryStore()
+	manager := pluginengine.NewManager(store)
+	svc := NewPluginInstallService(cfg, nil, manager, nil)
+
+	externalDir := t.TempDir()
+	externalPath := filepath.Join(externalDir, "plugin-sample")
+	if err := os.WriteFile(externalPath, []byte("plugin"), 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	record, err := manager.RegisterInstalled(sdkmanifest.Manifest{
+		ID:          "plugin-sample",
+		Name:        "Sample Plugin",
+		Version:     "0.1.0",
+		RuntimeType: sdkmanifest.RuntimeTypeBinary,
+	}, externalPath)
+	if err != nil {
+		t.Fatalf("RegisterInstalled() error = %v", err)
+	}
+	if _, markErr := manager.MarkRegistered(record.ID); markErr != nil {
+		t.Fatalf("MarkRegistered() error = %v", markErr)
+	}
+
+	if _, err := svc.Uninstall(context.Background(), "plugin-sample"); err != nil {
+		t.Fatalf("Uninstall() error = %v", err)
+	}
+	if _, err := os.Stat(externalPath); err != nil {
+		t.Fatalf("external artifact should remain, stat error = %v", err)
+	}
+}
+
+func TestPluginInstallServiceInstallReplacesExistingRecordAndArtifact(t *testing.T) {
+	oldBytes := []byte("old plugin")
+	newBytes := []byte("new plugin")
+	sum := sha256.Sum256(newBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
+						ID:                 "plugin-sample",
+						Name:               "Sample Plugin",
+						Version:            "0.1.1",
+						RuntimeType:        sdkmanifest.RuntimeTypeBinary,
+						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+						MinCoreVersion:     "0.1.0",
+						Artifacts: []sdkmanifest.Artifact{
+							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
+						},
+					}},
+				},
+			})
+		case "/artifact":
+			_, _ = w.Write(newBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+	}
+	store := pluginengine.NewMemoryStore()
+	manager := pluginengine.NewManager(store)
+	svc := NewPluginInstallService(cfg, server.Client(), manager, nil)
+
+	oldInstallDir := filepath.Join(cfg.PluginDir, "plugin-sample", "0.1.0")
+	if err := os.MkdirAll(oldInstallDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	oldInstallPath := filepath.Join(oldInstallDir, "plugin-sample")
+	if err := os.WriteFile(oldInstallPath, oldBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	now := time.Now()
+	if err := store.Save(pluginengine.Record{
+		ID:          "plugin-sample",
+		Manifest:    sdkmanifest.Manifest{ID: "plugin-sample", Name: "Sample Plugin", Version: "0.1.0", RuntimeType: sdkmanifest.RuntimeTypeBinary},
+		State:       "disabled",
+		InstallPath: oldInstallPath,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	result, err := svc.Install(context.Background(), "plugin-sample")
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+
+	if result.Record.Manifest.Version != "0.1.1" {
+		t.Fatalf("version = %q, want 0.1.1", result.Record.Manifest.Version)
+	}
+	if _, statErr := os.Stat(oldInstallPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("old artifact stat error = %v, want not exist", statErr)
+	}
+	contents, err := os.ReadFile(result.InstallPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if string(contents) != string(newBytes) {
+		t.Fatalf("artifact contents = %q", string(contents))
+	}
+}
+
+func TestPluginInstallServiceInstallPreservesPluginSecrets(t *testing.T) {
+	artifactBytes := []byte("new plugin")
+	sum := sha256.Sum256(artifactBytes)
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			_ = json.NewEncoder(w).Encode(PluginCatalog{
+				Plugins: []RegistryEntry{
+					{Manifest: sdkmanifest.Manifest{
+						ID:          kitsuPluginID,
+						Name:        "Kitsu Manga",
+						Version:     "0.1.1",
+						RuntimeType: sdkmanifest.RuntimeTypeBinary,
+						ConfigSchema: &sdkconfig.Schema{
+							Version: "1",
+							Fields: []sdkconfig.ConfigField{
+								{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+								{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+							},
+						},
+						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxBinary},
+						MinCoreVersion:     "0.1.0",
+						Artifacts: []sdkmanifest.Artifact{
+							{Platform: sdkmanifest.PlatformLinuxBinary, URL: server.URL + "/artifact", Checksum: checksum},
+						},
+					}},
+				},
+			})
+		case "/artifact":
+			_, _ = w.Write(artifactBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: server.URL + "/index.json",
+		PluginSecretKey:   "test-secret-key",
+	}
+	store := pluginengine.NewMemoryStore()
+	manager := pluginengine.NewManager(store)
+	secretRepo := newTestPluginSecretRepo()
+	secretSvc, secretSvcErr := NewPluginSecretService(cfg, secretRepo)
+	if secretSvcErr != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", secretSvcErr)
+	}
+	svc := NewPluginInstallService(cfg, server.Client(), manager, secretSvc)
+
+	oldInstallDir := filepath.Join(cfg.PluginDir, kitsuPluginID, "0.1.0")
+	if mkdirErr := os.MkdirAll(oldInstallDir, 0o755); mkdirErr != nil {
+		t.Fatalf("MkdirAll() error = %v", mkdirErr)
+	}
+	oldInstallPath := filepath.Join(oldInstallDir, kitsuPluginID)
+	if writeErr := os.WriteFile(oldInstallPath, []byte("old plugin"), 0o755); writeErr != nil {
+		t.Fatalf("WriteFile() error = %v", writeErr)
+	}
+
+	now := time.Now()
+	if saveErr := store.Save(pluginengine.Record{
+		ID: kitsuPluginID,
+		Manifest: sdkmanifest.Manifest{
+			ID:          kitsuPluginID,
+			Name:        "Kitsu Manga",
+			Version:     "0.1.0",
+			RuntimeType: sdkmanifest.RuntimeTypeBinary,
+			ConfigSchema: &sdkconfig.Schema{
+				Version: "1",
+				Fields: []sdkconfig.ConfigField{
+					{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+					{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+				},
+			},
+		},
+		State:       "disabled",
+		InstallPath: oldInstallPath,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); saveErr != nil {
+		t.Fatalf("Save() error = %v", saveErr)
+	}
+
+	if _, setErr := secretSvc.SetSecret(kitsuPluginID, sdkmanifest.Manifest{
+		ID: kitsuPluginID,
+		ConfigSchema: &sdkconfig.Schema{
+			Version: "1",
+			Fields: []sdkconfig.ConfigField{
+				{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+				{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+			},
+		},
+	}, "access_token", "test-access-token"); setErr != nil {
+		t.Fatalf("SetSecret() error = %v", setErr)
+	}
+
+	if _, installErr := svc.Install(context.Background(), kitsuPluginID); installErr != nil {
+		t.Fatalf("Install() error = %v", installErr)
+	}
+
+	status, err := secretSvc.Status(kitsuPluginID, sdkmanifest.Manifest{
+		ID: kitsuPluginID,
+		ConfigSchema: &sdkconfig.Schema{
+			Version: "1",
+			Fields: []sdkconfig.ConfigField{
+				{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+				{Key: "refresh_token", Type: sdkconfig.FieldTypeSecret, Label: "Refresh Token", EnvKey: "KITSU_REFRESH_TOKEN"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if len(status.Fields) != 2 || !status.Fields[0].Configured {
+		t.Fatalf("secret status = %+v, want configured", status.Fields)
+	}
+}
+
+func TestPluginInstallServiceUninstallKeepsArtifactWhenSecretDeletionFails(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:           t.TempDir(),
+		PluginDir:         filepath.Join(t.TempDir(), "plugins"),
+		PluginRegistryURL: "https://example.com/index.json",
+		PluginSecretKey:   "test-secret-key",
+	}
+	store := pluginengine.NewMemoryStore()
+	manager := pluginengine.NewManager(store)
+	secretRepo := &testPluginSecretRepo{items: make(map[string]model.PluginSecret)}
+	secretRepo.deleteByPluginErr = errors.New("delete secrets failed")
+	secretSvc, secretSvcErr := NewPluginSecretService(cfg, secretRepo)
+	if secretSvcErr != nil {
+		t.Fatalf("NewPluginSecretService() error = %v", secretSvcErr)
+	}
+	svc := NewPluginInstallService(cfg, nil, manager, secretSvc)
+
+	installDir := filepath.Join(cfg.PluginDir, kitsuPluginID, "0.1.0")
+	if mkdirErr := os.MkdirAll(installDir, 0o755); mkdirErr != nil {
+		t.Fatalf("MkdirAll() error = %v", mkdirErr)
+	}
+	installPath := filepath.Join(installDir, kitsuPluginID)
+	if writeErr := os.WriteFile(installPath, []byte("plugin"), 0o755); writeErr != nil {
+		t.Fatalf("WriteFile() error = %v", writeErr)
+	}
+
+	now := time.Now()
+	record := pluginengine.Record{
+		ID: kitsuPluginID,
+		Manifest: sdkmanifest.Manifest{
+			ID:          kitsuPluginID,
+			Name:        "Kitsu Manga",
+			Version:     "0.1.0",
+			RuntimeType: sdkmanifest.RuntimeTypeBinary,
+			ConfigSchema: &sdkconfig.Schema{
+				Version: "1",
+				Fields: []sdkconfig.ConfigField{
+					{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", EnvKey: "KITSU_ACCESS_TOKEN"},
+				},
+			},
+		},
+		State:       sdkstate.Disabled,
+		InstallPath: installPath,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if saveErr := store.Save(record); saveErr != nil {
+		t.Fatalf("Save() error = %v", saveErr)
+	}
+	if _, setErr := secretSvc.SetSecret(kitsuPluginID, record.Manifest, "access_token", "test-token"); setErr != nil {
+		t.Fatalf("SetSecret() error = %v", setErr)
+	}
+
+	_, uninstallErr := svc.Uninstall(context.Background(), kitsuPluginID)
+	if uninstallErr == nil {
+		t.Fatal("Uninstall() error = nil")
+	}
+
+	if _, statErr := os.Stat(installPath); statErr != nil {
+		t.Fatalf("artifact stat error = %v, want file to remain", statErr)
+	}
+	if _, ok, getErr := manager.Get(kitsuPluginID); getErr != nil {
+		t.Fatalf("Get() error = %v", getErr)
+	} else if !ok {
+		t.Fatal("record should remain when secret deletion fails")
+	}
+}
+
+type testPluginSecretRepo struct {
+	items             map[string]model.PluginSecret
+	deleteByPluginErr error
+}
+
+func newTestPluginSecretRepo() repository.PluginSecretRepository {
+	return &testPluginSecretRepo{items: make(map[string]model.PluginSecret)}
+}
+
+func (r *testPluginSecretRepo) GetByKey(_ database.Queryer, pluginID, fieldKey string) (*model.PluginSecret, error) {
+	item, ok := r.items[pluginID+"::"+fieldKey]
+	if !ok {
+		return nil, nil
+	}
+	copy := item
+	return &copy, nil
+}
+
+func (r *testPluginSecretRepo) ListByPlugin(_ database.Queryer, pluginID string) ([]model.PluginSecret, error) {
+	var items []model.PluginSecret
+	for _, item := range r.items {
+		if item.PluginID == pluginID {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+func (r *testPluginSecretRepo) Upsert(_ database.Queryer, pluginID, fieldKey, valueEncrypted string) error {
+	r.items[pluginID+"::"+fieldKey] = model.PluginSecret{
+		PluginID:       pluginID,
+		FieldKey:       fieldKey,
+		ValueEncrypted: valueEncrypted,
+		UpdatedAt:      time.Now(),
+	}
+	return nil
+}
+
+func (r *testPluginSecretRepo) Delete(_ database.Queryer, pluginID, fieldKey string) error {
+	delete(r.items, pluginID+"::"+fieldKey)
+	return nil
+}
+
+func (r *testPluginSecretRepo) DeleteByPlugin(_ database.Queryer, pluginID string) error {
+	if r.deleteByPluginErr != nil {
+		return r.deleteByPluginErr
+	}
+	for key, item := range r.items {
+		if item.PluginID == pluginID {
+			delete(r.items, key)
+		}
+	}
+	return nil
+}

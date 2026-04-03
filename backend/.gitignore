@@ -15,6 +15,7 @@ data/*.db-shm
 
 # Generated content
 data/thumbnails/
+data/plugins/
 
 # Go tests
 *.test

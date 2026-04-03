@@ -21,14 +21,13 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/handler"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
-	"github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime"
 	binaryruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime/binary"
+	serviceruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime/service"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	"github.com/aha-hyeong/kumiho/backend/internal/sse"
 	"github.com/aha-hyeong/kumiho/backend/internal/version"
-	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 )
 
 func main() {
@@ -49,6 +48,7 @@ func main() {
 	userRepo := repository.NewUserRepository()
 	libraryRepo := repository.NewLibraryRepository()
 	seriesRepo := repository.NewSeriesRepository()
+	seriesCharacterRepo := repository.NewSeriesCharacterRepository()
 	volumeRepo := repository.NewVolumeRepository()
 	chapterRepo := repository.NewChapterRepository()
 	pageRepo := repository.NewPageRepository()
@@ -56,6 +56,7 @@ func main() {
 	completionRepo := repository.NewVolumeCompletionRepository()
 	chapterCompletionRepo := repository.NewChapterCompletionRepository() // 추가
 	settingRepo := repository.NewSettingRepository()
+	pluginSecretRepo := repository.NewPluginSecretRepository()
 	userSettingRepo := repository.NewUserSettingRepository()
 	userSeriesSettingRepo := repository.NewUserSeriesSettingRepository()
 	sessionRepo := repository.NewSessionRepository()
@@ -93,16 +94,23 @@ func main() {
 	pluginManager := pluginengine.NewManager(
 		pluginStore,
 		binaryruntime.NewRuntime(),
-		runtime.NewStubRuntime(sdkmanifest.RuntimeTypeService),
+		serviceruntime.NewRuntime(),
 	)
-	if err := pluginManager.Bootstrap(); err != nil {
-		log.Fatalf("Failed to bootstrap plugin manager: %v", err)
+	pluginSecretSvc, secretSvcErr := service.NewPluginSecretService(cfg, pluginSecretRepo)
+	if secretSvcErr != nil {
+		log.Fatalf("Failed to initialize plugin secret service: %v", secretSvcErr)
+	}
+	pluginManager.SetEnvProvider(pluginSecretSvc)
+	if bootstrapErr := pluginManager.Bootstrap(ctx); bootstrapErr != nil {
+		log.Fatalf("Failed to bootstrap plugin manager: %v", bootstrapErr)
 	}
 	pluginRecords, err := pluginManager.List()
 	if err != nil {
 		log.Fatalf("Failed to list plugin records: %v", err)
 	}
 	log.Printf("Plugin manager initialized with %d persisted plugin records", len(pluginRecords))
+	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, pluginManager)
+	pluginInstallSvc := service.NewPluginInstallService(cfg, nil, pluginManager, pluginSecretSvc)
 
 	// 핸들러 초기화
 	authHandler := handler.NewAuthHandler(authService, cfg, hub)
@@ -120,7 +128,9 @@ func main() {
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkRepo, seriesRepo, volumeRepo, chapterRepo, authService)
 	sseHandler := handler.NewSSEHandler(hub)
 	filesystemHandler := handler.NewFilesystemHandler()
-	pluginHandler := handler.NewPluginHandler(pluginManager)
+	pluginHandler := handler.NewPluginHandler(pluginManager, pluginInstallSvc, pluginSecretSvc)
+	metadataHandler := handler.NewMetadataHandler(metadataSvc)
+	seriesCharacterHandler := handler.NewSeriesCharacterHandler(seriesRepo, seriesCharacterRepo, cfg)
 
 	// 미들웨어 초기화
 	authMiddleware := middleware.NewAuthMiddleware(authService)
@@ -198,8 +208,17 @@ func main() {
 	// 플러그인
 	plugins := protected.Group("/plugins")
 	plugins.Get("", pluginHandler.List)
+	plugins.Get("/catalog", authMiddleware.MasterOnly(), pluginHandler.Catalog)
+	plugins.Get("/updates", authMiddleware.MasterOnly(), pluginHandler.Updates)
 	plugins.Get("/:id", pluginHandler.Get)
+	plugins.Get("/:id/config", authMiddleware.MasterOnly(), pluginHandler.GetConfig)
+	plugins.Put("/:id/config", authMiddleware.MasterOnly(), pluginHandler.UpdateConfig)
+	plugins.Delete("/:id/config/:field", authMiddleware.MasterOnly(), pluginHandler.DeleteConfig)
+	plugins.Post("/:id/auth/:action", authMiddleware.MasterOnly(), pluginHandler.AuthAction)
+	plugins.Delete("/:id/auth/:action", authMiddleware.MasterOnly(), pluginHandler.DeleteAuthAction)
 	plugins.Get("/:id/health", authMiddleware.MasterOnly(), pluginHandler.Healthcheck)
+	plugins.Post("/install", authMiddleware.MasterOnly(), pluginHandler.Install)
+	plugins.Delete("/:id", authMiddleware.MasterOnly(), pluginHandler.Uninstall)
 	plugins.Post("/register-installed", authMiddleware.MasterOnly(), pluginHandler.RegisterInstalled)
 	plugins.Post("/:id/activate", authMiddleware.MasterOnly(), pluginHandler.Activate)
 	plugins.Post("/:id/deactivate", authMiddleware.MasterOnly(), pluginHandler.Deactivate)
@@ -225,6 +244,19 @@ func main() {
 	series.Post("/extensions/batch", seriesHandler.BatchGetExtensions)
 	series.Get("/:id", seriesHandler.GetSeries)
 	series.Patch("/:id", seriesHandler.UpdateSeries)
+	series.Post("/:id/metadata/search", metadataHandler.Search)
+	series.Post("/:id/metadata/fetch", metadataHandler.Fetch)
+	series.Post("/:id/metadata/apply", metadataHandler.Apply)
+	series.Get("/:id/characters", seriesCharacterHandler.List)
+	series.Post("/:id/characters", seriesCharacterHandler.Create)
+	series.Post("/:id/characters/import", seriesCharacterHandler.Import)
+	series.Post("/:id/characters/reorder", seriesCharacterHandler.Reorder)
+	series.Patch("/:id/characters/:characterId", seriesCharacterHandler.Update)
+	series.Delete("/:id/characters/:characterId", seriesCharacterHandler.Delete)
+	series.Post("/:id/characters/:characterId/image", seriesCharacterHandler.UploadImage)
+	series.Post("/:id/characters/:characterId/image/url", seriesCharacterHandler.UpdateImageURL)
+	series.Delete("/:id/characters/:characterId/image", seriesCharacterHandler.DeleteImage)
+	series.Get("/:id/characters/:characterId/image", seriesCharacterHandler.GetImage)
 	series.Get("/:seriesId/volumes", seriesHandler.ListVolumes)
 	series.Get("/:seriesId/chapters", seriesHandler.ListChaptersBySeries)
 	series.Get("/:seriesId/progress", progressHandler.GetProgress)
@@ -325,6 +357,11 @@ func main() {
 	// 시스템
 	system := protected.Group("/system")
 	system.Get("/version", systemHandler.GetVersion)
+	system.Get("/plugin-key-status", authMiddleware.MasterOnly(), func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"auto_generated": pluginSecretSvc.AutoGenerated(),
+		})
+	})
 
 	stats := protected.Group("/stats")
 	stats.Get("/personal", statsHandler.GetPersonalStats)

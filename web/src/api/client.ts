@@ -8,9 +8,28 @@ import type {
   Page,
   UserSeriesSetting,
   LibraryType,
+  SeriesCharacter,
 } from "../types/series";
 import type { User } from "../types/user";
 import type { Session } from "../types/session";
+import type {
+  MetadataApplyResponse,
+  MetadataCharacter,
+  MetadataFetchResponse,
+  MetadataResult,
+  MetadataSearchRequest,
+  MetadataSearchResult,
+  SeriesCharacterImportResponse,
+  PluginAuthActionResponse,
+  PluginAuthDeleteResponse,
+  PluginCatalogResponse,
+  PluginConfigStatus,
+  PluginConfigUpdateResponse,
+  PluginInstallResponse,
+  PluginRecord,
+  PluginUninstallResponse,
+  PluginUpdateSummary,
+} from "../types/plugin";
 
 // Docker 및 배포 환경에서 유연하게 대처하기 위해 기본값을 상대 경로로 설정합니다.
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
@@ -237,6 +256,35 @@ export const seriesAPI = {
   getViewerSettings: (seriesId: string) => api.get(`/series/${seriesId}/viewer-settings`).then((res) => res.data),
   updateViewerSettings: (seriesId: string, data: Record<string, unknown>) =>
     api.patch(`/series/${seriesId}/viewer-settings`, data).then((res) => res.data),
+  metadataSearch: (seriesId: string, data?: MetadataSearchRequest) =>
+    api.post<MetadataSearchResult>(`/series/${seriesId}/metadata/search`, data ?? {}).then((res) => res.data),
+  metadataFetch: (seriesId: string, data: { plugin_id: string; source: { id: string; name: string; url?: string } }) =>
+    api.post<MetadataFetchResponse>(`/series/${seriesId}/metadata/fetch`, data).then((res) => res.data),
+  metadataApply: (seriesId: string, result: MetadataResult) =>
+    api.post<MetadataApplyResponse>(`/series/${seriesId}/metadata/apply`, { result }).then((res) => res.data),
+  getCharacters: (seriesId: string) =>
+    api.get<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters`).then((res) => res.data),
+  createCharacter: (seriesId: string, data: { name: string; role?: string; image_url?: string }) =>
+    api.post<SeriesCharacter>(`/series/${seriesId}/characters`, data).then((res) => res.data),
+  updateCharacter: (seriesId: string, characterId: string, data: { name?: string; role?: string; image_url?: string }) =>
+    api.patch<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}`, data).then((res) => res.data),
+  deleteCharacter: (seriesId: string, characterId: string) =>
+    api.delete<{ deleted: boolean; id: string }>(`/series/${seriesId}/characters/${characterId}`).then((res) => res.data),
+  reorderCharacters: (seriesId: string, orderedIds: string[]) =>
+    api.post<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters/reorder`, { ordered_ids: orderedIds }).then((res) => res.data),
+  importCharacters: (seriesId: string, characters: MetadataCharacter[], sourceProvider?: string) =>
+    api.post<SeriesCharacterImportResponse>(`/series/${seriesId}/characters/import`, { characters, source_provider: sourceProvider }).then((res) => res.data),
+  uploadCharacterImage: (seriesId: string, characterId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    return api.post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }).then((res) => res.data);
+  },
+  updateCharacterImageUrl: (seriesId: string, characterId: string, url: string) =>
+    api.post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image/url`, { url }).then((res) => res.data),
+  deleteCharacterImage: (seriesId: string, characterId: string) =>
+    api.delete<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image`).then((res) => res.data),
 };
 
 // Volume API
@@ -416,6 +464,27 @@ export const downloadAPI = {
 // System API
 export const systemAPI = {
   getVersion: (force = false) => api.get(`/system/version?force=${force}`).then((res) => res.data),
+  getPluginKeyStatus: () => api.get<{ auto_generated: boolean }>("/system/plugin-key-status").then((res) => res.data),
+};
+
+export const pluginAPI = {
+  list: () => api.get<{ plugins: PluginRecord[] }>("/plugins").then((res) => res.data),
+  catalog: () => api.get<PluginCatalogResponse>("/plugins/catalog").then((res) => res.data),
+  getUpdates: (force = false) => api.get<PluginUpdateSummary>(`/plugins/updates?force=${force}`).then((res) => res.data),
+  install: (pluginId: string) => api.post<PluginInstallResponse>("/plugins/install", { plugin_id: pluginId }).then((res) => res.data),
+  uninstall: (pluginId: string) => api.delete<PluginUninstallResponse>(`/plugins/${pluginId}`).then((res) => res.data),
+  getConfig: (pluginId: string) => api.get<PluginConfigStatus>(`/plugins/${pluginId}/config`).then((res) => res.data),
+  updateConfig: (pluginId: string, field: string, value: string) =>
+    api.put<PluginConfigUpdateResponse>(`/plugins/${pluginId}/config`, { field, value }).then((res) => res.data),
+  runAuthAction: (pluginId: string, actionId: string, values: Record<string, string>) =>
+    api.post<PluginAuthActionResponse>(`/plugins/${pluginId}/auth/${actionId}`, { values }).then((res) => res.data),
+  deleteAuthAction: (pluginId: string, actionId: string) =>
+    api.delete<PluginAuthDeleteResponse>(`/plugins/${pluginId}/auth/${actionId}`).then((res) => res.data),
+  deleteConfig: (pluginId: string, field: string) =>
+    api.delete<PluginConfigUpdateResponse>(`/plugins/${pluginId}/config/${field}`).then((res) => res.data),
+  activate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/activate`).then((res) => res.data),
+  deactivate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/deactivate`).then((res) => res.data),
+  health: (pluginId: string) => api.get<{ status: string; version?: string; message?: string }>(`/plugins/${pluginId}/health`).then((res) => res.data),
 };
 
 // Session API

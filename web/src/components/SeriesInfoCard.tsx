@@ -1,12 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen } from "lucide-react";
-import type { Series, Volume, ReadingProgress, SeriesProgressSummary } from "../types/series";
+import type { Series, Volume, ReadingProgress, SeriesProgressSummary, SeriesCharacter } from "../types/series";
 import { EditSeriesModal } from "./modals/EditSeriesModal";
 import { EditVolumeModal } from "./modals/EditVolumeModal";
 import { AlertModal, type AlertType } from "./modals/AlertModal";
 import { seriesAPI, volumeAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
+import { localizedOriginalTitle } from "../utils/originalTitles";
 import { calculateProgressDisplay } from "../utils/progressUtils";
 import { useAuthStore } from "../stores/authStore";
 import { Tooltip } from "./common/Tooltip";
@@ -19,6 +21,7 @@ interface SeriesInfoCardProps {
   progress?: ReadingProgress;
   summary?: SeriesProgressSummary;
   preferPercentLabel?: boolean;
+  characters?: SeriesCharacter[];
   onUpdate?: (updated: Series | Volume) => void;
   onPlay: (incognito?: boolean) => void | Promise<void>;
   onRefresh?: () => void;
@@ -33,18 +36,94 @@ export function SeriesInfoCard({
   progress,
   summary,
   preferPercentLabel = false,
+  characters,
   onUpdate,
   onPlay,
   onRefresh,
   onAlert,
   onDownload,
 }: SeriesInfoCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const incognitoMenuId = useId();
+  const characterModalTitleId = useId();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
+  const characterModalRef = useRef<HTMLDivElement | null>(null);
+  const characterModalCloseRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isCharacterModalOpen) {
+      return undefined;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    characterModalCloseRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsCharacterModalOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const root = characterModalRef.current;
+      if (!root) {
+        return;
+      }
+
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (!root.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      previousFocusRef.current?.focus();
+    };
+  }, [isCharacterModalOpen]);
   const [imageError, setImageError] = useState(false);
   const splitButtonRef = useRef<HTMLDivElement | null>(null);
   const user = useAuthStore((state) => state.user);
@@ -64,6 +143,9 @@ export function SeriesInfoCard({
   });
 
   const isVolumeType = type === "volume";
+  const displayedOriginalTitle =
+    series.metadata?.original_title?.trim() ||
+    localizedOriginalTitle(series.metadata?.original_titles, i18n.language || "ko", "");
   const displayPath = (isVolumeType ? volume?.path : series.path) || "";
   const lowerDisplayPath = displayPath.toLowerCase();
   const isTextFile = lowerDisplayPath.endsWith(".txt") || (!isVolumeType && series.extension === "TXT");
@@ -249,7 +331,8 @@ export function SeriesInfoCard({
         )}
       </div>
 
-      {/* 썸네일 */}
+      {/* 썸네일 + 등장인물 */}
+      <div className={styles.seriesThumbnailColumn}>
       <div className={styles.seriesThumbnailContainer}>
         {thumbnailUrl && !imageError ? (
           isAudiobook ? (
@@ -337,6 +420,49 @@ export function SeriesInfoCard({
         )}
       </div>
 
+      {!isVolumeType && characters && characters.length > 0 && (
+        <div className={styles.characterAvatars}>
+          {characters.slice(0, 4).map((character) => (
+            <div
+              key={character.id}
+              className={styles.characterAvatar}
+            >
+              {character.image_url ? (
+                <img
+                  src={getAuthenticatedImageUrl(character.image_url)}
+                  alt=""
+                  aria-hidden="true"
+                  className={styles.characterAvatarImage}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                    (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "flex");
+                  }}
+                />
+              ) : null}
+              <span
+                className={styles.characterAvatarInitial}
+                aria-hidden="true"
+                style={character.image_url ? { display: "none" } : undefined}
+              >
+                {character.name.charAt(0)}
+              </span>
+              <span className={styles.characterAvatarName}>{character.name}</span>
+            </div>
+          ))}
+          {characters.length > 4 && (
+            <button
+              type="button"
+              className={`${styles.characterAvatar} ${styles.characterAvatarMore}`}
+              onClick={() => setIsCharacterModalOpen(true)}
+              aria-label={t("series.characters.title")}
+            >
+              +{characters.length - 4}
+            </button>
+          )}
+        </div>
+      )}
+      </div>
+
       {/* 콘텐츠 */}
       <div className={styles.seriesContent}>
         <div className={styles.seriesHeader}>
@@ -362,10 +488,10 @@ export function SeriesInfoCard({
                 )}
                 {series.metadata?.publication_year}
               </div>
-              {series.metadata?.original_title && (
+              {displayedOriginalTitle && (
                 <div className={styles.seriesExtraMeta}>
                   <span className={styles.seriesExtraMetaLabel}>{t("series.metainfo.original_title")}</span>
-                  <span>{series.metadata.original_title}</span>
+                  <span>{displayedOriginalTitle}</span>
                 </div>
               )}
             </>
@@ -557,6 +683,66 @@ export function SeriesInfoCard({
           series={series}
           onUpdate={onUpdate as (updatedVolume: Volume) => void}
         />
+      )}
+
+      {isCharacterModalOpen && characters && createPortal(
+        <div
+          className={styles.characterModalBackdrop}
+          onClick={() => setIsCharacterModalOpen(false)}
+        >
+          <div
+            className={styles.characterModalBox}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={characterModalTitleId}
+            ref={characterModalRef}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.characterModalHeader}>
+              <span id={characterModalTitleId}>{t("series.characters.title")}</span>
+              <button
+                type="button"
+                className={styles.characterModalClose}
+                onClick={() => setIsCharacterModalOpen(false)}
+                aria-label={t("common.close")}
+                ref={characterModalCloseRef}
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.characterModalScroll}>
+            <div className={styles.characterModalGrid}>
+              {characters.map((character) => (
+                <div key={character.id} className={styles.characterModalItem}>
+                  <div className={styles.characterModalAvatar}>
+                    {character.image_url ? (
+                      <img
+                        src={getAuthenticatedImageUrl(character.image_url)}
+                        alt=""
+                        aria-hidden="true"
+                        className={styles.characterModalImage}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = "none";
+                          (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "flex");
+                        }}
+                      />
+                    ) : null}
+                    <span
+                      className={styles.characterModalInitial}
+                      aria-hidden="true"
+                      style={character.image_url ? { display: "none" } : undefined}
+                    >
+                      {character.name.charAt(0)}
+                    </span>
+                  </div>
+                  <span className={styles.characterModalName}>{character.name}</span>
+                </div>
+              ))}
+            </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       <AlertModal

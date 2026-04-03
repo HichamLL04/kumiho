@@ -85,9 +85,28 @@ type SeriesMetadata struct {
 	Tags            string `json:"tags" db:"tags"`       // JSON string or comma-separated
 	PublicationYear string `json:"publication_year" db:"publication_year"`
 	OriginalTitle   string `json:"original_title" db:"original_title"`
+	OriginalTitles  string `json:"original_titles" db:"original_titles"`
 	Publisher       string `json:"publisher" db:"publisher"`
 	PublishedAt     string `json:"published_at" db:"published_at"`
 	ISBN            string `json:"isbn" db:"isbn"`
+}
+
+// SeriesCharacter 시리즈 등장인물 모델
+type SeriesCharacter struct {
+	ID                string    `json:"id" db:"id"`
+	SeriesID          string    `json:"series_id" db:"series_id"`
+	Name              string    `json:"name" db:"name"`
+	NormalizedName    string    `json:"-" db:"normalized_name"`
+	SortOrder         int       `json:"sort_order" db:"sort_order"`
+	Role              string    `json:"role" db:"role"`
+	ExternalImageURL  string    `json:"-" db:"external_image_url"`
+	ImagePath         string    `json:"-" db:"image_path"`
+	ImageURL          string    `json:"image_url" db:"-"`
+	SourceProvider    string    `json:"source_provider" db:"source_provider"`
+	SourceCharacterID string    `json:"source_character_id" db:"source_character_id"`
+	SourceRelationID  string    `json:"source_relation_id" db:"source_relation_id"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // Volume 볼륨(권) 모델
@@ -225,6 +244,14 @@ type UserSetting struct {
 	Key       string    `json:"key"`
 	Value     string    `json:"value"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// PluginSecret 플러그인별 비밀 설정 저장 모델
+type PluginSecret struct {
+	PluginID       string    `json:"plugin_id"`
+	FieldKey       string    `json:"field_key"`
+	ValueEncrypted string    `json:"-"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // UserSeriesSetting 사용자별 시리즈 개별 설정 모델

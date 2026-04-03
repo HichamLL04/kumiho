@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 36
+const latestMigrationVersion = 39
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -212,6 +212,26 @@ func ensurePluginInstallationsSchema() error {
 	return nil
 }
 
+func ensurePluginSecretsSchema() error {
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS plugin_secrets (
+			plugin_id TEXT NOT NULL,
+			field_key TEXT NOT NULL,
+			value_encrypted TEXT NOT NULL,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (plugin_id, field_key)
+		)
+	`); err != nil {
+		return fmt.Errorf("create plugin_secrets: %w", err)
+	}
+
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_plugin_secrets_plugin_id ON plugin_secrets(plugin_id)`); err != nil {
+		return fmt.Errorf("create index plugin_secrets(plugin_id): %w", err)
+	}
+
+	return nil
+}
+
 // Migrate 스키마 마이그레이션
 func Migrate() error {
 	schema := `
@@ -274,10 +294,29 @@ func Migrate() error {
 		tags TEXT DEFAULT '',
 		publication_year TEXT DEFAULT '',
 		original_title TEXT DEFAULT '',
+		original_titles TEXT DEFAULT '',
 		publisher TEXT DEFAULT '',
 		published_at TEXT DEFAULT '',
 		isbn TEXT DEFAULT ''
 	);
+
+	CREATE TABLE IF NOT EXISTS series_characters (
+		id TEXT PRIMARY KEY,
+		series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+		name TEXT NOT NULL,
+		normalized_name TEXT NOT NULL,
+		sort_order INTEGER NOT NULL DEFAULT 0,
+		role TEXT DEFAULT '',
+		external_image_url TEXT DEFAULT '',
+		image_path TEXT DEFAULT '',
+		source_provider TEXT DEFAULT '',
+		source_character_id TEXT DEFAULT '',
+		source_relation_id TEXT DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_series_characters_series_order ON series_characters(series_id, sort_order);
+	CREATE INDEX IF NOT EXISTS idx_series_characters_series_norm ON series_characters(series_id, normalized_name);
 
 	-- 볼륨 (권/시즌)
 	CREATE TABLE IF NOT EXISTS volumes (
@@ -578,6 +617,9 @@ func Migrate() error {
 		{34, "오디오 진행시간 문자열 정규화", migrateAudioProgressTimeFormat},
 		{35, "멀티 폴더 지원 (library_paths 테이블)", migrateMultiFolderPaths},
 		{36, "플러그인 설치 상태 테이블 추가", migratePluginInstallations},
+		{37, "플러그인 비밀 설정 테이블 추가", migratePluginSecrets},
+		{38, "시리즈 메타데이터 다국어 원제 컬럼 추가", migrateSeriesMetadataOriginalTitles},
+		{39, "시리즈 등장인물 테이블 추가", migrateSeriesCharacters},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -750,6 +792,7 @@ func migrateSeriesMetadata() error {
 			tags TEXT DEFAULT '',
 			publication_year TEXT DEFAULT '',
 			original_title TEXT DEFAULT '',
+			original_titles TEXT DEFAULT '',
 			publisher TEXT DEFAULT '',
 			published_at TEXT DEFAULT '',
 			isbn TEXT DEFAULT ''
@@ -1102,6 +1145,40 @@ func migrateSeriesMetadataColumns() error {
 		return err
 	}
 	return addColumn("series_metadata", "isbn", "TEXT DEFAULT ''")
+}
+
+// #38 migrateSeriesMetadataOriginalTitles series_metadata 테이블에 다국어 원제 컬럼 추가
+func migrateSeriesMetadataOriginalTitles() error {
+	return addColumn("series_metadata", "original_titles", "TEXT DEFAULT ''")
+}
+
+func migrateSeriesCharacters() error {
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS series_characters (
+			id TEXT PRIMARY KEY,
+			series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			normalized_name TEXT NOT NULL,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			role TEXT DEFAULT '',
+			external_image_url TEXT DEFAULT '',
+			image_path TEXT DEFAULT '',
+			source_provider TEXT DEFAULT '',
+			source_character_id TEXT DEFAULT '',
+			source_relation_id TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`); err != nil {
+		return fmt.Errorf("create series_characters: %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_series_characters_series_order ON series_characters(series_id, sort_order)`); err != nil {
+		return fmt.Errorf("create idx_series_characters_series_order: %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_series_characters_series_norm ON series_characters(series_id, normalized_name)`); err != nil {
+		return fmt.Errorf("create idx_series_characters_series_norm: %w", err)
+	}
+	return nil
 }
 
 // #14 migrateChapterCompletions chapter_completions 테이블 추가
@@ -1775,6 +1852,11 @@ func migrateMultiFolderPaths() error {
 // #36 migratePluginInstallations 플러그인 설치 상태 테이블 추가
 func migratePluginInstallations() error {
 	return ensurePluginInstallationsSchema()
+}
+
+// #37 migratePluginSecrets 플러그인 비밀 설정 테이블 추가
+func migratePluginSecrets() error {
+	return ensurePluginSecretsSchema()
 }
 
 // parseLegacyTimeToSeconds 문자열 시간(HH:MM:SS, MM:SS)을 초 단위 float64로 변환

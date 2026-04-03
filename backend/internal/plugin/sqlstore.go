@@ -90,6 +90,14 @@ func (s *SQLStore) List() ([]Record, error) {
 	return records, nil
 }
 
+func (s *SQLStore) Delete(id string) error {
+	_, err := database.DB.Exec(`DELETE FROM plugin_installations WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete plugin record: %w", err)
+	}
+	return nil
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }

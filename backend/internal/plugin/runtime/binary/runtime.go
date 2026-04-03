@@ -1,6 +1,7 @@
 package binary
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -21,6 +24,7 @@ import (
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
 	sdkplugin "github.com/kumiho-plugin/kumiho-plugin-sdk/plugin"
 	sdkservice "github.com/kumiho-plugin/kumiho-plugin-sdk/service"
+	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
 )
 
 const (
@@ -61,11 +65,46 @@ func (r *Runtime) Type() sdkmanifest.RuntimeType {
 	return sdkmanifest.RuntimeTypeBinary
 }
 
-func newProcessLifecycle() (chan error, chan error, context.Context, context.CancelFunc) {
+func newReadyChannel() chan error {
+	return make(chan error, 1)
+}
+
+func newAttemptLifecycle() (chan error, context.Context, context.CancelFunc) {
 	exited := make(chan error, 1)
-	ready := make(chan error, 1)
 	procCtx, cancel := context.WithCancel(context.Background())
-	return exited, ready, procCtx, cancel
+	return exited, procCtx, cancel
+}
+
+func buildCommandEnv(host string, port int, overrides map[string]string) []string {
+	envMap := make(map[string]string)
+	for _, entry := range os.Environ() {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok || key == "" {
+			continue
+		}
+		envMap[key] = value
+	}
+
+	envMap[EnvPluginHost] = host
+	envMap[EnvPluginPort] = strconv.Itoa(port)
+	for key, value := range overrides {
+		if key == "" {
+			continue
+		}
+		envMap[key] = value
+	}
+
+	keys := make([]string, 0, len(envMap))
+	for key := range envMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	env := make([]string, 0, len(keys))
+	for _, key := range keys {
+		env = append(env, key+"="+envMap[key])
+	}
+	return env
 }
 
 func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
@@ -106,21 +145,20 @@ func (r *Runtime) Start(ctx context.Context, inst runtime.Instance) error {
 			}
 			return nil
 		}
-		exited, ready, procCtx, cancel := newProcessLifecycle()
-		r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
+		ready := newReadyChannel()
+		r.processes[inst.ID] = processState{ready: ready}
 		r.mu.Unlock()
 
-		return r.startFresh(ctx, procCtx, cancel, inst, exited, ready)
+		return r.startFresh(ctx, inst, ready)
 	}
-	exited, ready, procCtx, cancel := newProcessLifecycle()
-	r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
+	ready := newReadyChannel()
+	r.processes[inst.ID] = processState{ready: ready}
 	r.mu.Unlock()
 
-	return r.startFresh(ctx, procCtx, cancel, inst, exited, ready)
+	return r.startFresh(ctx, inst, ready)
 }
 
-func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cancel context.CancelFunc, inst runtime.Instance, exited chan error, ready chan error) error {
-
+func (r *Runtime) startFresh(ctx context.Context, inst runtime.Instance, ready chan error) error {
 	absPath, err := filepath.Abs(inst.InstallPath)
 	if err != nil {
 		r.finishStart(inst.ID, fmt.Errorf("resolve install path: %w", err))
@@ -149,11 +187,9 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 		}
 		baseURL := fmt.Sprintf("http://%s:%d", host, port)
 
+		exited, procCtx, cancel := newAttemptLifecycle()
 		cmd := exec.CommandContext(procCtx, absPath)
-		cmd.Env = append(os.Environ(),
-			EnvPluginHost+"="+host,
-			EnvPluginPort+"="+strconv.Itoa(port),
-		)
+		cmd.Env = buildCommandEnv(host, port, inst.Env)
 		cmd.Stdout = log.Writer()
 		cmd.Stderr = log.Writer()
 
@@ -189,9 +225,8 @@ func (r *Runtime) startFresh(ctx context.Context, procCtx context.Context, cance
 			lastErr = err
 			_ = r.Stop(context.Background(), inst)
 			if attempt < maxStartAttempts {
-				exited = make(chan error, 1)
 				r.mu.Lock()
-				r.processes[inst.ID] = processState{cancel: cancel, exited: exited, ready: ready}
+				r.processes[inst.ID] = processState{ready: ready}
 				r.mu.Unlock()
 				time.Sleep(150 * time.Millisecond)
 				continue
@@ -289,6 +324,22 @@ func (r *Runtime) Healthcheck(ctx context.Context, inst runtime.Instance) (*heal
 		return nil, err
 	}
 	return &payload, nil
+}
+
+func (r *Runtime) Search(ctx context.Context, inst runtime.Instance, req *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error) {
+	payload := &sdktypes.SearchResponse{}
+	if err := r.doJSON(ctx, inst.ID, http.MethodPost, sdkservice.PathSearch, req, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func (r *Runtime) Fetch(ctx context.Context, inst runtime.Instance, req *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
+	payload := &sdktypes.FetchResponse{}
+	if err := r.doJSON(ctx, inst.ID, http.MethodPost, sdkservice.PathFetch, req, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
 }
 
 func (r *Runtime) waitUntilReady(ctx context.Context, id string, baseURL string, expectedManifestID string) error {
@@ -427,4 +478,35 @@ func allocatePort(host string) (int, error) {
 		return 0, errors.New("unexpected listener address type")
 	}
 	return tcpAddr.Port, nil
+}
+
+func (r *Runtime) doJSON(ctx context.Context, id string, method string, path string, requestBody any, out any) error {
+	state, ok := r.get(id)
+	if !ok || state.baseURL == "" {
+		return runtime.ErrNotRunning
+	}
+
+	body, err := json.Marshal(requestBody)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, state.baseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set(sdkservice.HeaderAccept, sdkservice.ContentTypeJSON)
+	req.Header.Set(sdkservice.HeaderContentType, sdkservice.ContentTypeJSON)
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != sdkservice.StatusOK {
+		return fmt.Errorf("%s returned status %d", path, resp.StatusCode)
+	}
+
+	return json.NewDecoder(resp.Body).Decode(out)
 }

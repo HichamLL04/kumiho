@@ -47,3 +47,36 @@ func TestParseTitleRemovesKoreanReleaseTag(t *testing.T) {
 		t.Fatalf("SeriesName = %q", parsed.SeriesName)
 	}
 }
+
+func TestParseTitleRemovesComicRangeNoise(t *testing.T) {
+	parsed := ParseTitle("All you Need Is Kill 1~2권_완")
+
+	if parsed.CanonicalTitle != "All you Need Is Kill" {
+		t.Fatalf("CanonicalTitle = %q", parsed.CanonicalTitle)
+	}
+	if parsed.SeriesName != "All you Need Is Kill" {
+		t.Fatalf("SeriesName = %q", parsed.SeriesName)
+	}
+}
+
+func TestParseTitleRemovesTrailingIssueNumber(t *testing.T) {
+	parsed := ParseTitle("Amazing Spider-Man-Venom - Death Spiral 001 (2026) (Digital) (Shan-Empire)")
+
+	if parsed.CanonicalTitle != "Amazing Spider-Man-Venom - Death Spiral" {
+		t.Fatalf("CanonicalTitle = %q", parsed.CanonicalTitle)
+	}
+	if parsed.SeriesName != "Amazing Spider-Man-Venom - Death Spiral" {
+		t.Fatalf("SeriesName = %q", parsed.SeriesName)
+	}
+}
+
+func TestParseTitleRemovesSpecialEditionNoise(t *testing.T) {
+	parsed := ParseTitle("20세기 소년 완전판 1~11권+특별편")
+
+	if parsed.CanonicalTitle != "20세기 소년 완전판" {
+		t.Fatalf("CanonicalTitle = %q", parsed.CanonicalTitle)
+	}
+	if parsed.SeriesName != "20세기 소년 완전판" {
+		t.Fatalf("SeriesName = %q", parsed.SeriesName)
+	}
+}
