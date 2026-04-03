@@ -26,7 +26,6 @@
   left: 50%;
   width: min(calc(100% - 2rem), 420px);
   transform: translateX(-50%);
-  z-index: 10;
 }
 
 .inline {

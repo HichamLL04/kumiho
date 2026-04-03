@@ -353,6 +353,8 @@ export function Header({ onMenuClick }: HeaderProps) {
                   <UpdateBadge
                     className={styles.badge}
                     size="sm"
+                    ariaLabel={t("header.new_update_available")}
+                    ariaLive="polite"
                   />
                 ) : otherUserCount > 0 ? (
                   <span

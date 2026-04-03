@@ -130,6 +130,11 @@ export function SettingsPage() {
                 <button
                   key={tab.id}
                   className={`${styles.navItem} ${activeTab === tab.id ? styles.active : ""}`}
+                  aria-label={
+                    (tab.id === "system" && hasSystemUpdate) || (tab.id === "plugins" && hasPluginUpdate)
+                      ? `${t(tab.label)} - ${t("header.new_update_available")}`
+                      : undefined
+                  }
                   onClick={() => {
                     const nextParams = new URLSearchParams(searchParams);
                     nextParams.set("tab", tab.id);
@@ -138,8 +143,18 @@ export function SettingsPage() {
                 >
                   <Icon size={18} />
                   <span>{t(tab.label)}</span>
-                  {tab.id === "system" && hasSystemUpdate && <UpdateBadge className={styles.navUpdateBadge} />}
-                  {tab.id === "plugins" && hasPluginUpdate && <UpdateBadge className={styles.navUpdateBadge} />}
+                  {tab.id === "system" && hasSystemUpdate && (
+                    <UpdateBadge
+                      className={styles.navUpdateBadge}
+                      ariaLabel={t("header.new_update_available")}
+                    />
+                  )}
+                  {tab.id === "plugins" && hasPluginUpdate && (
+                    <UpdateBadge
+                      className={styles.navUpdateBadge}
+                      ariaLabel={t("header.new_update_available")}
+                    />
+                  )}
                 </button>
               );
             })}

@@ -52,13 +52,19 @@ export function SeriesInfoCard({
   const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
 
   useEffect(() => {
-    if (isCharacterModalOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
+    if (!isCharacterModalOpen) {
+      return undefined;
     }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [isCharacterModalOpen]);
   const [imageError, setImageError] = useState(false);
@@ -385,12 +391,14 @@ export function SeriesInfoCard({
             </div>
           ))}
           {characters.length > 4 && (
-            <div
+            <button
+              type="button"
               className={`${styles.characterAvatar} ${styles.characterAvatarMore}`}
               onClick={() => setIsCharacterModalOpen(true)}
+              aria-label={t("series.characters.title")}
             >
               +{characters.length - 4}
-            </div>
+            </button>
           )}
         </div>
       )}
@@ -628,11 +636,11 @@ export function SeriesInfoCard({
             onClick={(e) => e.stopPropagation()}
           >
             <div className={styles.characterModalHeader}>
-              <span>등장인물</span>
+              <span>{t("series.characters.title")}</span>
               <button
                 className={styles.characterModalClose}
                 onClick={() => setIsCharacterModalOpen(false)}
-                aria-label="닫기"
+                aria-label={t("common.close")}
               >
                 ✕
               </button>

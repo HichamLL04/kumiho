@@ -139,6 +139,9 @@ func (s *PluginSecretService) EnvironmentForPlugin(id string, manifest sdkmanife
 
 	env := make(map[string]string, len(specs))
 	for _, spec := range specs {
+		if err := validateSecretSpec(spec); err != nil {
+			return nil, err
+		}
 		secret, err := s.repo.GetByKey(nil, id, spec.FieldKey)
 		if err != nil {
 			return nil, err
@@ -165,6 +168,9 @@ func (s *PluginSecretService) EnvironmentForPlugin(id string, manifest sdkmanife
 
 func (s *PluginSecretService) ValidateActivation(id string, manifest sdkmanifest.Manifest) error {
 	for _, spec := range configSpecsForManifest(manifest) {
+		if err := validateSecretSpec(spec); err != nil {
+			return err
+		}
 		if !spec.Required {
 			continue
 		}
@@ -180,6 +186,9 @@ func (s *PluginSecretService) ValidateActivation(id string, manifest sdkmanifest
 }
 
 func (s *PluginSecretService) resolveFieldStatus(pluginID string, spec pluginSecretSpec) (configured bool, source string, masked string, err error) {
+	if err := validateSecretSpec(spec); err != nil {
+		return false, "", "", err
+	}
 	secret, err := s.repo.GetByKey(nil, pluginID, spec.FieldKey)
 	if err != nil {
 		return false, "", "", err
@@ -281,6 +290,13 @@ func findConfigSpec(manifest sdkmanifest.Manifest, fieldKey string) (pluginSecre
 		}
 	}
 	return pluginSecretSpec{}, false
+}
+
+func validateSecretSpec(spec pluginSecretSpec) error {
+	if spec.EnvKey == "" {
+		return pluginerrors.New(pluginerrors.ErrCodeConfigInvalid, "secret config field is missing env_key")
+	}
+	return nil
 }
 
 func maskSecret(value string) string {

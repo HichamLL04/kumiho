@@ -93,6 +93,29 @@ func TestPluginSecretServiceDeleteSecret(t *testing.T) {
 	}
 }
 
+func TestPluginSecretServiceRejectsSecretFieldWithoutEnvKey(t *testing.T) {
+	repo := newFakePluginSecretRepo()
+	cfg := &config.Config{JWTSecret: "test-secret"}
+	svc := NewPluginSecretService(cfg, repo)
+
+	manifest := sdkmanifest.Manifest{
+		ID: kitsuPluginID,
+		ConfigSchema: &sdkconfig.Schema{
+			Version: "1",
+			Fields: []sdkconfig.ConfigField{
+				{Key: "access_token", Type: sdkconfig.FieldTypeSecret, Label: "Access Token", Required: true},
+			},
+		},
+	}
+
+	if _, err := svc.EnvironmentForPlugin(kitsuPluginID, manifest); err == nil {
+		t.Fatal("EnvironmentForPlugin() error = nil, want config invalid error")
+	}
+	if err := svc.ValidateActivation(kitsuPluginID, manifest); err == nil {
+		t.Fatal("ValidateActivation() error = nil, want config invalid error")
+	}
+}
+
 func TestMaskSecret(t *testing.T) {
 	if got := maskSecret("abcd1234"); got != "••••1234" {
 		t.Fatalf("maskSecret() = %q", got)

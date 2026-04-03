@@ -8,6 +8,7 @@ import type { MetadataApplyResponse } from "../../types/plugin";
 import { SeriesMetadataPanel } from "../SeriesMetadataPanel";
 import { SeriesCharactersDrawer } from "../SeriesCharactersDrawer";
 import { AlertModal, type AlertType } from "./AlertModal";
+import { orderedOriginalTitles } from "../../utils/originalTitles";
 import styles from "./EditSeriesModal.module.css";
 
 interface EditSeriesModalProps {
@@ -18,7 +19,7 @@ interface EditSeriesModalProps {
 }
 
 export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSeriesModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [formData, setFormData] = useState({
     title: "",
     authors: "",
@@ -126,32 +127,15 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   }, [isOpen]);
 
   const originalTitleOptions = useMemo(() => {
-    if (!series.metadata?.original_titles) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(series.metadata.original_titles);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return [];
-      }
-
-      const entries = [
-        { key: "ko", value: typeof parsed.ko === "string" ? parsed.ko.trim() : "" },
-        { key: "en", value: typeof parsed.en === "string" ? parsed.en.trim() : "" },
-        { key: "ja", value: typeof parsed.ja === "string" ? parsed.ja.trim() : "" },
-      ];
-
-      return entries.filter((entry, index, array) => {
-        if (!entry.value) {
-          return false;
-        }
-        return array.findIndex((candidate) => candidate.value === entry.value) === index;
-      });
-    } catch {
-      return [];
-    }
-  }, [series.metadata?.original_titles]);
+    return orderedOriginalTitles(
+      series.metadata?.original_titles,
+      i18n.language || "ko",
+      series.metadata?.original_title || "",
+    ).map((entry) => ({
+      key: entry.language,
+      value: entry.title,
+    }));
+  }, [i18n.language, series.metadata?.original_title, series.metadata?.original_titles]);
 
   useEffect(() => {
     if (!isOriginalTitleMenuOpen) {
