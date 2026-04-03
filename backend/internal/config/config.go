@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 )
 
+const defaultPluginRegistryURL = "https://raw.githubusercontent.com/kumiho-plugin/kumiho-plugin-registry/main/index.json"
+
 type Config struct {
 	Port              string
 	DatabasePath      string
@@ -28,7 +30,7 @@ func Load() *Config {
 		PluginSecretKey:   getEnv("PLUGIN_SECRET_KEY", ""),
 		DataDir:           dataDir,
 		PluginDir:         getEnv("PLUGIN_DIR", filepath.Join(dataDir, "plugins")),
-		PluginRegistryURL: getEnv("PLUGIN_REGISTRY_URL", ""),
+		PluginRegistryURL: getEnv("PLUGIN_REGISTRY_URL", defaultPluginRegistryURL),
 		Environment:       env,
 		CookieDomain:      getEnv("COOKIE_DOMAIN", ""),
 		CookieSecure:      env == "production", // 프로덕션에서만 Secure 쿠키
