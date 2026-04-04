@@ -194,7 +194,7 @@
       "start_scan": "메타데이터 검색 시작",
       "cancel_scan": "메타데이터 검색 취소",
       "apply_all": "일괄 적용",
-      "total_series_count": "총 {{count}}시리즈",
+      "total_series_count": "총 {{count}}개 시리즈",
       "manual_search": "수동 검색",
       "view_details": "상세 보기",
       "preview_result_for": "{{title}} 미리보기 결과 열기 또는 닫기",

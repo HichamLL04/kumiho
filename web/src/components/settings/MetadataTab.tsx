@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, Loader2, Database, ChevronDown } from "lucide-react";
 import { libraryAPI, seriesAPI, settingAPI } from "../../api/client";
@@ -22,7 +22,9 @@ interface MetadataSettingsData {
 
 export function MetadataTab() {
   const { t } = useTranslation();
+  const progressLabelId = useId();
   const cancelScanRequestedRef = useRef(false);
+  const isMountedRef = useRef(true);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [selectedLibraryId, setSelectedLibraryId] = useState<string>("");
   const [seriesList, setSeriesList] = useState<SeriesMetadataInfo[]>([]);
@@ -40,6 +42,13 @@ export function MetadataTab() {
     [deselectedApplySet, seriesList],
   );
   const scanPercent = scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      cancelScanRequestedRef.current = true;
+    };
+  }, []);
 
   // Load libraries on mount
   useEffect(() => {
@@ -165,25 +174,33 @@ export function MetadataTab() {
 
   const handleScan = async () => {
     if (isScanning || seriesList.length === 0) return;
+    const scanTargets = seriesList
+      .map((series, index) => ({ series, index }))
+      .filter(({ series }) => series.scanStatus !== "matched" && series.scanStatus !== "applied");
+    if (scanTargets.length === 0) return;
+
     cancelScanRequestedRef.current = false;
     setIsScanning(true);
-    setScanProgress({ current: 0, total: seriesList.length });
+    setScanProgress({ current: 0, total: scanTargets.length });
 
     const updatedList = [...seriesList];
 
-    for (let i = 0; i < updatedList.length; i++) {
+    for (let processedCount = 0; processedCount < scanTargets.length; processedCount++) {
       if (cancelScanRequestedRef.current) {
         break;
       }
 
-      const series = updatedList[i];
-      if (series.scanStatus === "matched" || series.scanStatus === "applied") continue;
+      const { series, index } = scanTargets[processedCount];
 
-      setScanProgress((prev) => ({ ...prev, current: i + 1 }));
+      if (isMountedRef.current) {
+        setScanProgress((prev) => ({ ...prev, current: processedCount + 1 }));
+      }
 
       // Update status to searching
-      updatedList[i] = { ...series, scanStatus: "searching" };
-      setSeriesList([...updatedList]);
+      updatedList[index] = { ...series, scanStatus: "searching" };
+      if (isMountedRef.current) {
+        setSeriesList([...updatedList]);
+      }
 
       try {
         // Search metadata
@@ -198,44 +215,48 @@ export function MetadataTab() {
           });
 
           if (cancelScanRequestedRef.current) {
-            updatedList[i] = { ...series, scanStatus: series.scanStatus || "idle" };
+            updatedList[index] = { ...series, scanStatus: series.scanStatus || "idle" };
             break;
           }
 
-          updatedList[i] = {
+          updatedList[index] = {
             ...series,
             scanStatus: "matched",
             matchResult: fetchRes,
           };
         } else {
-          updatedList[i] = { ...series, scanStatus: "failed" };
+          updatedList[index] = { ...series, scanStatus: "failed" };
         }
       } catch (err) {
         if (cancelScanRequestedRef.current) {
-          updatedList[i] = { ...series, scanStatus: series.scanStatus || "idle" };
+          updatedList[index] = { ...series, scanStatus: series.scanStatus || "idle" };
           break;
         }
         console.error(`Failed to scan series ${series.title}:`, err);
-        updatedList[i] = {
+        updatedList[index] = {
           ...series,
           scanStatus: "failed",
           error: err instanceof Error ? err.message : String(err),
         };
       }
 
-      setSeriesList([...updatedList]);
+      if (isMountedRef.current) {
+        setSeriesList([...updatedList]);
+      }
       // Small delay to prevent overwhelming the server/plugins
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
-    setIsScanning(false);
-    setSeriesList([...updatedList]);
-    setToast({
-      type: cancelScanRequestedRef.current ? "info" : "success",
-      message: cancelScanRequestedRef.current
-        ? t("settings.metadata.scan_cancelled")
-        : t("settings.metadata.scan_complete"),
-    });
+    if (isMountedRef.current) {
+      setIsScanning(false);
+      setSeriesList([...updatedList]);
+      setToast({
+        type: cancelScanRequestedRef.current ? "info" : "success",
+        message: cancelScanRequestedRef.current
+          ? t("settings.metadata.scan_cancelled")
+          : t("settings.metadata.scan_complete"),
+      });
+    }
     cancelScanRequestedRef.current = false;
   };
 
@@ -387,12 +408,15 @@ export function MetadataTab() {
       {isScanning && (
         <div className={styles.progressArea} role="status" aria-live="polite">
           <div className={styles.progressText}>
-            <span>
+            <span id={progressLabelId}>
               {t("settings.metadata.scanning_progress", { current: scanProgress.current, total: scanProgress.total })}
             </span>
             <span>{scanPercent}%</span>
           </div>
-          <ProgressBar value={scanPercent} />
+          <ProgressBar
+            value={scanPercent}
+            ariaLabelledBy={progressLabelId}
+          />
         </div>
       )}
 
@@ -429,16 +453,19 @@ export function MetadataTab() {
                 </tr>
               </thead>
               <tbody>
-                {seriesList.map((series, index) => (
+                {seriesList.map((series, index) => {
+                  const rowStatusClass = series.scanStatus ? styles[series.scanStatus] || "" : "";
+                  const statusDotClass = styles[`${series.scanStatus || "idle"}Dot`] || styles.idleDot;
+                  return (
                   <tr
                     key={series.id}
-                    className={`${styles[series.scanStatus || ""]} ${!series.matchResult && series.scanStatus !== "failed" ? styles.mobileNoResult : ""}`}
+                    className={`${rowStatusClass} ${!series.matchResult && series.scanStatus !== "failed" ? styles.mobileNoResult : ""}`.trim()}
                   >
                     <td data-label={t("settings.metadata.table.series")}>
                       <button
                         type="button"
                         className={styles.seriesLinkButton}
-                        onClick={() => window.open(`/series/${series.id}`, "_blank")}
+                        onClick={() => window.open(`/series/${series.id}`, "_blank", "noopener,noreferrer")}
                         title={t("settings.metadata.view_details")}
                       >
                         <div className={styles.seriesCell}>
@@ -460,7 +487,7 @@ export function MetadataTab() {
                     <td data-label={t("settings.metadata.table.match_status")}>
                       <div className={styles.statusBadge}>
                         <span
-                          className={`${styles.statusDot} ${styles[`${series.scanStatus || "idle"}Dot`]}`}
+                          className={`${styles.statusDot} ${statusDotClass}`}
                           aria-hidden="true"
                         />
                         {series.scanStatus === "searching" && (
@@ -549,6 +576,7 @@ export function MetadataTab() {
                               className={styles.applyCheckbox}
                               checked={isApplySelected(series)}
                               onChange={() => toggleApplySelection(series.id)}
+                              aria-label={`${series.title} - ${t("settings.metadata.apply_all")}`}
                             />
                           </label>
                         )}
@@ -566,7 +594,8 @@ export function MetadataTab() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
