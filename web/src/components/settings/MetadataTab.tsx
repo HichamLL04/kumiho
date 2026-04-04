@@ -314,12 +314,16 @@ export function MetadataTab() {
         await seriesAPI.metadataApply(series.id, series.matchResult.result);
         if (!isMountedRef.current) break;
         if (series.matchResult.plugin_id) {
-          await seriesAPI.importCharacters(
-            series.id,
-            series.matchResult.result.characters || [],
-            series.matchResult.plugin_id,
-          );
-          if (!isMountedRef.current) break;
+          try {
+            await seriesAPI.importCharacters(
+              series.id,
+              series.matchResult.result.characters || [],
+              series.matchResult.plugin_id,
+            );
+            if (!isMountedRef.current) break;
+          } catch (err) {
+            console.error(`Failed to import characters for ${series.title}:`, err);
+          }
         }
         if (!isMountedRef.current) break;
         setSeriesList((prev) => prev.map((s) => (s.id === series.id ? { ...s, scanStatus: "applied" } : s)));

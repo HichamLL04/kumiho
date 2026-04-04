@@ -111,9 +111,13 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
       const response = await seriesAPI.metadataApply(series.id, filterMetadataResult(result, applyFields));
       let characterChangeCount = 0;
       if (applyFields.characters && fetched?.plugin_id) {
-        const importResponse = await seriesAPI.importCharacters(series.id, result.characters || [], fetched.plugin_id);
-        characterChangeCount = importResponse.changed_count || 0;
-        onCharactersImported?.(characterChangeCount);
+        try {
+          const importResponse = await seriesAPI.importCharacters(series.id, result.characters || [], fetched.plugin_id);
+          characterChangeCount = importResponse.changed_count || 0;
+          onCharactersImported?.(characterChangeCount);
+        } catch (error: unknown) {
+          console.error("Failed to import characters:", error);
+        }
       }
       onApplied(response);
       const updatedFieldCount = response.updated_fields.length;
