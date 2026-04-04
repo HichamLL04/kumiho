@@ -153,7 +153,7 @@ export function MetadataTab() {
   }, [expandedResultId]);
 
   const isApplySelected = (series: SeriesMetadataInfo) =>
-    series.scanStatus === "matched" && !deselectedApplyIds.includes(series.id);
+    series.scanStatus === "matched" && !deselectedApplySet.has(series.id);
 
   const toggleApplySelection = (seriesId: string) => {
     setDeselectedApplyIds((prev) =>
@@ -212,6 +212,11 @@ export function MetadataTab() {
       try {
         // Search metadata
         const searchRes: MetadataSearchResult = await seriesAPI.metadataSearch(series.id);
+
+        if (cancelScanRequestedRef.current) {
+          updatedList[index] = { ...series, scanStatus: series.scanStatus || "idle" };
+          break;
+        }
 
         if (searchRes.candidates && searchRes.candidates.length > 0) {
           // Auto-fetch the first high-confidence candidate
@@ -277,7 +282,7 @@ export function MetadataTab() {
   };
 
   const handleApplyAll = async () => {
-    const matchedItems = seriesList.filter((s) => s.scanStatus === "matched" && !deselectedApplyIds.includes(s.id));
+    const matchedItems = seriesList.filter((s) => s.scanStatus === "matched" && !deselectedApplySet.has(s.id));
     if (matchedItems.length === 0 || !isMountedRef.current) return;
 
     setIsLoading(true);
