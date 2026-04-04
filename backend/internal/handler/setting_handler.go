@@ -55,18 +55,16 @@ var (
 )
 
 type SettingHandler struct {
-	repo        repository.SettingRepository
-	userRepo    repository.UserSettingRepository
-	libraryRepo *repository.LibraryRepository
-	scanner     *scanner.Scanner
+	repo     repository.SettingRepository
+	userRepo repository.UserSettingRepository
+	scanner  *scanner.Scanner
 }
 
-func NewSettingHandler(repo repository.SettingRepository, userRepo repository.UserSettingRepository, libraryRepo *repository.LibraryRepository, scanner *scanner.Scanner) *SettingHandler {
+func NewSettingHandler(repo repository.SettingRepository, userRepo repository.UserSettingRepository, scanner *scanner.Scanner) *SettingHandler {
 	return &SettingHandler{
-		repo:        repo,
-		userRepo:    userRepo,
-		libraryRepo: libraryRepo,
-		scanner:     scanner,
+		repo:     repo,
+		userRepo: userRepo,
+		scanner:  scanner,
 	}
 }
 
@@ -215,7 +213,7 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 			}
 			if err := h.scanner.NormalizeStoredSeriesTitlesWithTx(tx); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Failed to apply original title override",
+					"error": "Failed to normalize stored series titles",
 				})
 			}
 			if err := tx.Commit(); err != nil {
@@ -261,11 +259,6 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 			if err := h.repo.Update(tx, key, body.Value); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "Failed to update setting",
-				})
-			}
-			if err := h.scanner.NormalizeStoredSeriesTitlesWithTx(tx); err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Failed to apply original title override",
 				})
 			}
 			if err := tx.Commit(); err != nil {

@@ -273,7 +273,8 @@ func resolveSeriesTitleFromPath(path, fallback string) string {
 	return strings.TrimSuffix(base, ext)
 }
 
-func preferredOriginalTitleOrder(locale string) []string {
+// PreferredOriginalTitleOrder returns the language lookup priority for original titles.
+func PreferredOriginalTitleOrder(locale string) []string {
 	normalized := strings.ToLower(strings.TrimSpace(locale))
 	switch {
 	case strings.HasPrefix(normalized, "ko"):
@@ -378,7 +379,7 @@ func LocalizedOriginalTitle(metadata *model.SeriesMetadata, locale string) strin
 			}
 		}
 		if len(titles) > 0 {
-			for _, key := range preferredOriginalTitleOrder(locale) {
+			for _, key := range PreferredOriginalTitleOrder(locale) {
 				if title := strings.TrimSpace(titles[key]); title != "" {
 					return title
 				}

@@ -186,7 +186,7 @@ export function MetadataTab() {
       }
       setToast({ type: "success", message: t("settings.viewer.toast.saved") });
     } catch (error) {
-      console.error("Failed to update metadata setting:", error);
+      console.error("라이브러리 original_title_override 업데이트 실패:", error);
       if (isMountedRef.current) {
         setToast({ type: "error", message: t("settings.viewer.toast.save_failed") });
       }

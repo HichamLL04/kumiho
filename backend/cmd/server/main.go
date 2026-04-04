@@ -118,7 +118,7 @@ func main() {
 	libraryHandler := handler.NewLibraryHandler(ctx, libraryRepo, authService, fileScanner)
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
 	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
-	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, libraryRepo, fileScanner)
+	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가

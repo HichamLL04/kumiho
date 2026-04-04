@@ -435,7 +435,7 @@ func resolveFetchedOriginalTitle(result *sdktypes.MetadataResult, locale string)
 		return ""
 	}
 
-	for _, key := range preferredOriginalTitleOrder(locale) {
+	for _, key := range scanner.PreferredOriginalTitleOrder(locale) {
 		if title := strings.TrimSpace(result.OriginalTitles[key]); title != "" {
 			return title
 		}
@@ -444,18 +444,6 @@ func resolveFetchedOriginalTitle(result *sdktypes.MetadataResult, locale string)
 		return title
 	}
 	return strings.TrimSpace(result.Title)
-}
-
-func preferredOriginalTitleOrder(locale string) []string {
-	normalized := strings.ToLower(strings.TrimSpace(locale))
-	switch {
-	case strings.HasPrefix(normalized, "ko"):
-		return []string{"ko", "en", "ja"}
-	case strings.HasPrefix(normalized, "ja"):
-		return []string{"ja", "en", "ko"}
-	default:
-		return []string{"en", "ja", "ko"}
-	}
 }
 
 func filterNonEmpty(values []string) []string {
