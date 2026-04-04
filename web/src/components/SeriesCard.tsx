@@ -77,6 +77,10 @@ export function SeriesCard({
     type: "info",
     message: "",
   });
+  const itemTitle =
+    type === "series" && "display_title" in item && typeof item.display_title === "string" && item.display_title.trim() !== ""
+      ? item.display_title
+      : item.title;
 
   const closeAlert = () => {
     setAlertModal((prev) => ({ ...prev, isOpen: false }));
@@ -464,7 +468,7 @@ export function SeriesCard({
                 />
                 <img
                   src={thumbnailSrc}
-                  alt={item.title}
+                  alt={itemTitle}
                   className={styles.seriesThumbnailContain}
                   loading="lazy"
                   onError={() => setImageError(true)}
@@ -474,7 +478,7 @@ export function SeriesCard({
             ) : (
               <img
                 src={thumbnailSrc}
-                alt={item.title}
+                alt={itemTitle}
                 className={styles.seriesThumbnail}
                 loading="lazy"
                 onError={() => setImageError(true)}
@@ -641,9 +645,9 @@ export function SeriesCard({
       <div className={styles.seriesInfo}>
         <h3
           className={styles.seriesTitle}
-          title={item.title}
+          title={itemTitle}
         >
-          {item.title}
+          {itemTitle}
         </h3>
         {displaySubtitle || isAudioLayout || showMetaExtensionBadge ? (
           <div

@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 39
+const latestMigrationVersion = 40
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -620,6 +620,7 @@ func Migrate() error {
 		{37, "플러그인 비밀 설정 테이블 추가", migratePluginSecrets},
 		{38, "시리즈 메타데이터 다국어 원제 컬럼 추가", migrateSeriesMetadataOriginalTitles},
 		{39, "시리즈 등장인물 테이블 추가", migrateSeriesCharacters},
+		{40, "원제 오버라이드 라이브러리별 설정 이전", migrateOriginalTitleOverridePerLibrary},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -1178,6 +1179,34 @@ func migrateSeriesCharacters() error {
 	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_series_characters_series_norm ON series_characters(series_id, normalized_name)`); err != nil {
 		return fmt.Errorf("create idx_series_characters_series_norm: %w", err)
 	}
+	return nil
+}
+
+// #40 migrateOriginalTitleOverridePerLibrary 원제 오버라이드를 전역 설정에서 라이브러리별 컬럼으로 이전
+func migrateOriginalTitleOverridePerLibrary() error {
+	if err := addColumn("libraries", "original_title_override", "BOOLEAN NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	// 기존 전역 설정 값을 라이브러리별로 복사
+	var value string
+	err := DB.QueryRow(`
+		SELECT value FROM server_settings
+		WHERE key IN ('original_title_override', 'epub_title_override')
+		ORDER BY CASE key WHEN 'original_title_override' THEN 0 ELSE 1 END
+		LIMIT 1
+	`).Scan(&value)
+	if err != nil {
+		// 설정이 없으면 기본값(0)으로 유지
+		return nil
+	}
+
+	if strings.EqualFold(strings.TrimSpace(value), "true") {
+		if _, err := DB.Exec(`UPDATE libraries SET original_title_override = 1 WHERE type = 'LOCAL'`); err != nil {
+			return fmt.Errorf("copy original_title_override to libraries: %w", err)
+		}
+	}
+
 	return nil
 }
 

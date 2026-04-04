@@ -168,6 +168,7 @@ export const libraryAPI = {
     default_epub_keyboard_direction?: string;
     default_epub_click_direction?: string;
     library_type?: LibraryType;
+    original_title_override?: boolean;
   }) => api.post("/libraries", data),
   update: (
     id: string,
@@ -185,6 +186,7 @@ export const libraryAPI = {
       default_epub_click_direction?: string;
       library_type?: LibraryType;
       is_visible?: boolean;
+      original_title_override?: boolean;
     },
   ) => api.put(`/libraries/${id}`, data),
   scan: (id: string) => api.post(`/libraries/${id}/scan`),

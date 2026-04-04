@@ -148,6 +148,7 @@ export function SeriesInfoCard({
     i18n.language || "ko",
     series.metadata?.original_title || "",
   );
+  const visibleSeriesTitle = series.display_title || series.title;
   const displayPath = (isVolumeType ? volume?.path : series.path) || "";
   const lowerDisplayPath = displayPath.toLowerCase();
   const isTextFile = lowerDisplayPath.endsWith(".txt") || (!isVolumeType && series.extension === "TXT");
@@ -347,7 +348,7 @@ export function SeriesInfoCard({
               />
               <img
                 src={thumbnailUrl}
-                alt={isVolumeType ? volume?.title : series.title}
+                alt={isVolumeType ? volume?.title : visibleSeriesTitle}
                 className={styles.seriesThumbnailContain}
                 onError={() => setImageError(true)}
               />
@@ -355,7 +356,7 @@ export function SeriesInfoCard({
           ) : (
             <img
               src={thumbnailUrl}
-              alt={isVolumeType ? volume?.title : series.title}
+              alt={isVolumeType ? volume?.title : visibleSeriesTitle}
               className={styles.seriesThumbnail}
               onError={() => setImageError(true)}
             />
@@ -482,7 +483,7 @@ export function SeriesInfoCard({
             </>
           ) : (
             <>
-              <h1>{series.title}</h1>
+              <h1>{visibleSeriesTitle}</h1>
               <div className={styles.seriesMeta}>
                 {series.metadata?.authors}
                 {series.metadata?.authors && series.metadata?.publication_year && (

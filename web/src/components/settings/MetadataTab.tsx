@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, Loader2, Database, ChevronDown } from "lucide-react";
-import { libraryAPI, seriesAPI, settingAPI } from "../../api/client";
+import { libraryAPI, seriesAPI } from "../../api/client";
 import type { Library, Series } from "../../types/series";
 import type { MetadataFetchResponse, MetadataSearchResult } from "../../types/plugin";
 import { getAuthenticatedImageUrl } from "../../utils/image";
@@ -16,13 +16,8 @@ interface SeriesMetadataInfo extends Series {
   matchResult?: MetadataFetchResponse;
 }
 
-interface MetadataSettingsData {
-  original_title_override?: string;
-  epub_title_override?: string;
-}
-
 export function MetadataTab() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const progressLabelId = useId();
   const librarySelectorLabelId = useId();
   const cancelScanRequestedRef = useRef(false);
@@ -36,7 +31,7 @@ export function MetadataTab() {
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [originalTitleOverride, setOriginalTitleOverride] = useState(false);
+  const [updatingLibraryId, setUpdatingLibraryId] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const deselectedApplySet = useMemo(() => new Set(deselectedApplyIds), [deselectedApplyIds]);
@@ -69,17 +64,6 @@ export function MetadataTab() {
         }
       })
       .catch((err) => console.error("Failed to load libraries:", err));
-
-    settingAPI
-      .list()
-      .then((data: MetadataSettingsData) => {
-        if (!isMountedRef.current) return;
-        const originalTitleOverrideValue = data.original_title_override ?? data.epub_title_override;
-        if (originalTitleOverrideValue) {
-          setOriginalTitleOverride(originalTitleOverrideValue === "true");
-        }
-      })
-      .catch((err) => console.error("Failed to load metadata settings:", err));
   }, []);
 
   // Load series when selected library changes
@@ -188,16 +172,27 @@ export function MetadataTab() {
     return getAuthenticatedImageUrl(`${series.thumbnail_url}${separator}_cb=${cacheBuster}`);
   };
 
-  const handleMetadataSettingChange = async (value: string) => {
+  const handleLibraryOverrideToggle = async (library: Library, enabled: boolean) => {
+    if (!library.id) return;
     try {
-      await settingAPI.update("original_title_override", { value, locale: i18n.language || "ko" });
+      setUpdatingLibraryId(library.id);
+      const updatedLibrary = await libraryAPI
+        .update(library.id, { original_title_override: enabled })
+        .then((res) => res.data as Library);
       if (!isMountedRef.current) return;
-      setOriginalTitleOverride(value === "true");
+      setLibraries((prev) => prev.map((library) => (library.id === updatedLibrary.id ? { ...library, ...updatedLibrary } : library)));
+      if (selectedLibraryId === library.id) {
+        await loadSeries(library.id);
+      }
       setToast({ type: "success", message: t("settings.viewer.toast.saved") });
     } catch (error) {
       console.error("Failed to update metadata setting:", error);
       if (isMountedRef.current) {
         setToast({ type: "error", message: t("settings.viewer.toast.save_failed") });
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setUpdatingLibraryId(null);
       }
     }
   };
@@ -369,35 +364,49 @@ export function MetadataTab() {
         </div>
       </div>
 
-      <div className={commonStyles.settingsSections}>
-        <section className={commonStyles.settingsSection}>
-          <div className={`${commonStyles.sectionTitle} ${styles.settingsSectionTitle}`}>
-            <h3>{t("settings.viewer.subsections.metadata")}</h3>
+      <div className={styles.header}>
+        <section className={styles.libraryOverrideSection}>
+          <div className={styles.metadataSettingsHeader}>
+            <h3>{t("settings.viewer.epub.title_override_label")}</h3>
+            <p>{t("settings.metadata.settings_description")}</p>
           </div>
-          <div className={commonStyles.sectionContent}>
-            <div className={commonStyles.settingsItem}>
-              <div className={commonStyles.itemInfo}>
-                <label htmlFor="original_title_override">{t("settings.viewer.epub.title_override_label")}</label>
-                <p>{t("settings.metadata.settings_description")}</p>
-              </div>
-              <div className={commonStyles.itemControl}>
-                <select
-                  id="original_title_override"
-                  value={originalTitleOverride ? "true" : "false"}
-                  onChange={(e) => void handleMetadataSettingChange(e.target.value)}
-                  className={commonStyles.settingsSelect}
-                >
-                  <option value="true">{t("common.on", { defaultValue: "켜기" })}</option>
-                  <option value="false">{t("common.off", { defaultValue: "끄기" })}</option>
-                </select>
-              </div>
-            </div>
+          <div className={styles.libraryOverrideGrid}>
+            {libraries.map((library) => {
+              const enabled = Boolean(library.original_title_override);
+              const isUpdating = updatingLibraryId === library.id;
+              return (
+                <article key={library.id} className={styles.libraryOverrideCard}>
+                  <div className={styles.libraryOverrideInfo}>
+                    <div className={styles.libraryOverrideNameRow}>
+                      <Database size={16} />
+                      <h4>{library.name}</h4>
+                    </div>
+                    <p>{enabled ? t("common.on", { defaultValue: "켜기" }) : t("common.off", { defaultValue: "끄기" })}</p>
+                  </div>
+                  <label className={`${commonStyles.pluginToggle} ${isScanning || isUpdating ? commonStyles.pluginToggleDisabled : ""}`}>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={enabled}
+                      aria-label={`${library.name} ${t("settings.viewer.epub.title_override_label")}`}
+                      className={`${commonStyles.pluginToggleTrack} ${enabled ? commonStyles.pluginToggleTrackOn : ""}`}
+                      onClick={() => void handleLibraryOverrideToggle(library, !enabled)}
+                      disabled={isScanning || isUpdating}
+                    >
+                      <span className={`${commonStyles.pluginToggleThumb} ${enabled ? commonStyles.pluginToggleThumbOn : ""}`}>
+                        {isUpdating ? <Loader2 className={styles.spinning} size={11} /> : null}
+                      </span>
+                    </button>
+                  </label>
+                </article>
+              );
+            })}
           </div>
         </section>
       </div>
 
       <div className={styles.header}>
-        <div className={styles.actions}>
+        <div className={styles.libraryActionPanel}>
           <div className={styles.librarySelector}>
             <div id={librarySelectorLabelId} className={styles.selectorLabel}>
               <Database size={14} />
@@ -426,6 +435,7 @@ export function MetadataTab() {
               />
             </div>
           </div>
+          <div className={styles.actions}>
           <button
             className={`${commonStyles.settingsButton} ${styles.scanButton} ${styles.primaryAction}`}
             onClick={handleScanButtonClick}
@@ -450,6 +460,7 @@ export function MetadataTab() {
             {selectedMatchedCount > 0 && <span className={styles.applyCount}>{selectedMatchedCount}</span>}
             {t("settings.metadata.apply_all")}
           </button>
+          </div>
         </div>
       </div>
 

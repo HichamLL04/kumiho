@@ -109,7 +109,7 @@ func main() {
 		log.Fatalf("Failed to list plugin records: %v", err)
 	}
 	log.Printf("Plugin manager initialized with %d persisted plugin records", len(pluginRecords))
-	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, pluginManager)
+	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, libraryRepo, settingRepo, pluginManager)
 	pluginInstallSvc := service.NewPluginInstallService(cfg, nil, pluginManager, pluginSecretSvc)
 
 	// 핸들러 초기화
@@ -118,7 +118,7 @@ func main() {
 	libraryHandler := handler.NewLibraryHandler(ctx, libraryRepo, authService, fileScanner)
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
 	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
-	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
+	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, libraryRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가

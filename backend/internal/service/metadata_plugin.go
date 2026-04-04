@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -23,6 +22,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/capability"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
@@ -80,23 +80,34 @@ type MetadataApplyResult struct {
 }
 
 type MetadataService struct {
-	seriesRepo *repository.SeriesRepository
-	volumeRepo *repository.VolumeRepository
-	manager    *pluginengine.Manager
-	cfg        *config.Config
-	client     *http.Client
+	seriesRepo  *repository.SeriesRepository
+	volumeRepo  *repository.VolumeRepository
+	libraryRepo *repository.LibraryRepository
+	settingRepo repository.SettingRepository
+	manager     *pluginengine.Manager
+	cfg         *config.Config
+	client      *http.Client
 }
 
-func NewMetadataService(cfg *config.Config, client *http.Client, seriesRepo *repository.SeriesRepository, manager *pluginengine.Manager) *MetadataService {
+func NewMetadataService(
+	cfg *config.Config,
+	client *http.Client,
+	seriesRepo *repository.SeriesRepository,
+	libraryRepo *repository.LibraryRepository,
+	settingRepo repository.SettingRepository,
+	manager *pluginengine.Manager,
+) *MetadataService {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &MetadataService{
-		seriesRepo: seriesRepo,
-		volumeRepo: repository.NewVolumeRepository(),
-		manager:    manager,
-		cfg:        cfg,
-		client:     client,
+		seriesRepo:  seriesRepo,
+		volumeRepo:  repository.NewVolumeRepository(),
+		libraryRepo: libraryRepo,
+		settingRepo: settingRepo,
+		manager:     manager,
+		cfg:         cfg,
+		client:      client,
 	}
 }
 
@@ -269,10 +280,30 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	var updatedFields []string
 	applyFetchedTitle(series, result, &updatedFields)
 	applyString(&series.Description, sanitizeDescription(result.Description), "description", &updatedFields)
-	applyString(&series.Metadata.OriginalTitle, strings.TrimSpace(result.OriginalTitle), "original_title", &updatedFields)
-	if originalTitles := encodeOriginalTitles(result.OriginalTitles); originalTitles != "" {
+
+	// original_titles raw 저장
+	manualOriginalTitle := ""
+	isManualOriginalTitle := scanner.IsManualOriginalTitle(series.Metadata.OriginalTitles, series.Metadata.OriginalTitle)
+	if existingTitle := strings.TrimSpace(series.Metadata.OriginalTitle); isManualOriginalTitle {
+		manualOriginalTitle = existingTitle
+	}
+
+	if originalTitles := encodeOriginalTitles(result.OriginalTitles, manualOriginalTitle); originalTitles != "" {
 		applyString(&series.Metadata.OriginalTitles, originalTitles, "original_titles", &updatedFields)
 	}
+
+	// locale 우선순위로 해석한 값을 original_title에 저장
+	// 단, 기존 original_title이 비어있지 않고 original_titles에 없는 값이면 수동 입력으로 간주 → 덮어쓰지 않음
+	locale := repository.PreferredOriginalTitleLocale(s.settingRepo)
+	resolvedOriginalTitle := resolveFetchedOriginalTitle(result, locale)
+	if resolvedOriginalTitle != "" {
+		if !isManualOriginalTitle {
+			applyString(&series.Metadata.OriginalTitle, resolvedOriginalTitle, "original_title", &updatedFields)
+		}
+	} else if fetchedOriginalTitle := strings.TrimSpace(result.OriginalTitle); fetchedOriginalTitle != "" {
+		applyString(&series.Metadata.OriginalTitle, fetchedOriginalTitle, "original_title", &updatedFields)
+	}
+
 	applyString(&series.Metadata.Publisher, strings.TrimSpace(result.Publisher), "publisher", &updatedFields)
 	applyString(&series.Metadata.PublishedAt, strings.TrimSpace(result.PublicationDate), "published_at", &updatedFields)
 	if publicationYear := yearFromDate(result.PublicationDate); publicationYear != "" {
@@ -324,6 +355,18 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	}, nil
 }
 
+// isOriginalTitleFromTitles 기존 original_title이 original_titles 맵에 포함된 값인지 확인한다.
+// 포함되어 있으면 시스템이 해석한 값이므로 덮어써도 안전하고,
+// 포함되어 있지 않으면 사용자가 수동으로 입력한 값으로 간주한다.
+func isOriginalTitleFromTitles(existingTitle string, titles map[string]string) bool {
+	for _, v := range titles {
+		if strings.TrimSpace(v) == existingTitle {
+			return true
+		}
+	}
+	return false
+}
+
 func hasCapability(manifest sdkmanifest.Manifest, wanted capability.Capability) bool {
 	for _, current := range manifest.Capabilities {
 		if current == wanted {
@@ -371,29 +414,36 @@ func applyFetchedTitle(series *model.Series, result *sdktypes.MetadataResult, up
 	applyString(&series.Metadata.OriginalTitle, fetchedTitle, "original_title", updatedFields)
 }
 
-func encodeOriginalTitles(values map[string]string) string {
-	if len(values) == 0 {
+func encodeOriginalTitles(values map[string]string, manualOriginalTitle string) string {
+	return scanner.EncodeOriginalTitlesPayload(values, manualOriginalTitle)
+}
+
+func resolveFetchedOriginalTitle(result *sdktypes.MetadataResult, locale string) string {
+	if result == nil {
 		return ""
 	}
 
-	normalized := make(map[string]string, len(values))
-	for key, value := range values {
-		trimmedKey := strings.ToLower(strings.TrimSpace(key))
-		trimmedValue := strings.TrimSpace(value)
-		if trimmedKey == "" || trimmedValue == "" {
-			continue
+	for _, key := range preferredOriginalTitleOrder(locale) {
+		if title := strings.TrimSpace(result.OriginalTitles[key]); title != "" {
+			return title
 		}
-		normalized[trimmedKey] = trimmedValue
 	}
-	if len(normalized) == 0 {
-		return ""
+	if title := strings.TrimSpace(result.OriginalTitle); title != "" {
+		return title
 	}
+	return strings.TrimSpace(result.Title)
+}
 
-	payload, err := json.Marshal(normalized)
-	if err != nil {
-		return ""
+func preferredOriginalTitleOrder(locale string) []string {
+	normalized := strings.ToLower(strings.TrimSpace(locale))
+	switch {
+	case strings.HasPrefix(normalized, "ko"):
+		return []string{"ko", "en", "ja"}
+	case strings.HasPrefix(normalized, "ja"):
+		return []string{"ja", "en", "ko"}
+	default:
+		return []string{"en", "ja", "ko"}
 	}
-	return string(payload)
 }
 
 func filterNonEmpty(values []string) []string {

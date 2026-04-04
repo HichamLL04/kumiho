@@ -69,6 +69,8 @@ var (
 	rePrologue   = regexp.MustCompile(`(?i)(?:prologue|프롤로그)`)
 )
 
+const manualOriginalTitleKey = "_manual_title"
+
 func isExcluded(name string, patterns []string) bool {
 	// 기본 제외 대상 (NAS 시스템 폴더 등)
 	defaultExcludes := []string{"@eaDir", "#recycle", ".DS_Store", "Thumbs.db", ".git", ".idea"}
@@ -201,24 +203,62 @@ func (s *Scanner) applyOriginalTitleOverride(tx *sql.Tx, enabled bool) error {
 	}
 
 	for _, library := range libraries {
-		seriesList, err := s.seriesRepo.FindByLibraryID(tx, library.ID, "")
-		if err != nil {
+		if err := s.applyOriginalTitleOverrideForLibraryTx(tx, library.ID, enabled, locale); err != nil {
 			return err
-		}
-
-		for i := range seriesList {
-			series := &seriesList[i]
-			resolvedTitle := ResolveSeriesTitleFromOriginalTitle(series.Path, "", series.Metadata, enabled, locale)
-			if strings.TrimSpace(series.Title) == resolvedTitle {
-				continue
-			}
-			series.Title = resolvedTitle
-			if err := s.seriesRepo.Update(tx, series); err != nil {
-				return err
-			}
 		}
 	}
 
+	return nil
+}
+
+// ApplyOriginalTitleOverrideForLibrary 특정 라이브러리의 시리즈 제목을 원제 오버라이드 설정에 따라 재해석한다.
+func (s *Scanner) ApplyOriginalTitleOverrideForLibrary(libraryID string, enabled bool) error {
+	tx, err := database.DB.BeginTx(context.Background(), nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	locale := repository.PreferredOriginalTitleLocale(s.settingRepo)
+	if err := s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID, enabled, locale); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Scanner) ApplyOriginalTitleOverrideForLibraryWithTx(tx *sql.Tx, libraryID string, enabled bool) error {
+	if tx == nil {
+		return errors.New("transaction is required")
+	}
+	locale := repository.PreferredOriginalTitleLocale(s.settingRepo)
+	return s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID, enabled, locale)
+}
+
+func (s *Scanner) applyOriginalTitleOverrideForLibraryTx(tx *sql.Tx, libraryID string, enabled bool, locale string) error {
+	if s == nil || s.seriesRepo == nil {
+		return nil
+	}
+
+	// Stored title now remains path-based; override settings only affect display title.
+	// When this flow runs, normalize any legacy rows that still have an overridden title persisted.
+	seriesList, err := s.seriesRepo.FindByLibraryID(tx, libraryID, "")
+	if err != nil {
+		return err
+	}
+	for i := range seriesList {
+		series := &seriesList[i]
+		baseTitle := ResolveSeriesTitleFromOriginalTitle(series.Path, "", series.Metadata, false, locale)
+		if strings.TrimSpace(baseTitle) == "" || strings.TrimSpace(series.Title) == baseTitle {
+			continue
+		}
+		series.Title = baseTitle
+		if err := s.seriesRepo.Update(tx, series); err != nil {
+			return err
+		}
+	}
+
+	_ = enabled
 	return nil
 }
 
@@ -250,14 +290,99 @@ func preferredOriginalTitleOrder(locale string) []string {
 	}
 }
 
-func localizedOriginalTitle(metadata *model.SeriesMetadata, locale string) string {
+func parseOriginalTitlesPayload(raw string) (map[string]string, string) {
+	titles := make(map[string]string)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return titles, ""
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return titles, ""
+	}
+
+	manualTitle := strings.TrimSpace(payload[manualOriginalTitleKey])
+	for key, value := range payload {
+		if key == manualOriginalTitleKey {
+			continue
+		}
+		trimmedKey := strings.ToLower(strings.TrimSpace(key))
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		titles[trimmedKey] = trimmedValue
+	}
+
+	return titles, manualTitle
+}
+
+func EncodeOriginalTitlesPayload(titles map[string]string, manualTitle string) string {
+	normalized := make(map[string]string, len(titles)+1)
+	for key, value := range titles {
+		trimmedKey := strings.ToLower(strings.TrimSpace(key))
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		normalized[trimmedKey] = trimmedValue
+	}
+	if manual := strings.TrimSpace(manualTitle); manual != "" {
+		normalized[manualOriginalTitleKey] = manual
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+
+	payload, err := json.Marshal(normalized)
+	if err != nil {
+		return ""
+	}
+	return string(payload)
+}
+
+func WithManualOriginalTitle(raw string, originalTitle string) string {
+	titles, _ := parseOriginalTitlesPayload(raw)
+	return EncodeOriginalTitlesPayload(titles, originalTitle)
+}
+
+func IsManualOriginalTitle(raw string, current string) bool {
+	current = strings.TrimSpace(current)
+	if current == "" {
+		return false
+	}
+
+	titles, manualTitle := parseOriginalTitlesPayload(raw)
+	if manualTitle != "" {
+		return manualTitle == current
+	}
+
+	return !containsOriginalTitleValue(titles, current)
+}
+
+func WithoutManualOriginalTitle(raw string) string {
+	titles, _ := parseOriginalTitlesPayload(raw)
+	return EncodeOriginalTitlesPayload(titles, "")
+}
+
+// LocalizedOriginalTitle original_titles JSON에서 locale 우선순위로 원제를 선택한다.
+func LocalizedOriginalTitle(metadata *model.SeriesMetadata, locale string) string {
 	if metadata == nil {
 		return ""
 	}
 
 	if strings.TrimSpace(metadata.OriginalTitles) != "" {
-		var titles map[string]string
-		if err := json.Unmarshal([]byte(metadata.OriginalTitles), &titles); err == nil {
+		titles, manualTitle := parseOriginalTitlesPayload(metadata.OriginalTitles)
+		if title := strings.TrimSpace(metadata.OriginalTitle); title != "" {
+			if manualTitle != "" && manualTitle == title {
+				return title
+			}
+			if !containsOriginalTitleValue(titles, title) {
+				return title
+			}
+		}
+		if len(titles) > 0 {
 			for _, key := range preferredOriginalTitleOrder(locale) {
 				if title := strings.TrimSpace(titles[key]); title != "" {
 					return title
@@ -267,6 +392,19 @@ func localizedOriginalTitle(metadata *model.SeriesMetadata, locale string) strin
 	}
 
 	return strings.TrimSpace(metadata.OriginalTitle)
+}
+
+func containsOriginalTitleValue(titles map[string]string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range titles {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func ResolveSeriesTitleFromOriginalTitle(
@@ -279,7 +417,7 @@ func ResolveSeriesTitleFromOriginalTitle(
 	if !enableOriginalTitle || metadata == nil {
 		return pathTitle
 	}
-	originalTitle := localizedOriginalTitle(metadata, locale)
+	originalTitle := LocalizedOriginalTitle(metadata, locale)
 	if originalTitle == "" {
 		return pathTitle
 	}
@@ -466,7 +604,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 
 	// 3. 성능 설정 로드
 	perf := s.getPerfConfig()
-	originalTitleOverrideEnabled := s.isOriginalTitleOverrideEnabled()
+	originalTitleOverrideEnabled := library.OriginalTitleOverride
 	originalTitleLocale := repository.PreferredOriginalTitleLocale(s.settingRepo)
 
 	// 시리즈 레벨 동시성 제어
@@ -1126,9 +1264,9 @@ func (s *Scanner) processArchiveAsSeries(
 		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
 			seriesChanged = true
 		}
-		seriesTitle := ResolveSeriesTitleFromOriginalTitle(archivePath, title, series.Metadata, originalTitleOverrideEnabled, originalTitleLocale)
-		if strings.TrimSpace(series.Title) != seriesTitle {
-			series.Title = seriesTitle
+		baseTitle := resolveSeriesTitleFromPath(archivePath, title)
+		if strings.TrimSpace(series.Title) != baseTitle {
+			series.Title = baseTitle
 			seriesChanged = true
 		}
 		if seriesChanged {
@@ -1200,7 +1338,7 @@ func (s *Scanner) processArchiveAsSeries(
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
-		series.Title = ResolveSeriesTitleFromOriginalTitle(archivePath, title, series.Metadata, originalTitleOverrideEnabled, originalTitleLocale)
+		series.Title = resolveSeriesTitleFromPath(archivePath, title)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(archivePath))
@@ -1303,9 +1441,9 @@ func (s *Scanner) processSeries(
 		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
 			seriesChanged = true
 		}
-		resolvedSeriesTitle := ResolveSeriesTitleFromOriginalTitle(seriesPath, seriesTitle, series.Metadata, originalTitleOverrideEnabled, originalTitleLocale)
-		if strings.TrimSpace(series.Title) != resolvedSeriesTitle {
-			series.Title = resolvedSeriesTitle
+		baseSeriesTitle := resolveSeriesTitleFromPath(seriesPath, seriesTitle)
+		if strings.TrimSpace(series.Title) != baseSeriesTitle {
+			series.Title = baseSeriesTitle
 			seriesChanged = true
 		}
 		if seriesChanged {
@@ -1338,7 +1476,7 @@ func (s *Scanner) processSeries(
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
-		series.Title = ResolveSeriesTitleFromOriginalTitle(seriesPath, seriesTitle, series.Metadata, originalTitleOverrideEnabled, originalTitleLocale)
+		series.Title = resolveSeriesTitleFromPath(seriesPath, seriesTitle)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(seriesPath))

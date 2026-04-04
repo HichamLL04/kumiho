@@ -1,6 +1,8 @@
 export type OriginalTitlesValue = Record<string, string> | string | null | undefined;
 export type OriginalTitleLanguage = "ko" | "ja" | "en" | "unknown";
 
+const MANUAL_ORIGINAL_TITLE_KEY = "_manual_title";
+
 function normalizeOriginalTitles(
   value: Record<string, unknown>,
 ): Partial<Record<Exclude<OriginalTitleLanguage, "unknown">, string>> {
@@ -39,6 +41,31 @@ function parseOriginalTitles(value: OriginalTitlesValue): Partial<Record<Exclude
   return {};
 }
 
+function parseManualOriginalTitle(value: OriginalTitlesValue): string {
+  if (!value) {
+    return "";
+  }
+  if (typeof value === "object") {
+    if (Array.isArray(value)) {
+      return "";
+    }
+    const manual = value[MANUAL_ORIGINAL_TITLE_KEY];
+    return typeof manual === "string" ? manual.trim() : "";
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const manual = (parsed as Record<string, unknown>)[MANUAL_ORIGINAL_TITLE_KEY];
+      return typeof manual === "string" ? manual.trim() : "";
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
+
 function preferredLanguage(locale: string): "ko" | "ja" | "en" {
   const normalized = locale.toLowerCase();
   if (normalized.startsWith("ko")) {
@@ -56,6 +83,12 @@ function preferredLanguageOrder(locale: string): Array<"ko" | "ja" | "en"> {
 }
 
 export function localizedOriginalTitle(value: OriginalTitlesValue, locale: string, fallback = ""): string {
+  const manualTitle = parseManualOriginalTitle(value);
+  const normalizedFallback = fallback.trim();
+  if (manualTitle && normalizedFallback && manualTitle === normalizedFallback) {
+    return normalizedFallback;
+  }
+
   const titles = parseOriginalTitles(value);
   const order = preferredLanguageOrder(locale);
 
@@ -66,7 +99,6 @@ export function localizedOriginalTitle(value: OriginalTitlesValue, locale: strin
     }
   }
 
-  const normalizedFallback = fallback.trim();
   return normalizedFallback;
 }
 

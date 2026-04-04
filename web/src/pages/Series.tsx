@@ -72,6 +72,7 @@ export function SeriesPage() {
 
   const user = useAuthStore((state) => state.user);
   const canDownload = user?.role === "MASTER" || user?.can_download;
+  const seriesTitle = series?.display_title || series?.title || "";
   const preferPercentLabel =
     volumes.length > 0 &&
     volumes.every((volume) => {
@@ -96,7 +97,7 @@ export function SeriesPage() {
     setAlertModal({
       isOpen: true,
       type: "info",
-      message: t("series.alert.download_series_confirm", { title: series.title }),
+      message: t("series.alert.download_series_confirm", { title: series.display_title || series.title }),
       onConfirm: () => {
         try {
           const url = downloadAPI.getSeriesUrl(series.id);
@@ -385,7 +386,7 @@ export function SeriesPage() {
                 },
               ]
             : []),
-          { label: series.title },
+          { label: seriesTitle },
         ]}
       />
 

@@ -100,7 +100,7 @@ func TestResolveSeriesTitleFromOriginalTitle(t *testing.T) {
 		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want fallback path title when original title missing", got)
 	}
 
-	metadata.OriginalTitle = "Legacy English Title"
+	metadata.OriginalTitle = ""
 	metadata.OriginalTitles = `{"ko":"한국어 원제","en":"English Title","ja":"日本語タイトル"}`
 
 	got = ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "ko")
@@ -116,6 +116,42 @@ func TestResolveSeriesTitleFromOriginalTitle(t *testing.T) {
 	got = ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "en")
 	if got != "English Title" {
 		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want English title for en locale", got)
+	}
+}
+
+func TestResolveSeriesTitleFromOriginalTitlePrefersManualOriginalTitle(t *testing.T) {
+	metadata := &model.SeriesMetadata{
+		OriginalTitle:  "사용자 지정 원제",
+		OriginalTitles: `{"ko":"한국어 원제","en":"English Title","ja":"日本語タイトル","_manual_title":"사용자 지정 원제"}`,
+	}
+
+	got := ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "ja")
+	if got != "사용자 지정 원제" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want manual original title", got)
+	}
+}
+
+func TestResolveSeriesTitleFromOriginalTitleReappliesLocaleWhenOriginalTitleWasAutoResolved(t *testing.T) {
+	metadata := &model.SeriesMetadata{
+		OriginalTitle:  "한국어 원제",
+		OriginalTitles: `{"ko":"한국어 원제","en":"English Title","ja":"日本語タイトル"}`,
+	}
+
+	got := ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "en")
+	if got != "English Title" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want English title after locale switch", got)
+	}
+}
+
+func TestResolveSeriesTitleFromOriginalTitleKeepsManualSelectedLocaleValue(t *testing.T) {
+	metadata := &model.SeriesMetadata{
+		OriginalTitle:  "한국어 원제",
+		OriginalTitles: `{"ko":"한국어 원제","en":"English Title","ja":"日本語タイトル","_manual_title":"한국어 원제"}`,
+	}
+
+	got := ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "ja")
+	if got != "한국어 원제" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want manually selected Korean title", got)
 	}
 }
 
@@ -144,7 +180,7 @@ func TestApplyOriginalTitleOverrideUpdatesExistingSeriesTitles(t *testing.T) {
 
 	series := &model.Series{
 		LibraryID: library.ID,
-		Title:     "20세기 소년 완전판",
+		Title:     "20th Century Boys",
 		Path:      filepath.Join(library.Paths[0], "20세기 소년 완전판"),
 		Metadata: &model.SeriesMetadata{
 			Status:        "ONGOING",
@@ -168,8 +204,8 @@ func TestApplyOriginalTitleOverrideUpdatesExistingSeriesTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SeriesRepository.FindByID() error = %v", err)
 	}
-	if updated.Title != "20th Century Boys" {
-		t.Fatalf("Title = %q, want original title", updated.Title)
+	if updated.Title != "20세기 소년 완전판" {
+		t.Fatalf("Title = %q, want normalized path-based title", updated.Title)
 	}
 
 	if applyErr := s.ApplyOriginalTitleOverride(false); applyErr != nil {
@@ -181,7 +217,7 @@ func TestApplyOriginalTitleOverrideUpdatesExistingSeriesTitles(t *testing.T) {
 		t.Fatalf("SeriesRepository.FindByID() after restore error = %v", err)
 	}
 	if restored.Title != "20세기 소년 완전판" {
-		t.Fatalf("Title = %q, want path-based title after restore", restored.Title)
+		t.Fatalf("Title = %q, want normalized path-based title after restore", restored.Title)
 	}
 }
 
