@@ -213,7 +213,7 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 					"error": "Failed to update library original title override",
 				})
 			}
-			if err := h.scanner.ApplyOriginalTitleOverrideWithTx(tx, overrideEnabled); err != nil {
+			if err := h.scanner.NormalizeStoredSeriesTitlesWithTx(tx); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "Failed to apply original title override",
 				})
@@ -263,8 +263,7 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 					"error": "Failed to update setting",
 				})
 			}
-			overrideEnabled := repository.IsOriginalTitleOverrideEnabledWithQuery(tx, h.repo)
-			if err := h.scanner.ApplyOriginalTitleOverrideWithTx(tx, overrideEnabled); err != nil {
+			if err := h.scanner.NormalizeStoredSeriesTitlesWithTx(tx); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "Failed to apply original title override",
 				})

@@ -170,28 +170,28 @@ func (s *Scanner) isOriginalTitleOverrideEnabled() bool {
 	return repository.IsOriginalTitleOverrideEnabled(s.settingRepo)
 }
 
-func (s *Scanner) ApplyOriginalTitleOverride(enabled bool) error {
+func (s *Scanner) NormalizeStoredSeriesTitles() error {
 	tx, err := database.DB.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := s.applyOriginalTitleOverride(tx, enabled); err != nil {
+	if err := s.normalizeStoredSeriesTitles(tx); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-func (s *Scanner) ApplyOriginalTitleOverrideWithTx(tx *sql.Tx, enabled bool) error {
+func (s *Scanner) NormalizeStoredSeriesTitlesWithTx(tx *sql.Tx) error {
 	if tx == nil {
 		return fmt.Errorf("transaction is required")
 	}
-	return s.applyOriginalTitleOverride(tx, enabled)
+	return s.normalizeStoredSeriesTitles(tx)
 }
 
-func (s *Scanner) applyOriginalTitleOverride(tx *sql.Tx, enabled bool) error {
+func (s *Scanner) normalizeStoredSeriesTitles(tx *sql.Tx) error {
 	if s == nil || s.libraryRepo == nil || s.seriesRepo == nil {
 		return nil
 	}
@@ -202,7 +202,7 @@ func (s *Scanner) applyOriginalTitleOverride(tx *sql.Tx, enabled bool) error {
 	}
 
 	for _, library := range libraries {
-		if err := s.applyOriginalTitleOverrideForLibraryTx(tx, library.ID); err != nil {
+		if err := s.normalizeStoredSeriesTitlesForLibraryTx(tx, library.ID); err != nil {
 			return err
 		}
 	}
@@ -210,31 +210,29 @@ func (s *Scanner) applyOriginalTitleOverride(tx *sql.Tx, enabled bool) error {
 	return nil
 }
 
-// ApplyOriginalTitleOverrideForLibrary 특정 라이브러리의 시리즈 제목을 원제 오버라이드 설정에 따라 재해석한다.
-func (s *Scanner) ApplyOriginalTitleOverrideForLibrary(libraryID string, enabled bool) error {
-	_ = enabled
+// NormalizeStoredSeriesTitlesForLibrary 특정 라이브러리의 저장 title을 path 기반 제목으로 정규화한다.
+func (s *Scanner) NormalizeStoredSeriesTitlesForLibrary(libraryID string) error {
 	tx, err := database.DB.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID); err != nil {
+	if err := s.normalizeStoredSeriesTitlesForLibraryTx(tx, libraryID); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-func (s *Scanner) ApplyOriginalTitleOverrideForLibraryWithTx(tx *sql.Tx, libraryID string, enabled bool) error {
+func (s *Scanner) NormalizeStoredSeriesTitlesForLibraryWithTx(tx *sql.Tx, libraryID string) error {
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
-	_ = enabled
-	return s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID)
+	return s.normalizeStoredSeriesTitlesForLibraryTx(tx, libraryID)
 }
 
-func (s *Scanner) applyOriginalTitleOverrideForLibraryTx(tx *sql.Tx, libraryID string) error {
+func (s *Scanner) normalizeStoredSeriesTitlesForLibraryTx(tx *sql.Tx, libraryID string) error {
 	if s == nil || s.seriesRepo == nil {
 		return nil
 	}

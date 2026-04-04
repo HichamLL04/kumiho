@@ -858,7 +858,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 			})
 		}
 		if overrideChanged {
-			if err := h.scanner.ApplyOriginalTitleOverrideForLibraryWithTx(tx, pendingLibrary.ID, pendingLibrary.OriginalTitleOverride); err != nil {
+			if err := h.scanner.NormalizeStoredSeriesTitlesForLibraryWithTx(tx, pendingLibrary.ID); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "failed to apply original title override",
 				})

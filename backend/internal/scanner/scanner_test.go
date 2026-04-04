@@ -155,7 +155,7 @@ func TestResolveSeriesTitleFromOriginalTitleKeepsManualSelectedLocaleValue(t *te
 	}
 }
 
-func TestApplyOriginalTitleOverrideUpdatesExistingSeriesTitles(t *testing.T) {
+func TestNormalizeStoredSeriesTitlesUpdatesLegacyStoredTitles(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
 	if err := database.Connect(dbPath); err != nil {
 		t.Fatalf("database.Connect() error = %v", err)
@@ -196,8 +196,8 @@ func TestApplyOriginalTitleOverrideUpdatesExistingSeriesTitles(t *testing.T) {
 		seriesRepo:  seriesRepo,
 	}
 
-	if err := s.ApplyOriginalTitleOverride(true); err != nil {
-		t.Fatalf("ApplyOriginalTitleOverride(true) error = %v", err)
+	if err := s.NormalizeStoredSeriesTitles(); err != nil {
+		t.Fatalf("NormalizeStoredSeriesTitles() error = %v", err)
 	}
 
 	updated, err := seriesRepo.FindByID(nil, series.ID, "")
@@ -208,8 +208,8 @@ func TestApplyOriginalTitleOverrideUpdatesExistingSeriesTitles(t *testing.T) {
 		t.Fatalf("Title = %q, want normalized path-based title", updated.Title)
 	}
 
-	if applyErr := s.ApplyOriginalTitleOverride(false); applyErr != nil {
-		t.Fatalf("ApplyOriginalTitleOverride(false) error = %v", applyErr)
+	if applyErr := s.NormalizeStoredSeriesTitles(); applyErr != nil {
+		t.Fatalf("NormalizeStoredSeriesTitles() error = %v", applyErr)
 	}
 
 	restored, err := seriesRepo.FindByID(nil, series.ID, "")

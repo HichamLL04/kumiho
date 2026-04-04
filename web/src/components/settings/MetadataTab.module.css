@@ -42,25 +42,6 @@
   color: var(--text-secondary);
 }
 
-.metadataSettingsControlRow {
-  display: flex;
-  align-items: flex-end;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.metadataSettingsHelp {
-  flex: 1 1 240px;
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-.metadataSettingsSelect {
-  min-width: 140px;
-}
-
 .libraryOverrideSection {
   display: flex;
   flex-direction: column;
