@@ -207,6 +207,7 @@ export function MetadataTab() {
       .filter(({ series }) => series.scanStatus !== "matched" && series.scanStatus !== "applied");
     if (scanTargets.length === 0) return;
 
+    setEditingSeries(null);
     cancelScanRequestedRef.current = false;
     setIsScanning(true);
     setScanProgress({ current: 0, total: scanTargets.length });
