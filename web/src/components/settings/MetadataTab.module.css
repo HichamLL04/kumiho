@@ -242,6 +242,15 @@
 }
 
 @media (max-width: 980px) {
+  .metadataTab {
+    padding: 1.5rem;
+    gap: 1.5rem;
+  }
+
+  .metadataSettingsCard {
+    padding: 1.15rem 1.2rem;
+  }
+
   .actions {
     width: 100%;
     justify-content: stretch;
@@ -251,6 +260,219 @@
   .scanButton,
   .applyButton {
     width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .content {
+    overflow: visible;
+  }
+
+  .seriesTableContainer {
+    overflow: visible;
+  }
+
+  .seriesTable {
+    display: block;
+    table-layout: auto;
+  }
+
+  .seriesTable thead {
+    display: none;
+  }
+
+  .seriesTable tbody {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .seriesTable tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "series series"
+      "status result";
+    gap: 0.9rem 1rem;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .seriesTable tr:last-child {
+    border-bottom: none;
+  }
+
+  .seriesTable td {
+    display: block;
+    padding: 0;
+    border: none;
+  }
+
+  .seriesTable td::before {
+    display: block;
+    margin-bottom: 0.38rem;
+    color: rgba(185, 205, 235, 0.74);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    content: attr(data-label);
+  }
+
+  .seriesTable td:nth-child(1) {
+    grid-area: series;
+  }
+
+  .seriesTable td:nth-child(1)::before {
+    display: none;
+  }
+
+  .seriesTable td:nth-child(2) {
+    grid-area: status;
+    width: auto;
+    text-align: left;
+    align-self: start;
+  }
+
+  .seriesTable td:nth-child(3) {
+    grid-area: result;
+    width: auto;
+    text-align: left;
+    align-self: start;
+  }
+
+  .seriesCell {
+    gap: 0.9rem;
+    align-items: flex-start;
+  }
+
+  .thumbnailSmall {
+    width: 54px;
+    height: 76px;
+  }
+
+  .seriesInfo {
+    gap: 0.28rem;
+  }
+
+  .seriesTitle {
+    white-space: normal;
+    line-height: 1.35;
+    max-height: calc(1.35em * 2);
+  }
+
+  .seriesPath {
+    white-space: normal;
+    direction: ltr;
+    line-height: 1.35;
+    max-height: calc(1.35em * 2);
+  }
+
+  .statusBadge {
+    justify-content: flex-start;
+  }
+
+  .rowActions {
+    align-items: flex-start;
+    gap: 0.7rem;
+    width: 100%;
+  }
+
+  .matchPreview {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .matchDescription {
+    max-height: calc(1.4em * 3);
+  }
+
+  .matchPopover {
+    display: none;
+  }
+
+  .matchPreviewUp .matchPopover {
+    bottom: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .metadataTab {
+    padding: 1rem;
+    gap: 1.25rem;
+  }
+
+  .titleArea h2 {
+    font-size: 1.3rem;
+  }
+
+  .titleArea p {
+    font-size: 0.88rem;
+  }
+
+  .metadataSettingsCard {
+    padding: 1rem;
+  }
+
+  .seriesHeaderLabel {
+    gap: 0.4rem;
+  }
+
+  .seriesCount {
+    height: 1.35rem;
+    padding: 0 0.45rem;
+    font-size: 0.68rem;
+  }
+
+  .progressText {
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .seriesTable tr {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "series"
+      "status"
+      "result";
+    gap: 0.75rem;
+    padding: 0.95rem;
+  }
+
+  .seriesTable td::before {
+    margin-bottom: 0.3rem;
+  }
+
+  .seriesTable td:nth-child(2),
+  .seriesTable td:nth-child(3) {
+    width: 100%;
+  }
+
+  .rowActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .matchPreview {
+    width: 100%;
+  }
+
+  .matchThumbnail {
+    width: 48px;
+    height: 68px;
+  }
+
+  .applyCheckboxLabel {
+    order: -1;
+    align-self: flex-end;
+  }
+
+  .failedActionButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .emptyResult {
+    align-self: flex-start;
   }
 }
 
@@ -523,6 +745,7 @@
   flex: 1;
   position: relative;
   outline: none;
+  cursor: pointer;
 }
 
 .matchThumbnail {
@@ -578,9 +801,7 @@
   max-height: calc(1.4em * 2);
 }
 
-.matchPreview:hover .matchPopover,
-.matchPreview:focus-visible .matchPopover,
-.matchPreview:focus-within .matchPopover {
+.matchPreview:hover .matchPopover {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
@@ -728,4 +949,351 @@
 }
 .applied {
   background: rgba(59, 130, 246, 0.15) !important;
+}
+
+@media (max-width: 1200px) {
+  .seriesTable th,
+  .seriesTable td {
+    padding: 0.9rem 1rem;
+  }
+
+  .seriesTable th:nth-child(2),
+  .seriesTable td:nth-child(2) {
+    width: 118px;
+  }
+
+  .seriesTable th:nth-child(3),
+  .seriesTable td:nth-child(3) {
+    width: 228px;
+  }
+
+  .seriesCell {
+    gap: 0.9rem;
+  }
+
+  .seriesTitle {
+    display: block;
+    white-space: normal;
+    line-height: 1.35;
+    max-height: calc(1.35em * 2);
+    overflow: hidden;
+  }
+
+  .seriesPath {
+    font-size: 0.72rem;
+  }
+
+  .statusBadge {
+    min-width: 78px;
+    padding: 0.34rem 0.52rem;
+  }
+
+  .rowActions {
+    gap: 0.55rem;
+  }
+
+  .matchPreview {
+    gap: 0.55rem;
+  }
+
+  .matchThumbnail {
+    width: 34px;
+    height: 48px;
+  }
+
+  .matchTitle {
+    font-size: 0.82rem;
+    white-space: normal;
+    line-height: 1.35;
+    max-height: calc(1.35em * 2);
+  }
+
+  .matchDescription {
+    font-size: 0.72rem;
+    max-height: calc(1.4em * 1);
+  }
+}
+
+@media (max-width: 980px) {
+  .metadataTab {
+    padding: 1.5rem;
+    gap: 1.5rem;
+  }
+
+  .metadataSettingsCard {
+    padding: 1.15rem 1.2rem;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .librarySelector,
+  .scanButton,
+  .applyButton {
+    width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .content,
+  .seriesTableContainer {
+    overflow: visible;
+  }
+
+  .seriesTable {
+    display: block;
+    table-layout: auto;
+  }
+
+  .seriesTable thead {
+    display: none;
+  }
+
+  .seriesTable tbody {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .seriesTable tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "series status"
+      "result result";
+    gap: 0.65rem 0.9rem;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .seriesTable tr:last-child {
+    border-bottom: none;
+  }
+
+  .seriesTable td {
+    display: block;
+    width: auto !important;
+    padding: 0;
+    border: none;
+    text-align: left;
+  }
+
+  .seriesTable td::before {
+    display: none;
+  }
+
+  .seriesTable td:nth-child(1) {
+    grid-area: series;
+  }
+
+  .seriesTable td:nth-child(2) {
+    grid-area: status;
+    align-self: center;
+    justify-self: end;
+  }
+
+  .seriesTable td:nth-child(3) {
+    grid-area: result;
+    align-self: start;
+  }
+
+  .mobileNoResult {
+    grid-template-areas: "series status";
+    align-items: center;
+  }
+
+  .mobileNoResult td:nth-child(3) {
+    display: none;
+  }
+
+  .seriesCell {
+    gap: 0.9rem;
+    align-items: center;
+  }
+
+  .thumbnailSmall {
+    width: 52px;
+    height: 74px;
+  }
+
+  .seriesInfo {
+    gap: 0.28rem;
+  }
+
+  .seriesTitle {
+    white-space: normal;
+    line-height: 1.35;
+    max-height: calc(1.35em * 2);
+  }
+
+  .seriesPath {
+    white-space: nowrap;
+    direction: ltr;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .statusBadge {
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .rowActions {
+    width: 100%;
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .matchPreview {
+    min-width: 0;
+    flex: 1;
+    flex-wrap: wrap;
+  }
+
+  .matchDescription {
+    max-height: calc(1.4em * 3);
+  }
+
+  .matchPopover {
+    display: none;
+  }
+
+  .matchPreviewExpanded .matchPopover {
+    display: block;
+    position: static;
+    width: 100%;
+    margin-top: 0.2rem;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .matchPreviewUp .matchPopover {
+    bottom: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .metadataTab {
+    padding: 1rem;
+    gap: 1.25rem;
+  }
+
+  .titleArea h2 {
+    font-size: 1.3rem;
+  }
+
+  .titleArea p {
+    font-size: 0.88rem;
+  }
+
+  .metadataSettingsCard {
+    padding: 1rem;
+  }
+
+  .progressText {
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .seriesTable tr {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "series"
+      "status"
+      "result";
+    gap: 0.6rem;
+    padding: 0.9rem;
+  }
+
+  .mobileNoResult {
+    grid-template-areas:
+      "series"
+      "status";
+  }
+
+  .seriesCell {
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .thumbnailSmall {
+    width: 44px;
+    height: 62px;
+  }
+
+  .seriesTitle {
+    font-size: 0.9rem;
+  }
+
+  .seriesPath {
+    font-size: 0.72rem;
+  }
+
+  .statusBadge {
+    justify-content: flex-start;
+    padding: 0.3rem 0.55rem;
+  }
+
+  .rowActions {
+    gap: 0.55rem;
+  }
+
+  .matchPreview {
+    width: 100%;
+    gap: 0.65rem;
+  }
+
+  .matchThumbnail {
+    width: 44px;
+    height: 62px;
+    border-radius: 7px;
+  }
+
+  .matchTitle {
+    font-size: 0.86rem;
+  }
+
+  .matchDescription {
+    font-size: 0.73rem;
+    max-height: calc(1.4em * 2);
+  }
+
+  .applyCheckboxLabel {
+    width: 1.4rem;
+    height: 1.4rem;
+    margin-left: auto;
+  }
+
+  .failedActionButton {
+    width: auto;
+    margin-left: auto;
+    padding: 0 0.65rem;
+  }
+
+  .emptyResult {
+    margin-left: auto;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 900px) and (hover: hover) and (pointer: fine) {
+  .matchPopover {
+    display: block;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.75rem);
+    width: min(360px, 72vw);
+    margin-top: 0;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(6px);
+  }
+
+  .matchPreviewUp .matchPopover {
+    top: auto;
+    bottom: calc(100% + 0.75rem);
+  }
 }

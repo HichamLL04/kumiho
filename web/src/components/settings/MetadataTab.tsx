@@ -28,6 +28,7 @@ export function MetadataTab() {
   const [seriesList, setSeriesList] = useState<SeriesMetadataInfo[]>([]);
   const [deselectedApplyIds, setDeselectedApplyIds] = useState<string[]>([]);
   const [editingSeries, setEditingSeries] = useState<SeriesMetadataInfo | null>(null);
+  const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [epubTitleOverride, setEpubTitleOverride] = useState(false);
@@ -69,6 +70,7 @@ export function MetadataTab() {
       try {
         const res = await libraryAPI.getSeries(libraryId);
         setDeselectedApplyIds([]);
+        setExpandedResultId(null);
         setSeriesList(res.data.series || []);
       } catch (err) {
         console.error("Failed to load series:", err);
@@ -86,6 +88,45 @@ export function MetadataTab() {
     }
   }, [selectedLibraryId, loadSeries]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const touchPreviewQuery = window.matchMedia("(hover: none), (pointer: coarse)");
+    const syncExpandedResultState = () => {
+      if (!touchPreviewQuery.matches) {
+        setExpandedResultId(null);
+      }
+    };
+
+    syncExpandedResultState();
+    touchPreviewQuery.addEventListener("change", syncExpandedResultState);
+
+    return () => {
+      touchPreviewQuery.removeEventListener("change", syncExpandedResultState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!expandedResultId) return;
+
+    const isTouchPreviewMode =
+      typeof window !== "undefined" && window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
+    if (!isTouchPreviewMode) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest(`.${styles.matchPreview}`)) return;
+      setExpandedResultId(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [expandedResultId]);
+
   const isApplySelected = (series: SeriesMetadataInfo) =>
     series.scanStatus === "matched" && !deselectedApplyIds.includes(series.id);
 
@@ -93,6 +134,19 @@ export function MetadataTab() {
     setDeselectedApplyIds((prev) =>
       prev.includes(seriesId) ? prev.filter((id) => id !== seriesId) : [...prev, seriesId],
     );
+  };
+
+  const toggleResultPreview = (seriesId: string) => {
+    setExpandedResultId((prev) => (prev === seriesId ? null : seriesId));
+  };
+
+  const handleResultPreviewClick = (seriesId: string) => {
+    const isTouchPreviewMode =
+      typeof window !== "undefined" && window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
+    if (!isTouchPreviewMode) return;
+
+    toggleResultPreview(seriesId);
   };
 
   const handleMetadataSettingChange = async (value: string) => {
@@ -371,9 +425,9 @@ export function MetadataTab() {
                 {seriesList.map((series, index) => (
                   <tr
                     key={series.id}
-                    className={styles[series.scanStatus || ""]}
+                    className={`${styles[series.scanStatus || ""]} ${!series.matchResult && series.scanStatus !== "failed" ? styles.mobileNoResult : ""}`}
                   >
-                    <td>
+                    <td data-label={t("settings.metadata.table.series")}>
                       <button
                         type="button"
                         className={styles.seriesLinkButton}
@@ -396,7 +450,7 @@ export function MetadataTab() {
                         </div>
                       </button>
                     </td>
-                    <td>
+                    <td data-label={t("settings.metadata.table.match_status")}>
                       <div className={styles.statusBadge}>
                         <span className={`${styles.statusDot} ${styles[`${series.scanStatus || "idle"}Dot`]}`} />
                         {series.scanStatus === "searching" && (
@@ -408,12 +462,21 @@ export function MetadataTab() {
                         {t(`settings.metadata.status.${series.scanStatus || "idle"}`)}
                       </div>
                     </td>
-                    <td>
+                    <td data-label={t("settings.metadata.table.match_result")}>
                       <div className={styles.rowActions}>
                         {series.matchResult && (
                           <div
-                            className={`${styles.matchPreview} ${index >= Math.max(seriesList.length - 2, 0) ? styles.matchPreviewUp : ""}`}
+                            className={`${styles.matchPreview} ${index >= Math.max(seriesList.length - 2, 0) ? styles.matchPreviewUp : ""} ${expandedResultId === series.id ? styles.matchPreviewExpanded : ""}`}
                             tabIndex={0}
+                            role="button"
+                            aria-expanded={expandedResultId === series.id}
+                            onClick={() => handleResultPreviewClick(series.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                toggleResultPreview(series.id);
+                              }
+                            }}
                           >
                             <div className={styles.matchThumbnail}>
                               {series.matchResult.result.cover?.url ? (
