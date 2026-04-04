@@ -25,6 +25,7 @@ export function MetadataTab() {
   const librarySelectorLabelId = useId();
   const cancelScanRequestedRef = useRef(false);
   const isMountedRef = useRef(true);
+  const loadSeriesRequestIdRef = useRef(0);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [selectedLibraryId, setSelectedLibraryId] = useState<string>("");
   const [seriesList, setSeriesList] = useState<SeriesMetadataInfo[]>([]);
@@ -82,6 +83,7 @@ export function MetadataTab() {
   const loadSeries = useCallback(
     async (libraryId: string) => {
       if (!libraryId) return;
+      const requestId = ++loadSeriesRequestIdRef.current;
       if (isMountedRef.current) {
         setDeselectedApplyIds([]);
         setExpandedResultId(null);
@@ -90,15 +92,15 @@ export function MetadataTab() {
       }
       try {
         const res = await libraryAPI.getSeries(libraryId);
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || loadSeriesRequestIdRef.current !== requestId) return;
         setSeriesList(res.data.series || []);
       } catch (err) {
         console.error("Failed to load series:", err);
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || loadSeriesRequestIdRef.current !== requestId) return;
         setSeriesList([]);
         setToast({ type: "error", message: t("settings.metadata.error_load_series") });
       } finally {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && loadSeriesRequestIdRef.current === requestId) {
           setIsLoading(false);
         }
       }
@@ -603,6 +605,7 @@ export function MetadataTab() {
                         )}
                         {series.scanStatus === "failed" && (
                           <button
+                            type="button"
                             className={`${styles.btnIcon} ${styles.failedActionButton}`}
                             onClick={() => setEditingSeries(series)}
                             title={t("settings.metadata.manual_search")}
