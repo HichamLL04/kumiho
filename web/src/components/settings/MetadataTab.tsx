@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, AlertCircle, CheckCircle2, Loader2, Database, ChevronDown } from "lucide-react";
+import { Search, Sparkles, AlertCircle, Loader2, Database, ChevronDown } from "lucide-react";
 import { libraryAPI, seriesAPI } from "../../api/client";
 import type { Library, Series } from "../../types/series";
 import type { MetadataFetchResponse, MetadataSearchResult } from "../../types/plugin";
@@ -309,12 +309,6 @@ export function MetadataTab() {
                           <Loader2
                             size={14}
                             className={styles.spinning}
-                          />
-                        )}
-                        {series.scanStatus === "matched" && (
-                          <CheckCircle2
-                            size={14}
-                            color="var(--success-color)"
                           />
                         )}
                         {series.scanStatus === "failed" && (
