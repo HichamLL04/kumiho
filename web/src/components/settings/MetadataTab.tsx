@@ -4,6 +4,7 @@ import { Search, Sparkles, Loader2, Database, ChevronDown } from "lucide-react";
 import { libraryAPI, seriesAPI, settingAPI } from "../../api/client";
 import type { Library, Series } from "../../types/series";
 import type { MetadataFetchResponse, MetadataSearchResult } from "../../types/plugin";
+import { getAuthenticatedImageUrl } from "../../utils/image";
 import { ProgressBar } from "../common/ProgressBar";
 import { Toast } from "../common/Toast";
 import { EditSeriesModal } from "../modals/EditSeriesModal";
@@ -173,6 +174,16 @@ export function MetadataTab() {
 
   const toggleResultPreview = (seriesId: string) => {
     setExpandedResultId((prev) => (prev === seriesId ? null : seriesId));
+  };
+
+  const getSeriesThumbnailSrc = (series: SeriesMetadataInfo) => {
+    if (!series.thumbnail_url) return "";
+
+    const versionSource = series.updated_at || series.created_at;
+    const parsedTime = Date.parse(versionSource);
+    const cacheBuster = Number.isFinite(parsedTime) ? parsedTime : 0;
+    const separator = series.thumbnail_url.includes("?") ? "&" : "?";
+    return getAuthenticatedImageUrl(`${series.thumbnail_url}${separator}_cb=${cacheBuster}`);
   };
 
   const handleMetadataSettingChange = async (value: string) => {
@@ -500,8 +511,9 @@ export function MetadataTab() {
                             <div className={styles.thumbnailSmall}>
                               {series.thumbnail_url && (
                                 <img
-                                  src={series.thumbnail_url}
+                                  src={getSeriesThumbnailSrc(series)}
                                   alt={series.title}
+                                  loading="lazy"
                                 />
                               )}
                             </div>
@@ -546,6 +558,7 @@ export function MetadataTab() {
                                   <img
                                     src={series.matchResult.result.cover.url}
                                     alt={series.matchResult.result.title}
+                                    loading="lazy"
                                   />
                                 ) : (
                                   <span className={styles.matchThumbnailFallback}>
@@ -568,6 +581,7 @@ export function MetadataTab() {
                                       <img
                                         src={series.matchResult.result.cover.url}
                                         alt={series.matchResult.result.title}
+                                        loading="lazy"
                                       />
                                     ) : (
                                       <span className={styles.matchThumbnailFallback}>
