@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, AlertCircle, Loader2, Database, ChevronDown } from "lucide-react";
-import { libraryAPI, seriesAPI } from "../../api/client";
+import { Search, Sparkles, Loader2, Database, ChevronDown } from "lucide-react";
+import { libraryAPI, seriesAPI, settingAPI } from "../../api/client";
 import type { Library, Series } from "../../types/series";
 import type { MetadataFetchResponse, MetadataSearchResult } from "../../types/plugin";
 import { ProgressBar } from "../common/ProgressBar";
 import { Toast } from "../common/Toast";
+import { EditSeriesModal } from "../modals/EditSeriesModal";
 import styles from "./MetadataTab.module.css";
 import commonStyles from "./SettingsComponents.module.css";
 
@@ -15,14 +16,21 @@ interface SeriesMetadataInfo extends Series {
   error?: string;
 }
 
+interface MetadataSettingsData {
+  epub_title_override?: string;
+}
+
 export function MetadataTab() {
   const { t } = useTranslation();
+  const cancelScanRequestedRef = useRef(false);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [selectedLibraryId, setSelectedLibraryId] = useState<string>("");
   const [seriesList, setSeriesList] = useState<SeriesMetadataInfo[]>([]);
   const [deselectedApplyIds, setDeselectedApplyIds] = useState<string[]>([]);
+  const [editingSeries, setEditingSeries] = useState<SeriesMetadataInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [epubTitleOverride, setEpubTitleOverride] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const selectedMatchedCount = seriesList.filter(
@@ -42,6 +50,15 @@ export function MetadataTab() {
         }
       })
       .catch((err) => console.error("Failed to load libraries:", err));
+
+    settingAPI
+      .list()
+      .then((data: MetadataSettingsData) => {
+        if (data.epub_title_override) {
+          setEpubTitleOverride(data.epub_title_override === "true");
+        }
+      })
+      .catch((err) => console.error("Failed to load metadata settings:", err));
   }, []);
 
   // Load series when selected library changes
@@ -78,14 +95,30 @@ export function MetadataTab() {
     );
   };
 
+  const handleMetadataSettingChange = async (value: string) => {
+    try {
+      await settingAPI.update("epub_title_override", { value });
+      setEpubTitleOverride(value === "true");
+      setToast({ type: "success", message: t("settings.viewer.toast.saved") });
+    } catch (error) {
+      console.error("Failed to update metadata setting:", error);
+      setToast({ type: "error", message: t("settings.viewer.toast.save_failed") });
+    }
+  };
+
   const handleScan = async () => {
     if (isScanning || seriesList.length === 0) return;
+    cancelScanRequestedRef.current = false;
     setIsScanning(true);
     setScanProgress({ current: 0, total: seriesList.length });
 
     const updatedList = [...seriesList];
 
     for (let i = 0; i < updatedList.length; i++) {
+      if (cancelScanRequestedRef.current) {
+        break;
+      }
+
       const series = updatedList[i];
       if (series.scanStatus === "matched" || series.scanStatus === "applied") continue;
 
@@ -107,6 +140,11 @@ export function MetadataTab() {
             source: bestCandidate.candidate.source,
           });
 
+          if (cancelScanRequestedRef.current) {
+            updatedList[i] = { ...series, scanStatus: series.scanStatus || "idle" };
+            break;
+          }
+
           updatedList[i] = {
             ...series,
             scanStatus: "matched",
@@ -116,6 +154,10 @@ export function MetadataTab() {
           updatedList[i] = { ...series, scanStatus: "failed" };
         }
       } catch (err) {
+        if (cancelScanRequestedRef.current) {
+          updatedList[i] = { ...series, scanStatus: series.scanStatus || "idle" };
+          break;
+        }
         console.error(`Failed to scan series ${series.title}:`, err);
         updatedList[i] = { ...series, scanStatus: "failed", error: String(err) };
       }
@@ -126,7 +168,23 @@ export function MetadataTab() {
     }
 
     setIsScanning(false);
-    setToast({ type: "success", message: t("settings.metadata.scan_complete") });
+    setSeriesList([...updatedList]);
+    setToast({
+      type: cancelScanRequestedRef.current ? "info" : "success",
+      message: cancelScanRequestedRef.current
+        ? t("settings.metadata.scan_cancelled")
+        : t("settings.metadata.scan_complete"),
+    });
+    cancelScanRequestedRef.current = false;
+  };
+
+  const handleScanButtonClick = () => {
+    if (isScanning) {
+      cancelScanRequestedRef.current = true;
+      return;
+    }
+
+    void handleScan();
   };
 
   const handleApplyAll = async () => {
@@ -161,6 +219,18 @@ export function MetadataTab() {
 
   return (
     <div className={styles.metadataTab}>
+      {editingSeries && (
+        <EditSeriesModal
+          isOpen={Boolean(editingSeries)}
+          onClose={() => setEditingSeries(null)}
+          series={editingSeries}
+          onUpdate={(updatedSeries) => {
+            setSeriesList((prev) => prev.map((series) => (series.id === updatedSeries.id ? { ...series, ...updatedSeries } : series)));
+            setEditingSeries((prev) => (prev?.id === updatedSeries.id ? { ...prev, ...updatedSeries } : prev));
+          }}
+        />
+      )}
+
       {toast && (
         <Toast
           type={toast.type}
@@ -168,6 +238,30 @@ export function MetadataTab() {
           onClose={() => setToast(null)}
         />
       )}
+
+      <section className={styles.metadataSettingsCard}>
+        <div className={styles.metadataSettingsHeader}>
+          <h3>{t("settings.viewer.subsections.metadata")}</h3>
+          <p>{t("settings.metadata.settings_description")}</p>
+        </div>
+        <div className={commonStyles.settingsItem}>
+          <div className={commonStyles.itemInfo}>
+            <label htmlFor="epub_title_override">{t("settings.viewer.epub.title_override_label")}</label>
+            <p>{t("settings.viewer.epub.title_override_desc")}</p>
+          </div>
+          <div className={commonStyles.itemControl}>
+            <select
+              id="epub_title_override"
+              value={epubTitleOverride ? "true" : "false"}
+              onChange={(e) => void handleMetadataSettingChange(e.target.value)}
+              className={commonStyles.settingsSelect}
+            >
+              <option value="true">{t("common.on", { defaultValue: "켜기" })}</option>
+              <option value="false">{t("common.off", { defaultValue: "끄기" })}</option>
+            </select>
+          </div>
+        </div>
+      </section>
 
       <div className={styles.header}>
         <div className={styles.titleArea}>
@@ -204,8 +298,8 @@ export function MetadataTab() {
           </div>
           <button
             className={`${commonStyles.settingsButton} ${styles.scanButton} ${styles.primaryAction}`}
-            onClick={handleScan}
-            disabled={isScanning || isLoading || seriesList.length === 0}
+            onClick={handleScanButtonClick}
+            disabled={isLoading || (!isScanning && seriesList.length === 0)}
           >
             {isScanning ? (
               <Loader2
@@ -215,7 +309,7 @@ export function MetadataTab() {
             ) : (
               <Search size={16} />
             )}
-            {t("settings.metadata.start_scan")}
+            {isScanning ? t("settings.metadata.cancel_scan") : t("settings.metadata.start_scan")}
           </button>
           <button
             className={`${commonStyles.settingsButton} ${styles.applyButton}`}
@@ -274,7 +368,7 @@ export function MetadataTab() {
                 </tr>
               </thead>
               <tbody>
-                {seriesList.map((series) => (
+                {seriesList.map((series, index) => (
                   <tr
                     key={series.id}
                     className={styles[series.scanStatus || ""]}
@@ -311,19 +405,16 @@ export function MetadataTab() {
                             className={styles.spinning}
                           />
                         )}
-                        {series.scanStatus === "failed" && (
-                          <AlertCircle
-                            size={14}
-                            color="var(--error-color)"
-                          />
-                        )}
                         {t(`settings.metadata.status.${series.scanStatus || "idle"}`)}
                       </div>
                     </td>
                     <td>
                       <div className={styles.rowActions}>
                         {series.matchResult && (
-                          <div className={styles.matchPreview}>
+                          <div
+                            className={`${styles.matchPreview} ${index >= Math.max(seriesList.length - 2, 0) ? styles.matchPreviewUp : ""}`}
+                            tabIndex={0}
+                          >
                             <div className={styles.matchThumbnail}>
                               {series.matchResult.result.cover?.url ? (
                                 <img
@@ -337,18 +428,37 @@ export function MetadataTab() {
                               )}
                             </div>
                             <div className={styles.matchContent}>
-                              <span
-                                className={styles.matchTitle}
-                                title={series.matchResult.result.title}
-                              >
+                              <span className={styles.matchTitle}>
                                 {series.matchResult.result.title}
                               </span>
-                              <span
-                                className={styles.matchDescription}
-                                title={series.matchResult.result.description || ""}
-                              >
+                              <span className={styles.matchDescription}>
                                 {series.matchResult.result.description || "-"}
                               </span>
+                            </div>
+                            <div className={styles.matchPopover}>
+                              <div className={styles.matchPopoverMedia}>
+                                <div className={styles.matchPopoverThumbnail}>
+                                  {series.matchResult.result.cover?.url ? (
+                                    <img
+                                      src={series.matchResult.result.cover.url}
+                                      alt={series.matchResult.result.title}
+                                    />
+                                  ) : (
+                                    <div className={styles.matchThumbnailFallback}>
+                                      <Database size={18} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className={styles.matchPopoverContent}>
+                                  <strong>{series.matchResult.result.title}</strong>
+                                  {series.matchResult.result.authors && series.matchResult.result.authors.length > 0 && (
+                                    <span className={styles.matchPopoverAuthors}>
+                                      {series.matchResult.result.authors.join(", ")}
+                                    </span>
+                                  )}
+                                  <p>{series.matchResult.result.description || "-"}</p>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -367,11 +477,12 @@ export function MetadataTab() {
                         )}
                         {series.scanStatus === "failed" && (
                           <button
-                            className={styles.btnIcon}
-                            onClick={() => window.open(`/series/${series.id}?edit=metadata`, "_blank")}
+                            className={`${styles.btnIcon} ${styles.failedActionButton}`}
+                            onClick={() => setEditingSeries(series)}
                             title={t("settings.metadata.manual_search")}
                           >
                             <Search size={14} />
+                            <span>{t("settings.metadata.manual_search")}</span>
                           </button>
                         )}
                         {!series.matchResult && series.scanStatus !== "failed" && <span className={styles.emptyResult}>-</span>}

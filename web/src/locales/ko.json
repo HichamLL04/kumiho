@@ -190,7 +190,9 @@
     "metadata": {
       "title": "메타데이터 관리",
       "description": "라이브러리의 시리즈들을 스캔하여 누락된 메타데이터를 찾고 일괄 적용합니다.",
+      "settings_description": "재스캔 시 EPUB 메타데이터를 시리즈 제목에 반영할지 설정합니다.",
       "start_scan": "메타데이터 검색 시작",
+      "cancel_scan": "메타데이터 검색 취소",
       "apply_all": "일괄 적용",
       "total_series_count": "총 {{count}}시리즈",
       "manual_search": "수동 검색",
@@ -199,6 +201,7 @@
       "no_series": "이 라이브러리에 시리즈가 없습니다.",
       "error_load_series": "시리즈 목록을 불러오는데 실패했습니다.",
       "scan_complete": "메타데이터 검색이 완료되었습니다.",
+      "scan_cancelled": "메타데이터 검색을 중단했습니다.",
       "apply_complete": "{{count}}개의 시리즈에 메타데이터를 적용했습니다.",
       "status": {
         "idle": "대기 중",

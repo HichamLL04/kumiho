@@ -101,7 +101,9 @@
     "metadata": {
       "title": "メタデータ管理",
       "description": "ライブラリ内のシリーズをスキャンし、不足しているメタデータを見つけて一括適用します。",
+      "settings_description": "再スキャン時に EPUB メタデータのタイトルをシリーズ名へ反映するか設定します。",
       "start_scan": "メタデータ検索開始",
+      "cancel_scan": "メタデータ検索中止",
       "apply_all": "一括適用",
       "total_series_count": "全{{count}}シリーズ",
       "manual_search": "手動検索",
@@ -110,6 +112,7 @@
       "no_series": "このライブラリにはシリーズがありません。",
       "error_load_series": "シリーズ一覧の読み込みに失敗しました。",
       "scan_complete": "メタデータ検索が完了しました。",
+      "scan_cancelled": "メタデータ検索を中断しました。",
       "apply_complete": "{{count}}件のシリーズにメタデータを適用しました。",
       "status": {
         "idle": "待機中",

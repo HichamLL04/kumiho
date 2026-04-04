@@ -101,7 +101,9 @@
     "metadata": {
       "title": "Metadata Management",
       "description": "Scan series in a library, find missing metadata, and apply matches in bulk.",
+      "settings_description": "Control whether EPUB metadata titles should overwrite series titles during rescan.",
       "start_scan": "Start Metadata Scan",
+      "cancel_scan": "Cancel Metadata Scan",
       "apply_all": "Apply All",
       "total_series_count": "{{count}} series",
       "manual_search": "Manual Search",
@@ -110,6 +112,7 @@
       "no_series": "There are no series in this library.",
       "error_load_series": "Failed to load the series list.",
       "scan_complete": "Metadata scan completed.",
+      "scan_cancelled": "Metadata scan stopped.",
       "apply_complete": "Applied metadata to {{count}} series.",
       "status": {
         "idle": "Idle",
