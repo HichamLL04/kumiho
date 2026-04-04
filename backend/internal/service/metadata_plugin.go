@@ -355,18 +355,6 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	}, nil
 }
 
-// isOriginalTitleFromTitles 기존 original_title이 original_titles 맵에 포함된 값인지 확인한다.
-// 포함되어 있으면 시스템이 해석한 값이므로 덮어써도 안전하고,
-// 포함되어 있지 않으면 사용자가 수동으로 입력한 값으로 간주한다.
-func isOriginalTitleFromTitles(existingTitle string, titles map[string]string) bool {
-	for _, v := range titles {
-		if strings.TrimSpace(v) == existingTitle {
-			return true
-		}
-	}
-	return false
-}
-
 func hasCapability(manifest sdkmanifest.Manifest, wanted capability.Capability) bool {
 	for _, current := range manifest.Capabilities {
 		if current == wanted {

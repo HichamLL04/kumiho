@@ -26,11 +26,16 @@ func NormalizeOriginalTitleLocale(locale string) string {
 
 // IsOriginalTitleOverrideEnabled reads original_title_override, falling back to the legacy epub_title_override key.
 func IsOriginalTitleOverrideEnabled(repo SettingRepository) bool {
+	return IsOriginalTitleOverrideEnabledWithQuery(nil, repo)
+}
+
+// IsOriginalTitleOverrideEnabledWithQuery reads original title override settings using the provided query context.
+func IsOriginalTitleOverrideEnabledWithQuery(q database.Queryer, repo SettingRepository) bool {
 	if repo == nil {
 		return false
 	}
 	for _, key := range []string{"original_title_override", "epub_title_override"} {
-		setting, err := repo.GetByKey(nil, key)
+		setting, err := repo.GetByKey(q, key)
 		if err != nil || setting == nil {
 			continue
 		}
@@ -40,12 +45,16 @@ func IsOriginalTitleOverrideEnabled(repo SettingRepository) bool {
 }
 
 func PreferredOriginalTitleLocale(repo SettingRepository) string {
+	return PreferredOriginalTitleLocaleWithQuery(nil, repo)
+}
+
+func PreferredOriginalTitleLocaleWithQuery(q database.Queryer, repo SettingRepository) string {
 	if repo == nil {
 		return "ko"
 	}
 
 	for _, key := range []string{"original_title_locale"} {
-		setting, err := repo.GetByKey(nil, key)
+		setting, err := repo.GetByKey(q, key)
 		if err != nil || setting == nil {
 			continue
 		}

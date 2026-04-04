@@ -207,7 +207,7 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 					})
 				}
 			}
-			overrideEnabled := body.Value == "true"
+			overrideEnabled := repository.IsOriginalTitleOverrideEnabledWithQuery(tx, h.repo)
 			if _, err := tx.Exec(`UPDATE libraries SET original_title_override = ? WHERE type = 'LOCAL'`, overrideEnabled); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "Failed to update library original title override",
@@ -243,6 +243,31 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 						"error": "Failed to update original title locale",
 					})
 				}
+			}
+			if err := tx.Commit(); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to commit setting update",
+				})
+			}
+		} else if key == "original_title_locale" {
+			tx, err := database.DB.BeginTx(c.Context(), nil)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to start transaction",
+				})
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			if err := h.repo.Update(tx, key, body.Value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update setting",
+				})
+			}
+			overrideEnabled := repository.IsOriginalTitleOverrideEnabledWithQuery(tx, h.repo)
+			if err := h.scanner.ApplyOriginalTitleOverrideWithTx(tx, overrideEnabled); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to apply original title override",
+				})
 			}
 			if err := tx.Commit(); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

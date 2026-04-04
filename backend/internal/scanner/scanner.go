@@ -196,7 +196,7 @@ func (s *Scanner) applyOriginalTitleOverride(tx *sql.Tx, enabled bool) error {
 		return nil
 	}
 
-	locale := repository.PreferredOriginalTitleLocale(s.settingRepo)
+	locale := repository.PreferredOriginalTitleLocaleWithQuery(tx, s.settingRepo)
 	libraries, err := s.libraryRepo.FindAll(tx)
 	if err != nil {
 		return err
@@ -219,7 +219,7 @@ func (s *Scanner) ApplyOriginalTitleOverrideForLibrary(libraryID string, enabled
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	locale := repository.PreferredOriginalTitleLocale(s.settingRepo)
+	locale := repository.PreferredOriginalTitleLocaleWithQuery(tx, s.settingRepo)
 	if err := s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID, enabled, locale); err != nil {
 		return err
 	}
@@ -231,7 +231,7 @@ func (s *Scanner) ApplyOriginalTitleOverrideForLibraryWithTx(tx *sql.Tx, library
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
-	locale := repository.PreferredOriginalTitleLocale(s.settingRepo)
+	locale := repository.PreferredOriginalTitleLocaleWithQuery(tx, s.settingRepo)
 	return s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID, enabled, locale)
 }
 
