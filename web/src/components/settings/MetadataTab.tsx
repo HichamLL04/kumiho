@@ -44,6 +44,8 @@ export function MetadataTab() {
   const scanPercent = scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
       isMountedRef.current = false;
       cancelScanRequestedRef.current = true;
