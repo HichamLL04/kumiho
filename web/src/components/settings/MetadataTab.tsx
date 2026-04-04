@@ -13,7 +13,6 @@ import commonStyles from "./SettingsComponents.module.css";
 interface SeriesMetadataInfo extends Series {
   scanStatus?: "idle" | "searching" | "matched" | "failed" | "applied";
   matchResult?: MetadataFetchResponse;
-  error?: string;
 }
 
 interface MetadataSettingsData {
@@ -124,10 +123,19 @@ export function MetadataTab() {
     };
 
     syncExpandedResultState();
-    touchPreviewQuery.addEventListener("change", syncExpandedResultState);
+
+    if (typeof touchPreviewQuery.addEventListener === "function") {
+      touchPreviewQuery.addEventListener("change", syncExpandedResultState);
+    } else {
+      touchPreviewQuery.addListener(syncExpandedResultState);
+    }
 
     return () => {
-      touchPreviewQuery.removeEventListener("change", syncExpandedResultState);
+      if (typeof touchPreviewQuery.removeEventListener === "function") {
+        touchPreviewQuery.removeEventListener("change", syncExpandedResultState);
+      } else {
+        touchPreviewQuery.removeListener(syncExpandedResultState);
+      }
     };
   }, []);
 
@@ -248,7 +256,6 @@ export function MetadataTab() {
         updatedList[index] = {
           ...series,
           scanStatus: "failed",
-          error: err instanceof Error ? err.message : String(err),
         };
       }
 
