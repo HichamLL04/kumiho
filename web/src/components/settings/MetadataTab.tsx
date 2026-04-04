@@ -22,7 +22,7 @@ interface MetadataSettingsData {
 }
 
 export function MetadataTab() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const progressLabelId = useId();
   const librarySelectorLabelId = useId();
   const cancelScanRequestedRef = useRef(false);
@@ -190,7 +190,7 @@ export function MetadataTab() {
 
   const handleMetadataSettingChange = async (value: string) => {
     try {
-      await settingAPI.update("original_title_override", { value });
+      await settingAPI.update("original_title_override", { value, locale: i18n.language || "ko" });
       if (!isMountedRef.current) return;
       setOriginalTitleOverride(value === "true");
       setToast({ type: "success", message: t("settings.viewer.toast.saved") });
@@ -362,10 +362,17 @@ export function MetadataTab() {
         />
       )}
 
+      <div className={styles.header}>
+        <div className={styles.titleArea}>
+          <h2>{t("settings.metadata.title")}</h2>
+          <p>{t("settings.metadata.description")}</p>
+        </div>
+      </div>
+
       <div className={commonStyles.settingsSections}>
         <section className={commonStyles.settingsSection}>
           <div className={`${commonStyles.sectionTitle} ${styles.settingsSectionTitle}`}>
-            <h2>{t("settings.viewer.subsections.metadata")}</h2>
+            <h3>{t("settings.viewer.subsections.metadata")}</h3>
           </div>
           <div className={commonStyles.sectionContent}>
             <div className={commonStyles.settingsItem}>
@@ -390,10 +397,6 @@ export function MetadataTab() {
       </div>
 
       <div className={styles.header}>
-        <div className={styles.titleArea}>
-          <h3>{t("settings.metadata.title")}</h3>
-          <p>{t("settings.metadata.description")}</p>
-        </div>
         <div className={styles.actions}>
           <div className={styles.librarySelector}>
             <div id={librarySelectorLabelId} className={styles.selectorLabel}>

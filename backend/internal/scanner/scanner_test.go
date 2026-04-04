@@ -172,8 +172,8 @@ func TestApplyOriginalTitleOverrideUpdatesExistingSeriesTitles(t *testing.T) {
 		t.Fatalf("Title = %q, want original title", updated.Title)
 	}
 
-	if err := s.ApplyOriginalTitleOverride(false); err != nil {
-		t.Fatalf("ApplyOriginalTitleOverride(false) error = %v", err)
+	if applyErr := s.ApplyOriginalTitleOverride(false); applyErr != nil {
+		t.Fatalf("ApplyOriginalTitleOverride(false) error = %v", applyErr)
 	}
 
 	restored, err := seriesRepo.FindByID(nil, series.ID, "")

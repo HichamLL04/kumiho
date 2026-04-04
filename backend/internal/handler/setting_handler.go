@@ -103,7 +103,8 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	key := c.Params("key")
 	var body struct {
-		Value string `json:"value"`
+		Value  string `json:"value"`
+		Locale string `json:"locale"`
 	}
 
 	if err := c.BodyParser(&body); err != nil {
@@ -137,6 +138,9 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 		}
 
 		if key == "epub_title_override" || key == "original_title_override" {
+			targetKey := "original_title_override"
+			locale := repository.NormalizeOriginalTitleLocale(body.Locale)
+
 			tx, err := database.DB.BeginTx(c.Context(), nil)
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -145,10 +149,17 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 			}
 			defer func() { _ = tx.Rollback() }()
 
-			if err := h.repo.Update(tx, key, body.Value); err != nil {
+			if err := h.repo.Update(tx, targetKey, body.Value); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "Failed to update setting",
 				})
+			}
+			if locale != "" {
+				if err := h.repo.Update(tx, "original_title_locale", locale); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": "Failed to update original title locale",
+					})
+				}
 			}
 			if err := h.scanner.ApplyOriginalTitleOverrideWithTx(tx, body.Value == "true"); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -196,6 +207,10 @@ func (h *SettingHandler) validateSettingValue(key, value string) error {
 	case "app_language":
 		if !validLanguages[value] {
 			return fiber.NewError(fiber.StatusBadRequest, "Invalid app_language value")
+		}
+	case "original_title_locale":
+		if !validLanguages[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid original_title_locale value")
 		}
 	case "viewer_reading_mode":
 		if !validReadingModes[value] {

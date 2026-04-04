@@ -10,6 +10,20 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 )
 
+func NormalizeOriginalTitleLocale(locale string) string {
+	normalized := strings.ToLower(strings.TrimSpace(locale))
+	switch {
+	case strings.HasPrefix(normalized, "ko"):
+		return "ko"
+	case strings.HasPrefix(normalized, "ja"):
+		return "ja"
+	case strings.HasPrefix(normalized, "en"):
+		return "en"
+	default:
+		return ""
+	}
+}
+
 // IsOriginalTitleOverrideEnabled reads original_title_override, falling back to the legacy epub_title_override key.
 func IsOriginalTitleOverrideEnabled(repo SettingRepository) bool {
 	if repo == nil {
@@ -30,22 +44,16 @@ func PreferredOriginalTitleLocale(repo SettingRepository) string {
 		return "ko"
 	}
 
-	setting, err := repo.GetByKey(nil, "app_language")
-	if err != nil || setting == nil {
-		return "ko"
+	for _, key := range []string{"original_title_locale"} {
+		setting, err := repo.GetByKey(nil, key)
+		if err != nil || setting == nil {
+			continue
+		}
+		if normalized := NormalizeOriginalTitleLocale(setting.Value); normalized != "" {
+			return normalized
+		}
 	}
-
-	normalized := strings.ToLower(strings.TrimSpace(setting.Value))
-	switch {
-	case strings.HasPrefix(normalized, "ko"):
-		return "ko"
-	case strings.HasPrefix(normalized, "ja"):
-		return "ja"
-	case strings.HasPrefix(normalized, "en"):
-		return "en"
-	default:
-		return "ko"
-	}
+	return "ko"
 }
 
 type SettingRepository interface {

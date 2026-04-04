@@ -467,6 +467,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	// 3. 성능 설정 로드
 	perf := s.getPerfConfig()
 	originalTitleOverrideEnabled := s.isOriginalTitleOverrideEnabled()
+	originalTitleLocale := repository.PreferredOriginalTitleLocale(s.settingRepo)
 
 	// 시리즈 레벨 동시성 제어
 	seriesSemaphore := make(chan struct{}, perf.SeriesConcurrent)
@@ -536,6 +537,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					updateProgress,
 					perf,
 					originalTitleOverrideEnabled,
+					originalTitleLocale,
 					library.LibraryType,
 				)
 				if err != nil {
@@ -597,6 +599,7 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					entry.Name(),
 					existingMap,
 					originalTitleOverrideEnabled,
+					originalTitleLocale,
 					library.LibraryType,
 				)
 				if err != nil {
@@ -1084,6 +1087,7 @@ func (s *Scanner) processArchiveAsSeries(
 	archiveTitle string,
 	existingSeriesMap map[string]*model.Series,
 	originalTitleOverrideEnabled bool,
+	originalTitleLocale string,
 	libraryType string,
 ) (*ScanResult, error) {
 	// 트랜잭션 시작
@@ -1122,13 +1126,7 @@ func (s *Scanner) processArchiveAsSeries(
 		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
 			seriesChanged = true
 		}
-		seriesTitle := ResolveSeriesTitleFromOriginalTitle(
-			archivePath,
-			title,
-			series.Metadata,
-			originalTitleOverrideEnabled,
-			repository.PreferredOriginalTitleLocale(s.settingRepo),
-		)
+		seriesTitle := ResolveSeriesTitleFromOriginalTitle(archivePath, title, series.Metadata, originalTitleOverrideEnabled, originalTitleLocale)
 		if strings.TrimSpace(series.Title) != seriesTitle {
 			series.Title = seriesTitle
 			seriesChanged = true
@@ -1202,13 +1200,7 @@ func (s *Scanner) processArchiveAsSeries(
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
-		series.Title = ResolveSeriesTitleFromOriginalTitle(
-			archivePath,
-			title,
-			series.Metadata,
-			originalTitleOverrideEnabled,
-			repository.PreferredOriginalTitleLocale(s.settingRepo),
-		)
+		series.Title = ResolveSeriesTitleFromOriginalTitle(archivePath, title, series.Metadata, originalTitleOverrideEnabled, originalTitleLocale)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(archivePath))
@@ -1286,6 +1278,7 @@ func (s *Scanner) processSeries(
 	updateProgress func(string),
 	perf scanPerfConfig,
 	originalTitleOverrideEnabled bool,
+	originalTitleLocale string,
 	libraryType string,
 ) (*ScanResult, error) {
 	var series *model.Series
@@ -1310,13 +1303,7 @@ func (s *Scanner) processSeries(
 		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
 			seriesChanged = true
 		}
-		resolvedSeriesTitle := ResolveSeriesTitleFromOriginalTitle(
-			seriesPath,
-			seriesTitle,
-			series.Metadata,
-			originalTitleOverrideEnabled,
-			repository.PreferredOriginalTitleLocale(s.settingRepo),
-		)
+		resolvedSeriesTitle := ResolveSeriesTitleFromOriginalTitle(seriesPath, seriesTitle, series.Metadata, originalTitleOverrideEnabled, originalTitleLocale)
 		if strings.TrimSpace(series.Title) != resolvedSeriesTitle {
 			series.Title = resolvedSeriesTitle
 			seriesChanged = true
@@ -1351,13 +1338,7 @@ func (s *Scanner) processSeries(
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
-		series.Title = ResolveSeriesTitleFromOriginalTitle(
-			seriesPath,
-			seriesTitle,
-			series.Metadata,
-			originalTitleOverrideEnabled,
-			repository.PreferredOriginalTitleLocale(s.settingRepo),
-		)
+		series.Title = ResolveSeriesTitleFromOriginalTitle(seriesPath, seriesTitle, series.Metadata, originalTitleOverrideEnabled, originalTitleLocale)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(seriesPath))

@@ -451,7 +451,8 @@ export const viewerAPI = {
 // Settings API
 export const settingAPI = {
   list: () => api.get<Record<string, string>>("/settings").then((res) => res.data),
-  update: (key: string, data: { value: string }) => api.put(`/settings/${key}`, data).then((res) => res.data),
+  update: (key: string, data: { value: string; locale?: string }) =>
+    api.put(`/settings/${key}`, data).then((res) => res.data),
 };
 
 // Download API

@@ -3,10 +3,10 @@
 /* 공통 탭 스타일 */
 .tabContent {
   color: #fff;
-  animation: fadeIn 0.3s ease-out;
+  animation: settingsTabFadeIn 0.3s ease-out;
 }
 
-@keyframes fadeIn {
+@keyframes settingsTabFadeIn {
   from {
     opacity: 0;
     transform: translateY(10px);
