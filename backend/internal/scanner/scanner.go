@@ -196,14 +196,13 @@ func (s *Scanner) applyOriginalTitleOverride(tx *sql.Tx, enabled bool) error {
 		return nil
 	}
 
-	locale := repository.PreferredOriginalTitleLocaleWithQuery(tx, s.settingRepo)
 	libraries, err := s.libraryRepo.FindAll(tx)
 	if err != nil {
 		return err
 	}
 
 	for _, library := range libraries {
-		if err := s.applyOriginalTitleOverrideForLibraryTx(tx, library.ID, enabled, locale); err != nil {
+		if err := s.applyOriginalTitleOverrideForLibraryTx(tx, library.ID); err != nil {
 			return err
 		}
 	}
@@ -213,14 +212,14 @@ func (s *Scanner) applyOriginalTitleOverride(tx *sql.Tx, enabled bool) error {
 
 // ApplyOriginalTitleOverrideForLibrary 특정 라이브러리의 시리즈 제목을 원제 오버라이드 설정에 따라 재해석한다.
 func (s *Scanner) ApplyOriginalTitleOverrideForLibrary(libraryID string, enabled bool) error {
+	_ = enabled
 	tx, err := database.DB.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	locale := repository.PreferredOriginalTitleLocaleWithQuery(tx, s.settingRepo)
-	if err := s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID, enabled, locale); err != nil {
+	if err := s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID); err != nil {
 		return err
 	}
 
@@ -231,11 +230,11 @@ func (s *Scanner) ApplyOriginalTitleOverrideForLibraryWithTx(tx *sql.Tx, library
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
-	locale := repository.PreferredOriginalTitleLocaleWithQuery(tx, s.settingRepo)
-	return s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID, enabled, locale)
+	_ = enabled
+	return s.applyOriginalTitleOverrideForLibraryTx(tx, libraryID)
 }
 
-func (s *Scanner) applyOriginalTitleOverrideForLibraryTx(tx *sql.Tx, libraryID string, enabled bool, locale string) error {
+func (s *Scanner) applyOriginalTitleOverrideForLibraryTx(tx *sql.Tx, libraryID string) error {
 	if s == nil || s.seriesRepo == nil {
 		return nil
 	}
@@ -248,7 +247,7 @@ func (s *Scanner) applyOriginalTitleOverrideForLibraryTx(tx *sql.Tx, libraryID s
 	}
 	for i := range seriesList {
 		series := &seriesList[i]
-		baseTitle := ResolveSeriesTitleFromOriginalTitle(series.Path, "", series.Metadata, false, locale)
+		baseTitle := resolveSeriesTitleFromPath(series.Path, "")
 		if strings.TrimSpace(baseTitle) == "" || strings.TrimSpace(series.Title) == baseTitle {
 			continue
 		}
@@ -257,8 +256,6 @@ func (s *Scanner) applyOriginalTitleOverrideForLibraryTx(tx *sql.Tx, libraryID s
 			return err
 		}
 	}
-
-	_ = enabled
 	return nil
 }
 
@@ -604,9 +601,6 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 
 	// 3. 성능 설정 로드
 	perf := s.getPerfConfig()
-	originalTitleOverrideEnabled := library.OriginalTitleOverride
-	originalTitleLocale := repository.PreferredOriginalTitleLocale(s.settingRepo)
-
 	// 시리즈 레벨 동시성 제어
 	seriesSemaphore := make(chan struct{}, perf.SeriesConcurrent)
 
@@ -674,8 +668,6 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					excludePatterns,
 					updateProgress,
 					perf,
-					originalTitleOverrideEnabled,
-					originalTitleLocale,
 					library.LibraryType,
 				)
 				if err != nil {
@@ -736,8 +728,6 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					path,
 					entry.Name(),
 					existingMap,
-					originalTitleOverrideEnabled,
-					originalTitleLocale,
 					library.LibraryType,
 				)
 				if err != nil {
@@ -1224,8 +1214,6 @@ func (s *Scanner) processArchiveAsSeries(
 	archivePath string,
 	archiveTitle string,
 	existingSeriesMap map[string]*model.Series,
-	originalTitleOverrideEnabled bool,
-	originalTitleLocale string,
 	libraryType string,
 ) (*ScanResult, error) {
 	// 트랜잭션 시작
@@ -1415,8 +1403,6 @@ func (s *Scanner) processSeries(
 	excludePatterns []string,
 	updateProgress func(string),
 	perf scanPerfConfig,
-	originalTitleOverrideEnabled bool,
-	originalTitleLocale string,
 	libraryType string,
 ) (*ScanResult, error) {
 	var series *model.Series

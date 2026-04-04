@@ -85,11 +85,20 @@ function preferredLanguageOrder(locale: string): Array<"ko" | "ja" | "en"> {
 export function localizedOriginalTitle(value: OriginalTitlesValue, locale: string, fallback = ""): string {
   const manualTitle = parseManualOriginalTitle(value);
   const normalizedFallback = fallback.trim();
+  const titles = parseOriginalTitles(value);
+
   if (manualTitle && normalizedFallback && manualTitle === normalizedFallback) {
     return normalizedFallback;
   }
 
-  const titles = parseOriginalTitles(value);
+  const matchesFallback = normalizedFallback
+    ? Object.values(titles).some((title) => title?.trim() === normalizedFallback)
+    : false;
+
+  if (!manualTitle && normalizedFallback && !matchesFallback) {
+    return normalizedFallback;
+  }
+
   const order = preferredLanguageOrder(locale);
 
   for (const key of order) {

@@ -20,15 +20,7 @@ interface EditSeriesModalProps {
 
 export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSeriesModalProps) {
   const { t, i18n } = useTranslation();
-  const resolvedOriginalTitle = useMemo(
-    () =>
-      localizedOriginalTitle(
-        series.metadata?.original_titles,
-        i18n.language || "ko",
-        series.metadata?.original_title || "",
-      ),
-    [i18n.language, series.metadata?.original_title, series.metadata?.original_titles],
-  );
+  const storedOriginalTitle = series.metadata?.original_title || "";
   const originalTitleLanguageLabel = (language: string) =>
     language === "unknown" ? t("common.unknown") : t(`settings.general.language.${language}`);
   const [formData, setFormData] = useState({
@@ -106,14 +98,14 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
         tags: series.metadata?.tags || "",
         description: series.description || "",
         publication_year: series.metadata?.publication_year || "",
-        original_title: resolvedOriginalTitle,
+        original_title: storedOriginalTitle,
         publisher: series.metadata?.publisher || "",
         published_at: series.metadata?.published_at || "",
         isbn: series.metadata?.isbn || "",
       });
       setThumbnailUrl("");
     }
-  }, [isOpen, resolvedOriginalTitle, series]);
+  }, [isOpen, series, storedOriginalTitle]);
 
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
@@ -304,13 +296,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       tags: updatedFieldSet.has("tags") ? response.series.metadata?.tags || "" : prev.tags,
       description: updatedFieldSet.has("description") ? response.series.description || "" : prev.description,
       publication_year: updatedFieldSet.has("publication_year") ? response.series.metadata?.publication_year || "" : prev.publication_year,
-      original_title: updatedFieldSet.has("original_title")
-        ? localizedOriginalTitle(
-            response.series.metadata?.original_titles,
-            i18n.language || "ko",
-            response.series.metadata?.original_title || "",
-          )
-        : prev.original_title,
+      original_title: updatedFieldSet.has("original_title") ? response.series.metadata?.original_title || "" : prev.original_title,
       publisher: updatedFieldSet.has("publisher") ? response.series.metadata?.publisher || "" : prev.publisher,
       published_at: updatedFieldSet.has("published_at") ? response.series.metadata?.published_at || "" : prev.published_at,
       isbn: updatedFieldSet.has("isbn") ? response.series.metadata?.isbn || "" : prev.isbn,

@@ -404,6 +404,43 @@ func TestMetadataServiceApplySeriesMetadataPreservesManualOriginalTitle(t *testi
 	}
 }
 
+func TestMetadataServiceApplySeriesMetadataKeepsExistingOriginalTitlesWhenFetchedMapIsEmpty(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	series.Metadata = &model.SeriesMetadata{
+		SeriesID:       series.ID,
+		OriginalTitle:  "사용자 지정 원제",
+		OriginalTitles: `{"ko":"예전 제목","en":"Old Title","_manual_title":"사용자 지정 원제"}`,
+	}
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		OriginalTitle: "Fetched Title",
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	var originalTitles map[string]string
+	if err := json.Unmarshal([]byte(updated.Metadata.OriginalTitles), &originalTitles); err != nil {
+		t.Fatalf("Unmarshal(OriginalTitles) error = %v", err)
+	}
+	if originalTitles["ko"] != "예전 제목" || originalTitles["en"] != "Old Title" || originalTitles["_manual_title"] != "사용자 지정 원제" {
+		t.Fatalf("OriginalTitles = %#v", originalTitles)
+	}
+}
+
 func TestMetadataServiceApplySeriesMetadataUpdatesAutoResolvedOriginalTitleWhenFetchedMapChanges(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
@@ -453,7 +490,7 @@ func TestMetadataServiceApplySeriesMetadataUsesLocaleAndLibraryOverride(t *testi
 	}
 	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
-	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+	applied, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
 		Title:         "Localized Title",
 		OriginalTitle: "Fallback Title",
 		OriginalTitles: map[string]string{
@@ -478,6 +515,12 @@ func TestMetadataServiceApplySeriesMetadataUsesLocaleAndLibraryOverride(t *testi
 	}
 	if updated.Title != "Example Series" {
 		t.Fatalf("Title = %q", updated.Title)
+	}
+	if applied == nil || applied.Series == nil {
+		t.Fatal("applied series should not be nil")
+	}
+	if applied.Series.DisplayTitle != "鋼の錬金術師" {
+		t.Fatalf("DisplayTitle = %q", applied.Series.DisplayTitle)
 	}
 }
 

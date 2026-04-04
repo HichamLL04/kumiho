@@ -1624,6 +1624,7 @@ func (h *SeriesHandler) enrichSingleSeries(s *model.Series, userID string) {
 }
 
 func (h *SeriesHandler) assignSeriesDisplayTitles(seriesList []model.Series) {
+	locale := repository.PreferredOriginalTitleLocale(h.settingRepo)
 	libraryCache := make(map[string]*model.Library, len(seriesList))
 	for i := range seriesList {
 		series := &seriesList[i]
@@ -1635,7 +1636,7 @@ func (h *SeriesHandler) assignSeriesDisplayTitles(seriesList []model.Series) {
 				libraryCache[series.LibraryID] = library
 			}
 		}
-		h.applySeriesDisplayTitle(series, libraryCache[series.LibraryID])
+		h.applySeriesDisplayTitle(series, libraryCache[series.LibraryID], locale)
 	}
 }
 
@@ -1643,20 +1644,20 @@ func (h *SeriesHandler) assignSeriesDisplayTitle(series *model.Series) {
 	if series == nil {
 		return
 	}
+	locale := repository.PreferredOriginalTitleLocale(h.settingRepo)
 	library, err := h.libraryRepo.FindByID(nil, series.LibraryID)
 	if err != nil {
-		h.applySeriesDisplayTitle(series, nil)
+		h.applySeriesDisplayTitle(series, nil, locale)
 		return
 	}
-	h.applySeriesDisplayTitle(series, library)
+	h.applySeriesDisplayTitle(series, library, locale)
 }
 
-func (h *SeriesHandler) applySeriesDisplayTitle(series *model.Series, library *model.Library) {
+func (h *SeriesHandler) applySeriesDisplayTitle(series *model.Series, library *model.Library, locale string) {
 	if series == nil {
 		return
 	}
 
-	locale := repository.PreferredOriginalTitleLocale(h.settingRepo)
 	displayTitle := strings.TrimSpace(series.Title)
 	if library != nil && library.OriginalTitleOverride {
 		if resolved := scanner.ResolveSeriesTitleFromOriginalTitle(series.Path, "", series.Metadata, true, locale); resolved != "" {

@@ -288,8 +288,14 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 		manualOriginalTitle = existingTitle
 	}
 
-	if originalTitles := encodeOriginalTitles(result.OriginalTitles, manualOriginalTitle); originalTitles != "" {
-		applyString(&series.Metadata.OriginalTitles, originalTitles, "original_titles", &updatedFields)
+	if len(result.OriginalTitles) > 0 {
+		if originalTitles := encodeOriginalTitles(result.OriginalTitles, manualOriginalTitle); originalTitles != "" {
+			applyString(&series.Metadata.OriginalTitles, originalTitles, "original_titles", &updatedFields)
+		}
+	} else if manualOriginalTitle != "" {
+		if originalTitles := scanner.WithManualOriginalTitle(series.Metadata.OriginalTitles, manualOriginalTitle); originalTitles != "" {
+			applyString(&series.Metadata.OriginalTitles, originalTitles, "original_titles", &updatedFields)
+		}
 	}
 
 	// locale 우선순위로 해석한 값을 original_title에 저장
@@ -332,6 +338,7 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 
 	if len(updatedFields) == 0 {
 		s.enrichSeriesThumbnail(series)
+		s.assignSeriesDisplayTitle(series)
 		return &MetadataApplyResult{
 			Series:        series,
 			UpdatedFields: updatedFields,
@@ -346,6 +353,7 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	}
 
 	s.enrichSeriesThumbnail(series)
+	s.assignSeriesDisplayTitle(series)
 
 	return &MetadataApplyResult{
 		Series:        series,
@@ -404,6 +412,22 @@ func applyFetchedTitle(series *model.Series, result *sdktypes.MetadataResult, up
 
 func encodeOriginalTitles(values map[string]string, manualOriginalTitle string) string {
 	return scanner.EncodeOriginalTitlesPayload(values, manualOriginalTitle)
+}
+
+func (s *MetadataService) assignSeriesDisplayTitle(series *model.Series) {
+	if series == nil {
+		return
+	}
+
+	displayTitle := strings.TrimSpace(series.Title)
+	library, err := s.libraryRepo.FindByID(nil, series.LibraryID)
+	if err == nil && library != nil && library.OriginalTitleOverride {
+		locale := repository.PreferredOriginalTitleLocale(s.settingRepo)
+		if resolved := scanner.ResolveSeriesTitleFromOriginalTitle(series.Path, "", series.Metadata, true, locale); resolved != "" {
+			displayTitle = resolved
+		}
+	}
+	series.DisplayTitle = displayTitle
 }
 
 func resolveFetchedOriginalTitle(result *sdktypes.MetadataResult, locale string) string {

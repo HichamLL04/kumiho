@@ -20,22 +20,44 @@ describe("originalTitles utils", () => {
     ]);
   });
 
-  it("prefers localized titles before using a fallback title", () => {
-    expect(localizedOriginalTitle({ ko: "현지 제목" }, "ko", "Fallback Title")).toBe("현지 제목");
+  it("keeps fallback when it represents a legacy manual original title", () => {
+    expect(localizedOriginalTitle({ ko: "현지 제목" }, "ko", "Fallback Title")).toBe("Fallback Title");
     expect(localizedOriginalTitle({}, "ko", "Fallback Title")).toBe("Fallback Title");
   });
 
-  it("prefers configured language order from original_titles before falling back to original_title", () => {
+  it("prefers configured language order from original_titles when fallback is empty or already matches", () => {
     const originalTitles = {
       ko: "한국어 원제",
       en: "English Title",
       ja: "日本語タイトル",
     };
 
-    expect(localizedOriginalTitle(originalTitles, "ko", "Legacy English Title")).toBe("한국어 원제");
-    expect(localizedOriginalTitle({ en: "English Title", ja: "日本語タイトル" }, "ko", "Legacy English Title")).toBe(
+    expect(localizedOriginalTitle(originalTitles, "ko", "")).toBe("한국어 원제");
+    expect(localizedOriginalTitle(originalTitles, "ko", "English Title")).toBe("한국어 원제");
+    expect(localizedOriginalTitle({ en: "English Title", ja: "日本語タイトル" }, "ko", "")).toBe(
       "English Title",
     );
-    expect(localizedOriginalTitle({ ja: "日本語タイトル" }, "ko", "Legacy English Title")).toBe("日本語タイトル");
+    expect(localizedOriginalTitle({ ja: "日本語タイトル" }, "ko", "")).toBe("日本語タイトル");
+  });
+
+  it("prefers manually entered original_title when _manual_title marker is present", () => {
+    const originalTitles = {
+      ko: "한국어 원제",
+      en: "English Title",
+      _manual_title: "Manual Original Title",
+    } as unknown as Record<string, string>;
+
+    expect(localizedOriginalTitle(originalTitles, "ko", "Manual Original Title")).toBe("Manual Original Title");
+    expect(localizedOriginalTitle(originalTitles, "ja", "Manual Original Title")).toBe("Manual Original Title");
+  });
+
+  it("prefers legacy manual fallback when it does not match original_titles values", () => {
+    expect(
+      localizedOriginalTitle({ ko: "한국어 원제", en: "English Title" }, "ko", "Legacy Manual Original Title"),
+    ).toBe("Legacy Manual Original Title");
+    expect(localizedOriginalTitle({ en: "English Title" }, "ko", "Legacy Manual Original Title")).toBe(
+      "Legacy Manual Original Title",
+    );
+    expect(localizedOriginalTitle({}, "ko", "Legacy Manual Original Title")).toBe("Legacy Manual Original Title");
   });
 });
