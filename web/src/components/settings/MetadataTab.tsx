@@ -17,6 +17,7 @@ interface SeriesMetadataInfo extends Series {
 }
 
 interface MetadataSettingsData {
+  original_title_override?: string;
   epub_title_override?: string;
 }
 
@@ -35,7 +36,7 @@ export function MetadataTab() {
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [epubTitleOverride, setEpubTitleOverride] = useState(false);
+  const [originalTitleOverride, setOriginalTitleOverride] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const deselectedApplySet = useMemo(() => new Set(deselectedApplyIds), [deselectedApplyIds]);
@@ -73,8 +74,9 @@ export function MetadataTab() {
       .list()
       .then((data: MetadataSettingsData) => {
         if (!isMountedRef.current) return;
-        if (data.epub_title_override) {
-          setEpubTitleOverride(data.epub_title_override === "true");
+        const originalTitleOverrideValue = data.original_title_override ?? data.epub_title_override;
+        if (originalTitleOverrideValue) {
+          setOriginalTitleOverride(originalTitleOverrideValue === "true");
         }
       })
       .catch((err) => console.error("Failed to load metadata settings:", err));
@@ -188,9 +190,9 @@ export function MetadataTab() {
 
   const handleMetadataSettingChange = async (value: string) => {
     try {
-      await settingAPI.update("epub_title_override", { value });
+      await settingAPI.update("original_title_override", { value });
       if (!isMountedRef.current) return;
-      setEpubTitleOverride(value === "true");
+      setOriginalTitleOverride(value === "true");
       setToast({ type: "success", message: t("settings.viewer.toast.saved") });
     } catch (error) {
       console.error("Failed to update metadata setting:", error);
@@ -360,33 +362,36 @@ export function MetadataTab() {
         />
       )}
 
-      <section className={styles.metadataSettingsCard}>
-        <div className={styles.metadataSettingsHeader}>
-          <h3>{t("settings.viewer.subsections.metadata")}</h3>
-          <p>{t("settings.metadata.settings_description")}</p>
-        </div>
-        <div className={commonStyles.settingsItem}>
-          <div className={commonStyles.itemInfo}>
-            <label htmlFor="epub_title_override">{t("settings.viewer.epub.title_override_label")}</label>
-            <p>{t("settings.viewer.epub.title_override_desc")}</p>
+      <div className={commonStyles.settingsSections}>
+        <section className={commonStyles.settingsSection}>
+          <div className={`${commonStyles.sectionTitle} ${styles.settingsSectionTitle}`}>
+            <h2>{t("settings.viewer.subsections.metadata")}</h2>
           </div>
-          <div className={commonStyles.itemControl}>
-            <select
-              id="epub_title_override"
-              value={epubTitleOverride ? "true" : "false"}
-              onChange={(e) => void handleMetadataSettingChange(e.target.value)}
-              className={commonStyles.settingsSelect}
-            >
-              <option value="true">{t("common.on", { defaultValue: "켜기" })}</option>
-              <option value="false">{t("common.off", { defaultValue: "끄기" })}</option>
-            </select>
+          <div className={commonStyles.sectionContent}>
+            <div className={commonStyles.settingsItem}>
+              <div className={commonStyles.itemInfo}>
+                <label htmlFor="original_title_override">{t("settings.viewer.epub.title_override_label")}</label>
+                <p>{t("settings.metadata.settings_description")}</p>
+              </div>
+              <div className={commonStyles.itemControl}>
+                <select
+                  id="original_title_override"
+                  value={originalTitleOverride ? "true" : "false"}
+                  onChange={(e) => void handleMetadataSettingChange(e.target.value)}
+                  className={commonStyles.settingsSelect}
+                >
+                  <option value="true">{t("common.on", { defaultValue: "켜기" })}</option>
+                  <option value="false">{t("common.off", { defaultValue: "끄기" })}</option>
+                </select>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <div className={styles.header}>
         <div className={styles.titleArea}>
-          <h2>{t("settings.metadata.title")}</h2>
+          <h3>{t("settings.metadata.title")}</h3>
           <p>{t("settings.metadata.description")}</p>
         </div>
         <div className={styles.actions}>

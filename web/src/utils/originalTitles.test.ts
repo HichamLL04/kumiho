@@ -24,4 +24,18 @@ describe("originalTitles utils", () => {
     expect(localizedOriginalTitle({ ko: "현지 제목" }, "ko", "Fallback Title")).toBe("현지 제목");
     expect(localizedOriginalTitle({}, "ko", "Fallback Title")).toBe("Fallback Title");
   });
+
+  it("prefers configured language order from original_titles before falling back to original_title", () => {
+    const originalTitles = {
+      ko: "한국어 원제",
+      en: "English Title",
+      ja: "日本語タイトル",
+    };
+
+    expect(localizedOriginalTitle(originalTitles, "ko", "Legacy English Title")).toBe("한국어 원제");
+    expect(localizedOriginalTitle({ en: "English Title", ja: "日本語タイトル" }, "ko", "Legacy English Title")).toBe(
+      "English Title",
+    );
+    expect(localizedOriginalTitle({ ja: "日本語タイトル" }, "ko", "Legacy English Title")).toBe("日本語タイトル");
+  });
 });

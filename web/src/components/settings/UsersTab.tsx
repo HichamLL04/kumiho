@@ -214,7 +214,7 @@ export function UsersTab() {
   };
 
   return (
-    <div className={`${styles.tabContent} ${styles.relative}`}>
+    <div className={`${commonStyles.tabContent} ${styles.relative}`}>
       <AlertModal
         isOpen={deleteModalOpen}
         type="warning"

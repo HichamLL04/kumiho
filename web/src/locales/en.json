@@ -101,7 +101,7 @@
     "metadata": {
       "title": "Metadata Management",
       "description": "Scan series in a library, find missing metadata, and apply matches in bulk.",
-      "settings_description": "Control whether EPUB metadata titles should overwrite series titles during rescan.",
+      "settings_description": "Control whether stored original titles should overwrite series titles. Disable to restore path-based titles.",
       "start_scan": "Start Metadata Scan",
       "cancel_scan": "Cancel Metadata Scan",
       "apply_all": "Apply All",
@@ -274,8 +274,8 @@
         "keyboard_direction_desc": "Set the next-page direction for keyboard arrows.",
         "click_direction_label": "Next Page Click",
         "click_direction_desc": "Set which side click moves to the next page.",
-        "title_override_label": "EPUB Title Override",
-        "title_override_desc": "On rescan, apply EPUB metadata title to series title when available. Disable to restore path-based titles."
+        "title_override_label": "Original Title Override",
+        "title_override_desc": "On rescan, apply the stored original title to the series title when available. Disable to restore path-based titles."
       },
       "mode": {
         "single": "Single Page",

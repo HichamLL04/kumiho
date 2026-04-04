@@ -53,20 +53,43 @@
   }
 }
 
+.settingsSectionTitle {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.settingsSectionTitle h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
 .header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 2rem;
   flex-wrap: wrap;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.titleArea h2,
+.titleArea h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .titleArea h2 {
-  margin: 0 0 0.5rem 0;
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
+}
+
+.titleArea h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
 }
 
 .titleArea p {

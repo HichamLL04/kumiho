@@ -3,6 +3,18 @@
 /* 공통 탭 스타일 */
 .tabContent {
   color: #fff;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tabHeader {

@@ -190,7 +190,7 @@
     "metadata": {
       "title": "메타데이터 관리",
       "description": "라이브러리의 시리즈들을 스캔하여 누락된 메타데이터를 찾고 일괄 적용합니다.",
-      "settings_description": "재스캔 시 EPUB 메타데이터를 시리즈 제목에 반영할지 설정합니다.",
+      "settings_description": "저장된 원제를 시리즈 제목에 반영할지 설정합니다. 끄면 경로 기반 제목으로 복원됩니다.",
       "start_scan": "메타데이터 검색 시작",
       "cancel_scan": "메타데이터 검색 취소",
       "apply_all": "일괄 적용",
@@ -274,8 +274,8 @@
         "keyboard_direction_desc": "키보드 화살표로 다음 페이지 이동 방향을 설정합니다.",
         "click_direction_label": "다음 페이지 클릭",
         "click_direction_desc": "클릭 시 다음 페이지로 이동하는 영역 방향을 설정합니다.",
-        "title_override_label": "EPUB 제목 덮어쓰기",
-        "title_override_desc": "재스캔 시 EPUB 메타데이터 title이 있으면 시리즈 제목에 반영합니다. 끄면 경로 기반 제목으로 복원됩니다."
+        "title_override_label": "원제 제목 덮어쓰기",
+        "title_override_desc": "재스캔 시 서버에 저장된 원제가 있으면 시리즈 제목에 반영합니다. 끄면 경로 기반 제목으로 복원됩니다."
       },
       "mode": {
         "single": "한 페이지 보기",

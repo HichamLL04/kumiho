@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
@@ -135,7 +136,31 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 			})
 		}
 
-		if err := h.repo.Update(nil, key, body.Value); err != nil {
+		if key == "epub_title_override" || key == "original_title_override" {
+			tx, err := database.DB.BeginTx(c.Context(), nil)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to start transaction",
+				})
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			if err := h.repo.Update(tx, key, body.Value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update setting",
+				})
+			}
+			if err := h.scanner.ApplyOriginalTitleOverrideWithTx(tx, body.Value == "true"); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to apply original title override",
+				})
+			}
+			if err := tx.Commit(); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to commit setting update",
+				})
+			}
+		} else if err := h.repo.Update(nil, key, body.Value); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to update setting",
 			})
@@ -269,9 +294,9 @@ func (h *SettingHandler) validateSettingValue(key, value string) error {
 		if value != "true" && value != "false" {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Invalid %s value (must be 'true' or 'false')", key))
 		}
-	case "epub_title_override":
+	case "epub_title_override", "original_title_override":
 		if value != "true" && value != "false" {
-			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_title_override value (must be 'true' or 'false')")
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Invalid %s value (must be 'true' or 'false')", key))
 		}
 	default:
 		// 보안을 위해 정의되지 않은 키는 거부합니다.

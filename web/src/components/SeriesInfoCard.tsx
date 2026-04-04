@@ -143,9 +143,11 @@ export function SeriesInfoCard({
   });
 
   const isVolumeType = type === "volume";
-  const displayedOriginalTitle =
-    series.metadata?.original_title?.trim() ||
-    localizedOriginalTitle(series.metadata?.original_titles, i18n.language || "ko", "");
+  const displayedOriginalTitle = localizedOriginalTitle(
+    series.metadata?.original_titles,
+    i18n.language || "ko",
+    series.metadata?.original_title || "",
+  );
   const displayPath = (isVolumeType ? volume?.path : series.path) || "";
   const lowerDisplayPath = displayPath.toLowerCase();
   const isTextFile = lowerDisplayPath.endsWith(".txt") || (!isVolumeType && series.extension === "TXT");

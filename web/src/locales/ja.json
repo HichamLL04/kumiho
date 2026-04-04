@@ -101,7 +101,7 @@
     "metadata": {
       "title": "メタデータ管理",
       "description": "ライブラリ内のシリーズをスキャンし、不足しているメタデータを見つけて一括適用します。",
-      "settings_description": "再スキャン時に EPUB メタデータのタイトルをシリーズ名へ反映するか設定します。",
+      "settings_description": "保存済みの原題をシリーズ名へ反映するか設定します。無効にするとパスベースのタイトルへ戻します。",
       "start_scan": "メタデータ検索開始",
       "cancel_scan": "メタデータ検索中止",
       "apply_all": "一括適用",
@@ -274,8 +274,8 @@
         "keyboard_direction_desc": "キーボード矢印で次ページへ移動する方向を設定します。",
         "click_direction_label": "次へ進むクリック",
         "click_direction_desc": "クリックで次ページに進む領域の方向を設定します。",
-        "title_override_label": "EPUB タイトル上書き",
-        "title_override_desc": "再スキャン時、EPUB メタデータの title があればシリーズ名に反映します。無効時はパスベースのタイトルへ戻します。"
+        "title_override_label": "原題タイトル上書き",
+        "title_override_desc": "再スキャン時、サーバーに保存された原題があればシリーズ名に反映します。無効時はパスベースのタイトルへ戻します。"
       },
       "mode": {
         "single": "1ページ表示",

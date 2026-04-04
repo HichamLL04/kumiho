@@ -18,6 +18,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 )
 
@@ -298,6 +299,16 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	}
 	if req.ISBN != nil {
 		series.Metadata.ISBN = *req.ISBN
+	}
+
+	if req.OriginalTitle != nil && repository.IsOriginalTitleOverrideEnabled(h.settingRepo) {
+		series.Title = scanner.ResolveSeriesTitleFromOriginalTitle(
+			series.Path,
+			"",
+			series.Metadata,
+			true,
+			repository.PreferredOriginalTitleLocale(h.settingRepo),
+		)
 	}
 
 	// DB 업데이트
