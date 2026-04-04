@@ -11,7 +11,7 @@ import styles from "./MetadataTab.module.css";
 import commonStyles from "./SettingsComponents.module.css";
 
 interface SeriesMetadataInfo extends Series {
-  scanStatus?: "idle" | "searching" | "matched" | "failed" | "applying" | "applied";
+  scanStatus?: "idle" | "searching" | "matched" | "failed" | "applied";
   matchResult?: MetadataFetchResponse;
   error?: string;
 }
@@ -23,6 +23,7 @@ interface MetadataSettingsData {
 export function MetadataTab() {
   const { t } = useTranslation();
   const progressLabelId = useId();
+  const librarySelectorLabelId = useId();
   const cancelScanRequestedRef = useRef(false);
   const isMountedRef = useRef(true);
   const [libraries, setLibraries] = useState<Library[]>([]);
@@ -57,6 +58,7 @@ export function MetadataTab() {
     libraryAPI
       .getAll()
       .then((res: { data: { libraries?: Array<Library & { type?: string }> } }) => {
+        if (!isMountedRef.current) return;
         const allLibraries = res.data.libraries || [];
         const localLibraries = allLibraries.filter((lib) => lib.type !== "SYSTEM");
         setLibraries(localLibraries);
@@ -69,6 +71,7 @@ export function MetadataTab() {
     settingAPI
       .list()
       .then((data: MetadataSettingsData) => {
+        if (!isMountedRef.current) return;
         if (data.epub_title_override) {
           setEpubTitleOverride(data.epub_title_override === "true");
         }
@@ -80,17 +83,25 @@ export function MetadataTab() {
   const loadSeries = useCallback(
     async (libraryId: string) => {
       if (!libraryId) return;
-      setIsLoading(true);
-      try {
-        const res = await libraryAPI.getSeries(libraryId);
+      if (isMountedRef.current) {
         setDeselectedApplyIds([]);
         setExpandedResultId(null);
+        setSeriesList([]);
+        setIsLoading(true);
+      }
+      try {
+        const res = await libraryAPI.getSeries(libraryId);
+        if (!isMountedRef.current) return;
         setSeriesList(res.data.series || []);
       } catch (err) {
         console.error("Failed to load series:", err);
+        if (!isMountedRef.current) return;
+        setSeriesList([]);
         setToast({ type: "error", message: t("settings.metadata.error_load_series") });
       } finally {
-        setIsLoading(false);
+        if (isMountedRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [t],
@@ -154,23 +165,17 @@ export function MetadataTab() {
     setExpandedResultId((prev) => (prev === seriesId ? null : seriesId));
   };
 
-  const handleResultPreviewClick = (seriesId: string) => {
-    const isTouchPreviewMode =
-      typeof window !== "undefined" && window.matchMedia("(hover: none), (pointer: coarse)").matches;
-
-    if (!isTouchPreviewMode) return;
-
-    toggleResultPreview(seriesId);
-  };
-
   const handleMetadataSettingChange = async (value: string) => {
     try {
       await settingAPI.update("epub_title_override", { value });
+      if (!isMountedRef.current) return;
       setEpubTitleOverride(value === "true");
       setToast({ type: "success", message: t("settings.viewer.toast.saved") });
     } catch (error) {
       console.error("Failed to update metadata setting:", error);
-      setToast({ type: "error", message: t("settings.viewer.toast.save_failed") });
+      if (isMountedRef.current) {
+        setToast({ type: "error", message: t("settings.viewer.toast.save_failed") });
+      }
     }
   };
 
@@ -354,7 +359,7 @@ export function MetadataTab() {
         </div>
         <div className={styles.actions}>
           <div className={styles.librarySelector}>
-            <div className={styles.selectorLabel}>
+            <div id={librarySelectorLabelId} className={styles.selectorLabel}>
               <Database size={14} />
               <span>{t("settings.tabs.libraries")}</span>
             </div>
@@ -364,6 +369,7 @@ export function MetadataTab() {
                 value={selectedLibraryId}
                 onChange={(e) => setSelectedLibraryId(e.target.value)}
                 disabled={isScanning}
+                aria-labelledby={librarySelectorLabelId}
               >
                 {libraries.map((lib) => (
                   <option
@@ -513,7 +519,7 @@ export function MetadataTab() {
                             aria-label={t("settings.metadata.preview_result_for", {
                               title: series.matchResult.result.title,
                             })}
-                            onClick={() => handleResultPreviewClick(series.id)}
+                            onClick={() => toggleResultPreview(series.id)}
                             onKeyDown={(event) => {
                               if (event.key === "Enter" || event.key === " ") {
                                 event.preventDefault();
