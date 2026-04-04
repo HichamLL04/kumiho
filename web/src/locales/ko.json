@@ -197,6 +197,7 @@
       "total_series_count": "총 {{count}}시리즈",
       "manual_search": "수동 검색",
       "view_details": "상세 보기",
+      "preview_result_for": "{{title}} 미리보기 결과 열기 또는 닫기",
       "scanning_progress": "스캔 중: {{current}} / {{total}}",
       "no_series": "이 라이브러리에 시리즈가 없습니다.",
       "error_load_series": "시리즈 목록을 불러오는데 실패했습니다.",

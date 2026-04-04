@@ -15,6 +15,10 @@ export function ProgressBar({ value, max = 100, height = 4, color, className }: 
     <div
       className={`${styles.progressContainer} ${className || ""}`}
       style={{ height: `${height}px` }}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={Math.min(max, Math.max(0, value))}
     >
       <div
         className={styles.progressFill}

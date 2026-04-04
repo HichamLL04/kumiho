@@ -108,6 +108,7 @@
       "total_series_count": "全{{count}}シリーズ",
       "manual_search": "手動検索",
       "view_details": "詳細を見る",
+      "preview_result_for": "{{title}} のプレビュー結果を開くまたは閉じる",
       "scanning_progress": "スキャン中: {{current}} / {{total}}",
       "no_series": "このライブラリにはシリーズがありません。",
       "error_load_series": "シリーズ一覧の読み込みに失敗しました。",

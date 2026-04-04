@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, Loader2, Database, ChevronDown } from "lucide-react";
 import { libraryAPI, seriesAPI, settingAPI } from "../../api/client";
@@ -34,9 +34,12 @@ export function MetadataTab() {
   const [epubTitleOverride, setEpubTitleOverride] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
-  const selectedMatchedCount = seriesList.filter(
-    (series) => series.scanStatus === "matched" && !deselectedApplyIds.includes(series.id),
-  ).length;
+  const deselectedApplySet = useMemo(() => new Set(deselectedApplyIds), [deselectedApplyIds]);
+  const selectedMatchedCount = useMemo(
+    () => seriesList.filter((series) => series.scanStatus === "matched" && !deselectedApplySet.has(series.id)).length,
+    [deselectedApplySet, seriesList],
+  );
+  const scanPercent = scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;
 
   // Load libraries on mount
   useEffect(() => {
@@ -117,7 +120,7 @@ export function MetadataTab() {
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
-      if (target.closest(`.${styles.matchPreview}`)) return;
+      if (target.closest("[data-match-preview='true']")) return;
       setExpandedResultId(null);
     };
 
@@ -213,7 +216,11 @@ export function MetadataTab() {
           break;
         }
         console.error(`Failed to scan series ${series.title}:`, err);
-        updatedList[i] = { ...series, scanStatus: "failed", error: String(err) };
+        updatedList[i] = {
+          ...series,
+          scanStatus: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
 
       setSeriesList([...updatedList]);
@@ -378,14 +385,14 @@ export function MetadataTab() {
       </div>
 
       {isScanning && (
-        <div className={styles.progressArea}>
+        <div className={styles.progressArea} role="status" aria-live="polite">
           <div className={styles.progressText}>
             <span>
               {t("settings.metadata.scanning_progress", { current: scanProgress.current, total: scanProgress.total })}
             </span>
-            <span>{Math.round((scanProgress.current / scanProgress.total) * 100)}%</span>
+            <span>{scanPercent}%</span>
           </div>
-          <ProgressBar value={(scanProgress.current / scanProgress.total) * 100} />
+          <ProgressBar value={scanPercent} />
         </div>
       )}
 
@@ -452,7 +459,10 @@ export function MetadataTab() {
                     </td>
                     <td data-label={t("settings.metadata.table.match_status")}>
                       <div className={styles.statusBadge}>
-                        <span className={`${styles.statusDot} ${styles[`${series.scanStatus || "idle"}Dot`]}`} />
+                        <span
+                          className={`${styles.statusDot} ${styles[`${series.scanStatus || "idle"}Dot`]}`}
+                          aria-hidden="true"
+                        />
                         {series.scanStatus === "searching" && (
                           <Loader2
                             size={14}
@@ -467,9 +477,13 @@ export function MetadataTab() {
                         {series.matchResult && (
                           <div
                             className={`${styles.matchPreview} ${index >= Math.max(seriesList.length - 2, 0) ? styles.matchPreviewUp : ""} ${expandedResultId === series.id ? styles.matchPreviewExpanded : ""}`}
+                            data-match-preview="true"
                             tabIndex={0}
                             role="button"
                             aria-expanded={expandedResultId === series.id}
+                            aria-label={t("settings.metadata.preview_result_for", {
+                              title: series.matchResult.result.title,
+                            })}
                             onClick={() => handleResultPreviewClick(series.id)}
                             onKeyDown={(event) => {
                               if (event.key === "Enter" || event.key === " ") {

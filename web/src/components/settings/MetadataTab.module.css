@@ -241,241 +241,6 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
-@media (max-width: 980px) {
-  .metadataTab {
-    padding: 1.5rem;
-    gap: 1.5rem;
-  }
-
-  .metadataSettingsCard {
-    padding: 1.15rem 1.2rem;
-  }
-
-  .actions {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .librarySelector,
-  .scanButton,
-  .applyButton {
-    width: 100%;
-  }
-}
-
-@media (max-width: 900px) {
-  .content {
-    overflow: visible;
-  }
-
-  .seriesTableContainer {
-    overflow: visible;
-  }
-
-  .seriesTable {
-    display: block;
-    table-layout: auto;
-  }
-
-  .seriesTable thead {
-    display: none;
-  }
-
-  .seriesTable tbody {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .seriesTable tr {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "series series"
-      "status result";
-    gap: 0.9rem 1rem;
-    padding: 1rem 1.1rem;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .seriesTable tr:last-child {
-    border-bottom: none;
-  }
-
-  .seriesTable td {
-    display: block;
-    padding: 0;
-    border: none;
-  }
-
-  .seriesTable td::before {
-    display: block;
-    margin-bottom: 0.38rem;
-    color: rgba(185, 205, 235, 0.74);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    content: attr(data-label);
-  }
-
-  .seriesTable td:nth-child(1) {
-    grid-area: series;
-  }
-
-  .seriesTable td:nth-child(1)::before {
-    display: none;
-  }
-
-  .seriesTable td:nth-child(2) {
-    grid-area: status;
-    width: auto;
-    text-align: left;
-    align-self: start;
-  }
-
-  .seriesTable td:nth-child(3) {
-    grid-area: result;
-    width: auto;
-    text-align: left;
-    align-self: start;
-  }
-
-  .seriesCell {
-    gap: 0.9rem;
-    align-items: flex-start;
-  }
-
-  .thumbnailSmall {
-    width: 54px;
-    height: 76px;
-  }
-
-  .seriesInfo {
-    gap: 0.28rem;
-  }
-
-  .seriesTitle {
-    white-space: normal;
-    line-height: 1.35;
-    max-height: calc(1.35em * 2);
-  }
-
-  .seriesPath {
-    white-space: normal;
-    direction: ltr;
-    line-height: 1.35;
-    max-height: calc(1.35em * 2);
-  }
-
-  .statusBadge {
-    justify-content: flex-start;
-  }
-
-  .rowActions {
-    align-items: flex-start;
-    gap: 0.7rem;
-    width: 100%;
-  }
-
-  .matchPreview {
-    min-width: 0;
-    flex: 1;
-  }
-
-  .matchDescription {
-    max-height: calc(1.4em * 3);
-  }
-
-  .matchPopover {
-    display: none;
-  }
-
-  .matchPreviewUp .matchPopover {
-    bottom: auto;
-  }
-}
-
-@media (max-width: 640px) {
-  .metadataTab {
-    padding: 1rem;
-    gap: 1.25rem;
-  }
-
-  .titleArea h2 {
-    font-size: 1.3rem;
-  }
-
-  .titleArea p {
-    font-size: 0.88rem;
-  }
-
-  .metadataSettingsCard {
-    padding: 1rem;
-  }
-
-  .seriesHeaderLabel {
-    gap: 0.4rem;
-  }
-
-  .seriesCount {
-    height: 1.35rem;
-    padding: 0 0.45rem;
-    font-size: 0.68rem;
-  }
-
-  .progressText {
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
-  .seriesTable tr {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "series"
-      "status"
-      "result";
-    gap: 0.75rem;
-    padding: 0.95rem;
-  }
-
-  .seriesTable td::before {
-    margin-bottom: 0.3rem;
-  }
-
-  .seriesTable td:nth-child(2),
-  .seriesTable td:nth-child(3) {
-    width: 100%;
-  }
-
-  .rowActions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .matchPreview {
-    width: 100%;
-  }
-
-  .matchThumbnail {
-    width: 48px;
-    height: 68px;
-  }
-
-  .applyCheckboxLabel {
-    order: -1;
-    align-self: flex-end;
-  }
-
-  .failedActionButton {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .emptyResult {
-    align-self: flex-start;
-  }
-}
-
 .progressText {
   display: flex;
   justify-content: space-between;
@@ -748,6 +513,11 @@
   cursor: pointer;
 }
 
+.matchPreview:focus-visible {
+  border-radius: 10px;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.26);
+}
+
 .matchThumbnail {
   width: 42px;
   height: 58px;
@@ -938,17 +708,20 @@
 }
 
 /* Rows Status Styles */
-.searching {
-  background: rgba(59, 130, 246, 0.08) !important;
+.seriesTable tr.searching td {
+  background: rgba(59, 130, 246, 0.08);
 }
-.matched {
-  background: rgba(16, 185, 129, 0.08) !important;
+
+.seriesTable tr.matched td {
+  background: rgba(16, 185, 129, 0.08);
 }
-.failed {
-  background: rgba(239, 68, 68, 0.08) !important;
+
+.seriesTable tr.failed td {
+  background: rgba(239, 68, 68, 0.08);
 }
-.applied {
-  background: rgba(59, 130, 246, 0.15) !important;
+
+.seriesTable tr.applied td {
+  background: rgba(59, 130, 246, 0.15);
 }
 
 @media (max-width: 1200px) {

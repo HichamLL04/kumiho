@@ -108,6 +108,7 @@
       "total_series_count": "{{count}} series",
       "manual_search": "Manual Search",
       "view_details": "View Details",
+      "preview_result_for": "Open or close preview result for {{title}}",
       "scanning_progress": "Scanning: {{current}} / {{total}}",
       "no_series": "There are no series in this library.",
       "error_load_series": "Failed to load the series list.",
