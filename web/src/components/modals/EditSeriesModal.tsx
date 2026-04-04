@@ -8,7 +8,7 @@ import type { MetadataApplyResponse } from "../../types/plugin";
 import { SeriesMetadataPanel } from "../SeriesMetadataPanel";
 import { SeriesCharactersDrawer } from "../SeriesCharactersDrawer";
 import { AlertModal, type AlertType } from "./AlertModal";
-import { localizedOriginalTitle, orderedOriginalTitles } from "../../utils/originalTitles";
+import { orderedOriginalTitles } from "../../utils/originalTitles";
 import styles from "./EditSeriesModal.module.css";
 
 interface EditSeriesModalProps {
