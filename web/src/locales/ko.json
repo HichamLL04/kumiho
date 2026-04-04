@@ -95,7 +95,8 @@
       "plugins": "플러그인",
       "system": "시스템",
       "account": "내 계정",
-      "statistics": "통계"
+      "statistics": "통계",
+      "metadata": "메타데이터"
     },
     "plugins": {
       "title": "플러그인",
@@ -184,6 +185,35 @@
         "auth_deleted": "{{title}}으로 저장한 값을 삭제했습니다.",
         "auth_deleted_reactivate": "{{title}}으로 저장한 값을 삭제했습니다. 플러그인을 다시 활성화하면 기본 설정으로 동작합니다.",
         "auth_delete_failed": "{{title}}으로 저장한 값 삭제에 실패했습니다."
+      }
+    },
+    "metadata": {
+      "title": "메타데이터 관리",
+      "description": "라이브러리의 시리즈들을 스캔하여 누락된 메타데이터를 찾고 일괄 적용합니다.",
+      "start_scan": "메타데이터 검색 시작",
+      "apply_all": "일괄 적용",
+      "total_series_count": "총 {{count}}시리즈",
+      "manual_search": "수동 검색",
+      "view_details": "상세 보기",
+      "scanning_progress": "스캔 중: {{current}} / {{total}}",
+      "no_series": "이 라이브러리에 시리즈가 없습니다.",
+      "error_load_series": "시리즈 목록을 불러오는데 실패했습니다.",
+      "scan_complete": "메타데이터 검색이 완료되었습니다.",
+      "apply_complete": "{{count}}개의 시리즈에 메타데이터를 적용했습니다.",
+      "status": {
+        "idle": "대기 중",
+        "searching": "검색 중...",
+        "matched": "매칭됨",
+        "failed": "매칭 실패",
+        "applying": "적용 중...",
+        "applied": "적용 완료"
+      },
+      "table": {
+        "series": "시리즈",
+        "local_info": "로컬 정보",
+        "match_status": "상태",
+        "match_result": "결과",
+        "actions": "작업"
       }
     },
     "statistics": {

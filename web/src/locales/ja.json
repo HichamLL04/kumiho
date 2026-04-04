@@ -95,7 +95,37 @@
       "plugins": "プラグイン",
       "system": "システム",
       "account": "アカウント",
-      "statistics": "統計"
+      "statistics": "統計",
+      "metadata": "メタデータ"
+    },
+    "metadata": {
+      "title": "メタデータ管理",
+      "description": "ライブラリ内のシリーズをスキャンし、不足しているメタデータを見つけて一括適用します。",
+      "start_scan": "メタデータ検索開始",
+      "apply_all": "一括適用",
+      "total_series_count": "全{{count}}シリーズ",
+      "manual_search": "手動検索",
+      "view_details": "詳細を見る",
+      "scanning_progress": "スキャン中: {{current}} / {{total}}",
+      "no_series": "このライブラリにはシリーズがありません。",
+      "error_load_series": "シリーズ一覧の読み込みに失敗しました。",
+      "scan_complete": "メタデータ検索が完了しました。",
+      "apply_complete": "{{count}}件のシリーズにメタデータを適用しました。",
+      "status": {
+        "idle": "待機中",
+        "searching": "検索中...",
+        "matched": "一致",
+        "failed": "一致失敗",
+        "applying": "適用中...",
+        "applied": "適用完了"
+      },
+      "table": {
+        "series": "シリーズ",
+        "local_info": "ローカル情報",
+        "match_status": "状態",
+        "match_result": "結果",
+        "actions": "操作"
+      }
     },
     "plugins": {
       "title": "プラグイン",

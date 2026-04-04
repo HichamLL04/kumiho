@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle } from "lucide-react";
+import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle, Database } from "lucide-react";
 import { pluginAPI, systemAPI } from "../api/client";
 import { UpdateBadge } from "../components/common/UpdateBadge";
 import { Header } from "../components/headers/Header";
@@ -16,10 +16,20 @@ import { SystemTab } from "../components/settings/SystemTab";
 import { AccountTab } from "../components/settings/AccountTab";
 import { StatisticsTab } from "../components/settings/StatisticsTab";
 import { PluginsTab } from "../components/settings/PluginsTab";
+import { MetadataTab } from "../components/settings/MetadataTab";
 import styles from "./Settings.module.css";
 
 // 설정 탭 타입
-type SettingsTab = "general" | "statistics" | "viewer" | "libraries" | "users" | "plugins" | "system" | "account";
+type SettingsTab =
+  | "general"
+  | "statistics"
+  | "metadata"
+  | "viewer"
+  | "libraries"
+  | "users"
+  | "plugins"
+  | "system"
+  | "account";
 
 // 탭 정보
 const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: boolean }[] = [
@@ -27,6 +37,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: 
   { id: "statistics", label: "settings.tabs.statistics", icon: BarChart3 },
   { id: "viewer", label: "settings.tabs.viewer", icon: Monitor, adminOnly: true },
   { id: "libraries", label: "settings.tabs.libraries", icon: Library, adminOnly: true },
+  { id: "metadata", label: "settings.tabs.metadata", icon: Database, adminOnly: true },
   { id: "users", label: "settings.tabs.users", icon: Users, adminOnly: true },
   { id: "plugins", label: "settings.tabs.plugins", icon: Puzzle, adminOnly: true },
   { id: "system", label: "settings.tabs.system", icon: Server, adminOnly: true },
@@ -69,10 +80,7 @@ export function SettingsPage() {
 
     const loadUpdates = async () => {
       try {
-        const [systemInfo, pluginInfo] = await Promise.all([
-          systemAPI.getVersion(),
-          pluginAPI.getUpdates(),
-        ]);
+        const [systemInfo, pluginInfo] = await Promise.all([systemAPI.getVersion(), pluginAPI.getUpdates()]);
         setHasSystemUpdate(systemInfo.needs_update);
         setHasPluginUpdate(pluginInfo.has_updates);
       } catch (error) {
@@ -91,6 +99,8 @@ export function SettingsPage() {
         return <GeneralTab />;
       case "statistics":
         return <StatisticsTab />;
+      case "metadata":
+        return <MetadataTab />;
       case "viewer":
         return <ViewerTab />;
       case "libraries":

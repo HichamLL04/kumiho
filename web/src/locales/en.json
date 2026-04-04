@@ -95,7 +95,37 @@
       "plugins": "Plugins",
       "system": "System",
       "account": "Account",
-      "statistics": "Statistics"
+      "statistics": "Statistics",
+      "metadata": "Metadata"
+    },
+    "metadata": {
+      "title": "Metadata Management",
+      "description": "Scan series in a library, find missing metadata, and apply matches in bulk.",
+      "start_scan": "Start Metadata Scan",
+      "apply_all": "Apply All",
+      "total_series_count": "{{count}} series",
+      "manual_search": "Manual Search",
+      "view_details": "View Details",
+      "scanning_progress": "Scanning: {{current}} / {{total}}",
+      "no_series": "There are no series in this library.",
+      "error_load_series": "Failed to load the series list.",
+      "scan_complete": "Metadata scan completed.",
+      "apply_complete": "Applied metadata to {{count}} series.",
+      "status": {
+        "idle": "Idle",
+        "searching": "Searching...",
+        "matched": "Matched",
+        "failed": "Match Failed",
+        "applying": "Applying...",
+        "applied": "Applied"
+      },
+      "table": {
+        "series": "Series",
+        "local_info": "Local Info",
+        "match_status": "Status",
+        "match_result": "Result",
+        "actions": "Actions"
+      }
     },
     "plugins": {
       "title": "Plugins",
