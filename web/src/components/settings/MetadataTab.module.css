@@ -581,10 +581,20 @@
   max-height: calc(1.4em * 2);
 }
 
-.matchPreview:hover .matchPopover {
+.matchPreview:focus-visible .matchPopover,
+.matchPreview:focus-within .matchPopover,
+.matchPreviewExpanded .matchPopover {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .matchPreview:hover .matchPopover {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
 }
 
 .matchPopover {
@@ -958,7 +968,9 @@
     display: none;
   }
 
-  .matchPreviewExpanded .matchPopover {
+  .matchPreviewExpanded .matchPopover,
+  .matchPreview:focus-visible .matchPopover,
+  .matchPreview:focus-within .matchPopover {
     display: block;
     position: static;
     width: 100%;
