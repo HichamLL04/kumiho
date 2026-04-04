@@ -6,11 +6,21 @@ interface ProgressProps {
   height?: number;
   color?: string;
   className?: string;
-  ariaLabel?: string;
-  ariaLabelledBy?: string;
 }
 
-export function ProgressBar({ value, max = 100, height = 4, color, className, ariaLabel, ariaLabelledBy }: ProgressProps) {
+type ProgressLabelProps =
+  | { ariaLabel: string; ariaLabelledBy?: string }
+  | { ariaLabel?: string; ariaLabelledBy: string };
+
+export function ProgressBar({
+  value,
+  max = 100,
+  height = 4,
+  color,
+  className,
+  ariaLabel,
+  ariaLabelledBy,
+}: ProgressProps & ProgressLabelProps) {
   const safeMax = max > 0 ? max : 100;
   const safeValue = max > 0 ? value : 0;
   const percentage = Math.min(100, Math.max(0, (safeValue / safeMax) * 100));

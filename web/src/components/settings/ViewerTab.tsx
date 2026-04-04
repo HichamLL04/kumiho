@@ -26,7 +26,6 @@ interface SettingsData {
   epub_wheel_direction?: string;
   epub_keyboard_direction?: string;
   epub_click_direction?: string;
-  epub_title_override?: string;
   [key: string]: string | undefined;
 }
 
@@ -236,7 +235,6 @@ export function ViewerTab() {
         settingAPI.update("epub_wheel_direction", { value: "down" }),
         settingAPI.update("epub_keyboard_direction", { value: "right" }),
         settingAPI.update("epub_click_direction", { value: "right" }),
-        settingAPI.update("epub_title_override", { value: "false" }),
       ]);
 
       setEpubRenderMode("auto");

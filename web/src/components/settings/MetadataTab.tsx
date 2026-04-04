@@ -278,30 +278,36 @@ export function MetadataTab() {
 
   const handleApplyAll = async () => {
     const matchedItems = seriesList.filter((s) => s.scanStatus === "matched" && !deselectedApplyIds.includes(s.id));
-    if (matchedItems.length === 0) return;
+    if (matchedItems.length === 0 || !isMountedRef.current) return;
 
     setIsLoading(true);
     let successCount = 0;
 
     for (const series of matchedItems) {
+      if (!isMountedRef.current) break;
       if (!series.matchResult) continue;
 
       try {
         await seriesAPI.metadataApply(series.id, series.matchResult.result);
+        if (!isMountedRef.current) break;
         if (series.matchResult.plugin_id) {
           await seriesAPI.importCharacters(
             series.id,
             series.matchResult.result.characters || [],
             series.matchResult.plugin_id,
           );
+          if (!isMountedRef.current) break;
         }
+        if (!isMountedRef.current) break;
         setSeriesList((prev) => prev.map((s) => (s.id === series.id ? { ...s, scanStatus: "applied" } : s)));
         successCount++;
       } catch (err) {
         console.error(`Failed to apply metadata for ${series.title}:`, err);
+        if (!isMountedRef.current) break;
       }
     }
 
+    if (!isMountedRef.current) return;
     setIsLoading(false);
     setToast({ type: "success", message: t("settings.metadata.apply_complete", { count: successCount }) });
   };
@@ -465,115 +471,109 @@ export function MetadataTab() {
                   const rowStatusClass = series.scanStatus ? styles[series.scanStatus] || "" : "";
                   const statusDotClass = styles[`${series.scanStatus || "idle"}Dot`] || styles.idleDot;
                   return (
-                  <tr
-                    key={series.id}
-                    className={`${rowStatusClass} ${!series.matchResult && series.scanStatus !== "failed" ? styles.mobileNoResult : ""}`.trim()}
-                  >
-                    <td data-label={t("settings.metadata.table.series")}>
-                      <button
-                        type="button"
-                        className={styles.seriesLinkButton}
-                        onClick={() => window.open(`/series/${series.id}`, "_blank", "noopener,noreferrer")}
-                        title={t("settings.metadata.view_details")}
-                      >
-                        <div className={styles.seriesCell}>
-                          <div className={styles.thumbnailSmall}>
-                            {series.thumbnail_url && (
-                              <img
-                                src={series.thumbnail_url}
-                                alt={series.title}
-                              />
-                            )}
-                          </div>
-                          <div className={styles.seriesInfo}>
-                            <div className={styles.seriesTitle}>{series.title}</div>
-                            <div className={styles.seriesPath}>{series.path}</div>
-                          </div>
-                        </div>
-                      </button>
-                    </td>
-                    <td data-label={t("settings.metadata.table.match_status")}>
-                      <div className={styles.statusBadge}>
-                        <span
-                          className={`${styles.statusDot} ${statusDotClass}`}
-                          aria-hidden="true"
-                        />
-                        {series.scanStatus === "searching" && (
-                          <Loader2
-                            size={14}
-                            className={styles.spinning}
-                          />
-                        )}
-                        {t(`settings.metadata.status.${series.scanStatus || "idle"}`)}
-                      </div>
-                    </td>
-                    <td data-label={t("settings.metadata.table.match_result")}>
-                      <div className={styles.rowActions}>
-                        {series.matchResult && (
-                          <div
-                            className={`${styles.matchPreview} ${index >= Math.max(seriesList.length - 2, 0) ? styles.matchPreviewUp : ""} ${expandedResultId === series.id ? styles.matchPreviewExpanded : ""}`}
-                            data-match-preview="true"
-                            tabIndex={0}
-                            role="button"
-                            aria-expanded={expandedResultId === series.id}
-                            aria-label={t("settings.metadata.preview_result_for", {
-                              title: series.matchResult.result.title,
-                            })}
-                            onClick={() => toggleResultPreview(series.id)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                toggleResultPreview(series.id);
-                              }
-                            }}
-                          >
-                            <div className={styles.matchThumbnail}>
-                              {series.matchResult.result.cover?.url ? (
+                    <tr
+                      key={series.id}
+                      className={`${rowStatusClass} ${!series.matchResult && series.scanStatus !== "failed" ? styles.mobileNoResult : ""}`.trim()}
+                    >
+                      <td data-label={t("settings.metadata.table.series")}>
+                        <button
+                          type="button"
+                          className={styles.seriesLinkButton}
+                          onClick={() => window.open(`/series/${series.id}`, "_blank", "noopener,noreferrer")}
+                          title={t("settings.metadata.view_details")}
+                        >
+                          <div className={styles.seriesCell}>
+                            <div className={styles.thumbnailSmall}>
+                              {series.thumbnail_url && (
                                 <img
-                                  src={series.matchResult.result.cover.url}
-                                  alt={series.matchResult.result.title}
+                                  src={series.thumbnail_url}
+                                  alt={series.title}
                                 />
-                              ) : (
-                                <div className={styles.matchThumbnailFallback}>
-                                  <Database size={16} />
-                                </div>
                               )}
                             </div>
-                            <div className={styles.matchContent}>
-                              <span className={styles.matchTitle}>
-                                {series.matchResult.result.title}
-                              </span>
-                              <span className={styles.matchDescription}>
-                                {series.matchResult.result.description || "-"}
-                              </span>
-                            </div>
-                            <div className={styles.matchPopover}>
-                              <div className={styles.matchPopoverMedia}>
-                                <div className={styles.matchPopoverThumbnail}>
-                                  {series.matchResult.result.cover?.url ? (
-                                    <img
-                                      src={series.matchResult.result.cover.url}
-                                      alt={series.matchResult.result.title}
-                                    />
-                                  ) : (
-                                    <div className={styles.matchThumbnailFallback}>
-                                      <Database size={18} />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className={styles.matchPopoverContent}>
-                                  <strong>{series.matchResult.result.title}</strong>
-                                  {series.matchResult.result.authors && series.matchResult.result.authors.length > 0 && (
-                                    <span className={styles.matchPopoverAuthors}>
-                                      {series.matchResult.result.authors.join(", ")}
-                                    </span>
-                                  )}
-                                  <p>{series.matchResult.result.description || "-"}</p>
-                                </div>
-                              </div>
+                            <div className={styles.seriesInfo}>
+                              <div className={styles.seriesTitle}>{series.title}</div>
+                              <div className={styles.seriesPath}>{series.path}</div>
                             </div>
                           </div>
-                        )}
+                        </button>
+                      </td>
+                      <td data-label={t("settings.metadata.table.match_status")}>
+                        <div className={styles.statusBadge}>
+                          <span
+                            className={`${styles.statusDot} ${statusDotClass}`}
+                            aria-hidden="true"
+                          />
+                          {series.scanStatus === "searching" && (
+                            <Loader2
+                              size={14}
+                              className={styles.spinning}
+                            />
+                          )}
+                          {t(`settings.metadata.status.${series.scanStatus || "idle"}`)}
+                        </div>
+                      </td>
+                      <td data-label={t("settings.metadata.table.match_result")}>
+                        <div className={styles.rowActions}>
+                          {series.matchResult && (
+                            <button
+                              type="button"
+                              className={`${styles.matchPreview} ${index >= Math.max(seriesList.length - 2, 0) ? styles.matchPreviewUp : ""} ${expandedResultId === series.id ? styles.matchPreviewExpanded : ""}`}
+                              data-match-preview="true"
+                              aria-expanded={expandedResultId === series.id}
+                              aria-label={t("settings.metadata.preview_result_for", {
+                                title: series.matchResult.result.title,
+                              })}
+                              onClick={() => toggleResultPreview(series.id)}
+                              disabled={isScanning}
+                            >
+                              <span className={styles.matchThumbnail}>
+                                {series.matchResult.result.cover?.url ? (
+                                  <img
+                                    src={series.matchResult.result.cover.url}
+                                    alt={series.matchResult.result.title}
+                                  />
+                                ) : (
+                                  <span className={styles.matchThumbnailFallback}>
+                                    <Database size={16} />
+                                  </span>
+                                )}
+                              </span>
+                              <span className={styles.matchContent}>
+                                <span className={styles.matchTitle}>
+                                  {series.matchResult.result.title}
+                                </span>
+                                <span className={styles.matchDescription}>
+                                  {series.matchResult.result.description || "-"}
+                                </span>
+                              </span>
+                              <span className={styles.matchPopover}>
+                                <span className={styles.matchPopoverMedia}>
+                                  <span className={styles.matchPopoverThumbnail}>
+                                    {series.matchResult.result.cover?.url ? (
+                                      <img
+                                        src={series.matchResult.result.cover.url}
+                                        alt={series.matchResult.result.title}
+                                      />
+                                    ) : (
+                                      <span className={styles.matchThumbnailFallback}>
+                                        <Database size={18} />
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className={styles.matchPopoverContent}>
+                                    <strong>{series.matchResult.result.title}</strong>
+                                    {series.matchResult.result.authors && series.matchResult.result.authors.length > 0 && (
+                                      <span className={styles.matchPopoverAuthors}>
+                                        {series.matchResult.result.authors.join(", ")}
+                                      </span>
+                                    )}
+                                    <span>{series.matchResult.result.description || "-"}</span>
+                                  </span>
+                                </span>
+                              </span>
+                            </button>
+                          )}
                         {series.scanStatus === "matched" && series.matchResult && (
                           <label
                             className={styles.applyCheckboxLabel}
@@ -585,6 +585,7 @@ export function MetadataTab() {
                               checked={isApplySelected(series)}
                               onChange={() => toggleApplySelection(series.id)}
                               aria-label={`${series.title} - ${t("settings.metadata.apply_all")}`}
+                              disabled={isScanning}
                             />
                           </label>
                         )}
@@ -593,6 +594,7 @@ export function MetadataTab() {
                             className={`${styles.btnIcon} ${styles.failedActionButton}`}
                             onClick={() => setEditingSeries(series)}
                             title={t("settings.metadata.manual_search")}
+                            disabled={isScanning}
                           >
                             <Search size={14} />
                             <span>{t("settings.metadata.manual_search")}</span>
@@ -601,7 +603,7 @@ export function MetadataTab() {
                         {!series.matchResult && series.scanStatus !== "failed" && <span className={styles.emptyResult}>-</span>}
                       </div>
                     </td>
-                  </tr>
+                    </tr>
                   );
                 })}
               </tbody>

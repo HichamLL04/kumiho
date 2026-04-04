@@ -509,13 +509,23 @@
   max-width: 100%;
   flex: 1;
   position: relative;
+  padding: 0;
+  border: none;
+  background: transparent;
   outline: none;
+  text-align: left;
+  color: inherit;
   cursor: pointer;
 }
 
 .matchPreview:focus-visible {
   border-radius: 10px;
   box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.26);
+}
+
+.matchPreview:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .matchThumbnail {
@@ -645,7 +655,8 @@
   font-weight: 600;
 }
 
-.matchPopoverContent p {
+.matchPopoverContent p,
+.matchPopoverContent span:last-child {
   margin: 0.15rem 0 0;
   color: var(--text-secondary);
   font-size: 0.82rem;
@@ -685,6 +696,11 @@
   background: rgba(248, 113, 113, 0.2);
   color: #fff1f1;
   border-color: rgba(248, 113, 113, 0.3);
+}
+
+.failedActionButton:disabled {
+  cursor: default;
+  opacity: 0.65;
 }
 
 .btnIcon:hover {
