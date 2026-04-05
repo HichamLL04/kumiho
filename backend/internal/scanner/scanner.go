@@ -163,13 +163,6 @@ func (s *Scanner) getPerfConfig() scanPerfConfig {
 	}
 }
 
-func (s *Scanner) isOriginalTitleOverrideEnabled() bool {
-	if s.settingRepo == nil {
-		return false
-	}
-	return repository.IsOriginalTitleOverrideEnabled(s.settingRepo)
-}
-
 func (s *Scanner) NormalizeStoredSeriesTitles() error {
 	tx, err := database.DB.BeginTx(context.Background(), nil)
 	if err != nil {

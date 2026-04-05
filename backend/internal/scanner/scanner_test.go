@@ -53,31 +53,27 @@ func (r *scannerTestSettingRepo) Update(_ database.Queryer, key, value string) e
 
 func TestIsOriginalTitleOverrideEnabledPrefersNewKeyAndFallsBackToLegacyKey(t *testing.T) {
 	t.Run("new key takes precedence", func(t *testing.T) {
-		s := &Scanner{
-			settingRepo: &scannerTestSettingRepo{
-				values: map[string]string{
-					"original_title_override": "false",
-					"epub_title_override":     "true",
-				},
+		repo := &scannerTestSettingRepo{
+			values: map[string]string{
+				"original_title_override": "false",
+				"epub_title_override":     "true",
 			},
 		}
 
-		if s.isOriginalTitleOverrideEnabled() {
-			t.Fatal("isOriginalTitleOverrideEnabled() = true, want false when new key is false")
+		if repository.IsOriginalTitleOverrideEnabled(repo) {
+			t.Fatal("IsOriginalTitleOverrideEnabled() = true, want false when new key is false")
 		}
 	})
 
 	t.Run("legacy key is used as fallback", func(t *testing.T) {
-		s := &Scanner{
-			settingRepo: &scannerTestSettingRepo{
-				values: map[string]string{
-					"epub_title_override": "true",
-				},
+		repo := &scannerTestSettingRepo{
+			values: map[string]string{
+				"epub_title_override": "true",
 			},
 		}
 
-		if !s.isOriginalTitleOverrideEnabled() {
-			t.Fatal("isOriginalTitleOverrideEnabled() = false, want true from legacy key fallback")
+		if !repository.IsOriginalTitleOverrideEnabled(repo) {
+			t.Fatal("IsOriginalTitleOverrideEnabled() = false, want true from legacy key fallback")
 		}
 	})
 }

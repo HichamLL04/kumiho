@@ -439,6 +439,9 @@ func TestMetadataServiceApplySeriesMetadataKeepsExistingOriginalTitlesWhenFetche
 	if originalTitles["ko"] != "예전 제목" || originalTitles["en"] != "Old Title" || originalTitles["_manual_title"] != "사용자 지정 원제" {
 		t.Fatalf("OriginalTitles = %#v", originalTitles)
 	}
+	if updated.Metadata.OriginalTitle != "사용자 지정 원제" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
 }
 
 func TestMetadataServiceApplySeriesMetadataUpdatesAutoResolvedOriginalTitleWhenFetchedMapChanges(t *testing.T) {

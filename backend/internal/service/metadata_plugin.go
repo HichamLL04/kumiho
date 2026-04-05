@@ -278,15 +278,19 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	}
 
 	var updatedFields []string
-	applyFetchedTitle(series, result, &updatedFields)
-	applyString(&series.Description, sanitizeDescription(result.Description), "description", &updatedFields)
 
-	// original_titles raw 저장
+	// 수동 원제 여부를 먼저 판별한 뒤에만 fallback title 적용 여부를 결정한다.
 	manualOriginalTitle := ""
 	isManualOriginalTitle := scanner.IsManualOriginalTitle(series.Metadata.OriginalTitles, series.Metadata.OriginalTitle)
 	if existingTitle := strings.TrimSpace(series.Metadata.OriginalTitle); isManualOriginalTitle {
 		manualOriginalTitle = existingTitle
 	}
+	if !isManualOriginalTitle {
+		applyFetchedTitle(series, result, &updatedFields)
+	}
+	applyString(&series.Description, sanitizeDescription(result.Description), "description", &updatedFields)
+
+	// original_titles raw 저장
 
 	if len(result.OriginalTitles) > 0 {
 		if originalTitles := encodeOriginalTitles(result.OriginalTitles, manualOriginalTitle); originalTitles != "" {
@@ -396,6 +400,9 @@ func applyString(target *string, next string, field string, updatedFields *[]str
 
 func applyFetchedTitle(series *model.Series, result *sdktypes.MetadataResult, updatedFields *[]string) {
 	if series == nil || result == nil || series.Metadata == nil {
+		return
+	}
+	if strings.TrimSpace(series.Metadata.OriginalTitle) != "" {
 		return
 	}
 	if strings.TrimSpace(result.OriginalTitle) != "" || len(result.OriginalTitles) > 0 {
