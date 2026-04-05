@@ -115,12 +115,14 @@
       "scan_complete": "Metadata scan completed.",
       "scan_cancelled": "Metadata scan stopped.",
       "apply_complete": "Applied metadata to {{count}} series.",
+      "apply_complete_with_warnings": "Applied metadata to {{count}} series, but character sync failed for {{warnings}} series. Please retry.",
       "status": {
         "idle": "Idle",
         "searching": "Searching...",
         "matched": "Matched",
         "failed": "Match Failed",
-        "applied": "Applied"
+        "applied": "Applied",
+        "applied_with_warnings": "Applied with warnings"
       },
       "table": {
         "series": "Series",
@@ -679,6 +681,7 @@
         "fetch_failed": "Failed to fetch metadata details.",
         "apply_success": "Applied {{count}} fields.",
         "apply_success_with_character_sync": "Applied {{count}} fields and synced {{characters}} character changes.",
+        "apply_success_with_character_warning": "Applied {{count}} fields, but character sync failed. Please retry.",
         "apply_no_changes": "No metadata changes to apply.",
         "apply_failed": "Failed to apply metadata."
       }

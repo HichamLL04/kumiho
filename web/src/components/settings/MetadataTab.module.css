@@ -542,6 +542,11 @@
   box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.18);
 }
 
+.applied_with_warningsDot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+
 .metaBadge {
   display: inline-block;
   padding: 0.3125rem 0.75rem;
@@ -834,6 +839,10 @@
 
 .seriesTable tr.applied td {
   background: rgba(59, 130, 246, 0.15);
+}
+
+.seriesTable tr.applied_with_warnings td {
+  background: rgba(245, 158, 11, 0.14);
 }
 
 @media (max-width: 1200px) {

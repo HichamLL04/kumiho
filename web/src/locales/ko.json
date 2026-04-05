@@ -204,12 +204,14 @@
       "scan_complete": "메타데이터 검색이 완료되었습니다.",
       "scan_cancelled": "메타데이터 검색을 중단했습니다.",
       "apply_complete": "{{count}}개의 시리즈에 메타데이터를 적용했습니다.",
+      "apply_complete_with_warnings": "{{count}}개의 시리즈에 메타데이터를 적용했지만 {{warnings}}개의 시리즈에서 등장인물 동기화가 실패했습니다. 재적용해 주세요.",
       "status": {
         "idle": "대기 중",
         "searching": "검색 중...",
         "matched": "매칭됨",
         "failed": "매칭 실패",
-        "applied": "적용 완료"
+        "applied": "적용 완료",
+        "applied_with_warnings": "부분 적용"
       },
       "table": {
         "series": "시리즈",
@@ -679,6 +681,7 @@
         "fetch_failed": "메타데이터 상세 정보를 불러오지 못했습니다.",
         "apply_success": "{{count}}개 필드를 적용했습니다.",
         "apply_success_with_character_sync": "{{count}}개 필드를 적용하고 등장인물 {{characters}}건을 동기화했습니다.",
+        "apply_success_with_character_warning": "{{count}}개 필드를 적용했지만 등장인물 동기화에는 실패했습니다. 다시 시도해 주세요.",
         "apply_no_changes": "변경할 메타데이터가 없습니다.",
         "apply_failed": "메타데이터 적용에 실패했습니다."
       }

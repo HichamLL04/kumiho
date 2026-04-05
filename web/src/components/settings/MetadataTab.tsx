@@ -12,7 +12,7 @@ import styles from "./MetadataTab.module.css";
 import commonStyles from "./SettingsComponents.module.css";
 
 interface SeriesMetadataInfo extends Series {
-  scanStatus?: "idle" | "searching" | "matched" | "failed" | "applied";
+  scanStatus?: "idle" | "searching" | "matched" | "failed" | "applied" | "applied_with_warnings";
   matchResult?: MetadataFetchResponse;
 }
 
@@ -150,7 +150,7 @@ export function MetadataTab() {
   }, [expandedResultId]);
 
   const isApplySelected = (series: SeriesMetadataInfo) =>
-    series.scanStatus === "matched" && !deselectedApplySet.has(series.id);
+    (series.scanStatus === "matched" || series.scanStatus === "applied_with_warnings") && !deselectedApplySet.has(series.id);
 
   const toggleApplySelection = (seriesId: string) => {
     setDeselectedApplyIds((prev) =>
@@ -209,7 +209,7 @@ export function MetadataTab() {
     if (isScanning || seriesList.length === 0) return;
     const scanTargets = seriesList
       .map((series, index) => ({ series, index }))
-      .filter(({ series }) => series.scanStatus !== "matched" && series.scanStatus !== "applied");
+      .filter(({ series }) => series.scanStatus !== "matched" && series.scanStatus !== "applied" && series.scanStatus !== "applied_with_warnings");
     if (scanTargets.length === 0) return;
 
     setEditingSeries(null);
@@ -308,11 +308,14 @@ export function MetadataTab() {
   };
 
   const handleApplyAll = async () => {
-    const matchedItems = seriesList.filter((s) => s.scanStatus === "matched" && !deselectedApplySet.has(s.id));
+    const matchedItems = seriesList.filter(
+      (s) => (s.scanStatus === "matched" || s.scanStatus === "applied_with_warnings") && !deselectedApplySet.has(s.id),
+    );
     if (matchedItems.length === 0 || !isMountedRef.current) return;
 
     setIsLoading(true);
     let successCount = 0;
+    let warningCount = 0;
 
     for (const series of matchedItems) {
       if (!isMountedRef.current) break;
@@ -321,6 +324,7 @@ export function MetadataTab() {
       try {
         await seriesAPI.metadataApply(series.id, series.matchResult.result);
         if (!isMountedRef.current) break;
+        let characterImportFailed = false;
         if (series.matchResult.plugin_id) {
           try {
             await seriesAPI.importCharacters(
@@ -331,11 +335,21 @@ export function MetadataTab() {
             if (!isMountedRef.current) break;
           } catch (err) {
             console.error(`Failed to import characters for ${series.title}:`, err);
+            characterImportFailed = true;
           }
         }
         if (!isMountedRef.current) break;
-        setSeriesList((prev) => prev.map((s) => (s.id === series.id ? { ...s, scanStatus: "applied" } : s)));
+        setSeriesList((prev) =>
+          prev.map((s) =>
+            s.id === series.id
+              ? { ...s, scanStatus: characterImportFailed ? "applied_with_warnings" : "applied" }
+              : s,
+          ),
+        );
         successCount++;
+        if (characterImportFailed) {
+          warningCount++;
+        }
       } catch (err) {
         console.error(`Failed to apply metadata for ${series.title}:`, err);
         if (!isMountedRef.current) break;
@@ -344,7 +358,13 @@ export function MetadataTab() {
 
     if (!isMountedRef.current) return;
     setIsLoading(false);
-    setToast({ type: "success", message: t("settings.metadata.apply_complete", { count: successCount }) });
+    setToast({
+      type: warningCount > 0 ? "info" : "success",
+      message:
+        warningCount > 0
+          ? t("settings.metadata.apply_complete_with_warnings", { count: successCount, warnings: warningCount })
+          : t("settings.metadata.apply_complete", { count: successCount }),
+    });
   };
 
   return (
@@ -634,7 +654,7 @@ export function MetadataTab() {
                               </span>
                             </button>
                           )}
-                        {series.scanStatus === "matched" && series.matchResult && (
+                        {(series.scanStatus === "matched" || series.scanStatus === "applied_with_warnings") && series.matchResult && (
                           <label
                             className={styles.applyCheckboxLabel}
                             title={t("settings.metadata.apply_all")}
