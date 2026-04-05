@@ -411,8 +411,27 @@ export function MetadataTab() {
             {libraries.map((library) => {
               const enabled = Boolean(library.original_title_override);
               const isUpdating = updatingLibraryIds.has(library.id);
+              const isDisabled = isScanning || isUpdating;
               return (
-                <article key={library.id} className={styles.libraryOverrideCard}>
+                <article
+                  key={library.id}
+                  className={`${styles.libraryOverrideCard} ${isDisabled ? styles.libraryOverrideCardDisabled : ""}`}
+                  role="switch"
+                  aria-checked={enabled}
+                  aria-label={`${library.name} ${t("settings.viewer.epub.title_override_label")}`}
+                  aria-disabled={isDisabled}
+                  tabIndex={isDisabled ? -1 : 0}
+                  onClick={() => {
+                    if (isDisabled) return;
+                    void handleLibraryOverrideToggle(library, !enabled);
+                  }}
+                  onKeyDown={(event) => {
+                    if (isDisabled) return;
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    void handleLibraryOverrideToggle(library, !enabled);
+                  }}
+                >
                   <div className={styles.libraryOverrideInfo}>
                     <div className={styles.libraryOverrideNameRow}>
                       <Database size={16} />
@@ -423,12 +442,14 @@ export function MetadataTab() {
                   <label className={`${commonStyles.pluginToggle} ${isScanning || isUpdating ? commonStyles.pluginToggleDisabled : ""}`}>
                     <button
                       type="button"
-                      role="switch"
-                      aria-checked={enabled}
-                      aria-label={`${library.name} ${t("settings.viewer.epub.title_override_label")}`}
                       className={`${commonStyles.pluginToggleTrack} ${enabled ? commonStyles.pluginToggleTrackOn : ""}`}
-                      onClick={() => void handleLibraryOverrideToggle(library, !enabled)}
-                      disabled={isScanning || isUpdating}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleLibraryOverrideToggle(library, !enabled);
+                      }}
+                      disabled={isDisabled}
+                      aria-hidden="true"
+                      tabIndex={-1}
                     >
                       <span className={`${commonStyles.pluginToggleThumb} ${enabled ? commonStyles.pluginToggleThumbOn : ""}`}>
                         {isUpdating ? <Loader2 className={styles.spinning} size={11} /> : null}
