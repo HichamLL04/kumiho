@@ -31,7 +31,7 @@ export function MetadataTab() {
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [updatingLibraryId, setUpdatingLibraryId] = useState<string | null>(null);
+  const [updatingLibraryIds, setUpdatingLibraryIds] = useState<Set<string>>(new Set());
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const deselectedApplySet = useMemo(() => new Set(deselectedApplyIds), [deselectedApplyIds]);
@@ -175,7 +175,11 @@ export function MetadataTab() {
   const handleLibraryOverrideToggle = async (library: Library, enabled: boolean) => {
     if (!library.id) return;
     try {
-      setUpdatingLibraryId(library.id);
+      setUpdatingLibraryIds((prev) => {
+        const next = new Set(prev);
+        next.add(library.id);
+        return next;
+      });
       const updatedLibrary = await libraryAPI
         .update(library.id, { original_title_override: enabled })
         .then((res) => res.data as Library);
@@ -192,7 +196,11 @@ export function MetadataTab() {
       }
     } finally {
       if (isMountedRef.current) {
-        setUpdatingLibraryId(null);
+        setUpdatingLibraryIds((prev) => {
+          const next = new Set(prev);
+          next.delete(library.id);
+          return next;
+        });
       }
     }
   };
@@ -377,7 +385,7 @@ export function MetadataTab() {
           <div className={styles.libraryOverrideGrid}>
             {libraries.map((library) => {
               const enabled = Boolean(library.original_title_override);
-              const isUpdating = updatingLibraryId === library.id;
+              const isUpdating = updatingLibraryIds.has(library.id);
               return (
                 <article key={library.id} className={styles.libraryOverrideCard}>
                   <div className={styles.libraryOverrideInfo}>

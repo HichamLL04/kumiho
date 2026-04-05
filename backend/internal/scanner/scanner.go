@@ -1325,7 +1325,6 @@ func (s *Scanner) processArchiveAsSeries(
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
-		series.Title = resolveSeriesTitleFromPath(archivePath, title)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(archivePath))
@@ -1461,7 +1460,6 @@ func (s *Scanner) processSeries(
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
-		series.Title = resolveSeriesTitleFromPath(seriesPath, seriesTitle)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(seriesPath))
