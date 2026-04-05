@@ -450,7 +450,7 @@ func resolveFetchedOriginalTitle(result *sdktypes.MetadataResult, locale string)
 	if title := strings.TrimSpace(result.OriginalTitle); title != "" {
 		return title
 	}
-	return strings.TrimSpace(result.Title)
+	return ""
 }
 
 func filterNonEmpty(values []string) []string {

@@ -36,7 +36,12 @@ export function MetadataTab() {
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const deselectedApplySet = useMemo(() => new Set(deselectedApplyIds), [deselectedApplyIds]);
   const selectedMatchedCount = useMemo(
-    () => seriesList.filter((series) => series.scanStatus === "matched" && !deselectedApplySet.has(series.id)).length,
+    () =>
+      seriesList.filter(
+        (series) =>
+          (series.scanStatus === "matched" || series.scanStatus === "applied_with_warnings") &&
+          !deselectedApplySet.has(series.id),
+      ).length,
     [deselectedApplySet, seriesList],
   );
   const scanPercent = scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;

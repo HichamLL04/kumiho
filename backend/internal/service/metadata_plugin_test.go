@@ -480,6 +480,39 @@ func TestMetadataServiceApplySeriesMetadataUpdatesAutoResolvedOriginalTitleWhenF
 	}
 }
 
+func TestMetadataServiceApplySeriesMetadataDoesNotOverwriteExistingAutoOriginalTitleWhenFetchHasNoOriginalTitle(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	series.Metadata = &model.SeriesMetadata{
+		SeriesID:       series.ID,
+		OriginalTitle:  "Existing Auto Original Title",
+		OriginalTitles: `{"en":"Existing Auto Original Title"}`,
+	}
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		Title: "Localized Display Title",
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	if updated.Metadata.OriginalTitle != "Existing Auto Original Title" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
+}
+
 func TestMetadataServiceApplySeriesMetadataUsesLocaleAndLibraryOverride(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
