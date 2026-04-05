@@ -1,12 +1,21 @@
-export type OriginalTitlesValue = Record<string, string> | string | null | undefined;
+export type OriginalTitlesValue =
+  | Record<string, string>
+  | string
+  | null
+  | undefined;
 export type OriginalTitleLanguage = "ko" | "ja" | "en" | "unknown";
+
+const MANUAL_ORIGINAL_TITLE_KEY = "_manual_title";
 
 function normalizeOriginalTitles(
   value: Record<string, unknown>,
 ): Partial<Record<Exclude<OriginalTitleLanguage, "unknown">, string>> {
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, entry]) => {
-      if ((key !== "ko" && key !== "ja" && key !== "en") || typeof entry !== "string") {
+      if (
+        (key !== "ko" && key !== "ja" && key !== "en") ||
+        typeof entry !== "string"
+      ) {
         return [];
       }
 
@@ -16,27 +25,39 @@ function normalizeOriginalTitles(
   );
 }
 
-function parseOriginalTitles(value: OriginalTitlesValue): Partial<Record<Exclude<OriginalTitleLanguage, "unknown">, string>> {
+function parseOriginalTitlesPayload(value: OriginalTitlesValue): {
+  titles: Partial<Record<Exclude<OriginalTitleLanguage, "unknown">, string>>;
+  manualTitle: string;
+} {
   if (!value) {
-    return {};
+    return { titles: {}, manualTitle: "" };
   }
   if (typeof value === "object") {
     if (Array.isArray(value)) {
-      return {};
+      return { titles: {}, manualTitle: "" };
     }
-    return normalizeOriginalTitles(value);
+    const manual = value[MANUAL_ORIGINAL_TITLE_KEY];
+    return {
+      titles: normalizeOriginalTitles(value),
+      manualTitle: typeof manual === "string" ? manual.trim() : "",
+    };
   }
 
   try {
     const parsed = JSON.parse(value);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return normalizeOriginalTitles(parsed);
+      const payload = parsed as Record<string, unknown>;
+      const manual = payload[MANUAL_ORIGINAL_TITLE_KEY];
+      return {
+        titles: normalizeOriginalTitles(payload),
+        manualTitle: typeof manual === "string" ? manual.trim() : "",
+      };
     }
   } catch {
-    return {};
+    return { titles: {}, manualTitle: "" };
   }
 
-  return {};
+  return { titles: {}, manualTitle: "" };
 }
 
 function preferredLanguage(locale: string): "ko" | "ja" | "en" {
@@ -52,11 +73,35 @@ function preferredLanguage(locale: string): "ko" | "ja" | "en" {
 
 function preferredLanguageOrder(locale: string): Array<"ko" | "ja" | "en"> {
   const primary = preferredLanguage(locale);
-  return primary === "ko" ? ["ko", "en", "ja"] : primary === "ja" ? ["ja", "en", "ko"] : ["en", "ja", "ko"];
+  return primary === "ko"
+    ? ["ko", "en", "ja"]
+    : primary === "ja"
+      ? ["ja", "en", "ko"]
+      : ["en", "ja", "ko"];
 }
 
-export function localizedOriginalTitle(value: OriginalTitlesValue, locale: string, fallback = ""): string {
-  const titles = parseOriginalTitles(value);
+export function localizedOriginalTitle(
+  value: OriginalTitlesValue,
+  locale: string,
+  fallback = "",
+): string {
+  const { titles, manualTitle } = parseOriginalTitlesPayload(value);
+  const normalizedFallback = fallback.trim();
+
+  if (manualTitle && normalizedFallback && manualTitle === normalizedFallback) {
+    return normalizedFallback;
+  }
+
+  const matchesFallback = normalizedFallback
+    ? Object.values(titles).some(
+        (title) => title?.trim() === normalizedFallback,
+      )
+    : false;
+
+  if (!manualTitle && normalizedFallback && !matchesFallback) {
+    return normalizedFallback;
+  }
+
   const order = preferredLanguageOrder(locale);
 
   for (const key of order) {
@@ -66,7 +111,6 @@ export function localizedOriginalTitle(value: OriginalTitlesValue, locale: strin
     }
   }
 
-  const normalizedFallback = fallback.trim();
   return normalizedFallback;
 }
 
@@ -75,7 +119,7 @@ export function orderedOriginalTitles(
   locale: string,
   fallback = "",
 ): Array<{ language: OriginalTitleLanguage; title: string }> {
-  const titles = parseOriginalTitles(value);
+  const { titles } = parseOriginalTitlesPayload(value);
   const order = preferredLanguageOrder(locale);
   const items: Array<{ language: OriginalTitleLanguage; title: string }> = [];
   const seen = new Set<string>();

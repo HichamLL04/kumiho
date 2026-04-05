@@ -168,6 +168,7 @@ export const libraryAPI = {
     default_epub_keyboard_direction?: string;
     default_epub_click_direction?: string;
     library_type?: LibraryType;
+    original_title_override?: boolean;
   }) => api.post("/libraries", data),
   update: (
     id: string,
@@ -185,6 +186,7 @@ export const libraryAPI = {
       default_epub_click_direction?: string;
       library_type?: LibraryType;
       is_visible?: boolean;
+      original_title_override?: boolean;
     },
   ) => api.put(`/libraries/${id}`, data),
   scan: (id: string) => api.post(`/libraries/${id}/scan`),
@@ -451,7 +453,8 @@ export const viewerAPI = {
 // Settings API
 export const settingAPI = {
   list: () => api.get<Record<string, string>>("/settings").then((res) => res.data),
-  update: (key: string, data: { value: string }) => api.put(`/settings/${key}`, data).then((res) => res.data),
+  update: (key: string, data: { value: string; locale?: string }) =>
+    api.put(`/settings/${key}`, data).then((res) => res.data),
 };
 
 // Download API

@@ -101,7 +101,7 @@
     "metadata": {
       "title": "Metadata Management",
       "description": "Scan series in a library, find missing metadata, and apply matches in bulk.",
-      "settings_description": "Control whether EPUB metadata titles should overwrite series titles during rescan.",
+      "settings_description": "Control whether stored original titles should overwrite series titles. Disable to restore path-based titles.",
       "start_scan": "Start Metadata Scan",
       "cancel_scan": "Cancel Metadata Scan",
       "apply_all": "Apply All",
@@ -115,12 +115,14 @@
       "scan_complete": "Metadata scan completed.",
       "scan_cancelled": "Metadata scan stopped.",
       "apply_complete": "Applied metadata to {{count}} series.",
+      "apply_complete_with_warnings": "Applied metadata to {{count}} series, but character sync failed for {{warnings}} series. Please retry.",
       "status": {
         "idle": "Idle",
         "searching": "Searching...",
         "matched": "Matched",
         "failed": "Match Failed",
-        "applied": "Applied"
+        "applied": "Applied",
+        "applied_with_warnings": "Applied with warnings"
       },
       "table": {
         "series": "Series",
@@ -274,8 +276,8 @@
         "keyboard_direction_desc": "Set the next-page direction for keyboard arrows.",
         "click_direction_label": "Next Page Click",
         "click_direction_desc": "Set which side click moves to the next page.",
-        "title_override_label": "EPUB Title Override",
-        "title_override_desc": "On rescan, apply EPUB metadata title to series title when available. Disable to restore path-based titles."
+        "title_override_label": "Original Title Override",
+        "title_override_desc": "On rescan, apply the stored original title to the series title when available. Disable to restore path-based titles."
       },
       "mode": {
         "single": "Single Page",
@@ -679,6 +681,7 @@
         "fetch_failed": "Failed to fetch metadata details.",
         "apply_success": "Applied {{count}} fields.",
         "apply_success_with_character_sync": "Applied {{count}} fields and synced {{characters}} character changes.",
+        "apply_success_with_character_warning": "Applied {{count}} fields, but character sync failed. Please retry.",
         "apply_no_changes": "No metadata changes to apply.",
         "apply_failed": "Failed to apply metadata."
       }

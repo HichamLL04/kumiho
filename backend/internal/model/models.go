@@ -47,7 +47,8 @@ type Library struct {
 	Type                   string     `json:"type" db:"type"`                         // "LOCAL", "SYSTEM"
 	LibraryType            string     `json:"library_type" db:"library_type"`         // "book", "audiobook"
 	IsVisible              bool       `json:"is_visible" db:"is_visible"`
-	ScanExcludes           string     `json:"scan_excludes" db:"scan_excludes"` // comma-separated patterns
+	ScanExcludes           string     `json:"scan_excludes" db:"scan_excludes"`                     // comma-separated patterns
+	OriginalTitleOverride  bool       `json:"original_title_override" db:"original_title_override"` // 원제 덮어쓰기 옵션
 }
 
 // Series 시리즈 모델 (범용 컨테이너)
@@ -55,6 +56,7 @@ type Series struct {
 	ID            string    `json:"id"`
 	LibraryID     string    `json:"library_id"`
 	Title         string    `json:"title"`
+	DisplayTitle  string    `json:"display_title,omitempty" db:"-"`
 	Path          string    `json:"path"`
 	ThumbnailPath *string   `json:"thumbnail_path,omitempty"`
 	ThumbnailURL  *string   `json:"thumbnail_url,omitempty" db:"-"`

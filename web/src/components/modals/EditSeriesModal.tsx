@@ -20,6 +20,7 @@ interface EditSeriesModalProps {
 
 export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSeriesModalProps) {
   const { t, i18n } = useTranslation();
+  const storedOriginalTitle = series.metadata?.original_title || "";
   const originalTitleLanguageLabel = (language: string) =>
     language === "unknown" ? t("common.unknown") : t(`settings.general.language.${language}`);
   const [formData, setFormData] = useState({
@@ -97,14 +98,14 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
         tags: series.metadata?.tags || "",
         description: series.description || "",
         publication_year: series.metadata?.publication_year || "",
-        original_title: series.metadata?.original_title || "",
+        original_title: storedOriginalTitle,
         publisher: series.metadata?.publisher || "",
         published_at: series.metadata?.published_at || "",
         isbn: series.metadata?.isbn || "",
       });
       setThumbnailUrl("");
     }
-  }, [isOpen, series]);
+  }, [isOpen, series, storedOriginalTitle]);
 
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {

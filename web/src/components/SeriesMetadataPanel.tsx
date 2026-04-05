@@ -110,23 +110,31 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
     try {
       const response = await seriesAPI.metadataApply(series.id, filterMetadataResult(result, applyFields));
       let characterChangeCount = 0;
+      let characterImportFailed = false;
       if (applyFields.characters && fetched?.plugin_id) {
-        const importResponse = await seriesAPI.importCharacters(series.id, result.characters || [], fetched.plugin_id);
-        characterChangeCount = importResponse.changed_count || 0;
-        onCharactersImported?.(characterChangeCount);
+        try {
+          const importResponse = await seriesAPI.importCharacters(series.id, result.characters || [], fetched.plugin_id);
+          characterChangeCount = importResponse.changed_count || 0;
+          onCharactersImported?.(characterChangeCount);
+        } catch (error: unknown) {
+          console.error("Failed to import characters:", error);
+          characterImportFailed = true;
+        }
       }
       onApplied(response);
       const updatedFieldCount = response.updated_fields.length;
       setStatus({
-        type: "success",
-        message: updatedFieldCount > 0 || characterChangeCount > 0
-          ? characterChangeCount > 0
-            ? t("series.metadata.toast.apply_success_with_character_sync", {
-              count: updatedFieldCount,
-              characters: characterChangeCount,
-            })
-            : t("series.metadata.toast.apply_success", { count: updatedFieldCount })
-          : t("series.metadata.toast.apply_no_changes"),
+        type: characterImportFailed ? "info" : "success",
+        message: characterImportFailed
+          ? t("series.metadata.toast.apply_success_with_character_warning", { count: updatedFieldCount })
+          : updatedFieldCount > 0 || characterChangeCount > 0
+            ? characterChangeCount > 0
+              ? t("series.metadata.toast.apply_success_with_character_sync", {
+                count: updatedFieldCount,
+                characters: characterChangeCount,
+              })
+              : t("series.metadata.toast.apply_success", { count: updatedFieldCount })
+            : t("series.metadata.toast.apply_no_changes"),
       });
     } catch (error: unknown) {
       console.error("Failed to apply metadata:", error);

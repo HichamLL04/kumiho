@@ -18,6 +18,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 )
 
@@ -257,6 +258,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 		}
 
 		series.IsBookmarked = *req.IsBookmarked
+		h.assignSeriesDisplayTitle(series)
 		return c.JSON(series)
 	}
 
@@ -289,6 +291,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	}
 	if req.OriginalTitle != nil {
 		series.Metadata.OriginalTitle = *req.OriginalTitle
+		series.Metadata.OriginalTitles = scanner.WithManualOriginalTitle(series.Metadata.OriginalTitles, *req.OriginalTitle)
 	}
 	if req.Publisher != nil {
 		series.Metadata.Publisher = *req.Publisher
@@ -307,6 +310,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 		})
 	}
 
+	h.assignSeriesDisplayTitle(series)
 	return c.JSON(series)
 }
 
@@ -1610,11 +1614,57 @@ func (h *SeriesHandler) UpdateViewerSettings(c *fiber.Ctx) error {
 // enrichSeriesList 시리즈 목록 데이터 보정
 func (h *SeriesHandler) enrichSeriesList(seriesList []model.Series, userID string) {
 	h.seriesEnrichSvc.EnrichList(seriesList, userID)
+	h.assignSeriesDisplayTitles(seriesList)
 }
 
 // enrichSingleSeries 단일 시리즈 데이터 보정 (썸네일 URL, 진행도 계산)
 func (h *SeriesHandler) enrichSingleSeries(s *model.Series, userID string) {
 	h.seriesEnrichSvc.EnrichSingle(s, userID)
+	h.assignSeriesDisplayTitle(s)
+}
+
+func (h *SeriesHandler) assignSeriesDisplayTitles(seriesList []model.Series) {
+	locale := repository.PreferredOriginalTitleLocale(h.settingRepo)
+	libraryCache := make(map[string]*model.Library, len(seriesList))
+	for i := range seriesList {
+		series := &seriesList[i]
+		if _, ok := libraryCache[series.LibraryID]; !ok {
+			library, err := h.libraryRepo.FindByID(nil, series.LibraryID)
+			if err != nil {
+				libraryCache[series.LibraryID] = nil
+			} else {
+				libraryCache[series.LibraryID] = library
+			}
+		}
+		h.applySeriesDisplayTitle(series, libraryCache[series.LibraryID], locale)
+	}
+}
+
+func (h *SeriesHandler) assignSeriesDisplayTitle(series *model.Series) {
+	if series == nil {
+		return
+	}
+	locale := repository.PreferredOriginalTitleLocale(h.settingRepo)
+	library, err := h.libraryRepo.FindByID(nil, series.LibraryID)
+	if err != nil {
+		h.applySeriesDisplayTitle(series, nil, locale)
+		return
+	}
+	h.applySeriesDisplayTitle(series, library, locale)
+}
+
+func (h *SeriesHandler) applySeriesDisplayTitle(series *model.Series, library *model.Library, locale string) {
+	if series == nil {
+		return
+	}
+
+	displayTitle := strings.TrimSpace(series.Title)
+	if library != nil && library.OriginalTitleOverride {
+		if resolved := scanner.ResolveSeriesTitleFromOriginalTitle(series.Path, "", series.Metadata, true, locale); resolved != "" {
+			displayTitle = resolved
+		}
+	}
+	series.DisplayTitle = displayTitle
 }
 
 // Search 시리즈 검색

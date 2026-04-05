@@ -7,21 +7,6 @@
   animation: fadeIn 0.3s ease-out;
 }
 
-.metadataSettingsCard {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.35rem 1.5rem;
-  border-radius: 18px;
-  border: 1px solid rgba(120, 170, 255, 0.14);
-  background:
-    radial-gradient(circle at top right, rgba(96, 165, 250, 0.12), transparent 34%),
-    rgba(17, 26, 46, 0.72);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 16px 32px rgba(0, 0, 0, 0.18);
-}
-
 .metadataSettingsHeader {
   display: flex;
   flex-direction: column;
@@ -42,6 +27,100 @@
   color: var(--text-secondary);
 }
 
+.libraryOverrideSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+.libraryOverrideGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+  width: 100%;
+}
+
+.libraryOverrideCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(120, 170, 255, 0.14);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.015)
+    ),
+    rgba(17, 26, 46, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 24px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.libraryOverrideCard:hover {
+  border-color: rgba(120, 170, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 28px rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+}
+
+.libraryOverrideCard:focus-visible {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.9);
+  box-shadow:
+    0 0 0 3px rgba(139, 92, 246, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 28px rgba(0, 0, 0, 0.18);
+}
+
+.libraryOverrideCardDisabled {
+  cursor: default;
+}
+
+.libraryOverrideCardDisabled:hover {
+  border-color: rgba(120, 170, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 24px rgba(0, 0, 0, 0.14);
+  transform: none;
+}
+
+.libraryOverrideInfo {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.libraryOverrideNameRow {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text-primary);
+}
+
+.libraryOverrideNameRow h4 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.libraryOverrideInfo p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -53,20 +132,43 @@
   }
 }
 
+.settingsSectionTitle {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.settingsSectionTitle h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
 .header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 2rem;
   flex-wrap: wrap;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.titleArea h2,
+.titleArea h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .titleArea h2 {
-  margin: 0 0 0.5rem 0;
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
+}
+
+.titleArea h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
 }
 
 .titleArea p {
@@ -80,19 +182,33 @@
 .actions {
   display: flex;
   gap: 0.875rem;
-  align-items: flex-end;
-  flex-shrink: 0;
+  align-items: center;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.libraryActionPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  width: 100%;
+  align-items: flex-start;
 }
 
 .librarySelector {
   min-width: 240px;
+  max-width: 320px;
+  width: 100%;
   padding: 0.55rem 0.7rem 0.7rem 0.8rem;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0.02)
+    ),
     rgba(13, 17, 33, 0.72);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
@@ -158,19 +274,19 @@
   justify-content: center;
   gap: 0.625rem;
   white-space: nowrap;
-  min-height: 42px;
+  min-height: 46px;
   padding: 0 1rem;
+  min-width: 200px;
   border-radius: 12px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  font-size: 0.95rem;
+  font-size: 0.96rem;
 }
 
 .primaryAction {
   color: #08111f;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  background:
-    linear-gradient(135deg, #f6f7fb 0%, #dde7ff 52%, #c5d7ff 100%);
+  background: linear-gradient(135deg, #f6f7fb 0%, #dde7ff 52%, #c5d7ff 100%);
   box-shadow:
     0 8px 18px rgba(108, 151, 255, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.75);
@@ -188,8 +304,9 @@
   align-items: center;
   justify-content: center;
   gap: 0.625rem;
-  min-height: 42px;
-  padding: 0 0.95rem;
+  min-height: 46px;
+  padding: 0 1rem;
+  min-width: 180px;
   border-radius: 12px;
   border: 1px solid rgba(125, 182, 255, 0.18);
   background:
@@ -459,6 +576,11 @@
   box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.18);
 }
 
+.applied_with_warningsDot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+
 .metaBadge {
   display: inline-block;
   padding: 0.3125rem 0.75rem;
@@ -605,8 +727,11 @@
   padding: 0.9rem;
   border-radius: 16px;
   border: 1px solid rgba(120, 170, 255, 0.2);
-  background:
-    linear-gradient(180deg, rgba(18, 33, 58, 0.98), rgba(10, 20, 38, 0.98));
+  background: linear-gradient(
+    180deg,
+    rgba(18, 33, 58, 0.98),
+    rgba(10, 20, 38, 0.98)
+  );
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -750,6 +875,10 @@
   background: rgba(59, 130, 246, 0.15);
 }
 
+.seriesTable tr.applied_with_warnings td {
+  background: rgba(245, 158, 11, 0.14);
+}
+
 @media (max-width: 1200px) {
   .seriesTable th,
   .seriesTable td {
@@ -819,19 +948,20 @@
     gap: 1.5rem;
   }
 
-  .metadataSettingsCard {
-    padding: 1.15rem 1.2rem;
-  }
-
   .actions {
     width: 100%;
-    justify-content: stretch;
+    justify-content: flex-start;
+  }
+
+  .libraryActionPanel {
+    width: 100%;
   }
 
   .librarySelector,
   .scanButton,
   .applyButton {
     width: 100%;
+    min-width: 0;
   }
 }
 
@@ -997,10 +1127,6 @@
 
   .titleArea p {
     font-size: 0.88rem;
-  }
-
-  .metadataSettingsCard {
-    padding: 1rem;
   }
 
   .progressText {

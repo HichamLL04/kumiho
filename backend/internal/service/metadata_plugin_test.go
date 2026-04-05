@@ -45,7 +45,7 @@ func TestMetadataServiceSearchSeriesAggregatesCandidates(t *testing.T) {
 		},
 	}
 	manager := newActiveMetadataManager(t, rt)
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
 
 	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{})
 	if err != nil {
@@ -77,7 +77,7 @@ func TestMetadataServiceSearchSeriesPrefersLowerVolumeWhenConfidenceMatches(t *t
 		},
 	}
 	manager := newActiveMetadataManager(t, rt)
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
 
 	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{})
 	if err != nil {
@@ -111,7 +111,7 @@ func TestMetadataServiceSearchSeriesUsesOverrideTitle(t *testing.T) {
 		},
 	}
 	manager := newActiveMetadataManager(t, rt)
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
 
 	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{Title: "All you Need Is Kill"})
 	if err != nil {
@@ -140,7 +140,7 @@ func TestMetadataServiceSearchSeriesKeepsProviderOrderForLowConfidenceTies(t *te
 		},
 	}
 	manager := newActiveMetadataManager(t, rt)
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
 
 	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{})
 	if err != nil {
@@ -174,7 +174,7 @@ func TestMetadataServiceSearchSeriesDoesNotForceBookContentType(t *testing.T) {
 		},
 	}
 	manager := newActiveMetadataManager(t, rt)
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
 
 	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{Title: "Naruto"})
 	if err != nil {
@@ -196,7 +196,7 @@ func TestMetadataServiceFetchSeriesMetadataReturnsPluginNotReadyForInactivePlugi
 	seriesRepo := repository.NewSeriesRepository()
 	series := seedMetadataSeries(t, seriesRepo)
 	manager := newMetadataManagerWithState(t, &metadataRuntime{}, sdkstate.Registered, []capability.Capability{capability.MetadataSearch, capability.MetadataFetch})
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
 
 	_, err := svc.FetchSeriesMetadata(context.Background(), series.ID, "", MetadataFetchSelection{
 		PluginID: "plugin-sample",
@@ -220,7 +220,7 @@ func TestMetadataServiceFetchSeriesMetadataReturnsUnsupportedForMissingFetchCapa
 	seriesRepo := repository.NewSeriesRepository()
 	series := seedMetadataSeries(t, seriesRepo)
 	manager := newMetadataManagerWithState(t, &metadataRuntime{}, sdkstate.Active, []capability.Capability{capability.MetadataSearch})
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, manager)
 
 	_, err := svc.FetchSeriesMetadata(context.Background(), series.ID, "", MetadataFetchSelection{
 		PluginID: "plugin-sample",
@@ -243,7 +243,7 @@ func TestMetadataServiceApplySeriesMetadataUpdatesDatabase(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
 	series := seedMetadataSeries(t, seriesRepo)
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
 	result, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
 		Title:           "Applied Title",
@@ -300,7 +300,7 @@ func TestMetadataServiceApplySeriesMetadataStoresFetchedTitleAsOriginalTitle(t *
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
 	series := seedMetadataSeries(t, seriesRepo)
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
 	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
 		Title: "Example Series",
@@ -325,7 +325,7 @@ func TestMetadataServiceApplySeriesMetadataStoresOriginalTitlesMap(t *testing.T)
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
 	series := seedMetadataSeries(t, seriesRepo)
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
 	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
 		Title:         "강철의 연금술사",
@@ -347,7 +347,7 @@ func TestMetadataServiceApplySeriesMetadataStoresOriginalTitlesMap(t *testing.T)
 	if updated == nil || updated.Metadata == nil {
 		t.Fatal("updated metadata should not be nil")
 	}
-	if updated.Metadata.OriginalTitle != "Fullmetal Alchemist" {
+	if updated.Metadata.OriginalTitle != "강철의 연금술사" {
 		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
 	}
 
@@ -357,6 +357,254 @@ func TestMetadataServiceApplySeriesMetadataStoresOriginalTitlesMap(t *testing.T)
 	}
 	if originalTitles["ko"] != "강철의 연금술사" || originalTitles["en"] != "Fullmetal Alchemist" || originalTitles["ja"] != "鋼の錬金術師" {
 		t.Fatalf("OriginalTitles = %#v", originalTitles)
+	}
+}
+
+func TestMetadataServiceApplySeriesMetadataPreservesManualOriginalTitle(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	series.Metadata = &model.SeriesMetadata{
+		SeriesID:       series.ID,
+		OriginalTitle:  "사용자 지정 원제",
+		OriginalTitles: `{"ko":"예전 제목","en":"Old Title"}`,
+	}
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		OriginalTitle: "Fetched Title",
+		OriginalTitles: map[string]string{
+			"ko": "새 한국어 제목",
+			"en": "New English Title",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	if updated.Metadata.OriginalTitle != "사용자 지정 원제" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
+	var originalTitles map[string]string
+	if err := json.Unmarshal([]byte(updated.Metadata.OriginalTitles), &originalTitles); err != nil {
+		t.Fatalf("Unmarshal(OriginalTitles) error = %v", err)
+	}
+	if originalTitles["_manual_title"] != "사용자 지정 원제" {
+		t.Fatalf("manual title marker = %q", originalTitles["_manual_title"])
+	}
+}
+
+func TestMetadataServiceApplySeriesMetadataKeepsExistingOriginalTitlesWhenFetchedMapIsEmpty(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	series.Metadata = &model.SeriesMetadata{
+		SeriesID:       series.ID,
+		OriginalTitle:  "사용자 지정 원제",
+		OriginalTitles: `{"ko":"예전 제목","en":"Old Title","_manual_title":"사용자 지정 원제"}`,
+	}
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		OriginalTitle: "Fetched Title",
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	var originalTitles map[string]string
+	if err := json.Unmarshal([]byte(updated.Metadata.OriginalTitles), &originalTitles); err != nil {
+		t.Fatalf("Unmarshal(OriginalTitles) error = %v", err)
+	}
+	if originalTitles["ko"] != "예전 제목" || originalTitles["en"] != "Old Title" || originalTitles["_manual_title"] != "사용자 지정 원제" {
+		t.Fatalf("OriginalTitles = %#v", originalTitles)
+	}
+	if updated.Metadata.OriginalTitle != "사용자 지정 원제" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
+}
+
+func TestMetadataServiceApplySeriesMetadataUpdatesAutoResolvedOriginalTitleWhenFetchedMapChanges(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	series.Metadata = &model.SeriesMetadata{
+		SeriesID:       series.ID,
+		OriginalTitle:  "Old English Title",
+		OriginalTitles: `{"ko":"예전 한국어 제목","en":"Old English Title"}`,
+	}
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		OriginalTitles: map[string]string{
+			"ko": "새 한국어 제목",
+			"en": "New English Title",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	if updated.Metadata.OriginalTitle != "새 한국어 제목" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
+}
+
+func TestMetadataServiceApplySeriesMetadataDoesNotOverwriteExistingAutoOriginalTitleWhenFetchHasNoOriginalTitle(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	series.Metadata = &model.SeriesMetadata{
+		SeriesID:       series.ID,
+		OriginalTitle:  "Existing Auto Original Title",
+		OriginalTitles: `{"en":"Existing Auto Original Title"}`,
+	}
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		Title: "Localized Display Title",
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	if updated.Metadata.OriginalTitle != "Existing Auto Original Title" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
+}
+
+func TestMetadataServiceApplySeriesMetadataUsesLocaleAndLibraryOverride(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	if _, err := database.DB.Exec(`UPDATE libraries SET original_title_override = 1 WHERE id = ?`, series.LibraryID); err != nil {
+		t.Fatalf("update library original_title_override error = %v", err)
+	}
+	if _, err := database.DB.Exec(`INSERT INTO server_settings (key, value, updated_at) VALUES ('original_title_locale', 'ja', CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`); err != nil {
+		t.Fatalf("insert setting error = %v", err)
+	}
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	applied, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		Title:         "Localized Title",
+		OriginalTitle: "Fallback Title",
+		OriginalTitles: map[string]string{
+			"ko": "강철의 연금술사",
+			"ja": "鋼の錬金術師",
+			"en": "Fullmetal Alchemist",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	if updated.Metadata.OriginalTitle != "鋼の錬金術師" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
+	if updated.Title != "Example Series" {
+		t.Fatalf("Title = %q", updated.Title)
+	}
+	if applied == nil || applied.Series == nil {
+		t.Fatal("applied series should not be nil")
+	}
+	if applied.Series.DisplayTitle != "鋼の錬金術師" {
+		t.Fatalf("DisplayTitle = %q", applied.Series.DisplayTitle)
+	}
+}
+
+func TestMetadataServiceApplySeriesMetadataKeepsManualOriginalTitleForLibraryOverride(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	series.Metadata = &model.SeriesMetadata{
+		SeriesID:       series.ID,
+		OriginalTitle:  "사용자 지정 원제",
+		OriginalTitles: `{"ko":"예전 제목","en":"Old Title","ja":"古いタイトル"}`,
+	}
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if _, err := database.DB.Exec(`UPDATE libraries SET original_title_override = 1 WHERE id = ?`, series.LibraryID); err != nil {
+		t.Fatalf("update library original_title_override error = %v", err)
+	}
+	if _, err := database.DB.Exec(`INSERT INTO server_settings (key, value, updated_at) VALUES ('original_title_locale', 'ja', CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`); err != nil {
+		t.Fatalf("insert setting error = %v", err)
+	}
+
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
+		OriginalTitle: "Fetched Title",
+		OriginalTitles: map[string]string{
+			"ko": "새 한국어 제목",
+			"en": "New English Title",
+			"ja": "新しい日本語タイトル",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if updated == nil || updated.Metadata == nil {
+		t.Fatal("updated metadata should not be nil")
+	}
+	if updated.Metadata.OriginalTitle != "사용자 지정 원제" {
+		t.Fatalf("OriginalTitle = %q", updated.Metadata.OriginalTitle)
+	}
+	if updated.Title != "Example Series" {
+		t.Fatalf("Title = %q", updated.Title)
 	}
 }
 
@@ -373,7 +621,7 @@ func TestMetadataServiceApplySeriesMetadataDownloadsThumbnail(t *testing.T) {
 	defer server.Close()
 
 	cfg := (&configForMetadataTests{DataDir: t.TempDir()}).Config()
-	svc := NewMetadataService(cfg, server.Client(), seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	svc := newMetadataServiceForTests(t, cfg, server.Client(), seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
 	result, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
 		Cover: &sdktypes.CoverInfo{
@@ -420,7 +668,7 @@ func TestMetadataServiceApplySeriesMetadataRemovesPartialThumbnailOnWriteFailure
 			}, nil
 		}),
 	}
-	svc := NewMetadataService(cfg, client, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	svc := newMetadataServiceForTests(t, cfg, client, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
 	_, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
 		Cover: &sdktypes.CoverInfo{URL: "http://example.com/cover.png"},
@@ -462,7 +710,7 @@ func TestMetadataServiceApplySeriesMetadataReplacesExistingThumbnail(t *testing.
 	defer server.Close()
 
 	cfg := (&configForMetadataTests{DataDir: t.TempDir()}).Config()
-	svc := NewMetadataService(cfg, server.Client(), seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	svc := newMetadataServiceForTests(t, cfg, server.Client(), seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
 	result, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
 		Cover: &sdktypes.CoverInfo{
@@ -507,7 +755,7 @@ func TestMetadataServiceApplySeriesMetadataReturnsFallbackThumbnailURL(t *testin
 		t.Fatalf("insert volume error = %v", err)
 	}
 
-	svc := NewMetadataService((&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
 	result, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
 		Title: "Applied Title",
@@ -566,6 +814,24 @@ func seedMetadataSeries(t *testing.T, seriesRepo *repository.SeriesRepository) *
 		t.Fatalf("SeriesRepository.Create() error = %v", err)
 	}
 	return series
+}
+
+func newMetadataServiceForTests(
+	t *testing.T,
+	cfg *config.Config,
+	client *http.Client,
+	seriesRepo *repository.SeriesRepository,
+	manager *pluginengine.Manager,
+) *MetadataService {
+	t.Helper()
+	return NewMetadataService(
+		cfg,
+		client,
+		seriesRepo,
+		repository.NewLibraryRepository(),
+		repository.NewSettingRepository(),
+		manager,
+	)
 }
 
 func newActiveMetadataManager(t *testing.T, rt *metadataRuntime) *pluginengine.Manager {

@@ -27,6 +27,196 @@ var tinyPNG = []byte{
 	0x44, 0xae, 0x42, 0x60, 0x82,
 }
 
+type scannerTestSettingRepo struct {
+	values map[string]string
+}
+
+func (r *scannerTestSettingRepo) GetByKey(_ database.Queryer, key string) (*model.Setting, error) {
+	value, ok := r.values[key]
+	if !ok {
+		return nil, nil
+	}
+	return &model.Setting{Key: key, Value: value}, nil
+}
+
+func (r *scannerTestSettingRepo) GetAll(_ database.Queryer) ([]model.Setting, error) {
+	return nil, nil
+}
+
+func (r *scannerTestSettingRepo) Update(_ database.Queryer, key, value string) error {
+	if r.values == nil {
+		r.values = make(map[string]string)
+	}
+	r.values[key] = value
+	return nil
+}
+
+func TestIsOriginalTitleOverrideEnabledPrefersNewKeyAndFallsBackToLegacyKey(t *testing.T) {
+	t.Run("new key takes precedence", func(t *testing.T) {
+		repo := &scannerTestSettingRepo{
+			values: map[string]string{
+				"original_title_override": "false",
+				"epub_title_override":     "true",
+			},
+		}
+
+		if repository.IsOriginalTitleOverrideEnabled(repo) {
+			t.Fatal("IsOriginalTitleOverrideEnabled() = true, want false when new key is false")
+		}
+	})
+
+	t.Run("legacy key is used as fallback", func(t *testing.T) {
+		repo := &scannerTestSettingRepo{
+			values: map[string]string{
+				"epub_title_override": "true",
+			},
+		}
+
+		if !repository.IsOriginalTitleOverrideEnabled(repo) {
+			t.Fatal("IsOriginalTitleOverrideEnabled() = false, want true from legacy key fallback")
+		}
+	})
+}
+
+func TestResolveSeriesTitleFromOriginalTitle(t *testing.T) {
+	metadata := &model.SeriesMetadata{OriginalTitle: "강철의 연금술사"}
+
+	got := ResolveSeriesTitleFromOriginalTitle("/library/Fullmetal Alchemist.epub", "Fullmetal Alchemist.epub", metadata, true, "ko")
+	if got != "강철의 연금술사" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want original title", got)
+	}
+
+	got = ResolveSeriesTitleFromOriginalTitle("/library/Fullmetal Alchemist.epub", "Fullmetal Alchemist.epub", metadata, false, "ko")
+	if got != "Fullmetal Alchemist" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want path title when override disabled", got)
+	}
+
+	got = ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", &model.SeriesMetadata{}, true, "ko")
+	if got != "Series Folder" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want fallback path title when original title missing", got)
+	}
+
+	metadata.OriginalTitle = ""
+	metadata.OriginalTitles = `{"ko":"한국어 원제","en":"English Title","ja":"日本語タイトル"}`
+
+	got = ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "ko")
+	if got != "한국어 원제" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want Korean title for ko locale", got)
+	}
+
+	got = ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "ja")
+	if got != "日本語タイトル" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want Japanese title for ja locale", got)
+	}
+
+	got = ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "en")
+	if got != "English Title" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want English title for en locale", got)
+	}
+}
+
+func TestResolveSeriesTitleFromOriginalTitlePrefersManualOriginalTitle(t *testing.T) {
+	metadata := &model.SeriesMetadata{
+		OriginalTitle:  "사용자 지정 원제",
+		OriginalTitles: `{"ko":"한국어 원제","en":"English Title","ja":"日本語タイトル","_manual_title":"사용자 지정 원제"}`,
+	}
+
+	got := ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "ja")
+	if got != "사용자 지정 원제" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want manual original title", got)
+	}
+}
+
+func TestResolveSeriesTitleFromOriginalTitleReappliesLocaleWhenOriginalTitleWasAutoResolved(t *testing.T) {
+	metadata := &model.SeriesMetadata{
+		OriginalTitle:  "한국어 원제",
+		OriginalTitles: `{"ko":"한국어 원제","en":"English Title","ja":"日本語タイトル"}`,
+	}
+
+	got := ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "en")
+	if got != "English Title" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want English title after locale switch", got)
+	}
+}
+
+func TestResolveSeriesTitleFromOriginalTitleKeepsManualSelectedLocaleValue(t *testing.T) {
+	metadata := &model.SeriesMetadata{
+		OriginalTitle:  "한국어 원제",
+		OriginalTitles: `{"ko":"한국어 원제","en":"English Title","ja":"日本語タイトル","_manual_title":"한국어 원제"}`,
+	}
+
+	got := ResolveSeriesTitleFromOriginalTitle("/library/Series Folder", "Series Folder", metadata, true, "ja")
+	if got != "한국어 원제" {
+		t.Fatalf("ResolveSeriesTitleFromOriginalTitle() = %q, want manually selected Korean title", got)
+	}
+}
+
+func TestNormalizeStoredSeriesTitlesUpdatesLegacyStoredTitles(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("database.Connect() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("database.Close() error = %v", err)
+		}
+	})
+
+	libraryRepo := repository.NewLibraryRepository()
+	seriesRepo := repository.NewSeriesRepository()
+
+	library := &model.Library{
+		Name:        "테스트 라이브러리",
+		Paths:       []string{filepath.Join(t.TempDir(), "library")},
+		LibraryType: "book",
+	}
+	if err := libraryRepo.Create(nil, library); err != nil {
+		t.Fatalf("LibraryRepository.Create() error = %v", err)
+	}
+
+	series := &model.Series{
+		LibraryID: library.ID,
+		Title:     "20th Century Boys",
+		Path:      filepath.Join(library.Paths[0], "20세기 소년 완전판"),
+		Metadata: &model.SeriesMetadata{
+			Status:        "ONGOING",
+			OriginalTitle: "20th Century Boys",
+		},
+	}
+	if err := seriesRepo.Create(nil, series); err != nil {
+		t.Fatalf("SeriesRepository.Create() error = %v", err)
+	}
+
+	s := &Scanner{
+		libraryRepo: libraryRepo,
+		seriesRepo:  seriesRepo,
+	}
+
+	if err := s.NormalizeStoredSeriesTitles(); err != nil {
+		t.Fatalf("NormalizeStoredSeriesTitles() error = %v", err)
+	}
+
+	updated, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("SeriesRepository.FindByID() error = %v", err)
+	}
+	if updated.Title != "20세기 소년 완전판" {
+		t.Fatalf("Title = %q, want normalized path-based title", updated.Title)
+	}
+
+	if applyErr := s.NormalizeStoredSeriesTitles(); applyErr != nil {
+		t.Fatalf("NormalizeStoredSeriesTitles() error = %v", applyErr)
+	}
+
+	restored, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("SeriesRepository.FindByID() after restore error = %v", err)
+	}
+	if restored.Title != "20세기 소년 완전판" {
+		t.Fatalf("Title = %q, want normalized path-based title after restore", restored.Title)
+	}
+}
+
 func TestScanLibraryBumpsSeriesUpdatedAtWhenNewChapterIsAdded(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
 	if err := database.Connect(dbPath); err != nil {

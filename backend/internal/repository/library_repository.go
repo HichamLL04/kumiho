@@ -97,12 +97,12 @@ func scanLibraryRow(scanner interface {
 	var lastScanned sql.NullTime
 	var viewMode, readDirection, pageTransition, libType, scanStatus, scanResult, scanExcludes, libraryType sql.NullString
 	var epubRenderMode, epubTheme, epubSpread, epubWheelDir, epubKeyboardDir, epubClickDir sql.NullString
-	var isVisible sql.NullBool
+	var isVisible, originalTitleOverride sql.NullBool
 
 	if err := scanner.Scan(
 		&lib.ID, &lib.Name, &viewMode, &readDirection, &pageTransition,
 		&epubRenderMode, &epubTheme, &epubSpread, &epubWheelDir, &epubKeyboardDir, &epubClickDir,
-		&lib.SortOrder, &lib.CreatedAt, &lib.UpdatedAt, &lastScanned, &scanStatus, &scanResult, &libType, &isVisible, &scanExcludes, &libraryType,
+		&lib.SortOrder, &lib.CreatedAt, &lib.UpdatedAt, &lastScanned, &scanStatus, &scanResult, &libType, &isVisible, &scanExcludes, &libraryType, &originalTitleOverride,
 	); err != nil {
 		return nil, err
 	}
@@ -157,6 +157,9 @@ func scanLibraryRow(scanner interface {
 	} else {
 		lib.LibraryType = "book"
 	}
+	if originalTitleOverride.Valid {
+		lib.OriginalTitleOverride = originalTitleOverride.Bool
+	}
 
 	// 기본값 보장
 	if lib.DefaultViewMode == "" {
@@ -193,7 +196,7 @@ func scanLibraryRow(scanner interface {
 const librarySelectColumns = `id, name, default_view_mode, default_read_direction, default_page_transition,
 	default_epub_render_mode, default_epub_theme, default_epub_spread,
 	default_epub_wheel_direction, default_epub_keyboard_direction, default_epub_click_direction,
-	sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes, library_type`
+	sort_order, created_at, updated_at, last_scanned_at, scan_status, last_scan_result, type, is_visible, scan_excludes, library_type, original_title_override`
 
 func (r *LibraryRepository) replaceLibraryPaths(q database.Queryer, libraryID string, paths []string) error {
 	if _, err := q.Exec(`DELETE FROM library_paths WHERE library_id = ?`, libraryID); err != nil {
@@ -263,13 +266,13 @@ func (r *LibraryRepository) Create(db database.Queryer, library *model.Library) 
 				id, name, default_view_mode, default_read_direction, default_page_transition,
 				default_epub_render_mode, default_epub_theme, default_epub_spread, default_epub_wheel_direction,
 				default_epub_keyboard_direction, default_epub_click_direction,
-				sort_order, created_at, updated_at, type, library_type, is_visible, scan_excludes
+				sort_order, created_at, updated_at, type, library_type, is_visible, scan_excludes, original_title_override
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOCAL', ?, 1, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOCAL', ?, 1, ?, ?)`,
 			library.ID, library.Name, library.DefaultViewMode, library.DefaultReadDirection, library.DefaultPageTransition,
 			library.DefaultEpubRenderMode, library.DefaultEpubTheme, library.DefaultEpubSpread, library.DefaultEpubWheelDir,
 			library.DefaultEpubKeyboardDir, library.DefaultEpubClickDir,
-			library.SortOrder, library.CreatedAt, library.UpdatedAt, library.LibraryType, library.ScanExcludes,
+			library.SortOrder, library.CreatedAt, library.UpdatedAt, library.LibraryType, library.ScanExcludes, library.OriginalTitleOverride,
 		)
 		if err != nil {
 			return err
@@ -400,12 +403,12 @@ func (r *LibraryRepository) Update(db database.Queryer, library *model.Library) 
 			name = ?, default_view_mode = ?, default_read_direction = ?, default_page_transition = ?,
 			default_epub_render_mode = ?, default_epub_theme = ?, default_epub_spread = ?, default_epub_wheel_direction = ?,
 			default_epub_keyboard_direction = ?, default_epub_click_direction = ?,
-			sort_order = ?, library_type = ?, is_visible = ?, scan_excludes = ?, updated_at = ?
+			sort_order = ?, library_type = ?, is_visible = ?, scan_excludes = ?, original_title_override = ?, updated_at = ?
 		WHERE id = ?`,
 		library.Name, library.DefaultViewMode, library.DefaultReadDirection, library.DefaultPageTransition,
 		library.DefaultEpubRenderMode, library.DefaultEpubTheme, library.DefaultEpubSpread, library.DefaultEpubWheelDir,
 		library.DefaultEpubKeyboardDir, library.DefaultEpubClickDir,
-		library.SortOrder, library.LibraryType, library.IsVisible, library.ScanExcludes, library.UpdatedAt, library.ID,
+		library.SortOrder, library.LibraryType, library.IsVisible, library.ScanExcludes, library.OriginalTitleOverride, library.UpdatedAt, library.ID,
 	)
 	return err
 }

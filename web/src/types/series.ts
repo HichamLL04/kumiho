@@ -33,6 +33,7 @@ export interface Series {
   id: string;
   library_id: string;
   title: string;
+  display_title?: string;
   path?: string;
   author?: string;
   thumbnail_url?: string;
@@ -168,8 +169,12 @@ export interface Library {
   id: string;
   name: string;
   paths?: string[];
+  type?: string;
   default_view_mode?: string;
   default_read_direction?: string;
   default_page_transition?: string;
   library_type?: LibraryType;
+  is_visible?: boolean;
+  scan_excludes?: string;
+  original_title_override?: boolean;
 }

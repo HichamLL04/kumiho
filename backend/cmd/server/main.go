@@ -109,7 +109,7 @@ func main() {
 		log.Fatalf("Failed to list plugin records: %v", err)
 	}
 	log.Printf("Plugin manager initialized with %d persisted plugin records", len(pluginRecords))
-	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, pluginManager)
+	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, libraryRepo, settingRepo, pluginManager)
 	pluginInstallSvc := service.NewPluginInstallService(cfg, nil, pluginManager, pluginSecretSvc)
 
 	// 핸들러 초기화

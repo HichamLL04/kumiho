@@ -101,7 +101,7 @@
     "metadata": {
       "title": "メタデータ管理",
       "description": "ライブラリ内のシリーズをスキャンし、不足しているメタデータを見つけて一括適用します。",
-      "settings_description": "再スキャン時に EPUB メタデータのタイトルをシリーズ名へ反映するか設定します。",
+      "settings_description": "保存済みの原題をシリーズ名へ反映するか設定します。無効にするとパスベースのタイトルへ戻します。",
       "start_scan": "メタデータ検索開始",
       "cancel_scan": "メタデータ検索中止",
       "apply_all": "一括適用",
@@ -115,12 +115,14 @@
       "scan_complete": "メタデータ検索が完了しました。",
       "scan_cancelled": "メタデータ検索を中断しました。",
       "apply_complete": "{{count}}件のシリーズにメタデータを適用しました。",
+      "apply_complete_with_warnings": "{{count}}件のシリーズにメタデータを適用しましたが、{{warnings}}件で登場人物の同期に失敗しました。再適用してください。",
       "status": {
         "idle": "待機中",
         "searching": "検索中...",
         "matched": "一致",
         "failed": "一致失敗",
-        "applied": "適用完了"
+        "applied": "適用完了",
+        "applied_with_warnings": "一部適用"
       },
       "table": {
         "series": "シリーズ",
@@ -274,8 +276,8 @@
         "keyboard_direction_desc": "キーボード矢印で次ページへ移動する方向を設定します。",
         "click_direction_label": "次へ進むクリック",
         "click_direction_desc": "クリックで次ページに進む領域の方向を設定します。",
-        "title_override_label": "EPUB タイトル上書き",
-        "title_override_desc": "再スキャン時、EPUB メタデータの title があればシリーズ名に反映します。無効時はパスベースのタイトルへ戻します。"
+        "title_override_label": "原題タイトル上書き",
+        "title_override_desc": "再スキャン時、サーバーに保存された原題があればシリーズ名に反映します。無効時はパスベースのタイトルへ戻します。"
       },
       "mode": {
         "single": "1ページ表示",
@@ -679,6 +681,7 @@
         "fetch_failed": "メタデータ詳細の取得に失敗しました。",
         "apply_success": "{{count}}個のフィールドを適用しました。",
         "apply_success_with_character_sync": "{{count}}個のフィールドを適用し、登場人物の変更を{{characters}}件同期しました。",
+        "apply_success_with_character_warning": "{{count}}個のフィールドを適用しましたが、登場人物の同期に失敗しました。再試行してください。",
         "apply_no_changes": "適用する変更がありません。",
         "apply_failed": "メタデータの適用に失敗しました。"
       }
