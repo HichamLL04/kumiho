@@ -9,6 +9,7 @@ import { SeriesMetadataPanel } from "../SeriesMetadataPanel";
 import { SeriesCharactersDrawer } from "../SeriesCharactersDrawer";
 import { AlertModal, type AlertType } from "./AlertModal";
 import { orderedOriginalTitles } from "../../utils/originalTitles";
+import { normalizeAppLanguage } from "../../utils/language";
 import styles from "./EditSeriesModal.module.css";
 
 interface EditSeriesModalProps {
@@ -16,16 +17,6 @@ interface EditSeriesModalProps {
   onClose: () => void;
   series: Series;
   onUpdate: (updatedSeries: Series) => void;
-}
-
-function normalizeAppLanguage(value: unknown): string {
-  if (typeof value !== "string") return "ko";
-
-  const normalized = value.trim().toLowerCase();
-  if (normalized.startsWith("ko")) return "ko";
-  if (normalized.startsWith("en")) return "en";
-  if (normalized.startsWith("ja")) return "ja";
-  return "ko";
 }
 
 export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSeriesModalProps) {
@@ -71,7 +62,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     title?: string;
     message: string;
     showCancel?: boolean;
-    onConfirm: () => void;
+    onConfirm: () => void | Promise<void>;
     onCancel?: () => void;
   }>({
     isOpen: false,
@@ -91,7 +82,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     });
   };
 
-  const showConfirm = (message: string, onConfirm: () => void, title?: string) => {
+  const showConfirm = (message: string, onConfirm: () => void | Promise<void>, title?: string) => {
     setAlertModal({
       isOpen: true,
       type: "warning",
@@ -100,7 +91,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       showCancel: true,
       onConfirm: () => {
         setAlertModal((prev) => ({ ...prev, isOpen: false }));
-        onConfirm();
+        return onConfirm();
       },
       onCancel: () => setAlertModal((prev) => ({ ...prev, isOpen: false })),
     });
@@ -772,6 +763,9 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                               >
                                 <button
                                   type="button"
+                                  role="option"
+                                  aria-selected={descriptionView === "translated"}
+                                  tabIndex={descriptionView === "translated" ? 0 : -1}
                                   className={`${styles.descriptionViewOption} ${descriptionView === "translated" ? styles.descriptionViewOptionActive : ""}`}
                                   onClick={() => {
                                     setDescriptionView("translated");
@@ -782,6 +776,9 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                                 </button>
                                 <button
                                   type="button"
+                                  role="option"
+                                  aria-selected={descriptionView === "original"}
+                                  tabIndex={descriptionView === "original" ? 0 : -1}
                                   className={`${styles.descriptionViewOption} ${descriptionView === "original" ? styles.descriptionViewOptionActive : ""}`}
                                   onClick={() => {
                                     setDescriptionView("original");

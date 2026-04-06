@@ -10,6 +10,7 @@ import { ProgressBar } from "../common/ProgressBar";
 import { Toast } from "../common/Toast";
 import { EditSeriesModal } from "../modals/EditSeriesModal";
 import { AlertModal, type AlertType } from "../modals/AlertModal";
+import { normalizeAppLanguage } from "../../utils/language";
 import styles from "./MetadataTab.module.css";
 import commonStyles from "./SettingsComponents.module.css";
 
@@ -22,16 +23,6 @@ interface LanguageOption {
   code: string;
   label: string;
   keywords: string[];
-}
-
-function normalizeAppLanguage(value: unknown): string {
-  if (typeof value !== "string") return "ko";
-
-  const normalized = value.trim().toLowerCase();
-  if (normalized.startsWith("ko")) return "ko";
-  if (normalized.startsWith("en")) return "en";
-  if (normalized.startsWith("ja")) return "ja";
-  return "ko";
 }
 
 function extractApiErrorMessage(error: unknown, fallback: string): string {
@@ -968,6 +959,7 @@ export function MetadataTab() {
                     aria-controls={translateLanguageListboxId}
                     aria-expanded={isLanguageDropdownOpen}
                     aria-labelledby={translateLanguageLabelId}
+                    aria-label={`${t("settings.metadata.batch_translate.target_label")}: ${selectedLanguageOption.label}${selectedTargetLanguage === serverLanguage ? ` (${t("settings.metadata.batch_translate.server_language_badge")})` : ""}`}
                     onKeyDown={handleLanguageButtonKeyDown}
                     onClick={() => setIsLanguageDropdownOpen((prev) => !prev)}
                   >

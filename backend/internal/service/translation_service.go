@@ -144,6 +144,7 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 		}
 
 		series.Metadata.DescriptionTranslated = translated
+		series.UpdatedAt = time.Now()
 		if updateErr := s.seriesRepo.Update(nil, series); updateErr != nil {
 			result.TotalFailed++
 			continue
@@ -198,6 +199,7 @@ func (s *TranslationService) TranslateSeriesDescription(
 
 	series.Metadata.Description = series.Description
 	series.Metadata.DescriptionTranslated = translated
+	series.UpdatedAt = time.Now()
 	if err := s.seriesRepo.Update(nil, series); err != nil {
 		return nil, err
 	}
