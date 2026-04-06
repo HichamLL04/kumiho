@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
@@ -335,6 +336,9 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 	id := c.Params("id")
 	userID := middleware.GetUserID(c)
 	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	series, err := h.seriesRepo.FindByID(nil, id, userID)
 	if err != nil {

@@ -320,11 +320,16 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     try {
       const descriptionDirty = formData.description.trim() !== (series.description || "").trim();
       const translatedDirty = translatedDescription.trim() !== (series.metadata?.description_translated || "").trim();
-
-      const res = await seriesAPI.update(series.id, {
+      const shouldClearTranslatedDescription = descriptionDirty && !translatedDirty;
+      const shouldSendTranslatedDescription = translatedDirty || shouldClearTranslatedDescription;
+      const updatePayload = {
         ...formData,
-        description_translated: descriptionDirty && !translatedDirty ? "" : translatedDescription,
-      });
+        ...(shouldSendTranslatedDescription
+          ? { description_translated: shouldClearTranslatedDescription ? "" : translatedDescription }
+          : {}),
+      };
+
+      const res = await seriesAPI.update(series.id, updatePayload);
       onUpdate(res.data);
       window.location.reload();
     } catch (error) {

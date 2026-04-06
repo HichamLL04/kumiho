@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"log"
 
@@ -34,6 +35,9 @@ const (
 
 func (h *TranslationHandler) BatchTranslate(c *fiber.Ctx) error {
 	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var req translateRequest
 	if len(c.Body()) > 0 {
@@ -52,6 +56,9 @@ func (h *TranslationHandler) BatchTranslate(c *fiber.Ctx) error {
 
 func (h *TranslationHandler) TranslateSeriesDescription(c *fiber.Ctx) error {
 	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var req translateRequest
 	if len(c.Body()) > 0 {

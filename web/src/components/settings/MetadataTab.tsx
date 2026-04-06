@@ -475,9 +475,6 @@ export function MetadataTab() {
               className={styles.translationLanguageOptions}
               role="listbox"
               aria-labelledby={translateLanguageLabelId}
-              aria-activedescendant={
-                highlightedLanguageIndex >= 0 ? `translation-language-option-${filteredLanguageOptions[highlightedLanguageIndex]?.code}` : undefined
-              }
             >
               {filteredLanguageOptions.length > 0 ? (
                 filteredLanguageOptions.map((option, index) => (
