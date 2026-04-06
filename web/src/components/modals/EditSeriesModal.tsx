@@ -355,6 +355,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   };
 
   const handleTranslateDescription = async () => {
+    const translatedDirty = translatedDescription.trim() !== (series.metadata?.description_translated || "").trim();
+
     if (!formData.description.trim()) {
       showAlert("info", t("series.edit.alert.translate_empty"));
       return;
@@ -362,6 +364,11 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
 
     if (formData.description.trim() !== (series.description || "").trim()) {
       showAlert("info", t("series.edit.alert.translate_save_first"));
+      return;
+    }
+
+    if (translatedDirty) {
+      showAlert("info", t("series.edit.alert.translate_save_translated_first"));
       return;
     }
 

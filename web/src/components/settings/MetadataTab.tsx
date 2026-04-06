@@ -168,10 +168,15 @@ export function MetadataTab() {
     });
   }, [languageSearch]);
 
-  const closeLanguageDropdown = useCallback(() => {
+  const closeLanguageDropdown = useCallback((restoreFocus = false) => {
     setIsLanguageDropdownOpen(false);
     setLanguageSearch("");
     setHighlightedLanguageIndex(-1);
+    if (restoreFocus) {
+      requestAnimationFrame(() => {
+        languageButtonRef.current?.focus();
+      });
+    }
   }, []);
 
   const focusLanguageOption = useCallback((index: number) => {
@@ -327,7 +332,7 @@ export function MetadataTab() {
       if (languageDropdownRef.current?.contains(target) || languageButtonRef.current?.contains(target)) {
         return;
       }
-      closeLanguageDropdown();
+      closeLanguageDropdown(true);
     };
 
     const updateDropdownPosition = () => {
@@ -388,8 +393,7 @@ export function MetadataTab() {
         break;
       case "Escape":
         event.preventDefault();
-        closeLanguageDropdown();
-        languageButtonRef.current?.focus();
+        closeLanguageDropdown(true);
         break;
     }
   };
@@ -411,8 +415,7 @@ export function MetadataTab() {
         break;
       case "Escape":
         event.preventDefault();
-        closeLanguageDropdown();
-        languageButtonRef.current?.focus();
+        closeLanguageDropdown(true);
         break;
     }
   };
@@ -439,7 +442,7 @@ export function MetadataTab() {
       case "Escape":
         if (isLanguageDropdownOpen) {
           event.preventDefault();
-          closeLanguageDropdown();
+          closeLanguageDropdown(true);
         }
         break;
     }
@@ -748,7 +751,15 @@ export function MetadataTab() {
       const res = await pluginAPI.batchTranslate(selectedTargetLanguage);
       if (!isMountedRef.current) return;
 
-      if (res.total_failed > 0) {
+      if (res.cancelled) {
+        setToast({
+          type: res.total_success > 0 ? "info" : "warning",
+          message: t("settings.metadata.batch_translate.cancelled", {
+            total: res.total_processed,
+            success: res.total_success,
+          }),
+        });
+      } else if (res.total_failed > 0) {
         setToast({
           type: res.total_success > 0 ? "info" : "error",
           message: t("settings.metadata.batch_translate.failed", {
@@ -782,10 +793,7 @@ export function MetadataTab() {
 
   const handleSelectTargetLanguage = (languageCode: string) => {
     setSelectedTargetLanguage(languageCode);
-    closeLanguageDropdown();
-    requestAnimationFrame(() => {
-      languageButtonRef.current?.focus();
-    });
+    closeLanguageDropdown(true);
   };
 
   const handleResetLibraryMetadata = () => {

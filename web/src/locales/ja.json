@@ -124,6 +124,7 @@
         "translating": "翻訳中...",
         "starting": "一括翻訳を開始しています...",
         "complete": "一括翻訳が完了しました: {{total}} 件中 {{success}} 件成功しました。",
+        "cancelled": "一括翻訳は中断されました。{{total}} 件中 {{success}} 件のみ処理されました。",
         "failed": "一括翻訳が一部または全体で失敗しました。{{total}} 件中 {{failed}} 件エラーです。",
         "request_failed": "一括翻訳の実行に失敗しました。"
       },
@@ -880,6 +881,7 @@
         "update_failed": "シリーズ情報の更新に失敗しました。",
         "translate_empty": "翻訳するあらすじがありません。",
         "translate_save_first": "あらすじの変更を先に保存してから翻訳してください。",
+        "translate_save_translated_first": "翻訳済みあらすじの変更を先に保存してから再翻訳してください。",
         "translate_success": "{{language}} 翻訳を更新しました。",
         "translate_failed": "あらすじの翻訳に失敗しました。",
         "reset_metadata_title": "シリーズメタデータ初期化",

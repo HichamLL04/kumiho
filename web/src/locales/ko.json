@@ -213,6 +213,7 @@
         "translating": "번역 중...",
         "starting": "일괄 번역을 시작합니다...",
         "complete": "일괄 번역 완료: 총 {{total}}개 중 {{success}}개 성공",
+        "cancelled": "일괄 번역이 중단되었습니다. 총 {{total}}개 중 {{success}}개만 처리되었습니다.",
         "failed": "일괄 번역 일부 혹은 전체 실패. 총 {{total}}개, 에러 {{failed}}개",
         "request_failed": "일괄 번역을 실패했습니다."
       },
@@ -880,6 +881,7 @@
         "update_failed": "시리즈 정보 수정에 실패했습니다.",
         "translate_empty": "번역할 줄거리가 없습니다.",
         "translate_save_first": "줄거리 변경사항을 먼저 저장한 뒤 번역하세요.",
+        "translate_save_translated_first": "번역 줄거리 변경사항을 먼저 저장한 뒤 다시 번역하세요.",
         "translate_success": "{{language}} 번역을 갱신했습니다.",
         "translate_failed": "줄거리 번역에 실패했습니다.",
         "reset_metadata_title": "시리즈 메타데이터 초기화",

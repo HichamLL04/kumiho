@@ -124,6 +124,7 @@
         "translating": "Translating...",
         "starting": "Starting batch translation...",
         "complete": "Batch translation complete: {{success}} of {{total}} succeeded.",
+        "cancelled": "Batch translation was cancelled after {{success}} of {{total}} items were processed.",
         "failed": "Batch translation partially or fully failed. {{failed}} errors out of {{total}} items.",
         "request_failed": "Failed to run batch translation."
       },
@@ -880,6 +881,7 @@
         "update_failed": "Failed to update series info.",
         "translate_empty": "There is no synopsis to translate.",
         "translate_save_first": "Save description changes before translating.",
+        "translate_save_translated_first": "Save translated synopsis changes before retranslating.",
         "translate_success": "Updated the {{language}} translation.",
         "translate_failed": "Failed to translate the synopsis.",
         "reset_metadata_title": "Reset Series Metadata",
