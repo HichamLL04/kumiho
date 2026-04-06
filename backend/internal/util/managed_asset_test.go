@@ -121,3 +121,20 @@ func TestRemoveManagedAssetDeletesResolvedManagedPath(t *testing.T) {
 		t.Fatalf("resolved managed file should be removed, stat error = %v", statErr)
 	}
 }
+
+func TestRemoveManagedAssetTreatsMissingManagedPathAsHandled(t *testing.T) {
+	dataDir := t.TempDir()
+	managedDir := filepath.Join(dataDir, "thumbnails", "series")
+	if err := os.MkdirAll(managedDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	missingPath := filepath.Join(managedDir, "missing-cover.jpg")
+	removed, err := RemoveManagedAsset(dataDir, missingPath)
+	if err != nil {
+		t.Fatalf("RemoveManagedAsset() error = %v", err)
+	}
+	if !removed {
+		t.Fatal("RemoveManagedAsset() should treat missing managed path as handled")
+	}
+}

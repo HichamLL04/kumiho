@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,18 +18,35 @@ func managedAssetRoots(dataDir string) []string {
 	}
 }
 
+func resolveExistingOrMissingPath(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	parent := filepath.Dir(path)
+	resolvedParent, parentErr := filepath.EvalSymlinks(parent)
+	if parentErr != nil {
+		return "", parentErr
+	}
+	return filepath.Join(resolvedParent, filepath.Base(path)), nil
+}
+
 func resolveManagedAssetPath(dataDir, candidate string) (string, bool) {
-	trimmed := strings.TrimSpace(candidate)
-	if trimmed == "" {
+	trimmedCandidate := strings.TrimSpace(candidate)
+	if trimmedCandidate == "" {
 		return "", false
 	}
 
-	absCandidate, err := filepath.Abs(filepath.Clean(trimmed))
+	absCandidate, err := filepath.Abs(filepath.Clean(trimmedCandidate))
 	if err != nil {
 		return "", false
 	}
 
-	resolvedCandidate, err := filepath.EvalSymlinks(absCandidate)
+	resolvedCandidate, err := resolveExistingOrMissingPath(absCandidate)
 	if err != nil {
 		return "", false
 	}
@@ -62,6 +80,9 @@ func RemoveManagedAsset(dataDir, candidate string) (bool, error) {
 		return false, nil
 	}
 	if err := os.Remove(resolvedCandidate); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return true, nil
+		}
 		return true, err
 	}
 	return true, nil

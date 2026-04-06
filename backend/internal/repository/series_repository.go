@@ -488,6 +488,20 @@ func (r *SeriesRepository) UpdateUpdatedAt(db database.Queryer, id string, updat
 	return err
 }
 
+func (r *SeriesRepository) UpdateDescriptionTranslated(db database.Queryer, seriesID string, translated string, updatedAt time.Time) error {
+	db = database.GetQueryer(db)
+	if _, err := db.Exec(`UPDATE series SET updated_at = ? WHERE id = ?`, updatedAt, seriesID); err != nil {
+		return err
+	}
+	_, err := db.Exec(
+		`UPDATE series_metadata
+		 SET description_translated = ?
+		 WHERE series_id = ?`,
+		translated, seriesID,
+	)
+	return err
+}
+
 func (r *SeriesRepository) ResetMetadataByLibrary(db database.Queryer, libraryID string) (int64, error) {
 	db = database.GetQueryer(db)
 	result, err := db.Exec(

@@ -107,15 +107,6 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 			}
 		}
 
-		series, err := s.seriesRepo.FindByID(nil, target.ID, "")
-		if err != nil || series == nil {
-			result.TotalFailed++
-			continue
-		}
-		if series.Metadata == nil {
-			series.Metadata = &model.SeriesMetadata{SeriesID: series.ID}
-		}
-
 		desc := strings.TrimSpace(target.Description)
 		if desc == "" {
 			result.TotalFailed++
@@ -143,11 +134,7 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 			continue
 		}
 
-		series.Description = target.Description
-		series.Metadata.Description = target.Description
-		series.Metadata.DescriptionTranslated = translated
-		series.UpdatedAt = time.Now()
-		if updateErr := s.seriesRepo.Update(nil, series); updateErr != nil {
+		if updateErr := s.seriesRepo.UpdateDescriptionTranslated(nil, target.ID, translated, time.Now()); updateErr != nil {
 			result.TotalFailed++
 			continue
 		}
