@@ -24,6 +24,16 @@ interface LanguageOption {
   keywords: string[];
 }
 
+function normalizeAppLanguage(value: unknown): string {
+  if (typeof value !== "string") return "ko";
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized.startsWith("ko")) return "ko";
+  if (normalized.startsWith("en")) return "en";
+  if (normalized.startsWith("ja")) return "ja";
+  return "ko";
+}
+
 function extractApiErrorMessage(error: unknown, fallback: string): string {
   if (
     typeof error === "object" &&
@@ -210,7 +220,7 @@ export function MetadataTab() {
       .list()
       .then((settings) => {
         if (!isMountedRef.current) return;
-        const appLanguage = typeof settings.app_language === "string" ? settings.app_language : "ko";
+        const appLanguage = normalizeAppLanguage(settings.app_language);
         setServerLanguage(appLanguage);
         setSelectedTargetLanguage(appLanguage);
       })

@@ -18,6 +18,16 @@ interface EditSeriesModalProps {
   onUpdate: (updatedSeries: Series) => void;
 }
 
+function normalizeAppLanguage(value: unknown): string {
+  if (typeof value !== "string") return "ko";
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized.startsWith("ko")) return "ko";
+  if (normalized.startsWith("en")) return "en";
+  if (normalized.startsWith("ja")) return "ja";
+  return "ko";
+}
+
 export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSeriesModalProps) {
   const { t, i18n } = useTranslation();
   const storedOriginalTitle = series.metadata?.original_title || "";
@@ -154,10 +164,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     settingAPI
       .list()
       .then((settings) => {
-        const appLanguage = (settings.app_language || "").trim().toLowerCase();
-        if (appLanguage) {
-          setTranslationLanguage(appLanguage);
-        }
+        setTranslationLanguage(normalizeAppLanguage(settings.app_language));
       })
       .catch((error) => {
         console.error("Failed to load translation language:", error);
