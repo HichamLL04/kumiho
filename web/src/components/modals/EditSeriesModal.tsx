@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { ChevronDown, Link, RotateCcw, Save, Search, Upload, Users, X } from "lucide-react";
@@ -54,6 +54,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const fileInputRef = useRef<HTMLInputElement>(null);
   const originalTitleMenuRef = useRef<HTMLDivElement>(null);
   const descriptionViewMenuRef = useRef<HTMLDivElement>(null);
+  const descriptionViewButtonRef = useRef<HTMLButtonElement>(null);
+  const descriptionViewOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // AlertModal 상태
   const [alertModal, setAlertModal] = useState<{
@@ -202,6 +204,18 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     window.addEventListener("mousedown", handlePointerDown);
     return () => window.removeEventListener("mousedown", handlePointerDown);
   }, [isDescriptionViewMenuOpen]);
+
+  useEffect(() => {
+    if (!isDescriptionViewMenuOpen) {
+      descriptionViewOptionRefs.current = [];
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const selectedIndex = descriptionView === "translated" ? 0 : 1;
+      descriptionViewOptionRefs.current[selectedIndex]?.focus();
+    });
+  }, [descriptionView, isDescriptionViewMenuOpen]);
 
   useEffect(() => {
     const handleWindowDragEvent = (e: DragEvent) => {
@@ -368,6 +382,60 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       showAlert("error", t("series.edit.alert.translate_failed"));
     } finally {
       setIsTranslatingDescription(false);
+    }
+  };
+
+  const closeDescriptionViewMenu = () => {
+    setIsDescriptionViewMenuOpen(false);
+    requestAnimationFrame(() => {
+      descriptionViewButtonRef.current?.focus();
+    });
+  };
+
+  const handleDescriptionViewButtonKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    switch (event.key) {
+      case "ArrowDown":
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        setIsDescriptionViewMenuOpen(true);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setIsDescriptionViewMenuOpen(true);
+        requestAnimationFrame(() => {
+          descriptionViewOptionRefs.current[1]?.focus();
+        });
+        break;
+      case "Escape":
+        if (isDescriptionViewMenuOpen) {
+          event.preventDefault();
+          closeDescriptionViewMenu();
+        }
+        break;
+    }
+  };
+
+  const handleDescriptionViewOptionKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        descriptionViewOptionRefs.current[index === 0 ? 1 : 0]?.focus();
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        descriptionViewOptionRefs.current[index === 0 ? 1 : 0]?.focus();
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        setDescriptionView(index === 0 ? "translated" : "original");
+        closeDescriptionViewMenu();
+        break;
+      case "Escape":
+        event.preventDefault();
+        closeDescriptionViewMenu();
+        break;
     }
   };
 
@@ -748,9 +816,11 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                             <button
                               type="button"
                               className={styles.descriptionViewButton}
+                              ref={descriptionViewButtonRef}
                               aria-haspopup="menu"
                               aria-expanded={isDescriptionViewMenuOpen}
                               aria-label={t("series.edit.form.description_view")}
+                              onKeyDown={handleDescriptionViewButtonKeyDown}
                               onClick={() => setIsDescriptionViewMenuOpen((prev) => !prev)}
                             >
                               <span>
@@ -768,26 +838,34 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                               >
                                 <button
                                   type="button"
+                                  ref={(node) => {
+                                    descriptionViewOptionRefs.current[0] = node;
+                                  }}
                                   role="menuitemradio"
                                   aria-checked={descriptionView === "translated"}
                                   tabIndex={isDescriptionViewMenuOpen && descriptionView === "translated" ? 0 : -1}
                                   className={`${styles.descriptionViewOption} ${descriptionView === "translated" ? styles.descriptionViewOptionActive : ""}`}
+                                  onKeyDown={(event) => handleDescriptionViewOptionKeyDown(event, 0)}
                                   onClick={() => {
                                     setDescriptionView("translated");
-                                    setIsDescriptionViewMenuOpen(false);
+                                    closeDescriptionViewMenu();
                                   }}
                                 >
                                   {t("series.edit.form.description_view_translated")}
                                 </button>
                                 <button
                                   type="button"
+                                  ref={(node) => {
+                                    descriptionViewOptionRefs.current[1] = node;
+                                  }}
                                   role="menuitemradio"
                                   aria-checked={descriptionView === "original"}
                                   tabIndex={isDescriptionViewMenuOpen && descriptionView === "original" ? 0 : -1}
                                   className={`${styles.descriptionViewOption} ${descriptionView === "original" ? styles.descriptionViewOptionActive : ""}`}
+                                  onKeyDown={(event) => handleDescriptionViewOptionKeyDown(event, 1)}
                                   onClick={() => {
                                     setDescriptionView("original");
-                                    setIsDescriptionViewMenuOpen(false);
+                                    closeDescriptionViewMenu();
                                   }}
                                 >
                                   {t("series.edit.form.description_view_original")}

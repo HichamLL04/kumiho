@@ -95,7 +95,7 @@ export function MetadataTab() {
   const loadSeriesRequestIdRef = useRef(0);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
   const languageButtonRef = useRef<HTMLButtonElement>(null);
-  const languageOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const languageOptionRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [selectedLibraryId, setSelectedLibraryId] = useState<string>("");
   const [seriesList, setSeriesList] = useState<SeriesMetadataInfo[]>([]);
@@ -394,7 +394,7 @@ export function MetadataTab() {
     }
   };
 
-  const handleLanguageOptionKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+  const handleLanguageOptionKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>, index: number) => {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
@@ -466,6 +466,13 @@ export function MetadataTab() {
                 onKeyDown={handleLanguageInputKeyDown}
                 placeholder={t("settings.metadata.batch_translate.language_search_placeholder")}
                 aria-label={t("settings.metadata.batch_translate.language_search_placeholder")}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={isLanguageDropdownOpen}
+                aria-controls={translateLanguageListboxId}
+                aria-activedescendant={
+                  highlightedLanguageIndex >= 0 ? `translation-language-option-${filteredLanguageOptions[highlightedLanguageIndex]?.code}` : undefined
+                }
                 className={styles.translationLanguageSearchInput}
                 autoFocus
               />
@@ -473,22 +480,21 @@ export function MetadataTab() {
             <div
               id={translateLanguageListboxId}
               className={styles.translationLanguageOptions}
-              role="menu"
+              role="listbox"
               aria-labelledby={translateLanguageLabelId}
             >
               {filteredLanguageOptions.length > 0 ? (
                 filteredLanguageOptions.map((option, index) => (
-                  <button
+                  <div
                     id={`translation-language-option-${option.code}`}
                     key={option.code}
-                    type="button"
                     ref={(node) => {
                       languageOptionRefs.current[index] = node;
                     }}
                     className={styles.translationLanguageOption}
-                    role="menuitemradio"
-                    aria-checked={option.code === selectedTargetLanguage}
-                    tabIndex={isLanguageDropdownOpen && option.code === selectedTargetLanguage ? 0 : -1}
+                    role="option"
+                    aria-selected={option.code === selectedTargetLanguage}
+                    tabIndex={highlightedLanguageIndex === index ? 0 : -1}
                     onClick={() => handleSelectTargetLanguage(option.code)}
                     onFocus={() => setHighlightedLanguageIndex(index)}
                     onKeyDown={(event) => handleLanguageOptionKeyDown(event, index)}
@@ -498,7 +504,7 @@ export function MetadataTab() {
                       <span className={styles.translationLanguageCode}>{option.code.toUpperCase()}</span>
                     </span>
                     {option.code === selectedTargetLanguage ? <Check size={14} /> : null}
-                  </button>
+                  </div>
                 ))
               ) : (
                 <div className={styles.translationLanguageEmpty}>{t("settings.metadata.batch_translate.language_search_empty")}</div>
@@ -955,7 +961,7 @@ export function MetadataTab() {
                     type="button"
                     className={styles.translationLanguageButton}
                     ref={languageButtonRef}
-                    aria-haspopup="menu"
+                    aria-haspopup="listbox"
                     aria-controls={translateLanguageListboxId}
                     aria-expanded={isLanguageDropdownOpen}
                     aria-label={`${t("settings.metadata.batch_translate.target_label")}: ${selectedLanguageOption.label}${selectedTargetLanguage === appLanguage ? ` (${t("settings.metadata.batch_translate.server_language_badge")})` : ""}`}
