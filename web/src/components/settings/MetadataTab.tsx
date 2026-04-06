@@ -955,7 +955,6 @@ export function MetadataTab() {
                     aria-haspopup="listbox"
                     aria-controls={translateLanguageListboxId}
                     aria-expanded={isLanguageDropdownOpen}
-                    aria-labelledby={translateLanguageLabelId}
                     aria-label={`${t("settings.metadata.batch_translate.target_label")}: ${selectedLanguageOption.label}${selectedTargetLanguage === serverLanguage ? ` (${t("settings.metadata.batch_translate.server_language_badge")})` : ""}`}
                     onKeyDown={handleLanguageButtonKeyDown}
                     onClick={() => setIsLanguageDropdownOpen((prev) => !prev)}
