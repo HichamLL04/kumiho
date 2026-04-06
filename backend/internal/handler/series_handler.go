@@ -421,10 +421,13 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 	}
 
 	h.enrichSingleSeries(refreshed, userID)
-	return c.JSON(fiber.Map{
-		"series":   refreshed,
-		"warnings": warnings,
-	})
+	response := fiber.Map{
+		"series": refreshed,
+	}
+	if len(warnings) > 0 {
+		response["warnings"] = warnings
+	}
+	return c.JSON(response)
 }
 
 // UpdateVolume 볼륨 정보 수정

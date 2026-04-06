@@ -377,7 +377,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
           setTranslatedDescription(result.series.metadata?.description_translated || "");
           setDescriptionView(result.series.metadata?.description_translated?.trim() ? "translated" : "original");
           setCharactersReloadToken((prev) => prev + 1);
-          const warningMessage = result.warnings && result.warnings.length > 0 ? `\n\n${result.warnings.join("\n")}` : "";
+          const warningMessage = result.warnings && result.warnings.length > 0 ? `\n\n- ${result.warnings.join("\n- ")}` : "";
           showAlert("success", `${t("series.edit.alert.reset_metadata_success")}${warningMessage}`);
         } catch (error) {
           console.error("Failed to reset series metadata:", error);

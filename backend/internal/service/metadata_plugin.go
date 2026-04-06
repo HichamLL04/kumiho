@@ -417,20 +417,13 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 			}
 		}
 
-		if s.characterRepo == nil {
-			continue
-		}
-		characters, charErr := s.characterRepo.ListBySeriesID(nil, seriesList[i].ID)
+	}
+	if s.characterRepo != nil {
+		characterImagePaths, charErr := s.characterRepo.ListImagePathsByLibraryID(nil, libraryID)
 		if charErr != nil {
 			return nil, charErr
 		}
-		for _, character := range characters {
-			imagePath := strings.TrimSpace(character.ImagePath)
-			if imagePath == "" {
-				continue
-			}
-			filesToRemove = append(filesToRemove, imagePath)
-		}
+		filesToRemove = append(filesToRemove, characterImagePaths...)
 	}
 
 	tx, err := database.DB.BeginTx(ctx, nil)

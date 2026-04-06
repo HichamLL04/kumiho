@@ -15,6 +15,7 @@ import (
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
+	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 )
 
 func TestTranslationHandlerBatchTranslateReturnsBadRequestForInvalidBody(t *testing.T) {
@@ -57,6 +58,36 @@ func TestTranslationHandlerBatchTranslateReturnsServiceUnavailableWithoutPlugin(
 		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusServiceUnavailable)
 	}
 	assertErrorPayload(t, resp, errNoActiveTranslationPluginMsg)
+}
+
+func TestWriteTranslationErrorMapsPluginErrors(t *testing.T) {
+	app := fiber.New()
+	app.Get("/rate-limited", func(c *fiber.Ctx) error {
+		return writeTranslationError(c, pluginerrors.New(pluginerrors.ErrCodeRateLimited, "too many requests"), errBatchTranslateFailedMsg, "")
+	})
+	app.Get("/timeout", func(c *fiber.Ctx) error {
+		return writeTranslationError(c, pluginerrors.New(pluginerrors.ErrCodeTimeout, "plugin timed out"), errSeriesTranslateFailedMsg, "series-1")
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/rate-limited", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("rate-limited app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusTooManyRequests)
+	}
+	assertErrorResponse(t, resp, "too many requests", pluginerrors.ErrCodeRateLimited)
+
+	req = httptest.NewRequest(fiber.MethodGet, "/timeout", nil)
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("timeout app.Test() error = %v", err)
+	}
+	if resp.StatusCode != fiber.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusGatewayTimeout)
+	}
+	assertErrorResponse(t, resp, "plugin timed out", pluginerrors.ErrCodeTimeout)
 }
 
 func TestTranslationHandlerTranslateSeriesDescriptionMapsSeriesErrors(t *testing.T) {
@@ -156,5 +187,20 @@ func assertErrorPayload(t *testing.T, resp *http.Response, want string) {
 	}
 	if payload["error"] != want {
 		t.Fatalf("payload error = %q, want %q", payload["error"], want)
+	}
+}
+
+func assertErrorResponse(t *testing.T, resp *http.Response, wantError string, wantCode pluginerrors.ErrorCode) {
+	t.Helper()
+
+	var payload map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if payload["error"] != wantError {
+		t.Fatalf("payload error = %q, want %q", payload["error"], wantError)
+	}
+	if payload["code"] != string(wantCode) {
+		t.Fatalf("payload code = %q, want %q", payload["code"], wantCode)
 	}
 }
