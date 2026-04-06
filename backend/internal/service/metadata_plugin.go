@@ -415,9 +415,9 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		if s.characterRepo == nil {
 			continue
 		}
-		characters, err := s.characterRepo.ListBySeriesID(nil, seriesList[i].ID)
-		if err != nil {
-			return nil, err
+		characters, charErr := s.characterRepo.ListBySeriesID(nil, seriesList[i].ID)
+		if charErr != nil {
+			return nil, charErr
 		}
 		for _, character := range characters {
 			imagePath := strings.TrimSpace(character.ImagePath)

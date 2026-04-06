@@ -503,12 +503,13 @@ func (r *SeriesRepository) ResetMetadataByLibrary(db database.Queryer, libraryID
 	if err != nil {
 		return 0, err
 	}
-	if _, err := db.Exec(
+	_, err = db.Exec(
 		`UPDATE series
 		 SET thumbnail_path = NULL, updated_at = ?
 		 WHERE library_id = ?`,
 		time.Now(), libraryID,
-	); err != nil {
+	)
+	if err != nil {
 		return 0, err
 	}
 	rowsAffected, err := result.RowsAffected()

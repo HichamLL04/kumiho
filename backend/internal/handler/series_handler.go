@@ -373,17 +373,20 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := h.seriesRepo.ResetMetadataBySeriesID(tx, series.ID); err != nil {
+	err = h.seriesRepo.ResetMetadataBySeriesID(tx, series.ID)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to reset series metadata",
 		})
 	}
-	if err := h.seriesCharacterRepo.DeleteBySeriesID(tx, series.ID); err != nil {
+	err = h.seriesCharacterRepo.DeleteBySeriesID(tx, series.ID)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to reset series characters",
 		})
 	}
-	if err := tx.Commit(); err != nil {
+	err = tx.Commit()
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to commit series reset",
 		})
