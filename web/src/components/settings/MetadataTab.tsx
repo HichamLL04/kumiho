@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useId, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, Loader2, Database, ChevronDown, Languages, Check } from "lucide-react";
@@ -370,7 +370,7 @@ export function MetadataTab() {
     languageOptionRefs.current = [];
   }, [filteredLanguageOptions, isLanguageDropdownOpen, selectedTargetLanguage]);
 
-  const handleLanguageInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleLanguageInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
@@ -394,7 +394,7 @@ export function MetadataTab() {
     }
   };
 
-  const handleLanguageOptionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+  const handleLanguageOptionKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
@@ -417,7 +417,7 @@ export function MetadataTab() {
     }
   };
 
-  const handleLanguageButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+  const handleLanguageButtonKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     switch (event.key) {
       case "ArrowDown":
       case "Enter":
