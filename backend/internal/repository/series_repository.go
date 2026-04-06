@@ -14,6 +14,12 @@ import (
 
 type SeriesRepository struct{}
 
+type TranslationTarget struct {
+	ID                    string
+	Description           string
+	DescriptionTranslated string
+}
+
 func NewSeriesRepository() *SeriesRepository {
 	return &SeriesRepository{}
 }
@@ -544,6 +550,35 @@ func (r *SeriesRepository) FindUntranslatedSeriesIDs(db database.Queryer) ([]str
 		return nil, err
 	}
 	return ids, nil
+}
+
+func (r *SeriesRepository) FindUntranslatedSeriesForTranslation(db database.Queryer) ([]TranslationTarget, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(
+		`SELECT s.id, sm.description, sm.description_translated
+		 FROM series s
+		 JOIN series_metadata sm ON s.id = sm.series_id
+		 WHERE COALESCE(sm.description, '') != ''
+		   AND COALESCE(sm.description_translated, '') = ''
+		 ORDER BY s.id`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var targets []TranslationTarget
+	for rows.Next() {
+		var target TranslationTarget
+		if err := rows.Scan(&target.ID, &target.Description, &target.DescriptionTranslated); err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return targets, nil
 }
 
 func (r *SeriesRepository) ResetMetadataBySeriesID(db database.Queryer, seriesID string) error {

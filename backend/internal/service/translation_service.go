@@ -80,15 +80,15 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 		return nil, err
 	}
 
-	seriesIDs, err := s.seriesRepo.FindUntranslatedSeriesIDs(nil)
+	targets, err := s.seriesRepo.FindUntranslatedSeriesForTranslation(nil)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &BatchTranslateResponse{TotalProcessed: len(seriesIDs)}
+	result := &BatchTranslateResponse{TotalProcessed: len(targets)}
 	lastCallAt := time.Time{}
 
-	for _, id := range seriesIDs {
+	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
 			result.Cancelled = true
 			return result, nil
@@ -107,7 +107,7 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 			}
 		}
 
-		series, err := s.seriesRepo.FindByID(nil, id, "")
+		series, err := s.seriesRepo.FindByID(nil, target.ID, "")
 		if err != nil || series == nil {
 			result.TotalFailed++
 			continue
@@ -116,7 +116,7 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 			series.Metadata = &model.SeriesMetadata{SeriesID: series.ID}
 		}
 
-		desc := strings.TrimSpace(series.Description)
+		desc := strings.TrimSpace(target.Description)
 		if desc == "" {
 			result.TotalFailed++
 			continue
@@ -143,6 +143,8 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 			continue
 		}
 
+		series.Description = target.Description
+		series.Metadata.Description = target.Description
 		series.Metadata.DescriptionTranslated = translated
 		series.UpdatedAt = time.Now()
 		if updateErr := s.seriesRepo.Update(nil, series); updateErr != nil {

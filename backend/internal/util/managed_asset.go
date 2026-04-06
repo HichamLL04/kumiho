@@ -17,15 +17,20 @@ func managedAssetRoots(dataDir string) []string {
 	}
 }
 
-func IsManagedAssetPath(dataDir, candidate string) bool {
+func resolveManagedAssetPath(dataDir, candidate string) (string, bool) {
 	trimmed := strings.TrimSpace(candidate)
 	if trimmed == "" {
-		return false
+		return "", false
 	}
 
 	absCandidate, err := filepath.Abs(filepath.Clean(trimmed))
 	if err != nil {
-		return false
+		return "", false
+	}
+
+	resolvedCandidate, err := filepath.EvalSymlinks(absCandidate)
+	if err != nil {
+		return "", false
 	}
 
 	for _, root := range managedAssetRoots(dataDir) {
@@ -33,19 +38,30 @@ func IsManagedAssetPath(dataDir, candidate string) bool {
 		if rootErr != nil {
 			continue
 		}
-		if absCandidate == absRoot || strings.HasPrefix(absCandidate, absRoot+string(os.PathSeparator)) {
-			return true
+
+		resolvedRoot, evalErr := filepath.EvalSymlinks(absRoot)
+		if evalErr != nil {
+			continue
+		}
+		if resolvedCandidate == resolvedRoot || strings.HasPrefix(resolvedCandidate, resolvedRoot+string(os.PathSeparator)) {
+			return resolvedCandidate, true
 		}
 	}
 
-	return false
+	return "", false
+}
+
+func IsManagedAssetPath(dataDir, candidate string) bool {
+	_, ok := resolveManagedAssetPath(dataDir, candidate)
+	return ok
 }
 
 func RemoveManagedAsset(dataDir, candidate string) (bool, error) {
-	if !IsManagedAssetPath(dataDir, candidate) {
+	resolvedCandidate, ok := resolveManagedAssetPath(dataDir, candidate)
+	if !ok {
 		return false, nil
 	}
-	if err := os.Remove(strings.TrimSpace(candidate)); err != nil {
+	if err := os.Remove(resolvedCandidate); err != nil {
 		return true, err
 	}
 	return true, nil
