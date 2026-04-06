@@ -112,7 +112,7 @@
       "reset_failed": "Failed to reset library metadata.",
       "batch_translate": {
         "title": "Batch Translation (Beta)",
-        "description": "Translate series synopses in the selected language for every series in the library. An active translation plugin is required.",
+        "description": "Translate series synopses in the selected language for every untranslated series on the server. An active translation plugin is required.",
         "card_title": "Translate all series synopses",
         "card_description": "Only untranslated items with an empty translated synopsis will be processed.",
         "target_label": "Output language",

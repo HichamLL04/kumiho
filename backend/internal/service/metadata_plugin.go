@@ -386,7 +386,10 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 }
 
 func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID string) (*MetadataResetResult, error) {
-	_ = ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if strings.TrimSpace(libraryID) == "" {
 		return nil, ErrLibraryNotFound
 	}

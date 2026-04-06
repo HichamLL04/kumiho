@@ -11,7 +11,11 @@ disallow_local_replace() {
   exit 1
 }
 
-if grep -Eq '^replace .*=> (\./|\.\./|/)' "${backend_mod}"; then
+if grep -Eq '^[[:space:]]*replace[[:space:]]+.+[[:space:]]+=>[[:space:]]+(\./|\.\./|/)' "${backend_mod}"; then
+  disallow_local_replace
+fi
+
+if grep -Eq '^[[:space:]]+.+[[:space:]]+=>[[:space:]]+(\./|\.\./|/)' "${backend_mod}"; then
   disallow_local_replace
 fi
 
@@ -19,7 +23,7 @@ gopath_value="$(go env GOPATH 2>/dev/null || true)"
 if [ -n "${gopath_value}" ]; then
   IFS=':' read -r -a gopath_entries <<< "${gopath_value}"
   for gopath_entry in "${gopath_entries[@]}"; do
-    if [ -n "${gopath_entry}" ] && grep -Eq "^replace .*=> ${gopath_entry}/" "${backend_mod}"; then
+    if [ -n "${gopath_entry}" ] && grep -Eq "^[[:space:]]*(replace[[:space:]]+.+|.+)[[:space:]]+=>[[:space:]]+${gopath_entry}/" "${backend_mod}"; then
       disallow_local_replace
     fi
   done
