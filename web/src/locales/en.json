@@ -105,9 +105,9 @@
       "search_description": "Search series in the selected library and apply matched metadata in bulk.",
       "reset_title": "Reset Library Metadata",
       "reset_description": "Restore the library to its scanned state.",
-      "reset_card_description": "Clears authors, tags, publication info, synopsis, translated synopsis, and custom thumbnails.",
+      "reset_card_description": "Clears authors, tags, publication info, synopsis, translated synopsis, custom thumbnails, and series characters with their images.",
       "reset_action": "Reset Metadata",
-      "reset_confirm": "This will clear all metadata, translated synopses, and custom thumbnails in the {{library}} library. This action cannot be undone.",
+      "reset_confirm": "This will clear all metadata, translated synopses, custom thumbnails, and series characters with their images in the {{library}} library. This action cannot be undone.",
       "reset_complete": "Reset metadata for {{count}} series in {{library}}.",
       "reset_failed": "Failed to reset library metadata.",
       "batch_translate": {

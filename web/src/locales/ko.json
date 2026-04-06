@@ -194,9 +194,9 @@
       "search_description": "선택한 라이브러리의 시리즈를 검색하고 매칭된 메타데이터를 일괄 적용합니다.",
       "reset_title": "라이브러리 메타데이터 초기화",
       "reset_description": "스캔 당시 상태로 되돌립니다.",
-      "reset_card_description": "작가, 태그, 출판 정보, 줄거리, 번역 줄거리, 커스텀 썸네일을 모두 초기화합니다.",
+      "reset_card_description": "작가, 태그, 출판 정보, 줄거리, 번역 줄거리, 커스텀 썸네일, 등장인물 및 이미지까지 모두 초기화합니다.",
       "reset_action": "메타데이터 초기화",
-      "reset_confirm": "{{library}} 라이브러리의 메타데이터, 번역 줄거리, 커스텀 썸네일을 모두 초기화합니다. 이 작업은 되돌릴 수 없습니다.",
+      "reset_confirm": "{{library}} 라이브러리의 메타데이터, 번역 줄거리, 커스텀 썸네일, 등장인물 및 이미지를 모두 초기화합니다. 이 작업은 되돌릴 수 없습니다.",
       "reset_complete": "{{library}} 라이브러리의 {{count}}개 시리즈 메타데이터를 초기화했습니다.",
       "reset_failed": "라이브러리 메타데이터 초기화에 실패했습니다.",
       "batch_translate": {
