@@ -753,7 +753,7 @@ export function MetadataTab() {
 
       if (res.cancelled) {
         setToast({
-          type: res.total_success > 0 ? "info" : "warning",
+          type: "info",
           message: t("settings.metadata.batch_translate.cancelled", {
             total: res.total_processed,
             success: res.total_success,
