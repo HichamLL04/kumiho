@@ -91,7 +91,10 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       title,
       message,
       showCancel: true,
-      onConfirm,
+      onConfirm: async () => {
+        await onConfirm();
+        setAlertModal((prev) => (prev.type === "warning" ? { ...prev, isOpen: false } : prev));
+      },
       onCancel: () => setAlertModal((prev) => ({ ...prev, isOpen: false })),
     });
   };
