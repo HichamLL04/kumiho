@@ -534,6 +534,7 @@ export const pluginAPI = {
         total_processed: number;
         total_success: number;
         total_failed: number;
+        cancelled?: boolean;
       }>("/translations/batch", targetLang ? { target_lang: targetLang } : {})
       .then((res) => res.data),
 };

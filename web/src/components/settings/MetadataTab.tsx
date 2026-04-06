@@ -473,7 +473,7 @@ export function MetadataTab() {
             <div
               id={translateLanguageListboxId}
               className={styles.translationLanguageOptions}
-              role="listbox"
+              role="menu"
               aria-labelledby={translateLanguageLabelId}
             >
               {filteredLanguageOptions.length > 0 ? (
@@ -486,9 +486,9 @@ export function MetadataTab() {
                       languageOptionRefs.current[index] = node;
                     }}
                     className={styles.translationLanguageOption}
-                    role="option"
-                    aria-selected={option.code === selectedTargetLanguage}
-                    tabIndex={option.code === selectedTargetLanguage ? 0 : -1}
+                    role="menuitemradio"
+                    aria-checked={option.code === selectedTargetLanguage}
+                    tabIndex={isLanguageDropdownOpen && option.code === selectedTargetLanguage ? 0 : -1}
                     onClick={() => handleSelectTargetLanguage(option.code)}
                     onFocus={() => setHighlightedLanguageIndex(index)}
                     onKeyDown={(event) => handleLanguageOptionKeyDown(event, index)}
@@ -955,7 +955,7 @@ export function MetadataTab() {
                     type="button"
                     className={styles.translationLanguageButton}
                     ref={languageButtonRef}
-                    aria-haspopup="listbox"
+                    aria-haspopup="menu"
                     aria-controls={translateLanguageListboxId}
                     aria-expanded={isLanguageDropdownOpen}
                     aria-label={`${t("settings.metadata.batch_translate.target_label")}: ${selectedLanguageOption.label}${selectedTargetLanguage === appLanguage ? ` (${t("settings.metadata.batch_translate.server_language_badge")})` : ""}`}

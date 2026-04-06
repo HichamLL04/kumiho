@@ -748,7 +748,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                             <button
                               type="button"
                               className={styles.descriptionViewButton}
-                              aria-haspopup="listbox"
+                              aria-haspopup="menu"
                               aria-expanded={isDescriptionViewMenuOpen}
                               aria-label={t("series.edit.form.description_view")}
                               onClick={() => setIsDescriptionViewMenuOpen((prev) => !prev)}
@@ -763,14 +763,14 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                             {isDescriptionViewMenuOpen && (
                               <div
                                 className={styles.descriptionViewMenuList}
-                                role="listbox"
+                                role="menu"
                                 aria-label={t("series.edit.form.description_view")}
                               >
                                 <button
                                   type="button"
-                                  role="option"
-                                  aria-selected={descriptionView === "translated"}
-                                  tabIndex={descriptionView === "translated" ? 0 : -1}
+                                  role="menuitemradio"
+                                  aria-checked={descriptionView === "translated"}
+                                  tabIndex={isDescriptionViewMenuOpen && descriptionView === "translated" ? 0 : -1}
                                   className={`${styles.descriptionViewOption} ${descriptionView === "translated" ? styles.descriptionViewOptionActive : ""}`}
                                   onClick={() => {
                                     setDescriptionView("translated");
@@ -781,9 +781,9 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                                 </button>
                                 <button
                                   type="button"
-                                  role="option"
-                                  aria-selected={descriptionView === "original"}
-                                  tabIndex={descriptionView === "original" ? 0 : -1}
+                                  role="menuitemradio"
+                                  aria-checked={descriptionView === "original"}
+                                  tabIndex={isDescriptionViewMenuOpen && descriptionView === "original" ? 0 : -1}
                                   className={`${styles.descriptionViewOption} ${descriptionView === "original" ? styles.descriptionViewOptionActive : ""}`}
                                   onClick={() => {
                                     setDescriptionView("original");

@@ -61,7 +61,10 @@ func resolveManagedAssetPath(dataDir, candidate string) (string, bool) {
 		if evalErr != nil {
 			continue
 		}
-		if resolvedCandidate == resolvedRoot || strings.HasPrefix(resolvedCandidate, resolvedRoot+string(os.PathSeparator)) {
+		if resolvedCandidate == resolvedRoot {
+			return "", false
+		}
+		if strings.HasPrefix(resolvedCandidate, resolvedRoot+string(os.PathSeparator)) {
 			return resolvedCandidate, true
 		}
 	}
@@ -77,6 +80,9 @@ func IsManagedAssetPath(dataDir, candidate string) bool {
 func RemoveManagedAsset(dataDir, candidate string) (bool, error) {
 	resolvedCandidate, ok := resolveManagedAssetPath(dataDir, candidate)
 	if !ok {
+		return false, nil
+	}
+	if info, statErr := os.Lstat(resolvedCandidate); statErr == nil && info.IsDir() {
 		return false, nil
 	}
 	if err := os.Remove(resolvedCandidate); err != nil {
