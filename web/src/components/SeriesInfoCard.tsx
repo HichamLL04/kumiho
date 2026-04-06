@@ -536,7 +536,11 @@ export function SeriesInfoCard({
         {/* 줄거리 */}
         {(() => {
           const rawDescription = isVolumeType ? volume?.description || series.description : series.description;
-          const translatedDescription = !isVolumeType ? series.metadata?.description_translated : undefined;
+          const shouldUseSeriesDescriptionFallback = isVolumeType && !volume?.description?.trim();
+          const translatedDescription =
+            !isVolumeType || shouldUseSeriesDescriptionFallback
+              ? series.metadata?.description_translated
+              : undefined;
           const displayDescription = translatedDescription || rawDescription;
 
           if (!displayDescription) return null;
