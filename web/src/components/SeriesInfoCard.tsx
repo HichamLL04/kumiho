@@ -537,7 +537,7 @@ export function SeriesInfoCard({
         {(() => {
           const shouldUseSeriesDescriptionFallback = isVolumeType && !volume?.description?.trim();
           const rawDescription =
-            isVolumeType && !shouldUseSeriesDescriptionFallback ? volume.description : series.description;
+            isVolumeType && !shouldUseSeriesDescriptionFallback ? volume?.description ?? "" : series.description;
           const translatedDescription =
             !isVolumeType || shouldUseSeriesDescriptionFallback
               ? series.metadata?.description_translated
