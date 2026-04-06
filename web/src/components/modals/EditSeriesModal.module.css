@@ -535,7 +535,7 @@
   color: #fecaca;
 }
 
-.btnReset:hover {
+.btnReset:hover:not(:disabled) {
   background: rgba(153, 27, 27, 0.28);
   border-color: rgba(252, 165, 165, 0.34);
   transform: translateY(-1px);

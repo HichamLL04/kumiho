@@ -332,7 +332,7 @@ export function MetadataTab() {
       if (languageDropdownRef.current?.contains(target) || languageButtonRef.current?.contains(target)) {
         return;
       }
-      closeLanguageDropdown(true);
+      closeLanguageDropdown(false);
     };
 
     const updateDropdownPosition = () => {
