@@ -2,6 +2,7 @@ import axios from "axios";
 import type {
   Chapter,
   Series,
+  UpdateSeriesRequest,
   Volume,
   Library,
   ReadingProgress,
@@ -211,8 +212,7 @@ export const seriesAPI = {
   getProgress: (seriesId: string) => api.get(`/series/${seriesId}/progress`),
   getProgressList: (seriesId: string) =>
     api.get<{ progress_list: ReadingProgress[] }>(`/series/${seriesId}/progress-list`),
-  update: (seriesId: string, data: Partial<Series> & { description_translated?: string }) =>
-    api.patch(`/series/${seriesId}`, data),
+  update: (seriesId: string, data: UpdateSeriesRequest) => api.patch(`/series/${seriesId}`, data),
   resetMetadata: (seriesId: string) =>
     api
       .post<{ series: Series; warnings?: string[] }>(`/series/${seriesId}/reset-metadata`)

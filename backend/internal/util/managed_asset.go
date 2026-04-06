@@ -83,12 +83,20 @@ func resolveManagedAssetPath(dataDir, candidate string) (string, bool) {
 		if resolvedCandidate == resolvedRoot {
 			return "", false
 		}
-		if strings.HasPrefix(resolvedCandidate, resolvedRoot+string(os.PathSeparator)) {
+		if isPathUnderRoot(resolvedRoot, resolvedCandidate) {
 			return resolvedCandidate, true
 		}
 	}
 
 	return "", false
+}
+
+func isPathUnderRoot(root, candidate string) bool {
+	relativePath, err := filepath.Rel(root, candidate)
+	if err != nil || relativePath == "." {
+		return false
+	}
+	return relativePath != ".." && !strings.HasPrefix(relativePath, ".."+string(os.PathSeparator))
 }
 
 func IsManagedAssetPath(dataDir, candidate string) bool {

@@ -52,6 +52,21 @@ export interface Series {
   has_audio?: boolean;
 }
 
+export interface UpdateSeriesRequest {
+  title?: string;
+  description?: string;
+  description_translated?: string;
+  status?: string;
+  authors?: string;
+  tags?: string;
+  is_bookmarked?: boolean;
+  publication_year?: string;
+  original_title?: string;
+  publisher?: string;
+  published_at?: string;
+  isbn?: string;
+}
+
 export interface Volume {
   id: string;
   series_id: string;
