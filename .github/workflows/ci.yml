@@ -36,6 +36,9 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
 
+      - name: Check backend go.mod for local replace directives
+        run: bash ./.github/scripts/check-no-local-go-replace.sh
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:

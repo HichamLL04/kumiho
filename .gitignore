@@ -101,4 +101,6 @@ backend/internal/frontend/dist/
 # =============
 comments.json
 scripts/
+!.github/scripts/
+!.github/scripts/*.sh
 AGENTS.md
