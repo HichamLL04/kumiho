@@ -75,7 +75,10 @@ func resolveManagedAssetPath(dataDir, candidate string) (string, bool) {
 
 		resolvedRoot, evalErr := filepath.EvalSymlinks(absRoot)
 		if evalErr != nil {
-			continue
+			if !errors.Is(evalErr, os.ErrNotExist) {
+				continue
+			}
+			resolvedRoot = filepath.Clean(absRoot)
 		}
 		if resolvedCandidate == resolvedRoot {
 			return "", false
