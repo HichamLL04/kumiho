@@ -16,7 +16,7 @@ import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import { Tooltip } from "../components/common/Tooltip";
 import styles from "./Volume.module.css";
 
-import type { Volume, Chapter, Series, ReadingProgress } from "../types/series";
+import type { Volume, Chapter, Series, ReadingProgress, Library } from "../types/series";
 import { AlertModal, type AlertType } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 
@@ -30,6 +30,7 @@ export function VolumePage() {
   const [subVolumes, setSubVolumes] = useState<Volume[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [series, setSeries] = useState<Series | null>(null);
+  const [library, setLibrary] = useState<Library | null>(null);
   const [lastProgress, setLastProgress] = useState<ReadingProgress | null>(null);
   const [progressList, setProgressList] = useState<ReadingProgress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -85,7 +86,17 @@ export function VolumePage() {
 
         // 부모 시리즈 정보
         const seriesRes = await api.get(`/series/${volData.series_id}`);
-        setSeries(seriesRes.data);
+        const seriesData = seriesRes.data as Series;
+        setSeries(seriesData);
+
+        if (seriesData.library_id) {
+          const libraryRes = await api.get(`/libraries/${seriesData.library_id}`);
+          setLibrary(libraryRes.data as Library);
+        } else {
+          setLibrary(null);
+        }
+      } else {
+        setLibrary(null);
       }
 
       // 챕터 목록 (볼륨 단위 API 사용)
@@ -352,6 +363,7 @@ export function VolumePage() {
         <main className={styles.volumeMain}>
           <SeriesInfoCard
             series={series}
+            library={library}
             volume={volume}
             type="volume"
             progress={lastProgress || undefined}

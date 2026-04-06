@@ -451,14 +451,22 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		ResetCount:  resetCount,
 		ResetAt:     time.Now(),
 	}
+	sanitizeAssetWarningName := func(assetPath string) string {
+		name := filepath.Base(filepath.Clean(assetPath))
+		if name == "" || name == "." || name == string(filepath.Separator) {
+			return "asset"
+		}
+		return name
+	}
 	for _, path := range filesToRemove {
 		removed, removeErr := util.RemoveManagedAsset(s.cfg.DataDir, path)
+		assetName := sanitizeAssetWarningName(path)
 		if !removed {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("skipped unmanaged asset path %s", path))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("skipped unmanaged asset %s", assetName))
 			continue
 		}
 		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove %s: %v", path, removeErr))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove asset %s", assetName))
 		}
 	}
 
