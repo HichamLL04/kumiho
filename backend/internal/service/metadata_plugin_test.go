@@ -196,6 +196,13 @@ func TestMetadataServiceResetLibraryMetadataRemovesCharactersAndCharacterImages(
 	seriesRepo := repository.NewSeriesRepository()
 	characterRepo := repository.NewSeriesCharacterRepository()
 	series := seedMetadataSeries(t, seriesRepo)
+	series.Description = "Original synopsis"
+	series.Metadata.Description = "Original synopsis"
+	series.Metadata.DescriptionTranslated = "Translated synopsis"
+	series.Metadata.Status = "COMPLETED"
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("SeriesRepository.Update() error = %v", err)
+	}
 
 	imagePath := filepath.Join(t.TempDir(), "character.png")
 	if err := os.WriteFile(imagePath, []byte("image"), 0o644); err != nil {
@@ -229,6 +236,9 @@ func TestMetadataServiceResetLibraryMetadataRemovesCharactersAndCharacterImages(
 	if result.ResetCount != 1 {
 		t.Fatalf("reset count = %d, want 1", result.ResetCount)
 	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("warnings len = %d, want 0", len(result.Warnings))
+	}
 
 	items, err := characterRepo.ListBySeriesID(nil, series.ID)
 	if err != nil {
@@ -238,8 +248,20 @@ func TestMetadataServiceResetLibraryMetadataRemovesCharactersAndCharacterImages(
 		t.Fatalf("characters len = %d, want 0", len(items))
 	}
 
-	if _, err := os.Stat(imagePath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("character image should be removed, stat err = %v", err)
+	_, statErr := os.Stat(imagePath)
+	if !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("character image should be removed, stat err = %v", statErr)
+	}
+
+	refreshed, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if refreshed == nil || refreshed.Metadata == nil {
+		t.Fatal("refreshed metadata should not be nil")
+	}
+	if refreshed.Metadata.Status != "ONGOING" {
+		t.Fatalf("status = %q, want ONGOING", refreshed.Metadata.Status)
 	}
 }
 

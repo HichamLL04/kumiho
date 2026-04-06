@@ -86,6 +86,7 @@ type MetadataResetResult struct {
 	LibraryName string    `json:"library_name"`
 	ResetCount  int64     `json:"reset_count"`
 	ResetAt     time.Time `json:"reset_at"`
+	Warnings    []string  `json:"warnings,omitempty"`
 }
 
 type MetadataService struct {
@@ -447,18 +448,19 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		return nil, err
 	}
 
-	for _, path := range filesToRemove {
-		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			return nil, removeErr
-		}
-	}
-
-	return &MetadataResetResult{
+	result := &MetadataResetResult{
 		LibraryID:   library.ID,
 		LibraryName: library.Name,
 		ResetCount:  resetCount,
 		ResetAt:     time.Now(),
-	}, nil
+	}
+	for _, path := range filesToRemove {
+		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove %s: %v", path, removeErr))
+		}
+	}
+
+	return result, nil
 }
 
 func hasCapability(manifest sdkmanifest.Manifest, wanted capability.Capability) bool {

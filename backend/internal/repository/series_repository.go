@@ -486,9 +486,9 @@ func (r *SeriesRepository) ResetMetadataByLibrary(db database.Queryer, libraryID
 	db = database.GetQueryer(db)
 	result, err := db.Exec(
 		`UPDATE series_metadata
-		 SET description = '',
-		     description_translated = '',
-		     status = '',
+			 SET description = '',
+			     description_translated = '',
+			     status = 'ONGOING',
 		     authors = '',
 		     tags = '',
 		     publication_year = '',
@@ -550,9 +550,9 @@ func (r *SeriesRepository) ResetMetadataBySeriesID(db database.Queryer, seriesID
 	db = database.GetQueryer(db)
 	if _, err := db.Exec(
 		`UPDATE series_metadata
-		 SET description = '',
-		     description_translated = '',
-		     status = '',
+			 SET description = '',
+			     description_translated = '',
+			     status = 'ONGOING',
 		     authors = '',
 		     tags = '',
 		     publication_year = '',

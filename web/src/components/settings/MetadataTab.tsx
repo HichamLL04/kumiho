@@ -88,11 +88,13 @@ export function MetadataTab() {
   const progressLabelId = useId();
   const librarySelectorLabelId = useId();
   const translateLanguageLabelId = useId();
+  const translateLanguageListboxId = useId();
   const cancelScanRequestedRef = useRef(false);
   const isMountedRef = useRef(true);
   const loadSeriesRequestIdRef = useRef(0);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
   const languageButtonRef = useRef<HTMLButtonElement>(null);
+  const languageOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [selectedLibraryId, setSelectedLibraryId] = useState<string>("");
   const [seriesList, setSeriesList] = useState<SeriesMetadataInfo[]>([]);
@@ -106,6 +108,7 @@ export function MetadataTab() {
   const [selectedTargetLanguage, setSelectedTargetLanguage] = useState("ko");
   const [languageSearch, setLanguageSearch] = useState("");
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
+  const [highlightedLanguageIndex, setHighlightedLanguageIndex] = useState(-1);
   const [languageDropdownStyle, setLanguageDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(
     null,
   );
@@ -163,6 +166,35 @@ export function MetadataTab() {
       );
     });
   }, [languageSearch]);
+
+  const closeLanguageDropdown = useCallback(() => {
+    setIsLanguageDropdownOpen(false);
+    setLanguageSearch("");
+    setHighlightedLanguageIndex(-1);
+  }, []);
+
+  const focusLanguageOption = useCallback((index: number) => {
+    requestAnimationFrame(() => {
+      languageOptionRefs.current[index]?.focus();
+    });
+  }, []);
+
+  const moveHighlightedLanguage = useCallback(
+    (direction: 1 | -1) => {
+      if (filteredLanguageOptions.length === 0) return;
+
+      const currentIndex =
+        highlightedLanguageIndex >= 0 && highlightedLanguageIndex < filteredLanguageOptions.length
+          ? highlightedLanguageIndex
+          : filteredLanguageOptions.findIndex((option) => option.code === selectedTargetLanguage);
+      const baseIndex = currentIndex >= 0 ? currentIndex : direction > 0 ? -1 : 0;
+      const nextIndex = (baseIndex + direction + filteredLanguageOptions.length) % filteredLanguageOptions.length;
+
+      setHighlightedLanguageIndex(nextIndex);
+      focusLanguageOption(nextIndex);
+    },
+    [filteredLanguageOptions, focusLanguageOption, highlightedLanguageIndex, selectedTargetLanguage],
+  );
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -329,6 +361,89 @@ export function MetadataTab() {
     }
   }, [isLanguageDropdownOpen]);
 
+  useEffect(() => {
+    if (!isLanguageDropdownOpen) return;
+
+    const selectedIndex = filteredLanguageOptions.findIndex((option) => option.code === selectedTargetLanguage);
+    setHighlightedLanguageIndex(selectedIndex >= 0 ? selectedIndex : filteredLanguageOptions.length > 0 ? 0 : -1);
+    languageOptionRefs.current = [];
+  }, [filteredLanguageOptions, isLanguageDropdownOpen, selectedTargetLanguage]);
+
+  const handleLanguageInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        moveHighlightedLanguage(1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        moveHighlightedLanguage(-1);
+        break;
+      case "Enter":
+        if (highlightedLanguageIndex >= 0 && filteredLanguageOptions[highlightedLanguageIndex]) {
+          event.preventDefault();
+          handleSelectTargetLanguage(filteredLanguageOptions[highlightedLanguageIndex].code);
+        }
+        break;
+      case "Escape":
+        event.preventDefault();
+        closeLanguageDropdown();
+        languageButtonRef.current?.focus();
+        break;
+    }
+  };
+
+  const handleLanguageOptionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        moveHighlightedLanguage(1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        moveHighlightedLanguage(-1);
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        handleSelectTargetLanguage(filteredLanguageOptions[index].code);
+        break;
+      case "Escape":
+        event.preventDefault();
+        closeLanguageDropdown();
+        languageButtonRef.current?.focus();
+        break;
+    }
+  };
+
+  const handleLanguageButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    switch (event.key) {
+      case "ArrowDown":
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        setIsLanguageDropdownOpen(true);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setIsLanguageDropdownOpen(true);
+        requestAnimationFrame(() => {
+          if (filteredLanguageOptions.length > 0) {
+            const nextIndex = filteredLanguageOptions.length - 1;
+            setHighlightedLanguageIndex(nextIndex);
+            focusLanguageOption(nextIndex);
+          }
+        });
+        break;
+      case "Escape":
+        if (isLanguageDropdownOpen) {
+          event.preventDefault();
+          closeLanguageDropdown();
+        }
+        break;
+    }
+  };
+
   const languageDropdown =
     isLanguageDropdownOpen && languageDropdownStyle
       ? createPortal(
@@ -347,23 +462,37 @@ export function MetadataTab() {
               <input
                 value={languageSearch}
                 onChange={(e) => setLanguageSearch(e.target.value)}
-                placeholder="언어 검색"
+                onKeyDown={handleLanguageInputKeyDown}
+                placeholder={t("settings.metadata.batch_translate.language_search_placeholder")}
                 className={styles.translationLanguageSearchInput}
                 autoFocus
               />
             </div>
             <div
+              id={translateLanguageListboxId}
               className={styles.translationLanguageOptions}
               role="listbox"
               aria-labelledby={translateLanguageLabelId}
+              aria-activedescendant={
+                highlightedLanguageIndex >= 0 ? `translation-language-option-${filteredLanguageOptions[highlightedLanguageIndex]?.code}` : undefined
+              }
             >
               {filteredLanguageOptions.length > 0 ? (
-                filteredLanguageOptions.map((option) => (
+                filteredLanguageOptions.map((option, index) => (
                   <button
+                    id={`translation-language-option-${option.code}`}
                     key={option.code}
                     type="button"
+                    ref={(node) => {
+                      languageOptionRefs.current[index] = node;
+                    }}
                     className={styles.translationLanguageOption}
+                    role="option"
+                    aria-selected={option.code === selectedTargetLanguage}
+                    tabIndex={option.code === selectedTargetLanguage ? 0 : -1}
                     onClick={() => handleSelectTargetLanguage(option.code)}
+                    onFocus={() => setHighlightedLanguageIndex(index)}
+                    onKeyDown={(event) => handleLanguageOptionKeyDown(event, index)}
                   >
                     <span className={styles.translationLanguageOptionLabel}>
                       {option.label}
@@ -373,7 +502,7 @@ export function MetadataTab() {
                   </button>
                 ))
               ) : (
-                <div className={styles.translationLanguageEmpty}>검색 결과가 없습니다.</div>
+                <div className={styles.translationLanguageEmpty}>{t("settings.metadata.batch_translate.language_search_empty")}</div>
               )}
             </div>
           </div>,
@@ -608,7 +737,7 @@ export function MetadataTab() {
   const handleBatchTranslate = async () => {
     if (isTranslating || !isMountedRef.current) return;
     setIsTranslating(true);
-    setToast({ type: "info", message: "일괄 번역을 시작합니다..." });
+    setToast({ type: "info", message: t("settings.metadata.batch_translate.starting") });
 
     try {
       const res = await pluginAPI.batchTranslate(selectedTargetLanguage);
@@ -617,7 +746,10 @@ export function MetadataTab() {
       if (res.total_success > 0 || res.total_processed === 0) {
         setToast({
           type: "success",
-          message: `일괄 번역 완료: 총 ${res.total_processed}개 중 ${res.total_success}개 성공`,
+          message: t("settings.metadata.batch_translate.complete", {
+            total: res.total_processed,
+            success: res.total_success,
+          }),
         });
         if (selectedLibraryId) {
           loadSeries(selectedLibraryId); // Refresh the list
@@ -625,13 +757,16 @@ export function MetadataTab() {
       } else {
         setToast({
           type: "error",
-          message: `일괄 번역 일부 혹은 전체 실패. 총 ${res.total_processed}개, 에러 ${res.total_failed}개`,
+          message: t("settings.metadata.batch_translate.failed", {
+            total: res.total_processed,
+            failed: res.total_failed,
+          }),
         });
       }
     } catch (err: unknown) {
       if (!isMountedRef.current) return;
       console.error("Batch translate failed:", err);
-      const errMsg = extractApiErrorMessage(err, "일괄 번역을 실패했습니다.");
+      const errMsg = extractApiErrorMessage(err, t("settings.metadata.batch_translate.request_failed"));
       setToast({ type: "error", message: errMsg });
     } finally {
       if (isMountedRef.current) {
@@ -642,8 +777,7 @@ export function MetadataTab() {
 
   const handleSelectTargetLanguage = (languageCode: string) => {
     setSelectedTargetLanguage(languageCode);
-    setIsLanguageDropdownOpen(false);
-    setLanguageSearch("");
+    closeLanguageDropdown();
   };
 
   const handleResetLibraryMetadata = () => {
@@ -786,10 +920,8 @@ export function MetadataTab() {
       <div className={styles.header}>
         <section className={styles.libraryOverrideSection}>
           <div className={styles.metadataSettingsHeader}>
-            <h3>일괄 번역 (Beta)</h3>
-            <p>
-              라이브러리에 있는 모든 시리즈의 줄거리를 선택한 언어로 번역합니다. 활성화된 번역 플러그인이 필요합니다.
-            </p>
+            <h3>{t("settings.metadata.batch_translate.title")}</h3>
+            <p>{t("settings.metadata.batch_translate.description")}</p>
           </div>
           <div className={styles.libraryOverrideGrid}>
             <article
@@ -800,36 +932,38 @@ export function MetadataTab() {
                 <div className={styles.libraryOverrideInfo}>
                   <div className={styles.libraryOverrideNameRow}>
                     <Sparkles size={16} />
-                    <h4>전체 시리즈 줄거리 번역</h4>
+                    <h4>{t("settings.metadata.batch_translate.card_title")}</h4>
                   </div>
-                  <p>번역되지 않은 빈 항목만 번역을 시도합니다.</p>
+                  <p>{t("settings.metadata.batch_translate.card_description")}</p>
                 </div>
-                <div className={styles.translationLanguageControl} ref={languageDropdownRef}>
+                <div className={styles.translationLanguageControl}>
                   <div
                     id={translateLanguageLabelId}
                     className={styles.selectorLabel}
                   >
                     <Languages size={14} />
-                    <span>출력 언어</span>
+                    <span>{t("settings.metadata.batch_translate.target_label")}</span>
                   </div>
                   <div className={styles.translationLanguageHint}>
-                    기본값은 서버 언어이며, 현재 서버 언어는{" "}
-                    <strong>{LANGUAGE_OPTIONS.find((option) => option.code === serverLanguage)?.label ?? serverLanguage}</strong>
-                    입니다.
+                    {t("settings.metadata.batch_translate.server_language_hint", {
+                      language: LANGUAGE_OPTIONS.find((option) => option.code === serverLanguage)?.label ?? serverLanguage,
+                    })}
                   </div>
                   <button
                     type="button"
                     className={styles.translationLanguageButton}
                     ref={languageButtonRef}
                     aria-haspopup="listbox"
+                    aria-controls={translateLanguageListboxId}
                     aria-expanded={isLanguageDropdownOpen}
                     aria-labelledby={translateLanguageLabelId}
+                    onKeyDown={handleLanguageButtonKeyDown}
                     onClick={() => setIsLanguageDropdownOpen((prev) => !prev)}
                   >
                     <span className={styles.translationLanguageValue}>
                       {selectedLanguageOption.label}
                       {selectedTargetLanguage === serverLanguage && (
-                        <span className={styles.translationLanguageBadge}>서버 언어</span>
+                        <span className={styles.translationLanguageBadge}>{t("settings.metadata.batch_translate.server_language_badge")}</span>
                       )}
                     </span>
                     <ChevronDown
@@ -853,7 +987,7 @@ export function MetadataTab() {
                 ) : (
                   <Sparkles size={16} />
                 )}
-                {isTranslating ? "번역 중..." : "일괄 번역 실행"}
+                {isTranslating ? t("actions.translating") : t("settings.metadata.batch_translate.action")}
               </button>
             </article>
           </div>
