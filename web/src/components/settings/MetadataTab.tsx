@@ -24,6 +24,25 @@ interface LanguageOption {
   keywords: string[];
 }
 
+function extractApiErrorMessage(error: unknown, fallback: string): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "response" in error &&
+    typeof error.response === "object" &&
+    error.response !== null &&
+    "data" in error.response &&
+    typeof error.response.data === "object" &&
+    error.response.data !== null &&
+    "error" in error.response.data &&
+    typeof error.response.data.error === "string"
+  ) {
+    return error.response.data.error;
+  }
+
+  return fallback;
+}
+
 const LANGUAGE_OPTIONS: LanguageOption[] = [
   { code: "ar", label: "العربية", keywords: ["arabic", "ar", "العربية"] },
   { code: "ko", label: "한국어", keywords: ["korean", "hangul", "ko", "한국어"] },
@@ -612,8 +631,7 @@ export function MetadataTab() {
     } catch (err: unknown) {
       if (!isMountedRef.current) return;
       console.error("Batch translate failed:", err);
-      // Backend returns explicit error object or response message
-      const errMsg = (err as any)?.response?.data?.error || "일괄 번역을 실패했습니다.";
+      const errMsg = extractApiErrorMessage(err, "일괄 번역을 실패했습니다.");
       setToast({ type: "error", message: errMsg });
     } finally {
       if (isMountedRef.current) {

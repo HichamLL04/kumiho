@@ -84,8 +84,8 @@ func getMP3Duration(filePath string) *float64 {
 		return nil
 	}
 
-	version := (header >> 19) & 3    // 00=2.5, 01=reserved, 10=2, 11=1
-	layer := (header >> 17) & 3      // 01=III, 10=II, 11=I
+	version := (header >> 19) & 3 // 00=2.5, 01=reserved, 10=2, 11=1
+	layer := (header >> 17) & 3   // 01=III, 10=II, 11=I
 	bitrateIdx := (header >> 12) & 15
 	sampleIdx := (header >> 10) & 3
 
@@ -171,16 +171,23 @@ func getMPEGBitrate(version, layer uint32, idx int) int {
 	var tableIdx int
 	if version == 3 { // MPEG1
 		switch layer {
-		case 3: tableIdx = 0 // Layer I
-		case 2: tableIdx = 1 // Layer II
-		case 1: tableIdx = 2 // Layer III
-		default: return 0
+		case 3:
+			tableIdx = 0 // Layer I
+		case 2:
+			tableIdx = 1 // Layer II
+		case 1:
+			tableIdx = 2 // Layer III
+		default:
+			return 0
 		}
 	} else { // MPEG2, MPEG2.5
 		switch layer {
-		case 3: tableIdx = 3 // Layer I
-		case 2, 1: tableIdx = 4 // Layer II/III
-		default: return 0
+		case 3:
+			tableIdx = 3 // Layer I
+		case 2, 1:
+			tableIdx = 4 // Layer II/III
+		default:
+			return 0
 		}
 	}
 	return mpegBitrateTable[tableIdx][idx]
@@ -196,10 +203,14 @@ var mpegSampleRateTable = [4][3]int{
 func getMPEGSampleRate(version uint32, idx int) int {
 	var vIdx int
 	switch version {
-	case 3: vIdx = 0
-	case 2: vIdx = 1
-	case 0: vIdx = 2
-	default: return 0
+	case 3:
+		vIdx = 0
+	case 2:
+		vIdx = 1
+	case 0:
+		vIdx = 2
+	default:
+		return 0
 	}
 	return mpegSampleRateTable[vIdx][idx]
 }
@@ -207,15 +218,21 @@ func getMPEGSampleRate(version uint32, idx int) int {
 func getMPEGSamplesPerFrame(version, layer uint32) int {
 	if version == 3 { // MPEG1
 		switch layer {
-		case 3: return 384   // Layer I
-		case 2: return 1152  // Layer II
-		case 1: return 1152  // Layer III
+		case 3:
+			return 384 // Layer I
+		case 2:
+			return 1152 // Layer II
+		case 1:
+			return 1152 // Layer III
 		}
 	} else { // MPEG2/2.5
 		switch layer {
-		case 3: return 384   // Layer I
-		case 2: return 1152  // Layer II
-		case 1: return 576   // Layer III
+		case 3:
+			return 384 // Layer I
+		case 2:
+			return 1152 // Layer II
+		case 1:
+			return 576 // Layer III
 		}
 	}
 	return 1152
