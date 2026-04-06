@@ -71,6 +71,15 @@ export function VolumePage() {
     const requestId = ++loadRequestIdRef.current;
     const isStale = () => loadRequestIdRef.current !== requestId;
 
+    setIsLoading(true);
+    setVolume(null);
+    setSubVolumes([]);
+    setChapters([]);
+    setSeries(null);
+    setLibrary(null);
+    setLastProgress(null);
+    setProgressList([]);
+
     try {
       // 볼륨 상세 정보
       const volRes = await api.get(`/volumes/${volumeId}`);

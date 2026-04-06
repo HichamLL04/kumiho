@@ -408,12 +408,12 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		return nil, err
 	}
 
-	var filesToRemove []string
+	fileSet := make(map[string]struct{})
 	for i := range seriesList {
 		if seriesList[i].ThumbnailPath != nil {
 			thumbnailPath := strings.TrimSpace(*seriesList[i].ThumbnailPath)
 			if thumbnailPath != "" {
-				filesToRemove = append(filesToRemove, thumbnailPath)
+				fileSet[thumbnailPath] = struct{}{}
 			}
 		}
 
@@ -423,7 +423,13 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		if charErr != nil {
 			return nil, charErr
 		}
-		filesToRemove = append(filesToRemove, characterImagePaths...)
+		for _, imagePath := range characterImagePaths {
+			trimmedPath := strings.TrimSpace(imagePath)
+			if trimmedPath == "" {
+				continue
+			}
+			fileSet[trimmedPath] = struct{}{}
+		}
 	}
 
 	tx, err := database.DB.BeginTx(ctx, nil)
@@ -458,7 +464,7 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		}
 		return name
 	}
-	for _, path := range filesToRemove {
+	for path := range fileSet {
 		removed, removeErr := util.RemoveManagedAsset(s.cfg.DataDir, path)
 		assetName := sanitizeAssetWarningName(path)
 		if !removed {

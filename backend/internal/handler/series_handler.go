@@ -352,9 +352,9 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 		})
 	}
 
-	var filesToRemove []string
+	fileSet := make(map[string]struct{})
 	if series.ThumbnailPath != nil && strings.TrimSpace(*series.ThumbnailPath) != "" {
-		filesToRemove = append(filesToRemove, strings.TrimSpace(*series.ThumbnailPath))
+		fileSet[strings.TrimSpace(*series.ThumbnailPath)] = struct{}{}
 	}
 
 	characters, err := h.seriesCharacterRepo.ListBySeriesID(nil, series.ID)
@@ -368,7 +368,7 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 		if imagePath == "" {
 			continue
 		}
-		filesToRemove = append(filesToRemove, imagePath)
+		fileSet[imagePath] = struct{}{}
 	}
 
 	tx, err := database.DB.BeginTx(ctx, nil)
@@ -407,7 +407,7 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 	}
 
 	var warnings []string
-	for _, path := range filesToRemove {
+	for path := range fileSet {
 		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, path)
 		assetName := sanitizeAssetWarningName(path)
 		if !removed {
