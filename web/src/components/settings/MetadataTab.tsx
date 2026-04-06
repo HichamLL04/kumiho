@@ -179,9 +179,9 @@ export function MetadataTab() {
     }
   }, []);
 
-  const focusLanguageOption = useCallback((index: number) => {
+  const scrollLanguageOptionIntoView = useCallback((index: number) => {
     requestAnimationFrame(() => {
-      languageOptionRefs.current[index]?.focus();
+      languageOptionRefs.current[index]?.scrollIntoView({ block: "nearest" });
     });
   }, []);
 
@@ -197,9 +197,9 @@ export function MetadataTab() {
       const nextIndex = (baseIndex + direction + filteredLanguageOptions.length) % filteredLanguageOptions.length;
 
       setHighlightedLanguageIndex(nextIndex);
-      focusLanguageOption(nextIndex);
+      scrollLanguageOptionIntoView(nextIndex);
     },
-    [filteredLanguageOptions, focusLanguageOption, highlightedLanguageIndex, selectedTargetLanguage],
+    [filteredLanguageOptions, highlightedLanguageIndex, scrollLanguageOptionIntoView, selectedTargetLanguage],
   );
 
   useEffect(() => {
@@ -398,28 +398,6 @@ export function MetadataTab() {
     }
   };
 
-  const handleLanguageOptionKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>, index: number) => {
-    switch (event.key) {
-      case "ArrowDown":
-        event.preventDefault();
-        moveHighlightedLanguage(1);
-        break;
-      case "ArrowUp":
-        event.preventDefault();
-        moveHighlightedLanguage(-1);
-        break;
-      case "Enter":
-      case " ":
-        event.preventDefault();
-        handleSelectTargetLanguage(filteredLanguageOptions[index].code);
-        break;
-      case "Escape":
-        event.preventDefault();
-        closeLanguageDropdown(true);
-        break;
-    }
-  };
-
   const handleLanguageButtonKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     switch (event.key) {
       case "ArrowDown":
@@ -435,7 +413,7 @@ export function MetadataTab() {
           if (filteredLanguageOptions.length > 0) {
             const nextIndex = filteredLanguageOptions.length - 1;
             setHighlightedLanguageIndex(nextIndex);
-            focusLanguageOption(nextIndex);
+            scrollLanguageOptionIntoView(nextIndex);
           }
         });
         break;
@@ -497,10 +475,8 @@ export function MetadataTab() {
                     className={styles.translationLanguageOption}
                     role="option"
                     aria-selected={option.code === selectedTargetLanguage}
-                    tabIndex={highlightedLanguageIndex === index ? 0 : -1}
                     onClick={() => handleSelectTargetLanguage(option.code)}
-                    onFocus={() => setHighlightedLanguageIndex(index)}
-                    onKeyDown={(event) => handleLanguageOptionKeyDown(event, index)}
+                    onMouseEnter={() => setHighlightedLanguageIndex(index)}
                   >
                     <span className={styles.translationLanguageOptionLabel}>
                       {option.label}

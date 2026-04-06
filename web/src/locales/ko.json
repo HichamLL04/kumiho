@@ -887,7 +887,9 @@
         "reset_metadata_title": "시리즈 메타데이터 초기화",
         "reset_metadata_confirm": "이 시리즈의 메타데이터, 번역 줄거리, 커스텀 썸네일, 등장인물을 초기화합니다. 이 작업은 되돌릴 수 없습니다.",
         "reset_metadata_success": "시리즈 메타데이터가 초기화되었습니다.",
-        "reset_metadata_failed": "시리즈 메타데이터 초기화에 실패했습니다."
+        "reset_metadata_failed": "시리즈 메타데이터 초기화에 실패했습니다.",
+        "reset_warning_unmanaged_asset": "관리 대상이 아닌 자산 {{asset}} 은(는) 건너뛰었습니다.",
+        "reset_warning_remove_failed": "자산 {{asset}} 삭제에 실패했습니다."
       }
     }
   },

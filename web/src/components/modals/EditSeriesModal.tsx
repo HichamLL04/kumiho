@@ -91,12 +91,29 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       title,
       message,
       showCancel: true,
-      onConfirm: () => {
-        setAlertModal((prev) => ({ ...prev, isOpen: false }));
-        return onConfirm();
-      },
+      onConfirm,
       onCancel: () => setAlertModal((prev) => ({ ...prev, isOpen: false })),
     });
+  };
+
+  const formatResetWarnings = (warnings?: string[]) => {
+    if (!warnings || warnings.length === 0) return "";
+
+    const lines = warnings.map((warning) => {
+      const [code, ...rest] = warning.split(":");
+      const asset = rest.join(":");
+
+      switch (code) {
+        case "asset_unmanaged":
+          return t("series.edit.alert.reset_warning_unmanaged_asset", { asset });
+        case "asset_remove_failed":
+          return t("series.edit.alert.reset_warning_remove_failed", { asset });
+        default:
+          return warning;
+      }
+    });
+
+    return `\n\n- ${lines.join("\n- ")}`;
   };
 
   useEffect(() => {
@@ -457,7 +474,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
           setTranslatedDescription(result.series.metadata?.description_translated || "");
           setDescriptionView(result.series.metadata?.description_translated?.trim() ? "translated" : "original");
           setCharactersReloadToken((prev) => prev + 1);
-          const warningMessage = result.warnings && result.warnings.length > 0 ? `\n\n- ${result.warnings.join("\n- ")}` : "";
+          const warningMessage = formatResetWarnings(result.warnings);
           showAlert("success", `${t("series.edit.alert.reset_metadata_success")}${warningMessage}`);
         } catch (error) {
           console.error("Failed to reset series metadata:", error);

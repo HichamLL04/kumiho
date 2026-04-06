@@ -412,12 +412,12 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 		assetName := sanitizeAssetWarningName(path)
 		if !removed {
 			log.Printf("series reset skipped unmanaged asset path %s", path)
-			warnings = append(warnings, fmt.Sprintf("skipped unmanaged asset %s", assetName))
+			warnings = append(warnings, fmt.Sprintf("asset_unmanaged:%s", assetName))
 			continue
 		}
 		if remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
 			log.Printf("series reset asset removal failed for %s: %v", path, remErr)
-			warnings = append(warnings, fmt.Sprintf("failed to remove asset %s", assetName))
+			warnings = append(warnings, fmt.Sprintf("asset_remove_failed:%s", assetName))
 		}
 	}
 

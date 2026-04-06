@@ -887,7 +887,9 @@
         "reset_metadata_title": "Reset Series Metadata",
         "reset_metadata_confirm": "This will clear this series metadata, translated synopsis, custom thumbnail, and characters. This action cannot be undone.",
         "reset_metadata_success": "Series metadata has been reset.",
-        "reset_metadata_failed": "Failed to reset series metadata."
+        "reset_metadata_failed": "Failed to reset series metadata.",
+        "reset_warning_unmanaged_asset": "Skipped unmanaged asset {{asset}}.",
+        "reset_warning_remove_failed": "Failed to remove asset {{asset}}."
       }
     }
   },

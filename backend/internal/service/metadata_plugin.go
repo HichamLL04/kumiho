@@ -462,11 +462,11 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		removed, removeErr := util.RemoveManagedAsset(s.cfg.DataDir, path)
 		assetName := sanitizeAssetWarningName(path)
 		if !removed {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("skipped unmanaged asset %s", assetName))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("asset_unmanaged:%s", assetName))
 			continue
 		}
 		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove asset %s", assetName))
+			result.Warnings = append(result.Warnings, fmt.Sprintf("asset_remove_failed:%s", assetName))
 		}
 	}
 

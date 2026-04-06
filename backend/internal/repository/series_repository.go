@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"math"
 	"strings"
@@ -489,7 +490,18 @@ func (r *SeriesRepository) UpdateUpdatedAt(db database.Queryer, id string, updat
 }
 
 func (r *SeriesRepository) UpdateDescriptionTranslated(db database.Queryer, seriesID string, translated string, updatedAt time.Time) error {
-	db = database.GetQueryer(db)
+	if db == nil {
+		tx, err := database.DB.BeginTx(context.Background(), nil)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		if err := r.UpdateDescriptionTranslated(tx, seriesID, translated, updatedAt); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
 	if _, err := db.Exec(`UPDATE series SET updated_at = ? WHERE id = ?`, updatedAt, seriesID); err != nil {
 		return err
 	}
@@ -504,7 +516,12 @@ func (r *SeriesRepository) UpdateDescriptionTranslated(db database.Queryer, seri
 
 func (r *SeriesRepository) ResetMetadataByLibrary(db database.Queryer, libraryID string) (int64, error) {
 	db = database.GetQueryer(db)
-	result, err := db.Exec(
+	var targetCount int64
+	if err := db.QueryRow(`SELECT COUNT(*) FROM series WHERE library_id = ?`, libraryID).Scan(&targetCount); err != nil {
+		return 0, err
+	}
+
+	_, err := db.Exec(
 		`UPDATE series_metadata
 			 SET description = '',
 			     description_translated = '',
@@ -532,11 +549,7 @@ func (r *SeriesRepository) ResetMetadataByLibrary(db database.Queryer, libraryID
 	if err != nil {
 		return 0, err
 	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	return rowsAffected, nil
+	return targetCount, nil
 }
 
 func (r *SeriesRepository) FindUntranslatedSeriesIDs(db database.Queryer) ([]string, error) {
@@ -544,7 +557,7 @@ func (r *SeriesRepository) FindUntranslatedSeriesIDs(db database.Queryer) ([]str
 	rows, err := db.Query(
 		`SELECT series_id
 		 FROM series_metadata
-		 WHERE COALESCE(description, '') != ''
+		 WHERE TRIM(COALESCE(description, '')) != ''
 		   AND COALESCE(description_translated, '') = ''`,
 	)
 	if err != nil {
@@ -572,7 +585,7 @@ func (r *SeriesRepository) FindUntranslatedSeriesForTranslation(db database.Quer
 		`SELECT s.id, sm.description, sm.description_translated
 		 FROM series s
 		 JOIN series_metadata sm ON s.id = sm.series_id
-		 WHERE COALESCE(sm.description, '') != ''
+		 WHERE TRIM(COALESCE(sm.description, '')) != ''
 		   AND COALESCE(sm.description_translated, '') = ''
 		 ORDER BY s.id`,
 	)

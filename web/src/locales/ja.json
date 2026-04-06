@@ -887,7 +887,9 @@
         "reset_metadata_title": "シリーズメタデータ初期化",
         "reset_metadata_confirm": "このシリーズのメタデータ、翻訳あらすじ、カスタムサムネイル、登場人物を初期化します。この操作は元に戻せません。",
         "reset_metadata_success": "シリーズメタデータを初期化しました。",
-        "reset_metadata_failed": "シリーズメタデータの初期化に失敗しました。"
+        "reset_metadata_failed": "シリーズメタデータの初期化に失敗しました。",
+        "reset_warning_unmanaged_asset": "管理対象外のアセット {{asset}} はスキップしました。",
+        "reset_warning_remove_failed": "アセット {{asset}} の削除に失敗しました。"
       }
     }
   },
