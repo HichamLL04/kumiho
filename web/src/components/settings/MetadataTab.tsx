@@ -750,12 +750,13 @@ export function MetadataTab() {
     try {
       const res = await pluginAPI.batchTranslate(selectedTargetLanguage);
       if (!isMountedRef.current) return;
+      const totalTargets = res.total_targets ?? res.total_processed;
 
       if (res.cancelled) {
         setToast({
           type: "info",
           message: t("settings.metadata.batch_translate.cancelled", {
-            total: res.total_processed,
+            total: totalTargets,
             success: res.total_success,
           }),
         });
@@ -763,7 +764,7 @@ export function MetadataTab() {
         setToast({
           type: res.total_success > 0 ? "info" : "error",
           message: t("settings.metadata.batch_translate.failed", {
-            total: res.total_processed,
+            total: totalTargets,
             failed: res.total_failed,
           }),
         });
@@ -771,7 +772,7 @@ export function MetadataTab() {
         setToast({
           type: "success",
           message: t("settings.metadata.batch_translate.complete", {
-            total: res.total_processed,
+            total: totalTargets,
             success: res.total_success,
           }),
         });

@@ -139,6 +139,26 @@ func TestRemoveManagedAssetTreatsMissingManagedPathAsHandled(t *testing.T) {
 	}
 }
 
+func TestRemoveManagedAssetTreatsMissingManagedPathWithMissingParentAsHandled(t *testing.T) {
+	dataDir := t.TempDir()
+	managedDir := filepath.Join(dataDir, "thumbnails", "series", "nested")
+	if err := os.MkdirAll(managedDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.RemoveAll(managedDir); err != nil {
+		t.Fatalf("RemoveAll() error = %v", err)
+	}
+
+	missingPath := filepath.Join(managedDir, "missing-cover.jpg")
+	removed, err := RemoveManagedAsset(dataDir, missingPath)
+	if err != nil {
+		t.Fatalf("RemoveManagedAsset() error = %v", err)
+	}
+	if !removed {
+		t.Fatal("RemoveManagedAsset() should treat missing managed path with missing parent as handled")
+	}
+}
+
 func TestIsManagedAssetPathRejectsManagedRoot(t *testing.T) {
 	dataDir := t.TempDir()
 	managedRoot := filepath.Join(dataDir, "thumbnails")

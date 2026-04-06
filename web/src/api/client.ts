@@ -532,6 +532,7 @@ export const pluginAPI = {
     api
       .post<{
         total_processed: number;
+        total_targets?: number;
         total_success: number;
         total_failed: number;
         cancelled?: boolean;

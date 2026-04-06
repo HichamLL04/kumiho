@@ -27,12 +27,28 @@ func resolveExistingOrMissingPath(path string) (string, error) {
 		return "", err
 	}
 
-	parent := filepath.Dir(path)
-	resolvedParent, parentErr := filepath.EvalSymlinks(parent)
-	if parentErr != nil {
-		return "", parentErr
+	current := filepath.Dir(path)
+	missingSegments := []string{filepath.Base(path)}
+	for {
+		resolvedCurrent, currentErr := filepath.EvalSymlinks(current)
+		if currentErr == nil {
+			resolvedPath := resolvedCurrent
+			for i := len(missingSegments) - 1; i >= 0; i-- {
+				resolvedPath = filepath.Join(resolvedPath, missingSegments[i])
+			}
+			return resolvedPath, nil
+		}
+		if !errors.Is(currentErr, os.ErrNotExist) {
+			return "", currentErr
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", currentErr
+		}
+		missingSegments = append(missingSegments, filepath.Base(current))
+		current = parent
 	}
-	return filepath.Join(resolvedParent, filepath.Base(path)), nil
 }
 
 func resolveManagedAssetPath(dataDir, candidate string) (string, bool) {

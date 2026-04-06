@@ -21,7 +21,9 @@ var (
 )
 
 type BatchTranslateResponse struct {
+	// Deprecated: kept for backward compatibility. Prefer TotalTargets for total batch size.
 	TotalProcessed int  `json:"total_processed"`
+	TotalTargets   int  `json:"total_targets"`
 	TotalSuccess   int  `json:"total_success"`
 	TotalFailed    int  `json:"total_failed"`
 	Cancelled      bool `json:"cancelled,omitempty"`
@@ -85,7 +87,10 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 		return nil, err
 	}
 
-	result := &BatchTranslateResponse{TotalProcessed: len(targets)}
+	result := &BatchTranslateResponse{
+		TotalProcessed: len(targets),
+		TotalTargets:   len(targets),
+	}
 	lastCallAt := time.Time{}
 
 	for _, target := range targets {
