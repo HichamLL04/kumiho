@@ -90,8 +90,13 @@ export function VolumePage() {
         setSeries(seriesData);
 
         if (seriesData.library_id) {
-          const libraryRes = await api.get(`/libraries/${seriesData.library_id}`);
-          setLibrary(libraryRes.data as Library);
+          try {
+            const libraryRes = await api.get(`/libraries/${seriesData.library_id}`);
+            setLibrary(libraryRes.data as Library);
+          } catch (error) {
+            console.error("Failed to load library data:", error);
+            setLibrary(null);
+          }
         } else {
           setLibrary(null);
         }
