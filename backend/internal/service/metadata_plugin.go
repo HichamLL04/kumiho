@@ -24,6 +24,7 @@ import (
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/capability"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
@@ -458,7 +459,12 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		ResetAt:     time.Now(),
 	}
 	for _, path := range filesToRemove {
-		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		removed, removeErr := util.RemoveManagedAsset(s.cfg.DataDir, path)
+		if !removed {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("skipped unmanaged asset path %s", path))
+			continue
+		}
+		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove %s: %v", path, removeErr))
 		}
 	}

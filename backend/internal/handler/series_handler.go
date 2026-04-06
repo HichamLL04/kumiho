@@ -22,6 +22,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 )
 
 type SeriesHandler struct {
@@ -395,7 +396,13 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 
 	var warnings []string
 	for _, path := range filesToRemove {
-		if remErr := os.Remove(path); remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, path)
+		if !removed {
+			log.Printf("series reset skipped unmanaged asset path %s", path)
+			warnings = append(warnings, fmt.Sprintf("skipped unmanaged asset path %s", path))
+			continue
+		}
+		if remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
 			log.Printf("series reset asset removal failed for %s: %v", path, remErr)
 			warnings = append(warnings, fmt.Sprintf("failed to remove %s: %v", path, remErr))
 		}
@@ -752,7 +759,10 @@ func (h *SeriesHandler) DeleteVolumeThumbnail(c *fiber.Ctx) error {
 	}
 
 	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-		if remErr := os.Remove(*volume.ThumbnailPath); remErr != nil && !os.IsNotExist(remErr) {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, *volume.ThumbnailPath)
+		if !removed {
+			log.Printf("skipped unmanaged volume thumbnail path %s", *volume.ThumbnailPath)
+		} else if remErr != nil && !os.IsNotExist(remErr) {
 			log.Printf("failed to delete thumbnail file: %v", remErr)
 		}
 	}
@@ -1038,7 +1048,10 @@ func (h *SeriesHandler) DeleteThumbnail(c *fiber.Ctx) error {
 	// 기존 썸네일 파일 삭제
 	if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
 		fmt.Printf("[DEBUG] Removing thumbnail file: %s\n", *series.ThumbnailPath)
-		if remErr := os.Remove(*series.ThumbnailPath); remErr != nil && !os.IsNotExist(remErr) {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, *series.ThumbnailPath)
+		if !removed {
+			log.Printf("[DEBUG] Skipped unmanaged thumbnail path: %s", *series.ThumbnailPath)
+		} else if remErr != nil && !os.IsNotExist(remErr) {
 			// 파일 삭제 실패해도 DB 업데이트는 진행 (로그만 남김)
 			fmt.Printf("failed to delete thumbnail file: %v\n", remErr)
 		}

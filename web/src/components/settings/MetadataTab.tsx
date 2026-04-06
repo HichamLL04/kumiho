@@ -761,9 +761,9 @@ export function MetadataTab() {
             success: res.total_success,
           }),
         });
-        if (selectedLibraryId) {
-          loadSeries(selectedLibraryId); // Refresh the list
-        }
+      }
+      if (res.total_success > 0 && selectedLibraryId) {
+        loadSeries(selectedLibraryId); // Refresh the list when any item was translated
       }
     } catch (err: unknown) {
       if (!isMountedRef.current) return;

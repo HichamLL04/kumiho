@@ -802,7 +802,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                           type="button"
                           className={styles.translateButton}
                           onClick={handleTranslateDescription}
-                          disabled={isTranslatingDescription}
+                          disabled={isSaving || isResettingMetadata || isTranslatingDescription}
                         >
                           {isTranslatingDescription
                             ? t("series.edit.actions.translating")

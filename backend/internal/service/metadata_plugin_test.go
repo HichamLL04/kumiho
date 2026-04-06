@@ -204,7 +204,12 @@ func TestMetadataServiceResetLibraryMetadataRemovesCharactersAndCharacterImages(
 		t.Fatalf("SeriesRepository.Update() error = %v", err)
 	}
 
-	imagePath := filepath.Join(t.TempDir(), "character.png")
+	cfg := (&configForMetadataTests{DataDir: t.TempDir()}).Config()
+	imageDir := filepath.Join(cfg.DataDir, "thumbnails", "series-characters")
+	if err := os.MkdirAll(imageDir, 0o755); err != nil {
+		t.Fatalf("mkdir character image dir: %v", err)
+	}
+	imagePath := filepath.Join(imageDir, "character.png")
 	if err := os.WriteFile(imagePath, []byte("image"), 0o644); err != nil {
 		t.Fatalf("write character image: %v", err)
 	}
@@ -220,7 +225,7 @@ func TestMetadataServiceResetLibraryMetadataRemovesCharactersAndCharacterImages(
 	}
 
 	svc := NewMetadataService(
-		(&configForMetadataTests{DataDir: t.TempDir()}).Config(),
+		cfg,
 		nil,
 		seriesRepo,
 		characterRepo,
