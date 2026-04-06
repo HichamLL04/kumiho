@@ -156,7 +156,7 @@ export function MetadataTab() {
     return LANGUAGE_OPTIONS.filter((option) => {
       const normalizedCode = option.code.toLowerCase();
       const normalizedLabel = option.label.toLowerCase();
-      const normalizedKeywords = option.keywords.map((keyword) => keyword.toLowerCase());
+      const normalizedKeywords = option.keywords.map((keyword) => keyword.toLowerCase().replace(/\s+/g, ""));
 
       return (
         normalizedCode === normalizedQuery ||
@@ -326,7 +326,7 @@ export function MetadataTab() {
       if (languageDropdownRef.current?.contains(target) || languageButtonRef.current?.contains(target)) {
         return;
       }
-      setIsLanguageDropdownOpen(false);
+      closeLanguageDropdown();
     };
 
     const updateDropdownPosition = () => {
@@ -353,7 +353,7 @@ export function MetadataTab() {
       window.removeEventListener("resize", handleWindowChange);
       window.removeEventListener("scroll", handleWindowChange, true);
     };
-  }, [isLanguageDropdownOpen]);
+  }, [closeLanguageDropdown, isLanguageDropdownOpen]);
 
   useEffect(() => {
     if (!isLanguageDropdownOpen) {
@@ -744,7 +744,15 @@ export function MetadataTab() {
       const res = await pluginAPI.batchTranslate(selectedTargetLanguage);
       if (!isMountedRef.current) return;
 
-      if (res.total_success > 0 || res.total_processed === 0) {
+      if (res.total_failed > 0) {
+        setToast({
+          type: res.total_success > 0 ? "info" : "error",
+          message: t("settings.metadata.batch_translate.failed", {
+            total: res.total_processed,
+            failed: res.total_failed,
+          }),
+        });
+      } else {
         setToast({
           type: "success",
           message: t("settings.metadata.batch_translate.complete", {
@@ -755,14 +763,6 @@ export function MetadataTab() {
         if (selectedLibraryId) {
           loadSeries(selectedLibraryId); // Refresh the list
         }
-      } else {
-        setToast({
-          type: "error",
-          message: t("settings.metadata.batch_translate.failed", {
-            total: res.total_processed,
-            failed: res.total_failed,
-          }),
-        });
       }
     } catch (err: unknown) {
       if (!isMountedRef.current) return;

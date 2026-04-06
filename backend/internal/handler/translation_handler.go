@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/gofiber/fiber/v2"
@@ -21,22 +22,32 @@ type translateRequest struct {
 	TargetLang string `json:"target_lang"`
 }
 
+const (
+	errInvalidTranslateRequest      = "invalid request body"
+	errNoActiveTranslationPluginMsg = "no active translation plugin"
+	errSeriesNotFoundMsg            = "series not found"
+	errTranslationSourceEmptyMsg    = "translation source text is empty"
+	errBatchTranslateFailedMsg      = "failed to process batch translation"
+	errSeriesTranslateFailedMsg     = "failed to translate series description"
+)
+
 func (h *TranslationHandler) BatchTranslate(c *fiber.Ctx) error {
 	ctx := c.UserContext()
 
 	var req translateRequest
 	if len(c.Body()) > 0 {
 		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "요청 형식이 올바르지 않습니다."})
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": errInvalidTranslateRequest})
 		}
 	}
 
 	result, err := h.translationSvc.BatchTranslate(ctx, req.TargetLang)
 	if err != nil {
 		if errors.Is(err, service.ErrNoActiveTranslationPlugin) {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "활성화된 번역 플러그인이 없습니다."})
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": errNoActiveTranslationPluginMsg})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("Failed to process batch translation: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": errBatchTranslateFailedMsg})
 	}
 
 	return c.JSON(result)
@@ -48,7 +59,7 @@ func (h *TranslationHandler) TranslateSeriesDescription(c *fiber.Ctx) error {
 	var req translateRequest
 	if len(c.Body()) > 0 {
 		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "요청 형식이 올바르지 않습니다."})
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": errInvalidTranslateRequest})
 		}
 	}
 
@@ -61,13 +72,14 @@ func (h *TranslationHandler) TranslateSeriesDescription(c *fiber.Ctx) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrNoActiveTranslationPlugin):
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "활성화된 번역 플러그인이 없습니다."})
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": errNoActiveTranslationPluginMsg})
 		case errors.Is(err, service.ErrSeriesNotFound):
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "시리즈를 찾을 수 없습니다."})
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": errSeriesNotFoundMsg})
 		case errors.Is(err, service.ErrTranslationSourceEmpty):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "번역할 줄거리가 없습니다."})
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": errTranslationSourceEmptyMsg})
 		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+			log.Printf("Failed to translate series %s description: %v", c.Params("id"), err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": errSeriesTranslateFailedMsg})
 		}
 	}
 
