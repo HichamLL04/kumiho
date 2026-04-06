@@ -398,17 +398,26 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 		})
 	}
 
+	sanitizeAssetWarningName := func(assetPath string) string {
+		name := filepath.Base(filepath.Clean(assetPath))
+		if name == "" || name == "." || name == string(filepath.Separator) {
+			return "asset"
+		}
+		return name
+	}
+
 	var warnings []string
 	for _, path := range filesToRemove {
 		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, path)
+		assetName := sanitizeAssetWarningName(path)
 		if !removed {
 			log.Printf("series reset skipped unmanaged asset path %s", path)
-			warnings = append(warnings, fmt.Sprintf("skipped unmanaged asset path %s", path))
+			warnings = append(warnings, fmt.Sprintf("skipped unmanaged asset %s", assetName))
 			continue
 		}
 		if remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
 			log.Printf("series reset asset removal failed for %s: %v", path, remErr)
-			warnings = append(warnings, fmt.Sprintf("failed to remove %s: %v", path, remErr))
+			warnings = append(warnings, fmt.Sprintf("failed to remove asset %s", assetName))
 		}
 	}
 

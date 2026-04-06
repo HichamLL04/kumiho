@@ -105,7 +105,7 @@ export function MetadataTab() {
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
-  const [serverLanguage, setServerLanguage] = useState("ko");
+  const [appLanguage, setAppLanguage] = useState("ko");
   const [selectedTargetLanguage, setSelectedTargetLanguage] = useState("ko");
   const [languageSearch, setLanguageSearch] = useState("");
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
@@ -212,7 +212,7 @@ export function MetadataTab() {
       .then((settings) => {
         if (!isMountedRef.current) return;
         const appLanguage = normalizeAppLanguage(settings.app_language);
-        setServerLanguage(appLanguage);
+        setAppLanguage(appLanguage);
         setSelectedTargetLanguage(appLanguage);
       })
       .catch((error) => {
@@ -777,6 +777,9 @@ export function MetadataTab() {
   const handleSelectTargetLanguage = (languageCode: string) => {
     setSelectedTargetLanguage(languageCode);
     closeLanguageDropdown();
+    requestAnimationFrame(() => {
+      languageButtonRef.current?.focus();
+    });
   };
 
   const handleResetLibraryMetadata = () => {
@@ -945,7 +948,7 @@ export function MetadataTab() {
                   </div>
                   <div className={styles.translationLanguageHint}>
                     {t("settings.metadata.batch_translate.server_language_hint", {
-                      language: LANGUAGE_OPTIONS.find((option) => option.code === serverLanguage)?.label ?? serverLanguage,
+                      language: LANGUAGE_OPTIONS.find((option) => option.code === appLanguage)?.label ?? appLanguage,
                     })}
                   </div>
                   <button
@@ -955,13 +958,13 @@ export function MetadataTab() {
                     aria-haspopup="listbox"
                     aria-controls={translateLanguageListboxId}
                     aria-expanded={isLanguageDropdownOpen}
-                    aria-label={`${t("settings.metadata.batch_translate.target_label")}: ${selectedLanguageOption.label}${selectedTargetLanguage === serverLanguage ? ` (${t("settings.metadata.batch_translate.server_language_badge")})` : ""}`}
+                    aria-label={`${t("settings.metadata.batch_translate.target_label")}: ${selectedLanguageOption.label}${selectedTargetLanguage === appLanguage ? ` (${t("settings.metadata.batch_translate.server_language_badge")})` : ""}`}
                     onKeyDown={handleLanguageButtonKeyDown}
                     onClick={() => setIsLanguageDropdownOpen((prev) => !prev)}
                   >
                     <span className={styles.translationLanguageValue}>
                       {selectedLanguageOption.label}
-                      {selectedTargetLanguage === serverLanguage && (
+                      {selectedTargetLanguage === appLanguage && (
                         <span className={styles.translationLanguageBadge}>{t("settings.metadata.batch_translate.server_language_badge")}</span>
                       )}
                     </span>
