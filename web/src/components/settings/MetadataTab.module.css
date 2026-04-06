@@ -202,11 +202,7 @@
 }
 
 .translationLanguageDropdown {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  left: 0;
   z-index: 40;
-  width: 100%;
   overflow: hidden;
   border: 1px solid rgba(120, 170, 255, 0.2);
   border-radius: 14px;

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
@@ -22,6 +23,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 )
 
 type SeriesHandler struct {
@@ -315,6 +317,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	if req.ISBN != nil {
 		series.Metadata.ISBN = *req.ISBN
 	}
+	series.UpdatedAt = time.Now()
 
 	// DB 업데이트
 	if err := h.seriesRepo.Update(nil, series); err != nil {
@@ -333,6 +336,9 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 	id := c.Params("id")
 	userID := middleware.GetUserID(c)
 	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	series, err := h.seriesRepo.FindByID(nil, id, userID)
 	if err != nil {
@@ -346,9 +352,9 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 		})
 	}
 
-	var filesToRemove []string
+	fileSet := make(map[string]struct{})
 	if series.ThumbnailPath != nil && strings.TrimSpace(*series.ThumbnailPath) != "" {
-		filesToRemove = append(filesToRemove, strings.TrimSpace(*series.ThumbnailPath))
+		fileSet[strings.TrimSpace(*series.ThumbnailPath)] = struct{}{}
 	}
 
 	characters, err := h.seriesCharacterRepo.ListBySeriesID(nil, series.ID)
@@ -362,7 +368,7 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 		if imagePath == "" {
 			continue
 		}
-		filesToRemove = append(filesToRemove, imagePath)
+		fileSet[imagePath] = struct{}{}
 	}
 
 	tx, err := database.DB.BeginTx(ctx, nil)
@@ -373,27 +379,45 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := h.seriesRepo.ResetMetadataBySeriesID(tx, series.ID); err != nil {
+	err = h.seriesRepo.ResetMetadataBySeriesID(tx, series.ID)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to reset series metadata",
 		})
 	}
-	if err := h.seriesCharacterRepo.DeleteBySeriesID(tx, series.ID); err != nil {
+	err = h.seriesCharacterRepo.DeleteBySeriesID(tx, series.ID)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to reset series characters",
 		})
 	}
-	if err := tx.Commit(); err != nil {
+	err = tx.Commit()
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to commit series reset",
 		})
 	}
 
-	for _, path := range filesToRemove {
-		if remErr := os.Remove(path); remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "failed to remove reset asset",
-			})
+	sanitizeAssetWarningName := func(assetPath string) string {
+		name := filepath.Base(filepath.Clean(assetPath))
+		if name == "" || name == "." || name == string(filepath.Separator) {
+			return "asset"
+		}
+		return name
+	}
+
+	var warnings []string
+	for path := range fileSet {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, path)
+		assetName := sanitizeAssetWarningName(path)
+		if !removed {
+			log.Printf("series reset skipped unmanaged asset path %s", path)
+			warnings = append(warnings, fmt.Sprintf("asset_unmanaged:%s", assetName))
+			continue
+		}
+		if remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
+			log.Printf("series reset asset removal failed for %s: %v", path, remErr)
+			warnings = append(warnings, fmt.Sprintf("asset_remove_failed:%s", assetName))
 		}
 	}
 
@@ -410,7 +434,13 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 	}
 
 	h.enrichSingleSeries(refreshed, userID)
-	return c.JSON(refreshed)
+	response := fiber.Map{
+		"series": refreshed,
+	}
+	if len(warnings) > 0 {
+		response["warnings"] = warnings
+	}
+	return c.JSON(response)
 }
 
 // UpdateVolume 볼륨 정보 수정
@@ -745,7 +775,10 @@ func (h *SeriesHandler) DeleteVolumeThumbnail(c *fiber.Ctx) error {
 	}
 
 	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-		if remErr := os.Remove(*volume.ThumbnailPath); remErr != nil && !os.IsNotExist(remErr) {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, *volume.ThumbnailPath)
+		if !removed {
+			log.Printf("skipped unmanaged volume thumbnail path %s", *volume.ThumbnailPath)
+		} else if remErr != nil && !os.IsNotExist(remErr) {
 			log.Printf("failed to delete thumbnail file: %v", remErr)
 		}
 	}
@@ -1031,7 +1064,10 @@ func (h *SeriesHandler) DeleteThumbnail(c *fiber.Ctx) error {
 	// 기존 썸네일 파일 삭제
 	if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
 		fmt.Printf("[DEBUG] Removing thumbnail file: %s\n", *series.ThumbnailPath)
-		if remErr := os.Remove(*series.ThumbnailPath); remErr != nil && !os.IsNotExist(remErr) {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, *series.ThumbnailPath)
+		if !removed {
+			log.Printf("[DEBUG] Skipped unmanaged thumbnail path: %s", *series.ThumbnailPath)
+		} else if remErr != nil && !os.IsNotExist(remErr) {
 			// 파일 삭제 실패해도 DB 업데이트는 진행 (로그만 남김)
 			fmt.Printf("failed to delete thumbnail file: %v\n", remErr)
 		}

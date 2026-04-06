@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"math"
 	"strings"
@@ -13,6 +14,12 @@ import (
 )
 
 type SeriesRepository struct{}
+
+type TranslationTarget struct {
+	ID                    string
+	Description           string
+	DescriptionTranslated string
+}
 
 func NewSeriesRepository() *SeriesRepository {
 	return &SeriesRepository{}
@@ -482,13 +489,43 @@ func (r *SeriesRepository) UpdateUpdatedAt(db database.Queryer, id string, updat
 	return err
 }
 
+func (r *SeriesRepository) UpdateDescriptionTranslated(db database.Queryer, seriesID string, translated string, updatedAt time.Time) error {
+	if db == nil {
+		tx, err := database.DB.BeginTx(context.Background(), nil)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		if err := r.UpdateDescriptionTranslated(tx, seriesID, translated, updatedAt); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
+	if _, err := db.Exec(`UPDATE series SET updated_at = ? WHERE id = ?`, updatedAt, seriesID); err != nil {
+		return err
+	}
+	_, err := db.Exec(
+		`UPDATE series_metadata
+		 SET description_translated = ?
+		 WHERE series_id = ?`,
+		translated, seriesID,
+	)
+	return err
+}
+
 func (r *SeriesRepository) ResetMetadataByLibrary(db database.Queryer, libraryID string) (int64, error) {
 	db = database.GetQueryer(db)
-	result, err := db.Exec(
+	var targetCount int64
+	if err := db.QueryRow(`SELECT COUNT(*) FROM series WHERE library_id = ?`, libraryID).Scan(&targetCount); err != nil {
+		return 0, err
+	}
+
+	_, err := db.Exec(
 		`UPDATE series_metadata
-		 SET description = '',
-		     description_translated = '',
-		     status = '',
+			 SET description = '',
+			     description_translated = '',
+			     status = 'ONGOING',
 		     authors = '',
 		     tags = '',
 		     publication_year = '',
@@ -503,19 +540,16 @@ func (r *SeriesRepository) ResetMetadataByLibrary(db database.Queryer, libraryID
 	if err != nil {
 		return 0, err
 	}
-	if _, err := db.Exec(
+	_, err = db.Exec(
 		`UPDATE series
 		 SET thumbnail_path = NULL, updated_at = ?
 		 WHERE library_id = ?`,
 		time.Now(), libraryID,
-	); err != nil {
-		return 0, err
-	}
-	rowsAffected, err := result.RowsAffected()
+	)
 	if err != nil {
 		return 0, err
 	}
-	return rowsAffected, nil
+	return targetCount, nil
 }
 
 func (r *SeriesRepository) FindUntranslatedSeriesIDs(db database.Queryer) ([]string, error) {
@@ -523,7 +557,7 @@ func (r *SeriesRepository) FindUntranslatedSeriesIDs(db database.Queryer) ([]str
 	rows, err := db.Query(
 		`SELECT series_id
 		 FROM series_metadata
-		 WHERE COALESCE(description, '') != ''
+		 WHERE TRIM(COALESCE(description, '')) != ''
 		   AND COALESCE(description_translated, '') = ''`,
 	)
 	if err != nil {
@@ -545,13 +579,42 @@ func (r *SeriesRepository) FindUntranslatedSeriesIDs(db database.Queryer) ([]str
 	return ids, nil
 }
 
+func (r *SeriesRepository) FindUntranslatedSeriesForTranslation(db database.Queryer) ([]TranslationTarget, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(
+		`SELECT s.id, sm.description, sm.description_translated
+		 FROM series s
+		 JOIN series_metadata sm ON s.id = sm.series_id
+		 WHERE TRIM(COALESCE(sm.description, '')) != ''
+		   AND COALESCE(sm.description_translated, '') = ''
+		 ORDER BY s.id`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var targets []TranslationTarget
+	for rows.Next() {
+		var target TranslationTarget
+		if err := rows.Scan(&target.ID, &target.Description, &target.DescriptionTranslated); err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return targets, nil
+}
+
 func (r *SeriesRepository) ResetMetadataBySeriesID(db database.Queryer, seriesID string) error {
 	db = database.GetQueryer(db)
 	if _, err := db.Exec(
 		`UPDATE series_metadata
-		 SET description = '',
-		     description_translated = '',
-		     status = '',
+			 SET description = '',
+			     description_translated = '',
+			     status = 'ONGOING',
 		     authors = '',
 		     tags = '',
 		     publication_year = '',

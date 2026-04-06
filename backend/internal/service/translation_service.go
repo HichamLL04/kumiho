@@ -21,7 +21,9 @@ var (
 )
 
 type BatchTranslateResponse struct {
+	// Deprecated: kept for backward compatibility. Prefer TotalTargets for total batch size.
 	TotalProcessed int  `json:"total_processed"`
+	TotalTargets   int  `json:"total_targets"`
 	TotalSuccess   int  `json:"total_success"`
 	TotalFailed    int  `json:"total_failed"`
 	Cancelled      bool `json:"cancelled,omitempty"`
@@ -80,15 +82,18 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 		return nil, err
 	}
 
-	seriesIDs, err := s.seriesRepo.FindUntranslatedSeriesIDs(nil)
+	targets, err := s.seriesRepo.FindUntranslatedSeriesForTranslation(nil)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &BatchTranslateResponse{TotalProcessed: len(seriesIDs)}
+	result := &BatchTranslateResponse{
+		TotalProcessed: len(targets),
+		TotalTargets:   len(targets),
+	}
 	lastCallAt := time.Time{}
 
-	for _, id := range seriesIDs {
+	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
 			result.Cancelled = true
 			return result, nil
@@ -107,16 +112,7 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 			}
 		}
 
-		series, err := s.seriesRepo.FindByID(nil, id, "")
-		if err != nil || series == nil {
-			result.TotalFailed++
-			continue
-		}
-		if series.Metadata == nil {
-			series.Metadata = &model.SeriesMetadata{SeriesID: series.ID}
-		}
-
-		desc := strings.TrimSpace(series.Description)
+		desc := strings.TrimSpace(target.Description)
 		if desc == "" {
 			result.TotalFailed++
 			continue
@@ -143,8 +139,7 @@ func (s *TranslationService) BatchTranslate(ctx context.Context, targetLang stri
 			continue
 		}
 
-		series.Metadata.DescriptionTranslated = translated
-		if updateErr := s.seriesRepo.Update(nil, series); updateErr != nil {
+		if updateErr := s.seriesRepo.UpdateDescriptionTranslated(nil, target.ID, translated, time.Now()); updateErr != nil {
 			result.TotalFailed++
 			continue
 		}
@@ -198,6 +193,7 @@ func (s *TranslationService) TranslateSeriesDescription(
 
 	series.Metadata.Description = series.Description
 	series.Metadata.DescriptionTranslated = translated
+	series.UpdatedAt = time.Now()
 	if err := s.seriesRepo.Update(nil, series); err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ import axios from "axios";
 import type {
   Chapter,
   Series,
+  UpdateSeriesRequest,
   Volume,
   Library,
   ReadingProgress,
@@ -211,9 +212,11 @@ export const seriesAPI = {
   getProgress: (seriesId: string) => api.get(`/series/${seriesId}/progress`),
   getProgressList: (seriesId: string) =>
     api.get<{ progress_list: ReadingProgress[] }>(`/series/${seriesId}/progress-list`),
-  update: (seriesId: string, data: Partial<Series> & { description_translated?: string }) =>
-    api.patch(`/series/${seriesId}`, data),
-  resetMetadata: (seriesId: string) => api.post<Series>(`/series/${seriesId}/reset-metadata`).then((res) => res.data),
+  update: (seriesId: string, data: UpdateSeriesRequest) => api.patch(`/series/${seriesId}`, data),
+  resetMetadata: (seriesId: string) =>
+    api
+      .post<{ series: Series; warnings?: string[] }>(`/series/${seriesId}/reset-metadata`)
+      .then((res) => res.data),
   translateDescription: (seriesId: string, targetLang?: string) =>
     api
       .post<{ series: Series; target_lang: string; translated_text: string }>(
@@ -529,8 +532,10 @@ export const pluginAPI = {
     api
       .post<{
         total_processed: number;
+        total_targets?: number;
         total_success: number;
         total_failed: number;
+        cancelled?: boolean;
       }>("/translations/batch", targetLang ? { target_lang: targetLang } : {})
       .then((res) => res.data),
 };

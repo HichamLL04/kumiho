@@ -157,10 +157,20 @@
   transition: opacity 0.2s ease;
   cursor: pointer;
   z-index: 2; /* 배지보다 위에 오도록 */
+  border: 0;
+  padding: 0;
+  width: 100%;
+  appearance: none;
 }
 
 .seriesThumbnailContainer:hover .thumbnailPlayOverlay {
   opacity: 1;
+}
+
+.thumbnailPlayOverlay:focus-visible {
+  opacity: 1;
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: -2px;
 }
 
 .playIconWrapper {
@@ -179,6 +189,12 @@
 }
 
 .thumbnailPlayOverlay:hover .playIconWrapper {
+  transform: scale(1);
+  background: rgba(102, 126, 234, 0.8);
+  border-color: rgba(102, 126, 234, 0.6);
+}
+
+.thumbnailPlayOverlay:focus-visible .playIconWrapper {
   transform: scale(1);
   background: rgba(102, 126, 234, 0.8);
   border-color: rgba(102, 126, 234, 0.6);

@@ -105,11 +105,29 @@
       "search_description": "Search series in the selected library and apply matched metadata in bulk.",
       "reset_title": "Reset Library Metadata",
       "reset_description": "Restore the library to its scanned state.",
-      "reset_card_description": "Clears authors, tags, publication info, synopsis, translated synopsis, and custom thumbnails.",
+      "reset_card_description": "Clears authors, tags, publication info, synopsis, translated synopsis, custom thumbnails, and series characters with their images.",
       "reset_action": "Reset Metadata",
-      "reset_confirm": "This will clear all metadata, translated synopses, and custom thumbnails in the {{library}} library. This action cannot be undone.",
+      "reset_confirm": "This will clear all metadata, translated synopses, custom thumbnails, and series characters with their images in the {{library}} library. This action cannot be undone.",
       "reset_complete": "Reset metadata for {{count}} series in {{library}}.",
       "reset_failed": "Failed to reset library metadata.",
+      "batch_translate": {
+        "title": "Batch Translation (Beta)",
+        "description": "Translate series synopses in the selected language for every untranslated series on the server. An active translation plugin is required.",
+        "card_title": "Translate all series synopses",
+        "card_description": "Only untranslated items with an empty translated synopsis will be processed.",
+        "target_label": "Output language",
+        "server_language_hint": "The default is the current app language. The current app language is {{language}}.",
+        "server_language_badge": "Current app language",
+        "language_search_placeholder": "Search language",
+        "language_search_empty": "No matching languages found.",
+        "action": "Run Batch Translation",
+        "translating": "Translating...",
+        "starting": "Starting batch translation...",
+        "complete": "Batch translation complete: {{success}} of {{total}} succeeded.",
+        "cancelled": "Batch translation was cancelled after {{success}} of {{total}} items were processed.",
+        "failed": "Batch translation partially or fully failed. {{failed}} errors out of {{total}} items.",
+        "request_failed": "Failed to run batch translation."
+      },
       "settings_description": "Control whether stored original titles should overwrite series titles. Disable to restore path-based titles.",
       "start_scan": "Start Metadata Scan",
       "cancel_scan": "Cancel Metadata Scan",
@@ -648,7 +666,6 @@
       "title": "Library is empty",
       "desc": "Add a library in settings to get started!"
     },
-
     "library": {
       "not_found": "Library not found",
       "go_home": "Go Home",
@@ -730,7 +747,6 @@
     "empty_volumes": "No volumes found",
     "empty_chapters": "No chapters found",
     "not_found": "Series not found",
-
     "unit": {
       "volume": "Vol. {{count}}",
       "chapter": "Ch. {{count}}",
@@ -830,14 +846,14 @@
         "isbn": "ISBN",
         "isbn_placeholder": "e.g. 979-11-6521-810-2",
         "status": "Status",
-    "tags": "Tags (comma separated)",
-    "tags_placeholder": "e.g. Fantasy, Action",
-    "description": "Description",
-    "description_view": "Synopsis view",
-    "description_view_translated": "Translated",
-    "description_view_original": "Original",
-    "translation_target": "Translation language: {{language}}",
-    "sync_file": "File Sync (ComicInfo.xml) - Coming Soon",
+        "tags": "Tags (comma separated)",
+        "tags_placeholder": "e.g. Fantasy, Action",
+        "description": "Description",
+        "description_view": "Synopsis view",
+        "description_view_translated": "Translated",
+        "description_view_original": "Original",
+        "translation_target": "Translation language: {{language}}",
+        "sync_file": "File Sync (ComicInfo.xml) - Coming Soon",
         "status_options": {
           "completed": "Completed",
           "ongoing": "Ongoing",
@@ -845,34 +861,37 @@
           "cancelled": "Cancelled"
         }
       },
-  "actions": {
-    "cancel": "Cancel",
-    "reset": "Reset",
-    "resetting": "Resetting...",
-    "save": "Save",
-    "saving": "Saving...",
-    "translate": "Translate",
-    "translating": "Translating..."
-  },
-  "alert": {
+      "actions": {
+        "cancel": "Cancel",
+        "reset": "Reset",
+        "resetting": "Resetting...",
+        "save": "Save",
+        "saving": "Saving...",
+        "translate": "Translate",
+        "translating": "Translating..."
+      },
+      "alert": {
         "upload_failed": "Failed to upload thumbnail.",
         "url_failed": "Failed to download image. Please check the URL.",
         "reset_confirm_title": "Reset Thumbnail",
         "reset_confirm_msg": "Reset thumbnail to default? This cannot be undone.",
-    "reset_success": "Thumbnail reset.",
-    "reset_failed": "Failed to reset thumbnail.",
-    "upload_success": "Thumbnail uploaded successfully.",
-    "update_failed": "Failed to update series info.",
-    "translate_empty": "There is no synopsis to translate.",
-    "translate_save_first": "Save description changes before translating.",
-    "translate_success": "Updated the {{language}} translation.",
-    "translate_failed": "Failed to translate the synopsis.",
-    "reset_metadata_title": "Reset Series Metadata",
-    "reset_metadata_confirm": "This will clear this series metadata, translated synopsis, custom thumbnail, and characters. This action cannot be undone.",
-    "reset_metadata_success": "Series metadata has been reset.",
-    "reset_metadata_failed": "Failed to reset series metadata."
-  }
-}
+        "reset_success": "Thumbnail reset.",
+        "reset_failed": "Failed to reset thumbnail.",
+        "upload_success": "Thumbnail uploaded successfully.",
+        "update_failed": "Failed to update series info.",
+        "translate_empty": "There is no synopsis to translate.",
+        "translate_save_first": "Save description changes before translating.",
+        "translate_save_translated_first": "Save translated synopsis changes before retranslating.",
+        "translate_success": "Updated the {{language}} translation.",
+        "translate_failed": "Failed to translate the synopsis.",
+        "reset_metadata_title": "Reset Series Metadata",
+        "reset_metadata_confirm": "This will clear this series metadata, translated synopsis, custom thumbnail, and characters. This action cannot be undone.",
+        "reset_metadata_success": "Series metadata has been reset.",
+        "reset_metadata_failed": "Failed to reset series metadata.",
+        "reset_warning_unmanaged_asset": "Skipped unmanaged asset {{asset}}.",
+        "reset_warning_remove_failed": "Failed to remove asset {{asset}}."
+      }
+    }
   },
   "volume": {
     "edit": {

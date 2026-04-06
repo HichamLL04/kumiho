@@ -19,6 +19,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 	sdktypes "github.com/kumiho-plugin/kumiho-plugin-sdk/types"
 )
 
@@ -188,7 +189,7 @@ func (h *SeriesCharacterHandler) Delete(c *fiber.Ctx) error {
 		return errResp
 	}
 	if item.ImagePath != "" {
-		_ = os.Remove(item.ImagePath)
+		_, _ = util.RemoveManagedAsset(h.cfg.DataDir, item.ImagePath)
 	}
 	if err := h.characterRepo.Delete(nil, series.ID, item.ID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to delete character"})
@@ -338,7 +339,7 @@ func (h *SeriesCharacterHandler) Import(c *fiber.Ctx) error {
 	removedCount := 0
 	for _, item := range staleImportedCharactersForSync(existing, sourceProvider, seenExistingIDs, incomingSourceKeys) {
 		if item.ImagePath != "" {
-			_ = os.Remove(item.ImagePath)
+			_, _ = util.RemoveManagedAsset(h.cfg.DataDir, item.ImagePath)
 		}
 		if err := h.characterRepo.Delete(tx, series.ID, item.ID); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to remove stale imported character"})
@@ -412,7 +413,7 @@ func (h *SeriesCharacterHandler) UploadImage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to save image"})
 	}
 	if item.ImagePath != "" && item.ImagePath != path {
-		_ = os.Remove(item.ImagePath)
+		_, _ = util.RemoveManagedAsset(h.cfg.DataDir, item.ImagePath)
 	}
 	item.ImagePath = path
 	if err := h.characterRepo.Update(nil, item); err != nil {
@@ -439,7 +440,7 @@ func (h *SeriesCharacterHandler) UpdateImageURL(c *fiber.Ctx) error {
 	}
 	item.ExternalImageURL = strings.TrimSpace(req.URL)
 	if item.ImagePath != "" {
-		_ = os.Remove(item.ImagePath)
+		_, _ = util.RemoveManagedAsset(h.cfg.DataDir, item.ImagePath)
 		item.ImagePath = ""
 	}
 	if err := h.characterRepo.Update(nil, item); err != nil {
@@ -456,7 +457,7 @@ func (h *SeriesCharacterHandler) DeleteImage(c *fiber.Ctx) error {
 		return errResp
 	}
 	if item.ImagePath != "" {
-		_ = os.Remove(item.ImagePath)
+		_, _ = util.RemoveManagedAsset(h.cfg.DataDir, item.ImagePath)
 		item.ImagePath = ""
 	}
 	item.ExternalImageURL = ""

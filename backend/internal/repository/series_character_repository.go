@@ -202,6 +202,36 @@ func (r *SeriesCharacterRepository) DeleteByLibraryID(db database.Queryer, libra
 	return err
 }
 
+func (r *SeriesCharacterRepository) ListImagePathsByLibraryID(db database.Queryer, libraryID string) ([]string, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(
+		`SELECT sc.image_path
+		 FROM series_characters sc
+		 INNER JOIN series s ON s.id = sc.series_id
+		 WHERE s.library_id = ?
+		   AND TRIM(COALESCE(sc.image_path, '')) <> ''`,
+		libraryID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var paths []string
+	for rows.Next() {
+		var imagePath string
+		if err := rows.Scan(&imagePath); err != nil {
+			return nil, err
+		}
+		imagePath = strings.TrimSpace(imagePath)
+		if imagePath == "" {
+			continue
+		}
+		paths = append(paths, imagePath)
+	}
+	return paths, rows.Err()
+}
+
 func (r *SeriesCharacterRepository) DeleteBySeriesID(db database.Queryer, seriesID string) error {
 	db = database.GetQueryer(db)
 	_, err := db.Exec(`DELETE FROM series_characters WHERE series_id = ?`, seriesID)

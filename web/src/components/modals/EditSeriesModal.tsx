@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { ChevronDown, Link, RotateCcw, Save, Search, Upload, Users, X } from "lucide-react";
@@ -9,6 +9,7 @@ import { SeriesMetadataPanel } from "../SeriesMetadataPanel";
 import { SeriesCharactersDrawer } from "../SeriesCharactersDrawer";
 import { AlertModal, type AlertType } from "./AlertModal";
 import { orderedOriginalTitles } from "../../utils/originalTitles";
+import { normalizeAppLanguage } from "../../utils/language";
 import styles from "./EditSeriesModal.module.css";
 
 interface EditSeriesModalProps {
@@ -53,6 +54,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const fileInputRef = useRef<HTMLInputElement>(null);
   const originalTitleMenuRef = useRef<HTMLDivElement>(null);
   const descriptionViewMenuRef = useRef<HTMLDivElement>(null);
+  const descriptionViewButtonRef = useRef<HTMLButtonElement>(null);
+  const descriptionViewOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // AlertModal 상태
   const [alertModal, setAlertModal] = useState<{
@@ -61,7 +64,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     title?: string;
     message: string;
     showCancel?: boolean;
-    onConfirm: () => void;
+    onConfirm: () => void | Promise<void>;
     onCancel?: () => void;
   }>({
     isOpen: false,
@@ -81,19 +84,39 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     });
   };
 
-  const showConfirm = (message: string, onConfirm: () => void, title?: string) => {
+  const showConfirm = (message: string, onConfirm: () => void | Promise<void>, title?: string) => {
     setAlertModal({
       isOpen: true,
       type: "warning",
       title,
       message,
       showCancel: true,
-      onConfirm: () => {
-        setAlertModal((prev) => ({ ...prev, isOpen: false }));
-        onConfirm();
+      onConfirm: async () => {
+        await onConfirm();
+        setAlertModal((prev) => (prev.type === "warning" ? { ...prev, isOpen: false } : prev));
       },
       onCancel: () => setAlertModal((prev) => ({ ...prev, isOpen: false })),
     });
+  };
+
+  const formatResetWarnings = (warnings?: string[]) => {
+    if (!warnings || warnings.length === 0) return "";
+
+    const lines = warnings.map((warning) => {
+      const [code, ...rest] = warning.split(":");
+      const asset = rest.join(":");
+
+      switch (code) {
+        case "asset_unmanaged":
+          return t("series.edit.alert.reset_warning_unmanaged_asset", { asset });
+        case "asset_remove_failed":
+          return t("series.edit.alert.reset_warning_remove_failed", { asset });
+        default:
+          return warning;
+      }
+    });
+
+    return `\n\n- ${lines.join("\n- ")}`;
   };
 
   useEffect(() => {
@@ -154,10 +177,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     settingAPI
       .list()
       .then((settings) => {
-        const appLanguage = (settings.app_language || "").trim().toLowerCase();
-        if (appLanguage) {
-          setTranslationLanguage(appLanguage);
-        }
+        setTranslationLanguage(normalizeAppLanguage(settings.app_language));
       })
       .catch((error) => {
         console.error("Failed to load translation language:", error);
@@ -204,6 +224,18 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     window.addEventListener("mousedown", handlePointerDown);
     return () => window.removeEventListener("mousedown", handlePointerDown);
   }, [isDescriptionViewMenuOpen]);
+
+  useEffect(() => {
+    if (!isDescriptionViewMenuOpen) {
+      descriptionViewOptionRefs.current = [];
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const selectedIndex = descriptionView === "translated" ? 0 : 1;
+      descriptionViewOptionRefs.current[selectedIndex]?.focus();
+    });
+  }, [descriptionView, isDescriptionViewMenuOpen]);
 
   useEffect(() => {
     const handleWindowDragEvent = (e: DragEvent) => {
@@ -320,15 +352,18 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     setIsSaving(true);
 
     try {
-      const res = await seriesAPI.update(series.id, {
+      const descriptionDirty = formData.description.trim() !== (series.description || "").trim();
+      const translatedDirty = translatedDescription.trim() !== (series.metadata?.description_translated || "").trim();
+      const shouldClearTranslatedDescription = descriptionDirty && !translatedDirty;
+      const shouldSendTranslatedDescription = translatedDirty || shouldClearTranslatedDescription;
+      const updatePayload = {
         ...formData,
-        description_translated:
-          formData.description.trim() !== (series.description || "").trim()
-            ? descriptionView === "translated"
-              ? translatedDescription
-              : ""
-            : translatedDescription,
-      });
+        ...(shouldSendTranslatedDescription
+          ? { description_translated: shouldClearTranslatedDescription ? "" : translatedDescription }
+          : {}),
+      };
+
+      const res = await seriesAPI.update(series.id, updatePayload);
       onUpdate(res.data);
       window.location.reload();
     } catch (error) {
@@ -340,6 +375,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   };
 
   const handleTranslateDescription = async () => {
+    const translatedDirty = translatedDescription.trim() !== (series.metadata?.description_translated || "").trim();
+
     if (!formData.description.trim()) {
       showAlert("info", t("series.edit.alert.translate_empty"));
       return;
@@ -347,6 +384,11 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
 
     if (formData.description.trim() !== (series.description || "").trim()) {
       showAlert("info", t("series.edit.alert.translate_save_first"));
+      return;
+    }
+
+    if (translatedDirty) {
+      showAlert("info", t("series.edit.alert.translate_save_translated_first"));
       return;
     }
 
@@ -370,18 +412,73 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     }
   };
 
+  const closeDescriptionViewMenu = () => {
+    setIsDescriptionViewMenuOpen(false);
+    requestAnimationFrame(() => {
+      descriptionViewButtonRef.current?.focus();
+    });
+  };
+
+  const handleDescriptionViewButtonKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    switch (event.key) {
+      case "ArrowDown":
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        setIsDescriptionViewMenuOpen(true);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setIsDescriptionViewMenuOpen(true);
+        requestAnimationFrame(() => {
+          descriptionViewOptionRefs.current[1]?.focus();
+        });
+        break;
+      case "Escape":
+        if (isDescriptionViewMenuOpen) {
+          event.preventDefault();
+          closeDescriptionViewMenu();
+        }
+        break;
+    }
+  };
+
+  const handleDescriptionViewOptionKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        descriptionViewOptionRefs.current[index === 0 ? 1 : 0]?.focus();
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        descriptionViewOptionRefs.current[index === 0 ? 1 : 0]?.focus();
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        setDescriptionView(index === 0 ? "translated" : "original");
+        closeDescriptionViewMenu();
+        break;
+      case "Escape":
+        event.preventDefault();
+        closeDescriptionViewMenu();
+        break;
+    }
+  };
+
   const handleResetSeriesMetadata = () => {
     showConfirm(
       t("series.edit.alert.reset_metadata_confirm"),
       async () => {
         setIsResettingMetadata(true);
         try {
-          const refreshed = await seriesAPI.resetMetadata(series.id);
-          onUpdate(refreshed);
-          setTranslatedDescription(refreshed.metadata?.description_translated || "");
-          setDescriptionView(refreshed.metadata?.description_translated?.trim() ? "translated" : "original");
+          const result = await seriesAPI.resetMetadata(series.id);
+          onUpdate(result.series);
+          setTranslatedDescription(result.series.metadata?.description_translated || "");
+          setDescriptionView(result.series.metadata?.description_translated?.trim() ? "translated" : "original");
           setCharactersReloadToken((prev) => prev + 1);
-          showAlert("success", t("series.edit.alert.reset_metadata_success"));
+          const warningMessage = formatResetWarnings(result.warnings);
+          showAlert("success", `${t("series.edit.alert.reset_metadata_success")}${warningMessage}`);
         } catch (error) {
           console.error("Failed to reset series metadata:", error);
           showAlert("error", t("series.edit.alert.reset_metadata_failed"));
@@ -746,9 +843,11 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                             <button
                               type="button"
                               className={styles.descriptionViewButton}
-                              aria-haspopup="listbox"
+                              ref={descriptionViewButtonRef}
+                              aria-haspopup="menu"
                               aria-expanded={isDescriptionViewMenuOpen}
                               aria-label={t("series.edit.form.description_view")}
+                              onKeyDown={handleDescriptionViewButtonKeyDown}
                               onClick={() => setIsDescriptionViewMenuOpen((prev) => !prev)}
                             >
                               <span>
@@ -761,25 +860,39 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                             {isDescriptionViewMenuOpen && (
                               <div
                                 className={styles.descriptionViewMenuList}
-                                role="listbox"
+                                role="menu"
                                 aria-label={t("series.edit.form.description_view")}
                               >
                                 <button
                                   type="button"
+                                  ref={(node) => {
+                                    descriptionViewOptionRefs.current[0] = node;
+                                  }}
+                                  role="menuitemradio"
+                                  aria-checked={descriptionView === "translated"}
+                                  tabIndex={isDescriptionViewMenuOpen && descriptionView === "translated" ? 0 : -1}
                                   className={`${styles.descriptionViewOption} ${descriptionView === "translated" ? styles.descriptionViewOptionActive : ""}`}
+                                  onKeyDown={(event) => handleDescriptionViewOptionKeyDown(event, 0)}
                                   onClick={() => {
                                     setDescriptionView("translated");
-                                    setIsDescriptionViewMenuOpen(false);
+                                    closeDescriptionViewMenu();
                                   }}
                                 >
                                   {t("series.edit.form.description_view_translated")}
                                 </button>
                                 <button
                                   type="button"
+                                  ref={(node) => {
+                                    descriptionViewOptionRefs.current[1] = node;
+                                  }}
+                                  role="menuitemradio"
+                                  aria-checked={descriptionView === "original"}
+                                  tabIndex={isDescriptionViewMenuOpen && descriptionView === "original" ? 0 : -1}
                                   className={`${styles.descriptionViewOption} ${descriptionView === "original" ? styles.descriptionViewOptionActive : ""}`}
+                                  onKeyDown={(event) => handleDescriptionViewOptionKeyDown(event, 1)}
                                   onClick={() => {
                                     setDescriptionView("original");
-                                    setIsDescriptionViewMenuOpen(false);
+                                    closeDescriptionViewMenu();
                                   }}
                                 >
                                   {t("series.edit.form.description_view_original")}
@@ -799,7 +912,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                           type="button"
                           className={styles.translateButton}
                           onClick={handleTranslateDescription}
-                          disabled={isTranslatingDescription}
+                          disabled={isSaving || isResettingMetadata || isTranslatingDescription}
                         >
                           {isTranslatingDescription
                             ? t("series.edit.actions.translating")

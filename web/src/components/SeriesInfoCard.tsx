@@ -399,8 +399,10 @@ export function SeriesInfoCard({
           )}
 
           {/* 재생 오버레이 */}
-          <div
+          <button
+            type="button"
             className={styles.thumbnailPlayOverlay}
+            aria-label={isAudiobook ? t("series.actions.listen_now") : t("series.actions.read_now")}
             onClick={() => {
               void onPlay();
             }}
@@ -411,7 +413,7 @@ export function SeriesInfoCard({
                 fill="currentColor"
               />
             </div>
-          </div>
+          </button>
 
           {!isVolumeType && (
             <div className={`${styles.seriesStatusBadge} ${styles[`status${series.metadata?.status}`]}`}>
@@ -533,8 +535,13 @@ export function SeriesInfoCard({
 
         {/* 줄거리 */}
         {(() => {
-          const rawDescription = isVolumeType ? volume?.description || series.description : series.description;
-          const translatedDescription = !isVolumeType ? series.metadata?.description_translated : undefined;
+          const shouldUseSeriesDescriptionFallback = isVolumeType && !volume?.description?.trim();
+          const rawDescription =
+            isVolumeType && !shouldUseSeriesDescriptionFallback ? volume?.description ?? "" : series.description;
+          const translatedDescription =
+            !isVolumeType || shouldUseSeriesDescriptionFallback
+              ? series.metadata?.description_translated
+              : undefined;
           const displayDescription = translatedDescription || rawDescription;
 
           if (!displayDescription) return null;

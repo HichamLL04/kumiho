@@ -24,6 +24,7 @@ import (
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 	"github.com/kumiho-plugin/kumiho-plugin-sdk/capability"
 	pluginerrors "github.com/kumiho-plugin/kumiho-plugin-sdk/errors"
 	sdkmanifest "github.com/kumiho-plugin/kumiho-plugin-sdk/manifest"
@@ -86,6 +87,7 @@ type MetadataResetResult struct {
 	LibraryName string    `json:"library_name"`
 	ResetCount  int64     `json:"reset_count"`
 	ResetAt     time.Time `json:"reset_at"`
+	Warnings    []string  `json:"warnings,omitempty"`
 }
 
 type MetadataService struct {
@@ -385,7 +387,10 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 }
 
 func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID string) (*MetadataResetResult, error) {
-	_ = ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if strings.TrimSpace(libraryID) == "" {
 		return nil, ErrLibraryNotFound
 	}
@@ -403,28 +408,27 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		return nil, err
 	}
 
-	var filesToRemove []string
+	fileSet := make(map[string]struct{})
 	for i := range seriesList {
 		if seriesList[i].ThumbnailPath != nil {
 			thumbnailPath := strings.TrimSpace(*seriesList[i].ThumbnailPath)
 			if thumbnailPath != "" {
-				filesToRemove = append(filesToRemove, thumbnailPath)
+				fileSet[thumbnailPath] = struct{}{}
 			}
 		}
 
-		if s.characterRepo == nil {
-			continue
+	}
+	if s.characterRepo != nil {
+		characterImagePaths, charErr := s.characterRepo.ListImagePathsByLibraryID(nil, libraryID)
+		if charErr != nil {
+			return nil, charErr
 		}
-		characters, err := s.characterRepo.ListBySeriesID(nil, seriesList[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, character := range characters {
-			imagePath := strings.TrimSpace(character.ImagePath)
-			if imagePath == "" {
+		for _, imagePath := range characterImagePaths {
+			trimmedPath := strings.TrimSpace(imagePath)
+			if trimmedPath == "" {
 				continue
 			}
-			filesToRemove = append(filesToRemove, imagePath)
+			fileSet[trimmedPath] = struct{}{}
 		}
 	}
 
@@ -447,18 +451,32 @@ func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID st
 		return nil, err
 	}
 
-	for _, path := range filesToRemove {
-		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			return nil, removeErr
-		}
-	}
-
-	return &MetadataResetResult{
+	result := &MetadataResetResult{
 		LibraryID:   library.ID,
 		LibraryName: library.Name,
 		ResetCount:  resetCount,
 		ResetAt:     time.Now(),
-	}, nil
+	}
+	sanitizeAssetWarningName := func(assetPath string) string {
+		name := filepath.Base(filepath.Clean(assetPath))
+		if name == "" || name == "." || name == string(filepath.Separator) {
+			return "asset"
+		}
+		return name
+	}
+	for path := range fileSet {
+		removed, removeErr := util.RemoveManagedAsset(s.cfg.DataDir, path)
+		assetName := sanitizeAssetWarningName(path)
+		if !removed {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("asset_unmanaged:%s", assetName))
+			continue
+		}
+		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("asset_remove_failed:%s", assetName))
+		}
+	}
+
+	return result, nil
 }
 
 func hasCapability(manifest sdkmanifest.Manifest, wanted capability.Capability) bool {
