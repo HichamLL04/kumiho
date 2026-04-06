@@ -392,11 +392,11 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 		})
 	}
 
+	var warnings []string
 	for _, path := range filesToRemove {
 		if remErr := os.Remove(path); remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "failed to remove reset asset",
-			})
+			log.Printf("series reset asset removal failed for %s: %v", path, remErr)
+			warnings = append(warnings, fmt.Sprintf("failed to remove %s: %v", path, remErr))
 		}
 	}
 
@@ -413,7 +413,10 @@ func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
 	}
 
 	h.enrichSingleSeries(refreshed, userID)
-	return c.JSON(refreshed)
+	return c.JSON(fiber.Map{
+		"series":   refreshed,
+		"warnings": warnings,
+	})
 }
 
 // UpdateVolume 볼륨 정보 수정

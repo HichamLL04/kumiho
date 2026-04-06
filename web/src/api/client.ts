@@ -213,7 +213,10 @@ export const seriesAPI = {
     api.get<{ progress_list: ReadingProgress[] }>(`/series/${seriesId}/progress-list`),
   update: (seriesId: string, data: Partial<Series> & { description_translated?: string }) =>
     api.patch(`/series/${seriesId}`, data),
-  resetMetadata: (seriesId: string) => api.post<Series>(`/series/${seriesId}/reset-metadata`).then((res) => res.data),
+  resetMetadata: (seriesId: string) =>
+    api
+      .post<{ series: Series; warnings?: string[] }>(`/series/${seriesId}/reset-metadata`)
+      .then((res) => res.data),
   translateDescription: (seriesId: string, targetLang?: string) =>
     api
       .post<{ series: Series; target_lang: string; translated_text: string }>(

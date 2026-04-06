@@ -464,6 +464,7 @@ export function MetadataTab() {
                 onChange={(e) => setLanguageSearch(e.target.value)}
                 onKeyDown={handleLanguageInputKeyDown}
                 placeholder={t("settings.metadata.batch_translate.language_search_placeholder")}
+                aria-label={t("settings.metadata.batch_translate.language_search_placeholder")}
                 className={styles.translationLanguageSearchInput}
                 autoFocus
               />
@@ -987,7 +988,7 @@ export function MetadataTab() {
                 ) : (
                   <Sparkles size={16} />
                 )}
-                {isTranslating ? t("actions.translating") : t("settings.metadata.batch_translate.action")}
+                {isTranslating ? t("settings.metadata.batch_translate.translating") : t("settings.metadata.batch_translate.action")}
               </button>
             </article>
           </div>

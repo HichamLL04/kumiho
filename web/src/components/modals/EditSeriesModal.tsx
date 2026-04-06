@@ -320,14 +320,12 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     setIsSaving(true);
 
     try {
+      const descriptionDirty = formData.description.trim() !== (series.description || "").trim();
+      const translatedDirty = translatedDescription.trim() !== (series.metadata?.description_translated || "").trim();
+
       const res = await seriesAPI.update(series.id, {
         ...formData,
-        description_translated:
-          formData.description.trim() !== (series.description || "").trim()
-            ? descriptionView === "translated"
-              ? translatedDescription
-              : ""
-            : translatedDescription,
+        description_translated: descriptionDirty && !translatedDirty ? "" : translatedDescription,
       });
       onUpdate(res.data);
       window.location.reload();
@@ -376,12 +374,13 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       async () => {
         setIsResettingMetadata(true);
         try {
-          const refreshed = await seriesAPI.resetMetadata(series.id);
-          onUpdate(refreshed);
-          setTranslatedDescription(refreshed.metadata?.description_translated || "");
-          setDescriptionView(refreshed.metadata?.description_translated?.trim() ? "translated" : "original");
+          const result = await seriesAPI.resetMetadata(series.id);
+          onUpdate(result.series);
+          setTranslatedDescription(result.series.metadata?.description_translated || "");
+          setDescriptionView(result.series.metadata?.description_translated?.trim() ? "translated" : "original");
           setCharactersReloadToken((prev) => prev + 1);
-          showAlert("success", t("series.edit.alert.reset_metadata_success"));
+          const warningMessage = result.warnings && result.warnings.length > 0 ? `\n\n${result.warnings.join("\n")}` : "";
+          showAlert("success", `${t("series.edit.alert.reset_metadata_success")}${warningMessage}`);
         } catch (error) {
           console.error("Failed to reset series metadata:", error);
           showAlert("error", t("series.edit.alert.reset_metadata_failed"));
