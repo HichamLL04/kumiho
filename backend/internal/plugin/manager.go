@@ -229,6 +229,22 @@ func (m *Manager) Fetch(ctx context.Context, id string, req *sdktypes.FetchReque
 	return rt.Fetch(ctx, toInstance(record), req)
 }
 
+func (m *Manager) Translate(ctx context.Context, id string, req *sdktypes.TranslateRequest) (*sdktypes.TranslateResponse, error) {
+	record, rt, err := m.requireActiveRuntime(id)
+	if err != nil {
+		return nil, err
+	}
+	return rt.Translate(ctx, toInstance(record), req)
+}
+
+func (m *Manager) Detect(ctx context.Context, id string, req *sdktypes.DetectRequest) (*sdktypes.DetectResponse, error) {
+	record, rt, err := m.requireActiveRuntime(id)
+	if err != nil {
+		return nil, err
+	}
+	return rt.Detect(ctx, toInstance(record), req)
+}
+
 func (m *Manager) Get(id string) (Record, bool, error) {
 	return m.store.Get(id)
 }

@@ -332,11 +332,11 @@ func TestDeleteConfigReturnsReactivationRequiredForActivePlugin(t *testing.T) {
 }
 
 type handlerTestRuntime struct {
-	runtimeType sdkmanifest.RuntimeType
-	startCalls  int
-	stopCalls   int
-	startErr    error
-	stopErr     error
+	runtimeType    sdkmanifest.RuntimeType
+	startCalls     int
+	stopCalls      int
+	startErr       error
+	stopErr        error
 	healthcheckErr error
 }
 
@@ -364,6 +364,14 @@ func (r *handlerTestRuntime) Search(context.Context, pluginruntime.Instance, *sd
 }
 
 func (r *handlerTestRuntime) Fetch(context.Context, pluginruntime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
+	return nil, nil
+}
+
+func (r *handlerTestRuntime) Translate(context.Context, pluginruntime.Instance, *sdktypes.TranslateRequest) (*sdktypes.TranslateResponse, error) {
+	return nil, nil
+}
+
+func (r *handlerTestRuntime) Detect(context.Context, pluginruntime.Instance, *sdktypes.DetectRequest) (*sdktypes.DetectResponse, error) {
 	return nil, nil
 }
 

@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useId, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Loader2, Database, ChevronDown } from "lucide-react";
-import { libraryAPI, seriesAPI } from "../../api/client";
+import { Search, Sparkles, Loader2, Database, ChevronDown, Languages, Check } from "lucide-react";
+import { libraryAPI, seriesAPI, pluginAPI, settingAPI } from "../../api/client";
 import type { Library, Series } from "../../types/series";
 import type { MetadataFetchResponse, MetadataSearchResult } from "../../types/plugin";
 import { getAuthenticatedImageUrl } from "../../utils/image";
 import { ProgressBar } from "../common/ProgressBar";
 import { Toast } from "../common/Toast";
 import { EditSeriesModal } from "../modals/EditSeriesModal";
+import { AlertModal, type AlertType } from "../modals/AlertModal";
 import styles from "./MetadataTab.module.css";
 import commonStyles from "./SettingsComponents.module.css";
 
@@ -16,13 +18,62 @@ interface SeriesMetadataInfo extends Series {
   matchResult?: MetadataFetchResponse;
 }
 
+interface LanguageOption {
+  code: string;
+  label: string;
+  keywords: string[];
+}
+
+const LANGUAGE_OPTIONS: LanguageOption[] = [
+  { code: "ar", label: "العربية", keywords: ["arabic", "ar", "العربية"] },
+  { code: "ko", label: "한국어", keywords: ["korean", "hangul", "ko", "한국어"] },
+  { code: "en", label: "English", keywords: ["english", "en"] },
+  { code: "en-gb", label: "English (British)", keywords: ["english", "british", "en-gb", "uk english"] },
+  { code: "en-us", label: "English (American)", keywords: ["english", "american", "en-us", "us english"] },
+  { code: "ja", label: "日本語", keywords: ["japanese", "nihongo", "ja", "일본어", "日本語"] },
+  { code: "bg", label: "Български", keywords: ["bulgarian", "bg", "български"] },
+  { code: "cs", label: "Čeština", keywords: ["czech", "cs", "čeština"] },
+  { code: "da", label: "Dansk", keywords: ["danish", "da", "dansk"] },
+  { code: "de", label: "Deutsch", keywords: ["german", "de", "deutsch"] },
+  { code: "el", label: "Ελληνικά", keywords: ["greek", "el", "ελληνικά"] },
+  { code: "fr", label: "Français", keywords: ["french", "fr", "francais", "français"] },
+  { code: "es", label: "Español", keywords: ["spanish", "es", "espanol", "español"] },
+  { code: "es-419", label: "Español (Latinoamérica)", keywords: ["spanish latin american", "es-419", "latam spanish", "español latinoamérica"] },
+  { code: "et", label: "Eesti", keywords: ["estonian", "et", "eesti"] },
+  { code: "fi", label: "Suomi", keywords: ["finnish", "fi", "suomi"] },
+  { code: "hu", label: "Magyar", keywords: ["hungarian", "hu", "magyar"] },
+  { code: "id", label: "Bahasa Indonesia", keywords: ["indonesian", "id", "bahasa indonesia"] },
+  { code: "it", label: "Italiano", keywords: ["italian", "it", "italiano"] },
+  { code: "lt", label: "Lietuvių", keywords: ["lithuanian", "lt", "lietuvių"] },
+  { code: "lv", label: "Latviešu", keywords: ["latvian", "lv", "latviešu"] },
+  { code: "nb", label: "Norsk Bokmål", keywords: ["norwegian", "nb", "bokmal", "bokmål"] },
+  { code: "nl", label: "Nederlands", keywords: ["dutch", "nl", "nederlands"] },
+  { code: "pl", label: "Polski", keywords: ["polish", "pl", "polski"] },
+  { code: "pt", label: "Português", keywords: ["portuguese", "pt", "português", "portugues"] },
+  { code: "pt-br", label: "Português (Brasil)", keywords: ["portuguese brazil", "pt-br", "brazilian portuguese", "português brasil"] },
+  { code: "pt-pt", label: "Português (Europeu)", keywords: ["portuguese european", "pt-pt", "european portuguese", "português europeu"] },
+  { code: "ro", label: "Română", keywords: ["romanian", "ro", "română", "romana"] },
+  { code: "ru", label: "Русский", keywords: ["russian", "ru", "русский"] },
+  { code: "sk", label: "Slovenčina", keywords: ["slovak", "sk", "slovenčina"] },
+  { code: "sl", label: "Slovenščina", keywords: ["slovenian", "sl", "slovenščina"] },
+  { code: "sv", label: "Svenska", keywords: ["swedish", "sv", "svenska"] },
+  { code: "tr", label: "Türkçe", keywords: ["turkish", "tr", "türkçe", "turkce"] },
+  { code: "uk", label: "Українська", keywords: ["ukrainian", "uk", "українська"] },
+  { code: "zh", label: "中文", keywords: ["chinese", "zh", "中文"] },
+  { code: "zh-hans", label: "中文 (简体)", keywords: ["chinese simplified", "zh-hans", "简体中文", "simplified chinese"] },
+  { code: "zh-hant", label: "中文 (繁體)", keywords: ["chinese traditional", "zh-hant", "繁體中文", "traditional chinese"] },
+];
+
 export function MetadataTab() {
   const { t } = useTranslation();
   const progressLabelId = useId();
   const librarySelectorLabelId = useId();
+  const translateLanguageLabelId = useId();
   const cancelScanRequestedRef = useRef(false);
   const isMountedRef = useRef(true);
   const loadSeriesRequestIdRef = useRef(0);
+  const languageDropdownRef = useRef<HTMLDivElement>(null);
+  const languageButtonRef = useRef<HTMLButtonElement>(null);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [selectedLibraryId, setSelectedLibraryId] = useState<string>("");
   const [seriesList, setSeriesList] = useState<SeriesMetadataInfo[]>([]);
@@ -31,10 +82,37 @@ export function MetadataTab() {
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [serverLanguage, setServerLanguage] = useState("ko");
+  const [selectedTargetLanguage, setSelectedTargetLanguage] = useState("ko");
+  const [languageSearch, setLanguageSearch] = useState("");
+  const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
+  const [languageDropdownStyle, setLanguageDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(
+    null,
+  );
   const [updatingLibraryIds, setUpdatingLibraryIds] = useState<Set<string>>(new Set());
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [isResettingMetadata, setIsResettingMetadata] = useState(false);
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    type: AlertType;
+    title?: string;
+    message: string;
+    showCancel?: boolean;
+    onConfirm: () => void | Promise<void>;
+    onCancel?: () => void;
+  }>({
+    isOpen: false,
+    type: "info",
+    message: "",
+    onConfirm: () => {},
+  });
   const deselectedApplySet = useMemo(() => new Set(deselectedApplyIds), [deselectedApplyIds]);
+  const selectedLibrary = useMemo(
+    () => libraries.find((library) => library.id === selectedLibraryId) ?? null,
+    [libraries, selectedLibraryId],
+  );
   const selectedMatchedCount = useMemo(
     () =>
       seriesList.filter(
@@ -45,6 +123,27 @@ export function MetadataTab() {
     [deselectedApplySet, seriesList],
   );
   const scanPercent = scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0;
+  const selectedLanguageOption = useMemo(
+    () => LANGUAGE_OPTIONS.find((option) => option.code === selectedTargetLanguage) ?? LANGUAGE_OPTIONS[0],
+    [selectedTargetLanguage],
+  );
+  const filteredLanguageOptions = useMemo(() => {
+    const query = languageSearch.trim().toLowerCase();
+    if (!query) return LANGUAGE_OPTIONS;
+    const normalizedQuery = query.replace(/\s+/g, "");
+    return LANGUAGE_OPTIONS.filter((option) => {
+      const normalizedCode = option.code.toLowerCase();
+      const normalizedLabel = option.label.toLowerCase();
+      const normalizedKeywords = option.keywords.map((keyword) => keyword.toLowerCase());
+
+      return (
+        normalizedCode === normalizedQuery ||
+        normalizedCode.startsWith(normalizedQuery) ||
+        normalizedLabel.includes(query) ||
+        normalizedKeywords.some((keyword) => keyword === normalizedQuery || keyword.startsWith(normalizedQuery))
+      );
+    });
+  }, [languageSearch]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -53,6 +152,20 @@ export function MetadataTab() {
       isMountedRef.current = false;
       cancelScanRequestedRef.current = true;
     };
+  }, []);
+
+  useEffect(() => {
+    settingAPI
+      .list()
+      .then((settings) => {
+        if (!isMountedRef.current) return;
+        const appLanguage = typeof settings.app_language === "string" ? settings.app_language : "ko";
+        setServerLanguage(appLanguage);
+        setSelectedTargetLanguage(appLanguage);
+      })
+      .catch((error) => {
+        console.error("Failed to load translation language setting:", error);
+      });
   }, []);
 
   // Load libraries on mount
@@ -154,8 +267,104 @@ export function MetadataTab() {
     };
   }, [expandedResultId]);
 
+  useEffect(() => {
+    if (!isLanguageDropdownOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (languageDropdownRef.current?.contains(target) || languageButtonRef.current?.contains(target)) {
+        return;
+      }
+      setIsLanguageDropdownOpen(false);
+    };
+
+    const updateDropdownPosition = () => {
+      const rect = languageButtonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setLanguageDropdownStyle({
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+
+    updateDropdownPosition();
+
+    const handleWindowChange = () => {
+      updateDropdownPosition();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("resize", handleWindowChange);
+    window.addEventListener("scroll", handleWindowChange, true);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("resize", handleWindowChange);
+      window.removeEventListener("scroll", handleWindowChange, true);
+    };
+  }, [isLanguageDropdownOpen]);
+
+  useEffect(() => {
+    if (!isLanguageDropdownOpen) {
+      setLanguageDropdownStyle(null);
+    }
+  }, [isLanguageDropdownOpen]);
+
+  const languageDropdown =
+    isLanguageDropdownOpen && languageDropdownStyle
+      ? createPortal(
+          <div
+            ref={languageDropdownRef}
+            className={styles.translationLanguageDropdown}
+            style={{
+              position: "fixed",
+              top: languageDropdownStyle.top,
+              left: languageDropdownStyle.left,
+              width: languageDropdownStyle.width,
+            }}
+          >
+            <div className={styles.translationLanguageSearchWrap}>
+              <Search size={14} />
+              <input
+                value={languageSearch}
+                onChange={(e) => setLanguageSearch(e.target.value)}
+                placeholder="언어 검색"
+                className={styles.translationLanguageSearchInput}
+                autoFocus
+              />
+            </div>
+            <div
+              className={styles.translationLanguageOptions}
+              role="listbox"
+              aria-labelledby={translateLanguageLabelId}
+            >
+              {filteredLanguageOptions.length > 0 ? (
+                filteredLanguageOptions.map((option) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    className={styles.translationLanguageOption}
+                    onClick={() => handleSelectTargetLanguage(option.code)}
+                  >
+                    <span className={styles.translationLanguageOptionLabel}>
+                      {option.label}
+                      <span className={styles.translationLanguageCode}>{option.code.toUpperCase()}</span>
+                    </span>
+                    {option.code === selectedTargetLanguage ? <Check size={14} /> : null}
+                  </button>
+                ))
+              ) : (
+                <div className={styles.translationLanguageEmpty}>검색 결과가 없습니다.</div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   const isApplySelected = (series: SeriesMetadataInfo) =>
-    (series.scanStatus === "matched" || series.scanStatus === "applied_with_warnings") && !deselectedApplySet.has(series.id);
+    (series.scanStatus === "matched" || series.scanStatus === "applied_with_warnings") &&
+    !deselectedApplySet.has(series.id);
 
   const toggleApplySelection = (seriesId: string) => {
     setDeselectedApplyIds((prev) =>
@@ -189,7 +398,9 @@ export function MetadataTab() {
         .update(library.id, { original_title_override: enabled })
         .then((res) => res.data as Library);
       if (!isMountedRef.current) return;
-      setLibraries((prev) => prev.map((library) => (library.id === updatedLibrary.id ? { ...library, ...updatedLibrary } : library)));
+      setLibraries((prev) =>
+        prev.map((library) => (library.id === updatedLibrary.id ? { ...library, ...updatedLibrary } : library)),
+      );
       if (selectedLibraryId === library.id) {
         await loadSeries(library.id);
       }
@@ -214,7 +425,12 @@ export function MetadataTab() {
     if (isScanning || seriesList.length === 0) return;
     const scanTargets = seriesList
       .map((series, index) => ({ series, index }))
-      .filter(({ series }) => series.scanStatus !== "matched" && series.scanStatus !== "applied" && series.scanStatus !== "applied_with_warnings");
+      .filter(
+        ({ series }) =>
+          series.scanStatus !== "matched" &&
+          series.scanStatus !== "applied" &&
+          series.scanStatus !== "applied_with_warnings",
+      );
     if (scanTargets.length === 0) return;
 
     setEditingSeries(null);
@@ -346,9 +562,7 @@ export function MetadataTab() {
         if (!isMountedRef.current) break;
         setSeriesList((prev) =>
           prev.map((s) =>
-            s.id === series.id
-              ? { ...s, scanStatus: characterImportFailed ? "applied_with_warnings" : "applied" }
-              : s,
+            s.id === series.id ? { ...s, scanStatus: characterImportFailed ? "applied_with_warnings" : "applied" } : s,
           ),
         );
         successCount++;
@@ -372,6 +586,81 @@ export function MetadataTab() {
     });
   };
 
+  const handleBatchTranslate = async () => {
+    if (isTranslating || !isMountedRef.current) return;
+    setIsTranslating(true);
+    setToast({ type: "info", message: "일괄 번역을 시작합니다..." });
+
+    try {
+      const res = await pluginAPI.batchTranslate(selectedTargetLanguage);
+      if (!isMountedRef.current) return;
+
+      if (res.total_success > 0 || res.total_processed === 0) {
+        setToast({
+          type: "success",
+          message: `일괄 번역 완료: 총 ${res.total_processed}개 중 ${res.total_success}개 성공`,
+        });
+        if (selectedLibraryId) {
+          loadSeries(selectedLibraryId); // Refresh the list
+        }
+      } else {
+        setToast({
+          type: "error",
+          message: `일괄 번역 일부 혹은 전체 실패. 총 ${res.total_processed}개, 에러 ${res.total_failed}개`,
+        });
+      }
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return;
+      console.error("Batch translate failed:", err);
+      // Backend returns explicit error object or response message
+      const errMsg = (err as any)?.response?.data?.error || "일괄 번역을 실패했습니다.";
+      setToast({ type: "error", message: errMsg });
+    } finally {
+      if (isMountedRef.current) {
+        setIsTranslating(false);
+      }
+    }
+  };
+
+  const handleSelectTargetLanguage = (languageCode: string) => {
+    setSelectedTargetLanguage(languageCode);
+    setIsLanguageDropdownOpen(false);
+    setLanguageSearch("");
+  };
+
+  const handleResetLibraryMetadata = () => {
+    if (!selectedLibraryId || !selectedLibrary) return;
+
+    setAlertModal({
+      isOpen: true,
+      type: "warning",
+      title: t("settings.metadata.reset_title"),
+      message: t("settings.metadata.reset_confirm", { library: selectedLibrary.name }),
+      showCancel: true,
+      onConfirm: async () => {
+        setIsResettingMetadata(true);
+        try {
+          const result = await libraryAPI.resetMetadata(selectedLibraryId);
+          setToast({
+            type: "success",
+            message: t("settings.metadata.reset_complete", {
+              library: result.library_name,
+              count: result.reset_count,
+            }),
+          });
+          await loadSeries(selectedLibraryId);
+        } catch (error) {
+          console.error("Failed to reset library metadata:", error);
+          setToast({ type: "error", message: t("settings.metadata.reset_failed") });
+        } finally {
+          setIsResettingMetadata(false);
+          setAlertModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+      onCancel: () => setAlertModal((prev) => ({ ...prev, isOpen: false })),
+    });
+  };
+
   return (
     <div className={styles.metadataTab}>
       {editingSeries && (
@@ -380,7 +669,9 @@ export function MetadataTab() {
           onClose={() => setEditingSeries(null)}
           series={editingSeries}
           onUpdate={(updatedSeries) => {
-            setSeriesList((prev) => prev.map((series) => (series.id === updatedSeries.id ? { ...series, ...updatedSeries } : series)));
+            setSeriesList((prev) =>
+              prev.map((series) => (series.id === updatedSeries.id ? { ...series, ...updatedSeries } : series)),
+            );
             setEditingSeries((prev) => (prev?.id === updatedSeries.id ? { ...prev, ...updatedSeries } : prev));
           }}
         />
@@ -437,9 +728,13 @@ export function MetadataTab() {
                       <Database size={16} />
                       <h4>{library.name}</h4>
                     </div>
-                    <p>{enabled ? t("common.on", { defaultValue: "켜기" }) : t("common.off", { defaultValue: "끄기" })}</p>
+                    <p>
+                      {enabled ? t("common.on", { defaultValue: "켜기" }) : t("common.off", { defaultValue: "끄기" })}
+                    </p>
                   </div>
-                  <label className={`${commonStyles.pluginToggle} ${isScanning || isUpdating ? commonStyles.pluginToggleDisabled : ""}`}>
+                  <label
+                    className={`${commonStyles.pluginToggle} ${isScanning || isUpdating ? commonStyles.pluginToggleDisabled : ""}`}
+                  >
                     <button
                       type="button"
                       className={`${commonStyles.pluginToggleTrack} ${enabled ? commonStyles.pluginToggleTrackOn : ""}`}
@@ -451,8 +746,15 @@ export function MetadataTab() {
                       aria-hidden="true"
                       tabIndex={-1}
                     >
-                      <span className={`${commonStyles.pluginToggleThumb} ${enabled ? commonStyles.pluginToggleThumbOn : ""}`}>
-                        {isUpdating ? <Loader2 className={styles.spinning} size={11} /> : null}
+                      <span
+                        className={`${commonStyles.pluginToggleThumb} ${enabled ? commonStyles.pluginToggleThumbOn : ""}`}
+                      >
+                        {isUpdating ? (
+                          <Loader2
+                            className={styles.spinning}
+                            size={11}
+                          />
+                        ) : null}
                       </span>
                     </button>
                   </label>
@@ -464,66 +766,163 @@ export function MetadataTab() {
       </div>
 
       <div className={styles.header}>
-        <div className={styles.libraryActionPanel}>
-          <div className={styles.librarySelector}>
-            <div id={librarySelectorLabelId} className={styles.selectorLabel}>
-              <Database size={14} />
-              <span>{t("settings.tabs.libraries")}</span>
-            </div>
-            <div className={styles.selectWrap}>
-              <select
-                className={styles.librarySelect}
-                value={selectedLibraryId}
-                onChange={(e) => setSelectedLibraryId(e.target.value)}
-                disabled={isScanning}
-                aria-labelledby={librarySelectorLabelId}
-              >
-                {libraries.map((lib) => (
-                  <option
-                    key={lib.id}
-                    value={lib.id}
+        <section className={styles.libraryOverrideSection}>
+          <div className={styles.metadataSettingsHeader}>
+            <h3>일괄 번역 (Beta)</h3>
+            <p>
+              라이브러리에 있는 모든 시리즈의 줄거리를 선택한 언어로 번역합니다. 활성화된 번역 플러그인이 필요합니다.
+            </p>
+          </div>
+          <div className={styles.libraryOverrideGrid}>
+            <article
+              className={styles.libraryOverrideCard}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}
+            >
+              <div className={styles.translateCardContent}>
+                <div className={styles.libraryOverrideInfo}>
+                  <div className={styles.libraryOverrideNameRow}>
+                    <Sparkles size={16} />
+                    <h4>전체 시리즈 줄거리 번역</h4>
+                  </div>
+                  <p>번역되지 않은 빈 항목만 번역을 시도합니다.</p>
+                </div>
+                <div className={styles.translationLanguageControl} ref={languageDropdownRef}>
+                  <div
+                    id={translateLanguageLabelId}
+                    className={styles.selectorLabel}
                   >
-                    {lib.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={16}
-                className={styles.selectIcon}
-              />
+                    <Languages size={14} />
+                    <span>출력 언어</span>
+                  </div>
+                  <div className={styles.translationLanguageHint}>
+                    기본값은 서버 언어이며, 현재 서버 언어는{" "}
+                    <strong>{LANGUAGE_OPTIONS.find((option) => option.code === serverLanguage)?.label ?? serverLanguage}</strong>
+                    입니다.
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.translationLanguageButton}
+                    ref={languageButtonRef}
+                    aria-haspopup="listbox"
+                    aria-expanded={isLanguageDropdownOpen}
+                    aria-labelledby={translateLanguageLabelId}
+                    onClick={() => setIsLanguageDropdownOpen((prev) => !prev)}
+                  >
+                    <span className={styles.translationLanguageValue}>
+                      {selectedLanguageOption.label}
+                      {selectedTargetLanguage === serverLanguage && (
+                        <span className={styles.translationLanguageBadge}>서버 언어</span>
+                      )}
+                    </span>
+                    <ChevronDown
+                      size={16}
+                      className={isLanguageDropdownOpen ? styles.translationLanguageChevronOpen : undefined}
+                    />
+                  </button>
+                </div>
+              </div>
+              <button
+                className={`${commonStyles.settingsButton} ${styles.primaryAction}`}
+                onClick={handleBatchTranslate}
+                disabled={isTranslating}
+                style={{ height: "fit-content", padding: "0.5rem 1rem" }}
+              >
+                {isTranslating ? (
+                  <Loader2
+                    className={styles.spinning}
+                    size={16}
+                  />
+                ) : (
+                  <Sparkles size={16} />
+                )}
+                {isTranslating ? "번역 중..." : "일괄 번역 실행"}
+              </button>
+            </article>
+          </div>
+        </section>
+      </div>
+      {languageDropdown}
+
+      <div className={styles.header}>
+        <section className={styles.libraryOverrideSection}>
+          <div className={styles.metadataSettingsHeader}>
+            <h3>{t("settings.metadata.search_title", { defaultValue: "메타데이터 검색" })}</h3>
+            <p>
+              {t("settings.metadata.search_description", {
+                defaultValue: "선택한 라이브러리의 시리즈를 검색하고 매칭된 메타데이터를 일괄 적용합니다.",
+              })}
+            </p>
+          </div>
+          <div className={styles.metadataSearchCard}>
+            <div className={styles.libraryActionPanel}>
+              <div className={styles.librarySelector}>
+                <div
+                  id={librarySelectorLabelId}
+                  className={styles.selectorLabel}
+                >
+                  <Database size={14} />
+                  <span>{t("settings.tabs.libraries")}</span>
+                </div>
+                <div className={styles.selectWrap}>
+                  <select
+                    className={styles.librarySelect}
+                    value={selectedLibraryId}
+                    onChange={(e) => setSelectedLibraryId(e.target.value)}
+                    disabled={isScanning}
+                    aria-labelledby={librarySelectorLabelId}
+                  >
+                    {libraries.map((lib) => (
+                      <option
+                        key={lib.id}
+                        value={lib.id}
+                      >
+                        {lib.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={16}
+                    className={styles.selectIcon}
+                  />
+                </div>
+              </div>
+              <div className={styles.actions}>
+                <button
+                  className={`${commonStyles.settingsButton} ${styles.scanButton} ${styles.primaryAction}`}
+                  onClick={handleScanButtonClick}
+                  disabled={isLoading || (!isScanning && seriesList.length === 0)}
+                >
+                  {isScanning ? (
+                    <Loader2
+                      className={styles.spinning}
+                      size={16}
+                    />
+                  ) : (
+                    <Search size={16} />
+                  )}
+                  {isScanning ? t("settings.metadata.cancel_scan") : t("settings.metadata.start_scan")}
+                </button>
+                <button
+                  className={`${commonStyles.settingsButton} ${styles.applyButton}`}
+                  onClick={handleApplyAll}
+                  disabled={isScanning || isLoading || selectedMatchedCount === 0}
+                >
+                  <Sparkles size={16} />
+                  {selectedMatchedCount > 0 && <span className={styles.applyCount}>{selectedMatchedCount}</span>}
+                  {t("settings.metadata.apply_all")}
+                </button>
+              </div>
             </div>
           </div>
-          <div className={styles.actions}>
-          <button
-            className={`${commonStyles.settingsButton} ${styles.scanButton} ${styles.primaryAction}`}
-            onClick={handleScanButtonClick}
-            disabled={isLoading || (!isScanning && seriesList.length === 0)}
-          >
-            {isScanning ? (
-              <Loader2
-                className={styles.spinning}
-                size={16}
-              />
-            ) : (
-              <Search size={16} />
-            )}
-            {isScanning ? t("settings.metadata.cancel_scan") : t("settings.metadata.start_scan")}
-          </button>
-          <button
-            className={`${commonStyles.settingsButton} ${styles.applyButton}`}
-            onClick={handleApplyAll}
-            disabled={isScanning || isLoading || selectedMatchedCount === 0}
-          >
-            <Sparkles size={16} />
-            {selectedMatchedCount > 0 && <span className={styles.applyCount}>{selectedMatchedCount}</span>}
-            {t("settings.metadata.apply_all")}
-          </button>
-          </div>
-        </div>
+        </section>
       </div>
 
       {isScanning && (
-        <div className={styles.progressArea} role="status" aria-live="polite">
+        <div
+          className={styles.progressArea}
+          role="status"
+          aria-live="polite"
+        >
           <div className={styles.progressText}>
             <span id={progressLabelId}>
               {t("settings.metadata.scanning_progress", { current: scanProgress.current, total: scanProgress.total })}
@@ -561,7 +960,9 @@ export function MetadataTab() {
                 <tr>
                   <th>
                     <div className={styles.seriesHeaderLabel}>
-                      <span className={styles.seriesCount}>{t("settings.metadata.total_series_count", { count: seriesList.length })}</span>
+                      <span className={styles.seriesCount}>
+                        {t("settings.metadata.total_series_count", { count: seriesList.length })}
+                      </span>
                       <span>{t("settings.metadata.table.series")}</span>
                     </div>
                   </th>
@@ -645,9 +1046,7 @@ export function MetadataTab() {
                                 )}
                               </span>
                               <span className={styles.matchContent}>
-                                <span className={styles.matchTitle}>
-                                  {series.matchResult.result.title}
-                                </span>
+                                <span className={styles.matchTitle}>{series.matchResult.result.title}</span>
                                 <span className={styles.matchDescription}>
                                   {series.matchResult.result.description || "-"}
                                 </span>
@@ -669,47 +1068,51 @@ export function MetadataTab() {
                                   </span>
                                   <span className={styles.matchPopoverContent}>
                                     <strong>{series.matchResult.result.title}</strong>
-                                    {series.matchResult.result.authors && series.matchResult.result.authors.length > 0 && (
-                                      <span className={styles.matchPopoverAuthors}>
-                                        {series.matchResult.result.authors.join(", ")}
-                                      </span>
-                                    )}
+                                    {series.matchResult.result.authors &&
+                                      series.matchResult.result.authors.length > 0 && (
+                                        <span className={styles.matchPopoverAuthors}>
+                                          {series.matchResult.result.authors.join(", ")}
+                                        </span>
+                                      )}
                                     <span>{series.matchResult.result.description || "-"}</span>
                                   </span>
                                 </span>
                               </span>
                             </button>
                           )}
-                        {(series.scanStatus === "matched" || series.scanStatus === "applied_with_warnings") && series.matchResult && (
-                          <label
-                            className={styles.applyCheckboxLabel}
-                            title={t("settings.metadata.apply_all")}
-                          >
-                            <input
-                              type="checkbox"
-                              className={styles.applyCheckbox}
-                              checked={isApplySelected(series)}
-                              onChange={() => toggleApplySelection(series.id)}
-                              aria-label={`${series.title} - ${t("settings.metadata.apply_all")}`}
+                          {(series.scanStatus === "matched" || series.scanStatus === "applied_with_warnings") &&
+                            series.matchResult && (
+                              <label
+                                className={styles.applyCheckboxLabel}
+                                title={t("settings.metadata.apply_all")}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className={styles.applyCheckbox}
+                                  checked={isApplySelected(series)}
+                                  onChange={() => toggleApplySelection(series.id)}
+                                  aria-label={`${series.title} - ${t("settings.metadata.apply_all")}`}
+                                  disabled={isScanning}
+                                />
+                              </label>
+                            )}
+                          {series.scanStatus === "failed" && (
+                            <button
+                              type="button"
+                              className={`${styles.btnIcon} ${styles.failedActionButton}`}
+                              onClick={() => setEditingSeries(series)}
+                              title={t("settings.metadata.manual_search")}
                               disabled={isScanning}
-                            />
-                          </label>
-                        )}
-                        {series.scanStatus === "failed" && (
-                          <button
-                            type="button"
-                            className={`${styles.btnIcon} ${styles.failedActionButton}`}
-                            onClick={() => setEditingSeries(series)}
-                            title={t("settings.metadata.manual_search")}
-                            disabled={isScanning}
-                          >
-                            <Search size={14} />
-                            <span>{t("settings.metadata.manual_search")}</span>
-                          </button>
-                        )}
-                        {!series.matchResult && series.scanStatus !== "failed" && <span className={styles.emptyResult}>-</span>}
-                      </div>
-                    </td>
+                            >
+                              <Search size={14} />
+                              <span>{t("settings.metadata.manual_search")}</span>
+                            </button>
+                          )}
+                          {!series.matchResult && series.scanStatus !== "failed" && (
+                            <span className={styles.emptyResult}>-</span>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -718,6 +1121,78 @@ export function MetadataTab() {
           </div>
         )}
       </div>
+
+      <div className={styles.header}>
+        <section className={styles.libraryOverrideSection}>
+          <div className={styles.metadataSettingsHeader}>
+            <h3>{t("settings.metadata.reset_title")}</h3>
+            <p>{t("settings.metadata.reset_description")}</p>
+          </div>
+          <div className={styles.metadataSearchCard}>
+            <article className={styles.resetMetadataCard}>
+              <div className={styles.resetMetadataContent}>
+                <div className={styles.librarySelector}>
+                  <div
+                    id={`${librarySelectorLabelId}-reset`}
+                    className={styles.selectorLabel}
+                  >
+                    <Database size={14} />
+                    <span>{t("settings.tabs.libraries")}</span>
+                  </div>
+                  <div className={styles.selectWrap}>
+                    <select
+                      className={styles.librarySelect}
+                      value={selectedLibraryId}
+                      onChange={(e) => setSelectedLibraryId(e.target.value)}
+                      disabled={isResettingMetadata || isScanning || isLoading}
+                      aria-labelledby={`${librarySelectorLabelId}-reset`}
+                    >
+                      {libraries.map((lib) => (
+                        <option
+                          key={lib.id}
+                          value={lib.id}
+                        >
+                          {lib.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={16}
+                      className={styles.selectIcon}
+                    />
+                  </div>
+                </div>
+                <p>{t("settings.metadata.reset_card_description")}</p>
+              </div>
+              <button
+                className={`${commonStyles.settingsButton} ${styles.resetButton}`}
+                onClick={handleResetLibraryMetadata}
+                disabled={!selectedLibraryId || isResettingMetadata || isScanning || isLoading}
+              >
+                {isResettingMetadata ? (
+                  <Loader2
+                    className={styles.spinning}
+                    size={16}
+                  />
+                ) : (
+                  <Database size={16} />
+                )}
+                {t("settings.metadata.reset_action")}
+              </button>
+            </article>
+          </div>
+        </section>
+      </div>
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        showCancel={alertModal.showCancel}
+        onConfirm={alertModal.onConfirm}
+        onCancel={alertModal.onCancel}
+      />
     </div>
   );
 }

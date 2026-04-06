@@ -31,6 +31,8 @@ type Runtime interface {
 	Healthcheck(ctx context.Context, inst Instance) (*healthcheck.Response, error)
 	Search(ctx context.Context, inst Instance, req *sdktypes.SearchRequest) (*sdktypes.SearchResponse, error)
 	Fetch(ctx context.Context, inst Instance, req *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error)
+	Translate(ctx context.Context, inst Instance, req *sdktypes.TranslateRequest) (*sdktypes.TranslateResponse, error)
+	Detect(ctx context.Context, inst Instance, req *sdktypes.DetectRequest) (*sdktypes.DetectResponse, error)
 }
 
 // StubRuntime is used until a concrete runtime adapter is implemented.
@@ -63,5 +65,13 @@ func (r *StubRuntime) Search(context.Context, Instance, *sdktypes.SearchRequest)
 }
 
 func (r *StubRuntime) Fetch(context.Context, Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
+	return nil, ErrNotImplemented
+}
+
+func (r *StubRuntime) Translate(context.Context, Instance, *sdktypes.TranslateRequest) (*sdktypes.TranslateResponse, error) {
+	return nil, ErrNotImplemented
+}
+
+func (r *StubRuntime) Detect(context.Context, Instance, *sdktypes.DetectRequest) (*sdktypes.DetectResponse, error) {
 	return nil, ErrNotImplemented
 }

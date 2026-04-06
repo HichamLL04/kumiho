@@ -533,6 +533,14 @@ func (r *selectiveFakeRuntime) Fetch(context.Context, runtime.Instance, *sdktype
 	return nil, runtime.ErrNotImplemented
 }
 
+func (r *selectiveFakeRuntime) Translate(context.Context, runtime.Instance, *sdktypes.TranslateRequest) (*sdktypes.TranslateResponse, error) {
+	return nil, runtime.ErrNotImplemented
+}
+
+func (r *selectiveFakeRuntime) Detect(context.Context, runtime.Instance, *sdktypes.DetectRequest) (*sdktypes.DetectResponse, error) {
+	return nil, runtime.ErrNotImplemented
+}
+
 func (r *fakeRuntime) Type() sdkmanifest.RuntimeType {
 	return r.runtimeType
 }
@@ -560,6 +568,14 @@ func (r *fakeRuntime) Search(context.Context, runtime.Instance, *sdktypes.Search
 }
 
 func (r *fakeRuntime) Fetch(context.Context, runtime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
+	return nil, runtime.ErrNotImplemented
+}
+
+func (r *fakeRuntime) Translate(context.Context, runtime.Instance, *sdktypes.TranslateRequest) (*sdktypes.TranslateResponse, error) {
+	return nil, runtime.ErrNotImplemented
+}
+
+func (r *fakeRuntime) Detect(context.Context, runtime.Instance, *sdktypes.DetectRequest) (*sdktypes.DetectResponse, error) {
 	return nil, runtime.ErrNotImplemented
 }
 

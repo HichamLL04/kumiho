@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/metadata_engine"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
@@ -33,6 +34,7 @@ import (
 var (
 	ErrSeriesNotFound         = errors.New("series not found")
 	ErrNoActiveMetadataPlugin = errors.New("no active metadata plugin")
+	ErrLibraryNotFound        = errors.New("library not found")
 	htmlTagPattern            = regexp.MustCompile(`(?s)<[^>]*>`)
 	blockHTMLPattern          = regexp.MustCompile(`(?i)</?(p|div|br|li|ul|ol|h[1-6]|blockquote)[^>]*>`)
 	candidateVolumePattern    = regexp.MustCompile(`(?i)(?:^|[\s._:-])(?:vol(?:ume)?\.?\s*)?(\d{1,3})(?:$|[\s._:-])`)
@@ -79,20 +81,29 @@ type MetadataApplyResult struct {
 	AppliedAt     time.Time     `json:"applied_at"`
 }
 
+type MetadataResetResult struct {
+	LibraryID   string    `json:"library_id"`
+	LibraryName string    `json:"library_name"`
+	ResetCount  int64     `json:"reset_count"`
+	ResetAt     time.Time `json:"reset_at"`
+}
+
 type MetadataService struct {
-	seriesRepo  *repository.SeriesRepository
-	volumeRepo  *repository.VolumeRepository
-	libraryRepo *repository.LibraryRepository
-	settingRepo repository.SettingRepository
-	manager     *pluginengine.Manager
-	cfg         *config.Config
-	client      *http.Client
+	seriesRepo    *repository.SeriesRepository
+	characterRepo *repository.SeriesCharacterRepository
+	volumeRepo    *repository.VolumeRepository
+	libraryRepo   *repository.LibraryRepository
+	settingRepo   repository.SettingRepository
+	manager       *pluginengine.Manager
+	cfg           *config.Config
+	client        *http.Client
 }
 
 func NewMetadataService(
 	cfg *config.Config,
 	client *http.Client,
 	seriesRepo *repository.SeriesRepository,
+	characterRepo *repository.SeriesCharacterRepository,
 	libraryRepo *repository.LibraryRepository,
 	settingRepo repository.SettingRepository,
 	manager *pluginengine.Manager,
@@ -101,13 +112,14 @@ func NewMetadataService(
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &MetadataService{
-		seriesRepo:  seriesRepo,
-		volumeRepo:  repository.NewVolumeRepository(),
-		libraryRepo: libraryRepo,
-		settingRepo: settingRepo,
-		manager:     manager,
-		cfg:         cfg,
-		client:      client,
+		seriesRepo:    seriesRepo,
+		characterRepo: characterRepo,
+		volumeRepo:    repository.NewVolumeRepository(),
+		libraryRepo:   libraryRepo,
+		settingRepo:   settingRepo,
+		manager:       manager,
+		cfg:           cfg,
+		client:        client,
 	}
 }
 
@@ -288,7 +300,12 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	if !isManualOriginalTitle {
 		applyFetchedTitle(series, result, &updatedFields)
 	}
+	previousDescription := strings.TrimSpace(series.Description)
 	applyString(&series.Description, sanitizeDescription(result.Description), "description", &updatedFields)
+	if strings.TrimSpace(series.Description) != previousDescription {
+		series.Metadata.Description = series.Description
+		series.Metadata.DescriptionTranslated = ""
+	}
 
 	// original_titles raw 저장
 
@@ -364,6 +381,83 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 		UpdatedFields: updatedFields,
 		AppliedAt:     time.Now(),
 		CoverURL:      coverURL,
+	}, nil
+}
+
+func (s *MetadataService) ResetLibraryMetadata(ctx context.Context, libraryID string) (*MetadataResetResult, error) {
+	_ = ctx
+	if strings.TrimSpace(libraryID) == "" {
+		return nil, ErrLibraryNotFound
+	}
+
+	library, err := s.libraryRepo.FindByID(nil, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	if library == nil {
+		return nil, ErrLibraryNotFound
+	}
+
+	seriesList, err := s.seriesRepo.FindByLibraryID(nil, libraryID, "")
+	if err != nil {
+		return nil, err
+	}
+
+	var filesToRemove []string
+	for i := range seriesList {
+		if seriesList[i].ThumbnailPath != nil {
+			thumbnailPath := strings.TrimSpace(*seriesList[i].ThumbnailPath)
+			if thumbnailPath != "" {
+				filesToRemove = append(filesToRemove, thumbnailPath)
+			}
+		}
+
+		if s.characterRepo == nil {
+			continue
+		}
+		characters, err := s.characterRepo.ListBySeriesID(nil, seriesList[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, character := range characters {
+			imagePath := strings.TrimSpace(character.ImagePath)
+			if imagePath == "" {
+				continue
+			}
+			filesToRemove = append(filesToRemove, imagePath)
+		}
+	}
+
+	tx, err := database.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	resetCount, err := s.seriesRepo.ResetMetadataByLibrary(tx, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	if s.characterRepo != nil {
+		if err := s.characterRepo.DeleteByLibraryID(tx, libraryID); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	for _, path := range filesToRemove {
+		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return nil, removeErr
+		}
+	}
+
+	return &MetadataResetResult{
+		LibraryID:   library.ID,
+		LibraryName: library.Name,
+		ResetCount:  resetCount,
+		ResetAt:     time.Now(),
 	}, nil
 }
 

@@ -191,6 +191,58 @@ func TestMetadataServiceSearchSeriesDoesNotForceBookContentType(t *testing.T) {
 	}
 }
 
+func TestMetadataServiceResetLibraryMetadataRemovesCharactersAndCharacterImages(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	characterRepo := repository.NewSeriesCharacterRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+
+	imagePath := filepath.Join(t.TempDir(), "character.png")
+	if err := os.WriteFile(imagePath, []byte("image"), 0o644); err != nil {
+		t.Fatalf("write character image: %v", err)
+	}
+
+	character := &model.SeriesCharacter{
+		SeriesID:  series.ID,
+		Name:      "Ichigo",
+		SortOrder: 0,
+		ImagePath: imagePath,
+	}
+	if err := characterRepo.Create(nil, character); err != nil {
+		t.Fatalf("SeriesCharacterRepository.Create() error = %v", err)
+	}
+
+	svc := NewMetadataService(
+		(&configForMetadataTests{DataDir: t.TempDir()}).Config(),
+		nil,
+		seriesRepo,
+		characterRepo,
+		repository.NewLibraryRepository(),
+		repository.NewSettingRepository(),
+		pluginengine.NewManager(pluginengine.NewMemoryStore()),
+	)
+
+	result, err := svc.ResetLibraryMetadata(context.Background(), series.LibraryID)
+	if err != nil {
+		t.Fatalf("ResetLibraryMetadata() error = %v", err)
+	}
+	if result.ResetCount != 1 {
+		t.Fatalf("reset count = %d, want 1", result.ResetCount)
+	}
+
+	items, err := characterRepo.ListBySeriesID(nil, series.ID)
+	if err != nil {
+		t.Fatalf("ListBySeriesID() error = %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("characters len = %d, want 0", len(items))
+	}
+
+	if _, err := os.Stat(imagePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("character image should be removed, stat err = %v", err)
+	}
+}
+
 func TestMetadataServiceFetchSeriesMetadataReturnsPluginNotReadyForInactivePlugin(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
@@ -828,6 +880,7 @@ func newMetadataServiceForTests(
 		cfg,
 		client,
 		seriesRepo,
+		repository.NewSeriesCharacterRepository(),
 		repository.NewLibraryRepository(),
 		repository.NewSettingRepository(),
 		manager,
@@ -904,6 +957,14 @@ func (r *metadataRuntime) Search(_ context.Context, _ pluginruntime.Instance, re
 
 func (r *metadataRuntime) Fetch(context.Context, pluginruntime.Instance, *sdktypes.FetchRequest) (*sdktypes.FetchResponse, error) {
 	return r.fetchResp, nil
+}
+
+func (r *metadataRuntime) Translate(context.Context, pluginruntime.Instance, *sdktypes.TranslateRequest) (*sdktypes.TranslateResponse, error) {
+	return nil, nil
+}
+
+func (r *metadataRuntime) Detect(context.Context, pluginruntime.Instance, *sdktypes.DetectRequest) (*sdktypes.DetectResponse, error) {
+	return nil, nil
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

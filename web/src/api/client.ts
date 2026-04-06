@@ -192,6 +192,12 @@ export const libraryAPI = {
   scan: (id: string) => api.post(`/libraries/${id}/scan`),
   scanAll: () => api.post("/libraries/scan"),
   cancelScan: (id: string) => api.post(`/libraries/${id}/scan/cancel`),
+  resetMetadata: (id: string) =>
+    api
+      .post<{ library_id: string; library_name: string; reset_count: number; reset_at: string }>(
+        `/libraries/${id}/metadata/reset`,
+      )
+      .then((res) => res.data),
   delete: (id: string) => api.delete(`/libraries/${id}`),
   updateOrder: (ids: string[]) => api.put("/libraries/order", ids),
   getSeries: (libraryId: string) => api.get(`/libraries/${libraryId}/series`),
@@ -203,8 +209,18 @@ export const seriesAPI = {
   getVolumes: (seriesId: string) => api.get(`/series/${seriesId}/volumes`),
   getChapters: (seriesId: string) => api.get<{ chapters: Chapter[] }>(`/series/${seriesId}/chapters`),
   getProgress: (seriesId: string) => api.get(`/series/${seriesId}/progress`),
-  getProgressList: (seriesId: string) => api.get<{ progress_list: ReadingProgress[] }>(`/series/${seriesId}/progress-list`),
-  update: (seriesId: string, data: Partial<Series>) => api.patch(`/series/${seriesId}`, data),
+  getProgressList: (seriesId: string) =>
+    api.get<{ progress_list: ReadingProgress[] }>(`/series/${seriesId}/progress-list`),
+  update: (seriesId: string, data: Partial<Series> & { description_translated?: string }) =>
+    api.patch(`/series/${seriesId}`, data),
+  resetMetadata: (seriesId: string) => api.post<Series>(`/series/${seriesId}/reset-metadata`).then((res) => res.data),
+  translateDescription: (seriesId: string, targetLang?: string) =>
+    api
+      .post<{ series: Series; target_lang: string; translated_text: string }>(
+        `/series/${seriesId}/translate-description`,
+        targetLang ? { target_lang: targetLang } : {},
+      )
+      .then((res) => res.data),
   updateProgress: (
     seriesId: string,
     data: {
@@ -268,23 +284,39 @@ export const seriesAPI = {
     api.get<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters`).then((res) => res.data),
   createCharacter: (seriesId: string, data: { name: string; role?: string; image_url?: string }) =>
     api.post<SeriesCharacter>(`/series/${seriesId}/characters`, data).then((res) => res.data),
-  updateCharacter: (seriesId: string, characterId: string, data: { name?: string; role?: string; image_url?: string }) =>
-    api.patch<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}`, data).then((res) => res.data),
+  updateCharacter: (
+    seriesId: string,
+    characterId: string,
+    data: { name?: string; role?: string; image_url?: string },
+  ) => api.patch<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}`, data).then((res) => res.data),
   deleteCharacter: (seriesId: string, characterId: string) =>
-    api.delete<{ deleted: boolean; id: string }>(`/series/${seriesId}/characters/${characterId}`).then((res) => res.data),
+    api
+      .delete<{ deleted: boolean; id: string }>(`/series/${seriesId}/characters/${characterId}`)
+      .then((res) => res.data),
   reorderCharacters: (seriesId: string, orderedIds: string[]) =>
-    api.post<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters/reorder`, { ordered_ids: orderedIds }).then((res) => res.data),
+    api
+      .post<{ characters: SeriesCharacter[] }>(`/series/${seriesId}/characters/reorder`, { ordered_ids: orderedIds })
+      .then((res) => res.data),
   importCharacters: (seriesId: string, characters: MetadataCharacter[], sourceProvider?: string) =>
-    api.post<SeriesCharacterImportResponse>(`/series/${seriesId}/characters/import`, { characters, source_provider: sourceProvider }).then((res) => res.data),
+    api
+      .post<SeriesCharacterImportResponse>(`/series/${seriesId}/characters/import`, {
+        characters,
+        source_provider: sourceProvider,
+      })
+      .then((res) => res.data),
   uploadCharacterImage: (seriesId: string, characterId: string, file: File) => {
     const formData = new FormData();
     formData.append("image", file);
-    return api.post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    }).then((res) => res.data);
+    return api
+      .post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((res) => res.data);
   },
   updateCharacterImageUrl: (seriesId: string, characterId: string, url: string) =>
-    api.post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image/url`, { url }).then((res) => res.data),
+    api
+      .post<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image/url`, { url })
+      .then((res) => res.data),
   deleteCharacterImage: (seriesId: string, characterId: string) =>
     api.delete<SeriesCharacter>(`/series/${seriesId}/characters/${characterId}/image`).then((res) => res.data),
 };
@@ -473,8 +505,10 @@ export const systemAPI = {
 export const pluginAPI = {
   list: () => api.get<{ plugins: PluginRecord[] }>("/plugins").then((res) => res.data),
   catalog: () => api.get<PluginCatalogResponse>("/plugins/catalog").then((res) => res.data),
-  getUpdates: (force = false) => api.get<PluginUpdateSummary>(`/plugins/updates?force=${force}`).then((res) => res.data),
-  install: (pluginId: string) => api.post<PluginInstallResponse>("/plugins/install", { plugin_id: pluginId }).then((res) => res.data),
+  getUpdates: (force = false) =>
+    api.get<PluginUpdateSummary>(`/plugins/updates?force=${force}`).then((res) => res.data),
+  install: (pluginId: string) =>
+    api.post<PluginInstallResponse>("/plugins/install", { plugin_id: pluginId }).then((res) => res.data),
   uninstall: (pluginId: string) => api.delete<PluginUninstallResponse>(`/plugins/${pluginId}`).then((res) => res.data),
   getConfig: (pluginId: string) => api.get<PluginConfigStatus>(`/plugins/${pluginId}/config`).then((res) => res.data),
   updateConfig: (pluginId: string, field: string, value: string) =>
@@ -487,7 +521,18 @@ export const pluginAPI = {
     api.delete<PluginConfigUpdateResponse>(`/plugins/${pluginId}/config/${field}`).then((res) => res.data),
   activate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/activate`).then((res) => res.data),
   deactivate: (pluginId: string) => api.post<PluginRecord>(`/plugins/${pluginId}/deactivate`).then((res) => res.data),
-  health: (pluginId: string) => api.get<{ status: string; version?: string; message?: string }>(`/plugins/${pluginId}/health`).then((res) => res.data),
+  health: (pluginId: string) =>
+    api
+      .get<{ status: string; version?: string; message?: string }>(`/plugins/${pluginId}/health`)
+      .then((res) => res.data),
+  batchTranslate: (targetLang?: string) =>
+    api
+      .post<{
+        total_processed: number;
+        total_success: number;
+        total_failed: number;
+      }>("/translations/batch", targetLang ? { target_lang: targetLang } : {})
+      .then((res) => res.data),
 };
 
 // Session API
@@ -511,9 +556,12 @@ export const statsAPI = {
 // Filesystem API
 export const filesystemAPI = {
   browse: (path = "/") =>
-    api.get<{ current: string; parent: string | null; quick_paths: { name: string; path: string }[]; directories: { name: string; path: string }[] }>(
-      `/filesystem?path=${encodeURIComponent(path)}`,
-    ),
+    api.get<{
+      current: string;
+      parent: string | null;
+      quick_paths: { name: string; path: string }[];
+      directories: { name: string; path: string }[];
+    }>(`/filesystem?path=${encodeURIComponent(path)}`),
 };
 
 // EPUB API

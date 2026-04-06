@@ -42,6 +42,8 @@
 }
 
 .libraryOverrideCard {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -64,6 +66,7 @@
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     transform 0.2s ease;
+  overflow: visible;
 }
 
 .libraryOverrideCard:hover {
@@ -121,6 +124,169 @@
   color: var(--text-secondary);
 }
 
+.translateCardContent {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.translationLanguageControl {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  max-width: 360px;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.translationLanguageHint {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.translationLanguageButton {
+  display: flex;
+  min-height: 42px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid rgba(120, 170, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(7, 12, 25, 0.82);
+  color: var(--text-primary);
+  padding: 0.7rem 0.9rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.translationLanguageButton:hover {
+  border-color: rgba(120, 170, 255, 0.34);
+}
+
+.translationLanguageButton:focus-visible {
+  outline: none;
+  border-color: rgba(117, 183, 255, 0.56);
+  box-shadow:
+    0 0 0 3px rgba(93, 153, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.translationLanguageValue {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.translationLanguageBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(120, 170, 255, 0.12);
+  color: #cfe0ff;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.translationLanguageChevronOpen {
+  transform: rotate(180deg);
+}
+
+.translationLanguageDropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 40;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(120, 170, 255, 0.2);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(19, 27, 49, 0.98), rgba(11, 17, 33, 0.98)),
+    rgba(11, 17, 33, 0.98);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.translationLanguageSearchWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.translationLanguageSearchInput {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  outline: none;
+}
+
+.translationLanguageSearchInput::placeholder {
+  color: rgba(201, 220, 255, 0.4);
+}
+
+.translationLanguageOptions {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0.4rem;
+}
+
+.translationLanguageOption {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+}
+
+.translationLanguageOption:hover {
+  background: rgba(120, 170, 255, 0.1);
+}
+
+.translationLanguageOptionLabel {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.translationLanguageCode {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.translationLanguageEmpty {
+  padding: 0.85rem;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  text-align: center;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -152,6 +318,11 @@
   flex-wrap: wrap;
   padding-top: 2rem;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.metadataTab > .header:first-of-type {
+  padding-top: 0;
+  border-top: none;
 }
 
 .titleArea h2,
@@ -194,6 +365,47 @@
   gap: 0.8rem;
   width: 100%;
   align-items: flex-start;
+}
+
+.metadataSearchCard {
+  display: flex;
+  width: 100%;
+  padding: 1.1rem 1.2rem;
+  border-radius: 16px;
+  border: 1px solid rgba(120, 170, 255, 0.14);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.015)
+    ),
+    rgba(17, 26, 46, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 24px rgba(0, 0, 0, 0.14);
+}
+
+.resetMetadataCard {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.resetMetadataContent {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.resetMetadataContent p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 .librarySelector {
@@ -345,6 +557,56 @@
   color: inherit;
   font-size: 0.75rem;
   font-weight: 800;
+}
+
+.resetButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  min-height: 46px;
+  padding: 0 1rem;
+  min-width: 190px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  background:
+    linear-gradient(180deg, rgba(248, 113, 113, 0.18), rgba(248, 113, 113, 0.1)),
+    rgba(255, 255, 255, 0.02);
+  color: #fee2e2;
+  font-weight: 700;
+  font-size: 0.95rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.resetButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(248, 113, 113, 0.36);
+  background:
+    linear-gradient(180deg, rgba(248, 113, 113, 0.24), rgba(248, 113, 113, 0.14)),
+    rgba(255, 255, 255, 0.03);
+}
+
+@media (min-width: 1024px) {
+  .libraryActionPanel {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .libraryActionPanel .librarySelector {
+    flex: 0 0 340px;
+    max-width: 340px;
+  }
+
+  .libraryActionPanel .actions {
+    width: auto;
+    flex: 1;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+  }
 }
 
 .progressArea {
@@ -959,9 +1221,15 @@
 
   .librarySelector,
   .scanButton,
-  .applyButton {
+  .applyButton,
+  .resetButton {
     width: 100%;
     min-width: 0;
+  }
+
+  .resetMetadataCard {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 
@@ -1119,6 +1387,19 @@
   .metadataTab {
     padding: 1rem;
     gap: 1.25rem;
+  }
+
+  .libraryOverrideCard {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .translateCardContent {
+    width: 100%;
+  }
+
+  .translationLanguageControl {
+    max-width: none;
   }
 
   .titleArea h2 {

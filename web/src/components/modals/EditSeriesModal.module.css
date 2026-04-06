@@ -254,6 +254,137 @@
   color: #9ca3af;
 }
 
+.fieldLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.descriptionLabelRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.descriptionTranslateRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.descriptionViewMenu {
+  position: relative;
+  top: -1px;
+}
+
+.descriptionViewButton {
+  min-width: 70px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  height: 24px;
+  padding: 0 1rem 0 0.5rem;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.descriptionViewButton span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  text-align: center;
+}
+
+.descriptionViewButton svg {
+  flex-shrink: 0;
+  position: absolute;
+  right: 0.34rem;
+}
+
+.descriptionViewButton:focus {
+  outline: none;
+  border-color: rgba(102, 126, 234, 0.5);
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.18);
+}
+
+.descriptionViewMenuList {
+  position: absolute;
+  top: calc(100% + 0.28rem);
+  left: 0;
+  z-index: 30;
+  min-width: 70px;
+  padding: 0.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: #111827;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+}
+
+.descriptionViewOption {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.34rem 0.42rem;
+}
+
+.descriptionViewOption:hover,
+.descriptionViewOptionActive {
+  background: rgba(102, 126, 234, 0.18);
+}
+
+.translationLanguageBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(102, 126, 234, 0.14);
+  border: 1px solid rgba(102, 126, 234, 0.28);
+  color: #c7d2fe;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.translateButton {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  padding: 0.38rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.translateButton:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 0.16);
+  border-color: rgba(102, 126, 234, 0.34);
+}
+
+.translateButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
 .formGroup input,
 .formGroup select,
 .formGroup textarea {
@@ -388,6 +519,26 @@
   transition: all 0.2s;
   background: #667eea;
   color: white;
+}
+
+.btnReset {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.26);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+}
+
+.btnReset:hover {
+  background: rgba(153, 27, 27, 0.28);
+  border-color: rgba(252, 165, 165, 0.34);
+  transform: translateY(-1px);
 }
 
 .btnPrimary:hover {

@@ -192,6 +192,22 @@ func (r *SeriesCharacterRepository) Delete(db database.Queryer, seriesID string,
 	return err
 }
 
+func (r *SeriesCharacterRepository) DeleteByLibraryID(db database.Queryer, libraryID string) error {
+	db = database.GetQueryer(db)
+	_, err := db.Exec(
+		`DELETE FROM series_characters
+		 WHERE series_id IN (SELECT id FROM series WHERE library_id = ?)`,
+		libraryID,
+	)
+	return err
+}
+
+func (r *SeriesCharacterRepository) DeleteBySeriesID(db database.Queryer, seriesID string) error {
+	db = database.GetQueryer(db)
+	_, err := db.Exec(`DELETE FROM series_characters WHERE series_id = ?`, seriesID)
+	return err
+}
+
 func (r *SeriesCharacterRepository) Reorder(db database.Queryer, seriesID string, orderedIDs []string) error {
 	queryer := database.GetQueryer(db)
 	if tx, ok := queryer.(*sql.Tx); ok {

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { ChevronDown, Link, RotateCcw, Save, Search, Upload, Users, X } from "lucide-react";
 import type { Series } from "../../types/series";
-import { seriesAPI } from "../../api/client";
+import { seriesAPI, settingAPI } from "../../api/client";
 import type { MetadataApplyResponse } from "../../types/plugin";
 import { SeriesMetadataPanel } from "../SeriesMetadataPanel";
 import { SeriesCharactersDrawer } from "../SeriesCharactersDrawer";
@@ -36,6 +36,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     isbn: "",
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isResettingMetadata, setIsResettingMetadata] = useState(false);
+  const [isTranslatingDescription, setIsTranslatingDescription] = useState(false);
   const [thumbnailMode, setThumbnailMode] = useState<"file" | "url">("file");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -43,9 +45,14 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const [isCharactersOpen, setIsCharactersOpen] = useState(false);
   const [charactersReloadToken, setCharactersReloadToken] = useState(0);
+  const [translationLanguage, setTranslationLanguage] = useState("ko");
+  const [descriptionView, setDescriptionView] = useState<"translated" | "original">("original");
+  const [translatedDescription, setTranslatedDescription] = useState("");
+  const [isDescriptionViewMenuOpen, setIsDescriptionViewMenuOpen] = useState(false);
   const wasOpenRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const originalTitleMenuRef = useRef<HTMLDivElement>(null);
+  const descriptionViewMenuRef = useRef<HTMLDivElement>(null);
 
   // AlertModal 상태
   const [alertModal, setAlertModal] = useState<{
@@ -104,6 +111,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
         isbn: series.metadata?.isbn || "",
       });
       setThumbnailUrl("");
+      setTranslatedDescription(series.metadata?.description_translated || "");
+      setDescriptionView(series.metadata?.description_translated?.trim() ? "translated" : "original");
     }
   }, [isOpen, series, storedOriginalTitle]);
 
@@ -112,6 +121,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       setThumbnailMode("file");
       setIsDragging(false);
       setIsOriginalTitleMenuOpen(false);
+      setIsDescriptionViewMenuOpen(false);
       setIsMetadataOpen(false);
       setIsCharactersOpen(false);
       setCharactersReloadToken(0);
@@ -134,6 +144,24 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    settingAPI
+      .list()
+      .then((settings) => {
+        const appLanguage = (settings.app_language || "").trim().toLowerCase();
+        if (appLanguage) {
+          setTranslationLanguage(appLanguage);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load translation language:", error);
+      });
   }, [isOpen]);
 
   const originalTitleOptions = useMemo(() => {
@@ -163,6 +191,21 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   }, [isOriginalTitleMenuOpen]);
 
   useEffect(() => {
+    if (!isDescriptionViewMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!descriptionViewMenuRef.current?.contains(event.target as Node)) {
+        setIsDescriptionViewMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [isDescriptionViewMenuOpen]);
+
+  useEffect(() => {
     const handleWindowDragEvent = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -186,6 +229,15 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const { value } = e.target;
+    if (descriptionView === "translated") {
+      setTranslatedDescription(value);
+      return;
+    }
+    setFormData((prev) => ({ ...prev, description: value }));
   };
 
   const applyOriginalTitleOption = (value: string) => {
@@ -268,7 +320,15 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     setIsSaving(true);
 
     try {
-      const res = await seriesAPI.update(series.id, formData);
+      const res = await seriesAPI.update(series.id, {
+        ...formData,
+        description_translated:
+          formData.description.trim() !== (series.description || "").trim()
+            ? descriptionView === "translated"
+              ? translatedDescription
+              : ""
+            : translatedDescription,
+      });
       onUpdate(res.data);
       window.location.reload();
     } catch (error) {
@@ -278,6 +338,64 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       setIsSaving(false);
     }
   };
+
+  const handleTranslateDescription = async () => {
+    if (!formData.description.trim()) {
+      showAlert("info", t("series.edit.alert.translate_empty"));
+      return;
+    }
+
+    if (formData.description.trim() !== (series.description || "").trim()) {
+      showAlert("info", t("series.edit.alert.translate_save_first"));
+      return;
+    }
+
+    setIsTranslatingDescription(true);
+    try {
+      const response = await seriesAPI.translateDescription(series.id, translationLanguage);
+      onUpdate(response.series);
+      setTranslatedDescription(response.translated_text);
+      setDescriptionView("translated");
+      showAlert(
+        "success",
+        t("series.edit.alert.translate_success", {
+          language: originalTitleLanguageLabel(translationLanguage),
+        }),
+      );
+    } catch (error) {
+      console.error("Failed to translate description:", error);
+      showAlert("error", t("series.edit.alert.translate_failed"));
+    } finally {
+      setIsTranslatingDescription(false);
+    }
+  };
+
+  const handleResetSeriesMetadata = () => {
+    showConfirm(
+      t("series.edit.alert.reset_metadata_confirm"),
+      async () => {
+        setIsResettingMetadata(true);
+        try {
+          const refreshed = await seriesAPI.resetMetadata(series.id);
+          onUpdate(refreshed);
+          setTranslatedDescription(refreshed.metadata?.description_translated || "");
+          setDescriptionView(refreshed.metadata?.description_translated?.trim() ? "translated" : "original");
+          setCharactersReloadToken((prev) => prev + 1);
+          showAlert("success", t("series.edit.alert.reset_metadata_success"));
+        } catch (error) {
+          console.error("Failed to reset series metadata:", error);
+          showAlert("error", t("series.edit.alert.reset_metadata_failed"));
+        } finally {
+          setIsResettingMetadata(false);
+        }
+      },
+      t("series.edit.alert.reset_metadata_title"),
+    );
+  };
+
+  const hasTranslatedDescription = Boolean(translatedDescription.trim());
+  const isShowingTranslatedDescription = hasTranslatedDescription && descriptionView === "translated";
+  const displayedDescription = isShowingTranslatedDescription ? translatedDescription : formData.description;
 
   if (!isOpen) return null;
 
@@ -301,6 +419,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       published_at: updatedFieldSet.has("published_at") ? response.series.metadata?.published_at || "" : prev.published_at,
       isbn: updatedFieldSet.has("isbn") ? response.series.metadata?.isbn || "" : prev.isbn,
     }));
+    setTranslatedDescription(response.series.metadata?.description_translated || "");
+    setDescriptionView(response.series.metadata?.description_translated?.trim() ? "translated" : "original");
   };
 
   return (
@@ -318,10 +438,24 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
               <h2>{t("series.edit.title")}</h2>
               <div className={styles.headerActions}>
                 <button
+                  type="button"
+                  className={styles.btnReset}
+                  onClick={handleResetSeriesMetadata}
+                  disabled={isSaving || isResettingMetadata}
+                >
+                  {isResettingMetadata ? (
+                    t("series.edit.actions.resetting")
+                  ) : (
+                    <>
+                      <RotateCcw size={16} /> {t("series.edit.actions.reset")}
+                    </>
+                  )}
+                </button>
+                <button
                   type="submit"
                   form="edit-series-form"
                   className={styles.btnPrimary}
-                  disabled={isSaving}
+                  disabled={isSaving || isResettingMetadata}
                 >
                   {isSaving ? (
                     t("series.edit.actions.saving")
@@ -601,11 +735,82 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                   </div>
 
                   <div className={`${styles.formGroup} ${styles.hFull}`}>
-                    <label>{t("series.edit.form.description")}</label>
+                    <div className={styles.fieldLabelRow}>
+                      <div className={styles.descriptionLabelRow}>
+                        <label>{t("series.edit.form.description")}</label>
+                        {hasTranslatedDescription && (
+                          <div
+                            ref={descriptionViewMenuRef}
+                            className={styles.descriptionViewMenu}
+                          >
+                            <button
+                              type="button"
+                              className={styles.descriptionViewButton}
+                              aria-haspopup="listbox"
+                              aria-expanded={isDescriptionViewMenuOpen}
+                              aria-label={t("series.edit.form.description_view")}
+                              onClick={() => setIsDescriptionViewMenuOpen((prev) => !prev)}
+                            >
+                              <span>
+                                {descriptionView === "translated"
+                                  ? t("series.edit.form.description_view_translated")
+                                  : t("series.edit.form.description_view_original")}
+                              </span>
+                              <ChevronDown size={11} />
+                            </button>
+                            {isDescriptionViewMenuOpen && (
+                              <div
+                                className={styles.descriptionViewMenuList}
+                                role="listbox"
+                                aria-label={t("series.edit.form.description_view")}
+                              >
+                                <button
+                                  type="button"
+                                  className={`${styles.descriptionViewOption} ${descriptionView === "translated" ? styles.descriptionViewOptionActive : ""}`}
+                                  onClick={() => {
+                                    setDescriptionView("translated");
+                                    setIsDescriptionViewMenuOpen(false);
+                                  }}
+                                >
+                                  {t("series.edit.form.description_view_translated")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`${styles.descriptionViewOption} ${descriptionView === "original" ? styles.descriptionViewOptionActive : ""}`}
+                                  onClick={() => {
+                                    setDescriptionView("original");
+                                    setIsDescriptionViewMenuOpen(false);
+                                  }}
+                                >
+                                  {t("series.edit.form.description_view_original")}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className={styles.descriptionTranslateRow}>
+                        <span className={styles.translationLanguageBadge}>
+                          {t("series.edit.form.translation_target", {
+                            language: originalTitleLanguageLabel(translationLanguage),
+                          })}
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.translateButton}
+                          onClick={handleTranslateDescription}
+                          disabled={isTranslatingDescription}
+                        >
+                          {isTranslatingDescription
+                            ? t("series.edit.actions.translating")
+                            : t("series.edit.actions.translate")}
+                        </button>
+                      </div>
+                    </div>
                     <textarea
                       name="description"
-                      value={formData.description}
-                      onChange={handleChange}
+                      value={displayedDescription}
+                      onChange={handleDescriptionChange}
                       className={styles.hFull}
                     />
                   </div>

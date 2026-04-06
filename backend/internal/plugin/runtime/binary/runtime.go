@@ -342,6 +342,22 @@ func (r *Runtime) Fetch(ctx context.Context, inst runtime.Instance, req *sdktype
 	return payload, nil
 }
 
+func (r *Runtime) Translate(ctx context.Context, inst runtime.Instance, req *sdktypes.TranslateRequest) (*sdktypes.TranslateResponse, error) {
+	payload := &sdktypes.TranslateResponse{}
+	if err := r.doJSON(ctx, inst.ID, http.MethodPost, sdkservice.PathTranslate, req, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func (r *Runtime) Detect(ctx context.Context, inst runtime.Instance, req *sdktypes.DetectRequest) (*sdktypes.DetectResponse, error) {
+	payload := &sdktypes.DetectResponse{}
+	if err := r.doJSON(ctx, inst.ID, http.MethodPost, sdkservice.PathDetect, req, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 func (r *Runtime) waitUntilReady(ctx context.Context, id string, baseURL string, expectedManifestID string) error {
 	deadline := time.Now().Add(sdkplugin.StartupTimeout)
 	for time.Now().Before(deadline) {

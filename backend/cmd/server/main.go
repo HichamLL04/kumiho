@@ -109,8 +109,9 @@ func main() {
 		log.Fatalf("Failed to list plugin records: %v", err)
 	}
 	log.Printf("Plugin manager initialized with %d persisted plugin records", len(pluginRecords))
-	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, libraryRepo, settingRepo, pluginManager)
+	metadataSvc := service.NewMetadataService(cfg, nil, seriesRepo, seriesCharacterRepo, libraryRepo, settingRepo, pluginManager)
 	pluginInstallSvc := service.NewPluginInstallService(cfg, nil, pluginManager, pluginSecretSvc)
+	translationSvc := service.NewTranslationService(pluginManager, seriesRepo, settingRepo)
 
 	// 핸들러 초기화
 	authHandler := handler.NewAuthHandler(authService, cfg, hub)
@@ -119,7 +120,7 @@ func main() {
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
 	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
-	seriesHandler := handler.NewSeriesHandler(seriesRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
+	seriesHandler := handler.NewSeriesHandler(seriesRepo, seriesCharacterRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
 	systemHandler := handler.NewSystemHandler(settingRepo) // 추가
 	statsHandler := handler.NewStatsHandler(progressRepo, completionRepo, viewerSessionRepo)
@@ -131,6 +132,7 @@ func main() {
 	pluginHandler := handler.NewPluginHandler(pluginManager, pluginInstallSvc, pluginSecretSvc)
 	metadataHandler := handler.NewMetadataHandler(metadataSvc)
 	seriesCharacterHandler := handler.NewSeriesCharacterHandler(seriesRepo, seriesCharacterRepo, cfg)
+	translationHandler := handler.NewTranslationHandler(translationSvc)
 
 	// 미들웨어 초기화
 	authMiddleware := middleware.NewAuthMiddleware(authService)
@@ -223,6 +225,9 @@ func main() {
 	plugins.Post("/:id/activate", authMiddleware.MasterOnly(), pluginHandler.Activate)
 	plugins.Post("/:id/deactivate", authMiddleware.MasterOnly(), pluginHandler.Deactivate)
 
+	translations := protected.Group("/translations")
+	translations.Post("/batch", authMiddleware.MasterOnly(), translationHandler.BatchTranslate)
+
 	// 라이브러리
 	libraries := protected.Group("/libraries")
 	libraries.Get("", libraryHandler.List)
@@ -231,6 +236,7 @@ func main() {
 	libraries.Post("", libraryHandler.Create)
 	libraries.Put("/order", libraryHandler.UpdateOrder)
 	libraries.Post("/scan", libraryHandler.ScanAll)
+	libraries.Post("/:id/metadata/reset", authMiddleware.MasterOnly(), metadataHandler.ResetLibrary)
 	libraries.Get("/:id", libraryHandler.Get)
 	libraries.Put("/:id", libraryHandler.Update)
 	libraries.Post("/:id/scan", libraryHandler.Scan)
@@ -244,6 +250,8 @@ func main() {
 	series.Post("/extensions/batch", seriesHandler.BatchGetExtensions)
 	series.Get("/:id", seriesHandler.GetSeries)
 	series.Patch("/:id", seriesHandler.UpdateSeries)
+	series.Post("/:id/reset-metadata", seriesHandler.ResetSeriesMetadata)
+	series.Post("/:id/translate-description", translationHandler.TranslateSeriesDescription)
 	series.Post("/:id/metadata/search", metadataHandler.Search)
 	series.Post("/:id/metadata/fetch", metadataHandler.Fetch)
 	series.Post("/:id/metadata/apply", metadataHandler.Apply)

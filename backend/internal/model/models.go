@@ -79,18 +79,19 @@ type Series struct {
 
 // SeriesMetadata 시리즈 부가 메타데이터
 type SeriesMetadata struct {
-	SeriesID        string `json:"series_id" db:"series_id"`
-	Description     string `json:"description" db:"description"`
-	IsBookmarked    bool   `json:"is_bookmarked" db:"is_bookmarked"`
-	Status          string `json:"status" db:"status"`   // "ONGOING", "COMPLETED", "HIATUS"
-	Authors         string `json:"authors" db:"authors"` // JSON string or comma-separated
-	Tags            string `json:"tags" db:"tags"`       // JSON string or comma-separated
-	PublicationYear string `json:"publication_year" db:"publication_year"`
-	OriginalTitle   string `json:"original_title" db:"original_title"`
-	OriginalTitles  string `json:"original_titles" db:"original_titles"`
-	Publisher       string `json:"publisher" db:"publisher"`
-	PublishedAt     string `json:"published_at" db:"published_at"`
-	ISBN            string `json:"isbn" db:"isbn"`
+	SeriesID              string `json:"series_id" db:"series_id"`
+	Description           string `json:"description" db:"description"`
+	DescriptionTranslated string `json:"description_translated" db:"description_translated"`
+	IsBookmarked          bool   `json:"is_bookmarked" db:"is_bookmarked"`
+	Status                string `json:"status" db:"status"`   // "ONGOING", "COMPLETED", "HIATUS"
+	Authors               string `json:"authors" db:"authors"` // JSON string or comma-separated
+	Tags                  string `json:"tags" db:"tags"`       // JSON string or comma-separated
+	PublicationYear       string `json:"publication_year" db:"publication_year"`
+	OriginalTitle         string `json:"original_title" db:"original_title"`
+	OriginalTitles        string `json:"original_titles" db:"original_titles"`
+	Publisher             string `json:"publisher" db:"publisher"`
+	PublishedAt           string `json:"published_at" db:"published_at"`
+	ISBN                  string `json:"isbn" db:"isbn"`
 }
 
 // SeriesCharacter 시리즈 등장인물 모델

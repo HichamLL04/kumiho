@@ -101,6 +101,15 @@
     "metadata": {
       "title": "メタデータ管理",
       "description": "ライブラリ内のシリーズをスキャンし、不足しているメタデータを見つけて一括適用します。",
+      "search_title": "メタデータ検索",
+      "search_description": "選択したライブラリのシリーズを検索し、一致したメタデータを一括適用します。",
+      "reset_title": "ライブラリメタデータ初期化",
+      "reset_description": "スキャン時の状態に戻します。",
+      "reset_card_description": "作者、タグ、出版情報、あらすじ、翻訳あらすじ、カスタムサムネイルをすべて初期化します。",
+      "reset_action": "メタデータ初期化",
+      "reset_confirm": "{{library}} ライブラリのメタデータ、翻訳あらすじ、カスタムサムネイルをすべて初期化します。この操作は元に戻せません。",
+      "reset_complete": "{{library}} ライブラリの {{count}} 件のシリーズメタデータを初期化しました。",
+      "reset_failed": "ライブラリメタデータの初期化に失敗しました。",
       "settings_description": "保存済みの原題をシリーズ名へ反映するか設定します。無効にするとパスベースのタイトルへ戻します。",
       "start_scan": "メタデータ検索開始",
       "cancel_scan": "メタデータ検索中止",
@@ -822,10 +831,14 @@
         "isbn": "ISBN",
         "isbn_placeholder": "例: 979-11-6521-810-2",
         "status": "連載状態",
-        "tags": "タグ (カンマ区切り)",
-        "tags_placeholder": "例: ファンタジー, アクション",
-        "description": "あらすじ",
-        "sync_file": "ファイル同期 (ComicInfo.xml) - 準備中",
+    "tags": "タグ (カンマ区切り)",
+    "tags_placeholder": "例: ファンタジー, アクション",
+    "description": "あらすじ",
+    "description_view": "あらすじ表示",
+    "description_view_translated": "翻訳",
+    "description_view_original": "原文",
+    "translation_target": "翻訳言語: {{language}}",
+    "sync_file": "ファイル同期 (ComicInfo.xml) - 準備中",
         "status_options": {
           "completed": "完結",
           "ongoing": "連載中",
@@ -833,22 +846,34 @@
           "cancelled": "打ち切り"
         }
       },
-      "actions": {
-        "cancel": "キャンセル",
-        "save": "保存",
-        "saving": "保存中..."
-      },
-      "alert": {
+  "actions": {
+    "cancel": "キャンセル",
+    "reset": "初期化",
+    "resetting": "初期化中...",
+    "save": "保存",
+    "saving": "保存中...",
+    "translate": "翻訳",
+    "translating": "翻訳中..."
+  },
+  "alert": {
         "upload_failed": "サムネイルのアップロードに失敗しました。",
         "url_failed": "画像のダウンロードに失敗しました。URLを確認してください。",
         "reset_confirm_title": "サムネイルリセット",
         "reset_confirm_msg": "サムネイルを初期化しますか？ (デフォルトに戻ります)",
-        "reset_success": "サムネイルがリセットされました。",
-        "reset_failed": "リセットに失敗しました。",
-        "upload_success": "サムネイルがアップロードされました。",
-        "update_failed": "シリーズ情報の更新に失敗しました。"
-      }
-    }
+    "reset_success": "サムネイルがリセットされました。",
+    "reset_failed": "リセットに失敗しました。",
+    "upload_success": "サムネイルがアップロードされました。",
+    "update_failed": "シリーズ情報の更新に失敗しました。",
+    "translate_empty": "翻訳するあらすじがありません。",
+    "translate_save_first": "あらすじの変更を先に保存してから翻訳してください。",
+    "translate_success": "{{language}} 翻訳を更新しました。",
+    "translate_failed": "あらすじの翻訳に失敗しました。",
+    "reset_metadata_title": "シリーズメタデータ初期化",
+    "reset_metadata_confirm": "このシリーズのメタデータ、翻訳あらすじ、カスタムサムネイル、登場人物を初期化します。この操作は元に戻せません。",
+    "reset_metadata_success": "シリーズメタデータを初期化しました。",
+    "reset_metadata_failed": "シリーズメタデータの初期化に失敗しました。"
+  }
+}
   },
   "volume": {
     "edit": {

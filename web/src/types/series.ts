@@ -13,6 +13,7 @@ export interface EbookMetadata {
   publisher: string;
   published_at: string;
   isbn: string;
+  description_translated?: string;
 }
 
 export interface SeriesCharacter {

@@ -54,11 +54,11 @@ func (r *SeriesRepository) Create(db database.Queryer, series *model.Series) err
 	}
 	_, err = db.Exec(
 		`INSERT INTO series_metadata (
-			series_id, description, is_bookmarked, status, authors, tags, publication_year,
+			series_id, description, description_translated, is_bookmarked, status, authors, tags, publication_year,
 			original_title, original_titles, publisher, published_at, isbn
 		)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		series.ID, series.Description, series.IsBookmarked, series.Metadata.Status, series.Metadata.Authors, series.Metadata.Tags, series.Metadata.PublicationYear,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		series.ID, series.Description, series.Metadata.DescriptionTranslated, series.IsBookmarked, series.Metadata.Status, series.Metadata.Authors, series.Metadata.Tags, series.Metadata.PublicationYear,
 		series.Metadata.OriginalTitle, series.Metadata.OriginalTitles, series.Metadata.Publisher, series.Metadata.PublishedAt, series.Metadata.ISBN,
 	)
 	return err
@@ -69,7 +69,7 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
-		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
+		        sm.description, sm.description_translated, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
 				sm.original_title, sm.original_titles, sm.publisher, sm.published_at, sm.isbn,
 				l.library_type
 		 FROM series s
@@ -89,13 +89,13 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 		var s model.Series
 		var m model.SeriesMetadata
 		var thumbnail, ext sql.NullString
-		var desc, status, authors, tags, pubYear, originalTitle, originalTitles, publisher, publishedAt, isbn sql.NullString
+		var desc, descTranslated, status, authors, tags, pubYear, originalTitle, originalTitles, publisher, publishedAt, isbn sql.NullString
 		var isBookmarked sql.NullBool
 		var libraryType sql.NullString
 
 		err := rows.Scan(
 			&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
-			&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &originalTitles, &publisher, &publishedAt, &isbn,
+			&desc, &descTranslated, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &originalTitles, &publisher, &publishedAt, &isbn,
 			&libraryType,
 		)
 		if err != nil {
@@ -114,6 +114,9 @@ func (r *SeriesRepository) FindByLibraryID(db database.Queryer, libraryID string
 		if desc.Valid {
 			s.Description = desc.String
 			m.Description = desc.String
+		}
+		if descTranslated.Valid {
+			m.DescriptionTranslated = descTranslated.String
 		}
 		if isBookmarked.Valid {
 			s.IsBookmarked = isBookmarked.Bool
@@ -158,7 +161,7 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 	db = database.GetQueryer(db)
 	rows, err := db.Query(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
-		        sm.description, 1 AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
+		        sm.description, sm.description_translated, 1 AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
 				sm.original_title, sm.original_titles, sm.publisher, sm.published_at, sm.isbn,
 				l.library_type
 		 FROM series s
@@ -178,13 +181,13 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 		var s model.Series
 		var m model.SeriesMetadata
 		var thumbnail, ext sql.NullString
-		var desc, status, authors, tags, pubYear, originalTitle, originalTitles, publisher, publishedAt, isbn sql.NullString
+		var desc, descTranslated, status, authors, tags, pubYear, originalTitle, originalTitles, publisher, publishedAt, isbn sql.NullString
 		var isBookmarked sql.NullBool
 		var libraryType sql.NullString
 
 		err := rows.Scan(
 			&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
-			&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &originalTitles, &publisher, &publishedAt, &isbn,
+			&desc, &descTranslated, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &originalTitles, &publisher, &publishedAt, &isbn,
 			&libraryType,
 		)
 		if err != nil {
@@ -203,6 +206,9 @@ func (r *SeriesRepository) FindBookmarked(db database.Queryer, userID string) ([
 		if desc.Valid {
 			s.Description = desc.String
 			m.Description = desc.String
+		}
+		if descTranslated.Valid {
+			m.DescriptionTranslated = descTranslated.String
 		}
 		if isBookmarked.Valid {
 			s.IsBookmarked = isBookmarked.Bool
@@ -248,13 +254,13 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	var s model.Series
 	var m model.SeriesMetadata
 	var thumbnail, ext sql.NullString
-	var desc, status, authors, tags, pubYear, originalTitle, originalTitles, publisher, publishedAt, isbn sql.NullString
+	var desc, descTranslated, status, authors, tags, pubYear, originalTitle, originalTitles, publisher, publishedAt, isbn sql.NullString
 	var isBookmarked sql.NullBool
 
 	var libraryType sql.NullString
 	err := db.QueryRow(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
-		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
+		        sm.description, sm.description_translated, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
 				sm.original_title, sm.original_titles, sm.publisher, sm.published_at, sm.isbn,
 				l.library_type
 		 FROM series s
@@ -265,7 +271,7 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 		userID, id,
 	).Scan(
 		&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
-		&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &originalTitles, &publisher, &publishedAt, &isbn,
+		&desc, &descTranslated, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &originalTitles, &publisher, &publishedAt, &isbn,
 		&libraryType,
 	)
 
@@ -288,6 +294,9 @@ func (r *SeriesRepository) FindByID(db database.Queryer, id string, userID strin
 	if desc.Valid {
 		s.Description = desc.String
 		m.Description = desc.String
+	}
+	if descTranslated.Valid {
+		m.DescriptionTranslated = descTranslated.String
 	}
 	if isBookmarked.Valid {
 		s.IsBookmarked = isBookmarked.Bool
@@ -331,13 +340,13 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	var s model.Series
 	var m model.SeriesMetadata
 	var thumbnail, ext sql.NullString
-	var desc, status, authors, tags, pubYear, originalTitle, originalTitles, publisher, publishedAt, isbn sql.NullString
+	var desc, descTranslated, status, authors, tags, pubYear, originalTitle, originalTitles, publisher, publishedAt, isbn sql.NullString
 	var isBookmarked sql.NullBool
 	var libraryType sql.NullString
 
 	err := db.QueryRow(
 		`SELECT s.id, s.library_id, s.title, s.path, s.thumbnail_path, s.extension, s.created_at, s.updated_at,
-		        sm.description, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
+		        sm.description, sm.description_translated, (ub.series_id IS NOT NULL) AS is_bookmarked, sm.status, sm.authors, sm.tags, sm.publication_year,
 				sm.original_title, sm.original_titles, sm.publisher, sm.published_at, sm.isbn,
 				l.library_type
 		 FROM series s
@@ -348,7 +357,7 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 		userID, path,
 	).Scan(
 		&s.ID, &s.LibraryID, &s.Title, &s.Path, &thumbnail, &ext, &s.CreatedAt, &s.UpdatedAt,
-		&desc, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &originalTitles, &publisher, &publishedAt, &isbn,
+		&desc, &descTranslated, &isBookmarked, &status, &authors, &tags, &pubYear, &originalTitle, &originalTitles, &publisher, &publishedAt, &isbn,
 		&libraryType,
 	)
 
@@ -371,6 +380,9 @@ func (r *SeriesRepository) FindByPath(db database.Queryer, path string, userID s
 	if desc.Valid {
 		s.Description = desc.String
 		m.Description = desc.String
+	}
+	if descTranslated.Valid {
+		m.DescriptionTranslated = descTranslated.String
 	}
 	if isBookmarked.Valid {
 		s.IsBookmarked = isBookmarked.Bool
@@ -438,10 +450,10 @@ func (r *SeriesRepository) Update(db database.Queryer, series *model.Series) err
 	if series.Metadata != nil {
 		_, err = db.Exec(
 			`UPDATE series_metadata
-			 SET description = ?, is_bookmarked = ?, status = ?, authors = ?, tags = ?, publication_year = ?,
+			 SET description = ?, description_translated = ?, is_bookmarked = ?, status = ?, authors = ?, tags = ?, publication_year = ?,
 			     original_title = ?, original_titles = ?, publisher = ?, published_at = ?, isbn = ?
 			 WHERE series_id = ?`,
-			series.Description, series.IsBookmarked, series.Metadata.Status, series.Metadata.Authors, series.Metadata.Tags, series.Metadata.PublicationYear,
+			series.Description, series.Metadata.DescriptionTranslated, series.IsBookmarked, series.Metadata.Status, series.Metadata.Authors, series.Metadata.Tags, series.Metadata.PublicationYear,
 			series.Metadata.OriginalTitle, series.Metadata.OriginalTitles, series.Metadata.Publisher, series.Metadata.PublishedAt, series.Metadata.ISBN, series.ID,
 		)
 		return err
@@ -467,6 +479,98 @@ func (r *SeriesRepository) UpdateBookmark(db database.Queryer, userID, seriesID 
 func (r *SeriesRepository) UpdateUpdatedAt(db database.Queryer, id string, updatedAt time.Time) error {
 	db = database.GetQueryer(db)
 	_, err := db.Exec(`UPDATE series SET updated_at = ? WHERE id = ?`, updatedAt, id)
+	return err
+}
+
+func (r *SeriesRepository) ResetMetadataByLibrary(db database.Queryer, libraryID string) (int64, error) {
+	db = database.GetQueryer(db)
+	result, err := db.Exec(
+		`UPDATE series_metadata
+		 SET description = '',
+		     description_translated = '',
+		     status = '',
+		     authors = '',
+		     tags = '',
+		     publication_year = '',
+		     original_title = '',
+		     original_titles = '',
+		     publisher = '',
+		     published_at = '',
+		     isbn = ''
+		 WHERE series_id IN (SELECT id FROM series WHERE library_id = ?)`,
+		libraryID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := db.Exec(
+		`UPDATE series
+		 SET thumbnail_path = NULL, updated_at = ?
+		 WHERE library_id = ?`,
+		time.Now(), libraryID,
+	); err != nil {
+		return 0, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rowsAffected, nil
+}
+
+func (r *SeriesRepository) FindUntranslatedSeriesIDs(db database.Queryer) ([]string, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(
+		`SELECT series_id
+		 FROM series_metadata
+		 WHERE COALESCE(description, '') != ''
+		   AND COALESCE(description_translated, '') = ''`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func (r *SeriesRepository) ResetMetadataBySeriesID(db database.Queryer, seriesID string) error {
+	db = database.GetQueryer(db)
+	if _, err := db.Exec(
+		`UPDATE series_metadata
+		 SET description = '',
+		     description_translated = '',
+		     status = '',
+		     authors = '',
+		     tags = '',
+		     publication_year = '',
+		     original_title = '',
+		     original_titles = '',
+		     publisher = '',
+		     published_at = '',
+		     isbn = ''
+		 WHERE series_id = ?`,
+		seriesID,
+	); err != nil {
+		return err
+	}
+	_, err := db.Exec(
+		`UPDATE series
+		 SET thumbnail_path = NULL, updated_at = ?
+		 WHERE id = ?`,
+		time.Now(), seriesID,
+	)
 	return err
 }
 

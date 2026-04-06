@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 40
+const latestMigrationVersion = 41
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -288,6 +288,7 @@ func Migrate() error {
 	CREATE TABLE IF NOT EXISTS series_metadata (
 		series_id TEXT PRIMARY KEY REFERENCES series(id) ON DELETE CASCADE,
 		description TEXT DEFAULT '',
+		description_translated TEXT DEFAULT '',
 		is_bookmarked BOOLEAN DEFAULT 0,
 		status TEXT DEFAULT 'ONGOING',
 		authors TEXT DEFAULT '',
@@ -621,6 +622,7 @@ func Migrate() error {
 		{38, "시리즈 메타데이터 다국어 원제 컬럼 추가", migrateSeriesMetadataOriginalTitles},
 		{39, "시리즈 등장인물 테이블 추가", migrateSeriesCharacters},
 		{40, "원제 오버라이드 라이브러리별 설정 이전", migrateOriginalTitleOverridePerLibrary},
+		{41, "시리즈 메타데이터 번역된 줄거리 컬럼 추가", migrateSeriesMetadataDescriptionTranslated},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -1208,6 +1210,11 @@ func migrateOriginalTitleOverridePerLibrary() error {
 	}
 
 	return nil
+}
+
+// #41 migrateSeriesMetadataDescriptionTranslated series_metadata 테이블에 번역된 줄거리 컬럼 추가
+func migrateSeriesMetadataDescriptionTranslated() error {
+	return addColumn("series_metadata", "description_translated", "TEXT DEFAULT ''")
 }
 
 // #14 migrateChapterCompletions chapter_completions 테이블 추가

@@ -396,6 +396,7 @@ export function SeriesPage() {
           <>
             <SeriesInfoCard
               series={series}
+              library={library}
               characters={characters}
               progress={progress}
               summary={summary}

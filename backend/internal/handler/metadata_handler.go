@@ -97,9 +97,24 @@ func (h *MetadataHandler) Apply(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
+func (h *MetadataHandler) ResetLibrary(c *fiber.Ctx) error {
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	result, err := h.metadataSvc.ResetLibraryMetadata(ctx, c.Params("id"))
+	if err != nil {
+		return writeMetadataError(c, err)
+	}
+	return c.JSON(result)
+}
+
 func writeMetadataError(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, service.ErrSeriesNotFound):
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	case errors.Is(err, service.ErrLibraryNotFound):
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 	case errors.Is(err, service.ErrNoActiveMetadataPlugin):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
