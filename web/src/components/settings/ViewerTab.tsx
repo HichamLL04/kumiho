@@ -26,7 +26,6 @@ interface SettingsData {
   epub_wheel_direction?: string;
   epub_keyboard_direction?: string;
   epub_click_direction?: string;
-  epub_title_override?: string;
   [key: string]: string | undefined;
 }
 
@@ -89,7 +88,6 @@ export function ViewerTab() {
   const [epubWheelDirection, setEpubWheelDirection] = useState<"down" | "up">("down");
   const [epubKeyboardDirection, setEpubKeyboardDirection] = useState<"right" | "left">("right");
   const [epubClickDirection, setEpubClickDirection] = useState<"right" | "left">("right");
-  const [epubTitleOverride, setEpubTitleOverride] = useState(false);
 
   // 설정 가져오기
   useEffect(() => {
@@ -137,9 +135,6 @@ export function ViewerTab() {
         }
         if (data.epub_click_direction === "right" || data.epub_click_direction === "left") {
           setEpubClickDirection(data.epub_click_direction);
-        }
-        if (data.epub_title_override) {
-          setEpubTitleOverride(data.epub_title_override === "true");
         }
       } catch (error) {
         if (isMounted) {
@@ -240,7 +235,6 @@ export function ViewerTab() {
         settingAPI.update("epub_wheel_direction", { value: "down" }),
         settingAPI.update("epub_keyboard_direction", { value: "right" }),
         settingAPI.update("epub_click_direction", { value: "right" }),
-        settingAPI.update("epub_title_override", { value: "false" }),
       ]);
 
       setEpubRenderMode("auto");
@@ -249,8 +243,6 @@ export function ViewerTab() {
       setEpubWheelDirection("down");
       setEpubKeyboardDirection("right");
       setEpubClickDirection("right");
-      setEpubTitleOverride(false);
-
       setStatus({ type: "success", message: t("settings.viewer.toast.reset_success") });
       setIsResetModalOpen(false);
       setResetTarget(null);
@@ -670,30 +662,6 @@ export function ViewerTab() {
               </div>
             </div>
 
-            <h4 className={localStyles.subsectionTitle}>{t("settings.viewer.subsections.metadata")}</h4>
-            <div className={localStyles.subsectionGroup}>
-              <div className={styles.settingsItem}>
-                <div className={styles.itemInfo}>
-                  <label htmlFor="epub_title_override">{t("settings.viewer.epub.title_override_label")}</label>
-                  <p>{t("settings.viewer.epub.title_override_desc")}</p>
-                </div>
-                <div className={styles.itemControl}>
-                  <select
-                    id="epub_title_override"
-                    value={epubTitleOverride ? "true" : "false"}
-                    onChange={(e) =>
-                      handleSettingChange("epub_title_override", e.target.value, (v) =>
-                        setEpubTitleOverride(v === "true"),
-                      )
-                    }
-                    className={styles.settingsSelect}
-                  >
-                    <option value="true">{t("common.on", { defaultValue: "켜기" })}</option>
-                    <option value="false">{t("common.off", { defaultValue: "끄기" })}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
           </div>
         </section>
 

@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -66,6 +68,8 @@ var (
 	reVolSuffix  = regexp.MustCompile(`(?:^|[\s\-_\[\(])(\d+)(?:$|[\s\-_\]\)])`)
 	rePrologue   = regexp.MustCompile(`(?i)(?:prologue|프롤로그)`)
 )
+
+const manualOriginalTitleKey = "_manual_title"
 
 func isExcluded(name string, patterns []string) bool {
 	// 기본 제외 대상 (NAS 시스템 폴더 등)
@@ -159,15 +163,91 @@ func (s *Scanner) getPerfConfig() scanPerfConfig {
 	}
 }
 
-func (s *Scanner) isEpubTitleOverrideEnabled() bool {
-	if s.settingRepo == nil {
-		return false
+func (s *Scanner) NormalizeStoredSeriesTitles() error {
+	tx, err := database.DB.BeginTx(context.Background(), nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
 	}
-	setting, err := s.settingRepo.GetByKey(nil, "epub_title_override")
-	if err != nil || setting == nil {
-		return false
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.normalizeStoredSeriesTitles(tx); err != nil {
+		return err
 	}
-	return strings.EqualFold(strings.TrimSpace(setting.Value), "true")
+
+	return tx.Commit()
+}
+
+func (s *Scanner) NormalizeStoredSeriesTitlesWithTx(tx *sql.Tx) error {
+	if tx == nil {
+		return fmt.Errorf("transaction is required")
+	}
+	return s.normalizeStoredSeriesTitles(tx)
+}
+
+func (s *Scanner) normalizeStoredSeriesTitles(tx *sql.Tx) error {
+	if s == nil || s.libraryRepo == nil || s.seriesRepo == nil {
+		return nil
+	}
+
+	libraries, err := s.libraryRepo.FindAll(tx)
+	if err != nil {
+		return err
+	}
+
+	for _, library := range libraries {
+		if err := s.normalizeStoredSeriesTitlesForLibraryTx(tx, library.ID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// NormalizeStoredSeriesTitlesForLibrary 특정 라이브러리의 저장 title을 path 기반 제목으로 정규화한다.
+func (s *Scanner) NormalizeStoredSeriesTitlesForLibrary(libraryID string) error {
+	tx, err := database.DB.BeginTx(context.Background(), nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.normalizeStoredSeriesTitlesForLibraryTx(tx, libraryID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Scanner) NormalizeStoredSeriesTitlesForLibraryWithTx(tx *sql.Tx, libraryID string) error {
+	if tx == nil {
+		return errors.New("transaction is required")
+	}
+	return s.normalizeStoredSeriesTitlesForLibraryTx(tx, libraryID)
+}
+
+func (s *Scanner) normalizeStoredSeriesTitlesForLibraryTx(tx *sql.Tx, libraryID string) error {
+	if s == nil || s.seriesRepo == nil {
+		return nil
+	}
+
+	// Stored title now remains path-based; override settings only affect display title.
+	// When this flow runs, normalize any legacy rows that still have an overridden title persisted.
+	seriesList, err := s.seriesRepo.FindByLibraryID(tx, libraryID, "")
+	if err != nil {
+		return err
+	}
+	for i := range seriesList {
+		series := &seriesList[i]
+		baseTitle := resolveSeriesTitleFromPath(series.Path, "")
+		if strings.TrimSpace(baseTitle) == "" || strings.TrimSpace(series.Title) == baseTitle {
+			continue
+		}
+		series.Title = baseTitle
+		if err := s.seriesRepo.Update(tx, series); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func resolveSeriesTitleFromPath(path, fallback string) string {
@@ -186,16 +266,151 @@ func resolveSeriesTitleFromPath(path, fallback string) string {
 	return strings.TrimSuffix(base, ext)
 }
 
-func resolveEpubSeriesTitle(path, fallback string, meta *util.EpubMetadata, enableMetadataTitle bool) string {
+// PreferredOriginalTitleOrder returns the language lookup priority for original titles.
+func PreferredOriginalTitleOrder(locale string) []string {
+	normalized := strings.ToLower(strings.TrimSpace(locale))
+	switch {
+	case strings.HasPrefix(normalized, "ko"):
+		return []string{"ko", "en", "ja"}
+	case strings.HasPrefix(normalized, "ja"):
+		return []string{"ja", "en", "ko"}
+	default:
+		return []string{"en", "ja", "ko"}
+	}
+}
+
+func parseOriginalTitlesPayload(raw string) (map[string]string, string) {
+	titles := make(map[string]string)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return titles, ""
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return titles, ""
+	}
+
+	manualTitle := strings.TrimSpace(payload[manualOriginalTitleKey])
+	for key, value := range payload {
+		if key == manualOriginalTitleKey {
+			continue
+		}
+		trimmedKey := strings.ToLower(strings.TrimSpace(key))
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		titles[trimmedKey] = trimmedValue
+	}
+
+	return titles, manualTitle
+}
+
+func EncodeOriginalTitlesPayload(titles map[string]string, manualTitle string) string {
+	normalized := make(map[string]string, len(titles)+1)
+	for key, value := range titles {
+		trimmedKey := strings.ToLower(strings.TrimSpace(key))
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		normalized[trimmedKey] = trimmedValue
+	}
+	if manual := strings.TrimSpace(manualTitle); manual != "" {
+		normalized[manualOriginalTitleKey] = manual
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+
+	payload, err := json.Marshal(normalized)
+	if err != nil {
+		return ""
+	}
+	return string(payload)
+}
+
+func WithManualOriginalTitle(raw string, originalTitle string) string {
+	titles, _ := parseOriginalTitlesPayload(raw)
+	return EncodeOriginalTitlesPayload(titles, originalTitle)
+}
+
+func IsManualOriginalTitle(raw string, current string) bool {
+	current = strings.TrimSpace(current)
+	if current == "" {
+		return false
+	}
+
+	titles, manualTitle := parseOriginalTitlesPayload(raw)
+	if manualTitle != "" {
+		return manualTitle == current
+	}
+
+	return !containsOriginalTitleValue(titles, current)
+}
+
+func WithoutManualOriginalTitle(raw string) string {
+	titles, _ := parseOriginalTitlesPayload(raw)
+	return EncodeOriginalTitlesPayload(titles, "")
+}
+
+// LocalizedOriginalTitle original_titles JSON에서 locale 우선순위로 원제를 선택한다.
+func LocalizedOriginalTitle(metadata *model.SeriesMetadata, locale string) string {
+	if metadata == nil {
+		return ""
+	}
+
+	if strings.TrimSpace(metadata.OriginalTitles) != "" {
+		titles, manualTitle := parseOriginalTitlesPayload(metadata.OriginalTitles)
+		if title := strings.TrimSpace(metadata.OriginalTitle); title != "" {
+			if manualTitle != "" && manualTitle == title {
+				return title
+			}
+			if !containsOriginalTitleValue(titles, title) {
+				return title
+			}
+		}
+		if len(titles) > 0 {
+			for _, key := range PreferredOriginalTitleOrder(locale) {
+				if title := strings.TrimSpace(titles[key]); title != "" {
+					return title
+				}
+			}
+		}
+	}
+
+	return strings.TrimSpace(metadata.OriginalTitle)
+}
+
+func containsOriginalTitleValue(titles map[string]string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range titles {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func ResolveSeriesTitleFromOriginalTitle(
+	path, fallback string,
+	metadata *model.SeriesMetadata,
+	enableOriginalTitle bool,
+	locale string,
+) string {
 	pathTitle := resolveSeriesTitleFromPath(path, fallback)
-	if !enableMetadataTitle || meta == nil {
+	if !enableOriginalTitle || metadata == nil {
 		return pathTitle
 	}
-	metaTitle := strings.TrimSpace(meta.Title)
-	if metaTitle == "" {
+	originalTitle := LocalizedOriginalTitle(metadata, locale)
+	if originalTitle == "" {
 		return pathTitle
 	}
-	return metaTitle
+	return originalTitle
 }
 
 func NewScanner(
@@ -378,8 +593,6 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 
 	// 3. 성능 설정 로드
 	perf := s.getPerfConfig()
-	epubTitleOverrideEnabled := s.isEpubTitleOverrideEnabled()
-
 	// 시리즈 레벨 동시성 제어
 	seriesSemaphore := make(chan struct{}, perf.SeriesConcurrent)
 
@@ -447,7 +660,6 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					excludePatterns,
 					updateProgress,
 					perf,
-					epubTitleOverrideEnabled,
 					library.LibraryType,
 				)
 				if err != nil {
@@ -508,7 +720,6 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 					path,
 					entry.Name(),
 					existingMap,
-					epubTitleOverrideEnabled,
 					library.LibraryType,
 				)
 				if err != nil {
@@ -995,7 +1206,6 @@ func (s *Scanner) processArchiveAsSeries(
 	archivePath string,
 	archiveTitle string,
 	existingSeriesMap map[string]*model.Series,
-	epubTitleOverrideEnabled bool,
 	libraryType string,
 ) (*ScanResult, error) {
 	// 트랜잭션 시작
@@ -1019,8 +1229,6 @@ func (s *Scanner) processArchiveAsSeries(
 			log.Printf("[SCANNER] Failed to extract EPUB metadata for %s: %v", archivePath, mErr)
 		}
 	}
-	seriesTitle := resolveEpubSeriesTitle(archivePath, title, epubMeta, epubTitleOverrideEnabled)
-
 	// 파일 수정 시간 확인
 	var lastModified time.Time
 	info, iErr := os.Stat(archivePath)
@@ -1033,11 +1241,12 @@ func (s *Scanner) processArchiveAsSeries(
 	if existing, ok := existingSeriesMap[archivePath]; ok {
 		series = existing
 		seriesChanged := false
-		if strings.TrimSpace(series.Title) != seriesTitle {
-			series.Title = seriesTitle
+		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
 			seriesChanged = true
 		}
-		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
+		baseTitle := resolveSeriesTitleFromPath(archivePath, title)
+		if strings.TrimSpace(series.Title) != baseTitle {
+			series.Title = baseTitle
 			seriesChanged = true
 		}
 		if seriesChanged {
@@ -1097,7 +1306,7 @@ func (s *Scanner) processArchiveAsSeries(
 
 		series = &model.Series{
 			LibraryID: libraryID,
-			Title:     seriesTitle,
+			Title:     resolveSeriesTitleFromPath(archivePath, title),
 			Path:      archivePath,
 			Metadata: &model.SeriesMetadata{
 				Status: status,
@@ -1185,7 +1394,6 @@ func (s *Scanner) processSeries(
 	excludePatterns []string,
 	updateProgress func(string),
 	perf scanPerfConfig,
-	epubTitleOverrideEnabled bool,
 	libraryType string,
 ) (*ScanResult, error) {
 	var series *model.Series
@@ -1198,22 +1406,21 @@ func (s *Scanner) processSeries(
 			log.Printf("[SCANNER] Failed to extract EPUB metadata for %s: %v", epubPath, mErr)
 		}
 	}
-	seriesTitle = resolveEpubSeriesTitle(seriesPath, seriesTitle, epubMeta, epubTitleOverrideEnabled)
-
 	// 기존 시리즈 확인
 	if existing, ok := existingSeriesMap[seriesPath]; ok {
 		series = existing
 		seriesChanged := false
-		if strings.TrimSpace(series.Title) != seriesTitle {
-			series.Title = seriesTitle
-			seriesChanged = true
-		}
 
 		// 기존 PDF 시리즈인데 썸네일이 없는 경우 추출 시도
 		if strings.ToLower(filepath.Ext(seriesPath)) == ".pdf" && (series.ThumbnailPath == nil || *series.ThumbnailPath == "") {
 			s.ensureSeriesPdfThumbnailIfMissing(nil, series, seriesPath, seriesTitle, false)
 		}
 		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
+			seriesChanged = true
+		}
+		baseSeriesTitle := resolveSeriesTitleFromPath(seriesPath, seriesTitle)
+		if strings.TrimSpace(series.Title) != baseSeriesTitle {
+			series.Title = baseSeriesTitle
 			seriesChanged = true
 		}
 		if seriesChanged {
@@ -1235,7 +1442,7 @@ func (s *Scanner) processSeries(
 
 		series = &model.Series{
 			LibraryID: libraryID,
-			Title:     seriesTitle,
+			Title:     resolveSeriesTitleFromPath(seriesPath, seriesTitle),
 			Path:      seriesPath,
 			Metadata: &model.SeriesMetadata{
 				Status: status,

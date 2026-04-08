@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { LogOut, Menu, Settings, ChevronDown, User, Search, X, ChevronRight, FileText } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
-import { seriesAPI, systemAPI } from "../../api/client";
+import { pluginAPI, seriesAPI, systemAPI } from "../../api/client";
 import { useSSE } from "../../hooks/useSSE";
 import type { Series } from "../../types/series";
 import { ScanProgressBar } from "../ScanProgressBar";
 import { AtmosphereSettings } from "../Atmosphere/AtmosphereSettings";
+import { UpdateBadge } from "../common/UpdateBadge";
 import styles from "./Header.module.css";
 
 interface HeaderProps {
@@ -28,7 +29,8 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
   const [otherUserCount, setOtherUserCount] = useState(0);
-  const [hasUpdate, setHasUpdate] = useState(false);
+  const [hasSystemUpdate, setHasSystemUpdate] = useState(false);
+  const [hasPluginUpdate, setHasPluginUpdate] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const { subscribe } = useSSE();
 
@@ -71,19 +73,23 @@ export function Header({ onMenuClick }: HeaderProps) {
     });
 
     // 2. 시스템 업데이트 확인 (MASTER 권한만, 30분 폴링)
-    const checkVersion = async () => {
+    const checkUpdates = async () => {
       if (user?.role !== "MASTER") return;
 
       try {
-        const info = await systemAPI.getVersion();
-        setHasUpdate(info.needs_update);
+        const [systemInfo, pluginInfo] = await Promise.all([
+          systemAPI.getVersion(),
+          pluginAPI.getUpdates(),
+        ]);
+        setHasSystemUpdate(systemInfo.needs_update);
+        setHasPluginUpdate(pluginInfo.has_updates);
       } catch (error) {
-        console.error("Failed to check system version:", error);
+        console.error("Failed to check update status:", error);
       }
     };
-    checkVersion();
+    checkUpdates();
 
-    const versionInterval = setInterval(checkVersion, 30 * 60 * 1000);
+    const versionInterval = setInterval(checkUpdates, 30 * 60 * 1000);
 
     return () => {
       unsubscribe();
@@ -261,59 +267,62 @@ export function Header({ onMenuClick }: HeaderProps) {
               >
                 {liveResults.length > 0 ? (
                   <>
-                    {liveResults.slice(0, MAX_VISIBLE_RESULTS).map((series: Series, index: number) => (
-                      <div
-                        key={series.id}
-                        className={`${styles.searchResultItem} ${selectedIndex === index ? styles.active : ""}`}
-                        onClick={() => handleResultClick(series.id)}
-                        onMouseEnter={() => !isKeyboardNav && setSelectedIndex(index)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            handleResultClick(series.id);
-                          }
-                        }}
-                      >
-                        <div className={styles.resultThumbnailWrapper}>
-                          {series.thumbnail_url && !imageErrors[series.id] ? (
-                            <img
-                              src={series.thumbnail_url}
-                              alt={series.title}
-                              className={styles.resultThumbnail}
-                              onError={() => setImageErrors((prev) => ({ ...prev, [series.id]: true }))}
-                            />
-                          ) : (series.path || "").toLowerCase().endsWith(".pdf") ? (
-                            <div
-                              className={styles.resultThumbnail}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: "#1a1f2e",
-                              }}
-                            >
-                              <FileText
-                                size={20}
-                                style={{ opacity: 0.5 }}
+                    {liveResults.slice(0, MAX_VISIBLE_RESULTS).map((series: Series, index: number) => {
+                      const seriesTitle = series.display_title || series.title;
+                      return (
+                        <div
+                          key={series.id}
+                          className={`${styles.searchResultItem} ${selectedIndex === index ? styles.active : ""}`}
+                          onClick={() => handleResultClick(series.id)}
+                          onMouseEnter={() => !isKeyboardNav && setSelectedIndex(index)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleResultClick(series.id);
+                            }
+                          }}
+                        >
+                          <div className={styles.resultThumbnailWrapper}>
+                            {series.thumbnail_url && !imageErrors[series.id] ? (
+                              <img
+                                src={series.thumbnail_url}
+                                alt={seriesTitle}
+                                className={styles.resultThumbnail}
+                                onError={() => setImageErrors((prev) => ({ ...prev, [series.id]: true }))}
                               />
-                            </div>
-                          ) : (
-                            <div
-                              className={styles.resultThumbnail}
-                              style={{ backgroundColor: "#1a1f2e" }}
-                            />
-                          )}
+                            ) : (series.path || "").toLowerCase().endsWith(".pdf") ? (
+                              <div
+                                className={styles.resultThumbnail}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  backgroundColor: "#1a1f2e",
+                                }}
+                              >
+                                <FileText
+                                  size={20}
+                                  style={{ opacity: 0.5 }}
+                                />
+                              </div>
+                            ) : (
+                              <div
+                                className={styles.resultThumbnail}
+                                style={{ backgroundColor: "#1a1f2e" }}
+                              />
+                            )}
+                          </div>
+                          <div className={styles.resultInfo}>
+                            <span className={styles.resultName}>{seriesTitle}</span>
+                            {series.metadata?.authors && (
+                              <span className={styles.resultAuthor}>{series.metadata.authors}</span>
+                            )}
+                          </div>
                         </div>
-                        <div className={styles.resultInfo}>
-                          <span className={styles.resultName}>{series.title}</span>
-                          {series.metadata?.authors && (
-                            <span className={styles.resultAuthor}>{series.metadata.authors}</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <button
                       className={`${styles.allResultsBtn} ${selectedIndex === Math.min(liveResults.length, MAX_VISIBLE_RESULTS) ? styles.active : ""}`}
                       onClick={() => handleSearchSubmit()}
@@ -343,15 +352,13 @@ export function Header({ onMenuClick }: HeaderProps) {
             <span className={styles.userIconWrapper}>
               <User size={18} />
               {user?.role === "MASTER" ? (
-                hasUpdate ? (
-                  <span
-                    className={`${styles.badge} ${styles.updateBadge}`}
-                    aria-label={t("header.new_update_available")}
-                    aria-live="polite"
-                    aria-atomic="true"
-                  >
-                    UP
-                  </span>
+                hasSystemUpdate || hasPluginUpdate ? (
+                  <UpdateBadge
+                    className={styles.badge}
+                    size="sm"
+                    ariaLabel={t("header.new_update_available")}
+                    ariaLive="polite"
+                  />
                 ) : otherUserCount > 0 ? (
                   <span
                     className={`${styles.badge} ${styles.countBadge}`}

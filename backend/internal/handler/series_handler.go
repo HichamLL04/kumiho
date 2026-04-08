@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,14 +17,18 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
+	"github.com/aha-hyeong/kumiho/backend/internal/scanner"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 )
 
 type SeriesHandler struct {
 	seriesRepo            *repository.SeriesRepository
+	seriesCharacterRepo   *repository.SeriesCharacterRepository
 	libraryRepo           *repository.LibraryRepository
 	authService           *service.AuthService
 	volumeRepo            *repository.VolumeRepository
@@ -48,6 +54,7 @@ func (h *SeriesHandler) assignVolumeThumbnailURL(volume *model.Volume) {
 
 func NewSeriesHandler(
 	seriesRepo *repository.SeriesRepository,
+	seriesCharacterRepo *repository.SeriesCharacterRepository,
 	libraryRepo *repository.LibraryRepository,
 	authService *service.AuthService,
 	volumeRepo *repository.VolumeRepository,
@@ -63,6 +70,7 @@ func NewSeriesHandler(
 ) *SeriesHandler {
 	return &SeriesHandler{
 		seriesRepo:            seriesRepo,
+		seriesCharacterRepo:   seriesCharacterRepo,
 		libraryRepo:           libraryRepo,
 		authService:           authService,
 		volumeRepo:            volumeRepo,
@@ -79,17 +87,18 @@ func NewSeriesHandler(
 }
 
 type UpdateSeriesRequest struct {
-	Title           *string `json:"title"`
-	Description     *string `json:"description"`
-	Status          *string `json:"status"`
-	Authors         *string `json:"authors"`
-	Tags            *string `json:"tags"`
-	IsBookmarked    *bool   `json:"is_bookmarked"`
-	PublicationYear *string `json:"publication_year"`
-	OriginalTitle   *string `json:"original_title"`
-	Publisher       *string `json:"publisher"`
-	PublishedAt     *string `json:"published_at"`
-	ISBN            *string `json:"isbn"`
+	Title                 *string `json:"title"`
+	Description           *string `json:"description"`
+	DescriptionTranslated *string `json:"description_translated"`
+	Status                *string `json:"status"`
+	Authors               *string `json:"authors"`
+	Tags                  *string `json:"tags"`
+	IsBookmarked          *bool   `json:"is_bookmarked"`
+	PublicationYear       *string `json:"publication_year"`
+	OriginalTitle         *string `json:"original_title"`
+	Publisher             *string `json:"publisher"`
+	PublishedAt           *string `json:"published_at"`
+	ISBN                  *string `json:"isbn"`
 }
 
 type UpdateVolumeRequest struct {
@@ -247,7 +256,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 
 	// 단독 북마크 업데이트인 경우, updated_at을 변경하지 않고 북마크 상태만 변경
 	if req.IsBookmarked != nil && req.Title == nil && req.Description == nil &&
-		req.Status == nil && req.Authors == nil && req.Tags == nil && req.PublicationYear == nil &&
+		req.DescriptionTranslated == nil && req.Status == nil && req.Authors == nil && req.Tags == nil && req.PublicationYear == nil &&
 		req.OriginalTitle == nil && req.Publisher == nil && req.PublishedAt == nil && req.ISBN == nil {
 
 		if err := h.seriesRepo.UpdateBookmark(nil, userID, series.ID, *req.IsBookmarked); err != nil {
@@ -257,6 +266,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 		}
 
 		series.IsBookmarked = *req.IsBookmarked
+		h.assignSeriesDisplayTitle(series)
 		return c.JSON(series)
 	}
 
@@ -265,6 +275,9 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 		series.Title = *req.Title
 	}
 	if req.Description != nil {
+		if strings.TrimSpace(series.Description) != strings.TrimSpace(*req.Description) && series.Metadata != nil && req.DescriptionTranslated == nil {
+			series.Metadata.DescriptionTranslated = ""
+		}
 		series.Description = *req.Description
 	}
 	if req.IsBookmarked != nil {
@@ -274,6 +287,10 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	// 메타데이터 업데이트
 	if series.Metadata == nil {
 		series.Metadata = &model.SeriesMetadata{SeriesID: series.ID}
+	}
+	series.Metadata.Description = series.Description
+	if req.DescriptionTranslated != nil {
+		series.Metadata.DescriptionTranslated = *req.DescriptionTranslated
 	}
 	if req.Status != nil {
 		series.Metadata.Status = *req.Status
@@ -289,6 +306,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	}
 	if req.OriginalTitle != nil {
 		series.Metadata.OriginalTitle = *req.OriginalTitle
+		series.Metadata.OriginalTitles = scanner.WithManualOriginalTitle(series.Metadata.OriginalTitles, *req.OriginalTitle)
 	}
 	if req.Publisher != nil {
 		series.Metadata.Publisher = *req.Publisher
@@ -299,15 +317,128 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	if req.ISBN != nil {
 		series.Metadata.ISBN = *req.ISBN
 	}
-
 	// DB 업데이트
-	if err := h.seriesRepo.Update(nil, series); err != nil {
+	if err := h.seriesRepo.UpdatePreservingUpdatedAt(nil, series); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to update series",
 		})
 	}
 
+	h.assignSeriesDisplayTitle(series)
 	return c.JSON(series)
+}
+
+// ResetSeriesMetadata 시리즈 메타데이터 초기화
+// POST /api/v1/series/:id/reset-metadata
+func (h *SeriesHandler) ResetSeriesMetadata(c *fiber.Ctx) error {
+	id := c.Params("id")
+	userID := middleware.GetUserID(c)
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	series, err := h.seriesRepo.FindByID(nil, id, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch series",
+		})
+	}
+	if series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	fileSet := make(map[string]struct{})
+	if series.ThumbnailPath != nil && strings.TrimSpace(*series.ThumbnailPath) != "" {
+		fileSet[strings.TrimSpace(*series.ThumbnailPath)] = struct{}{}
+	}
+
+	characters, err := h.seriesCharacterRepo.ListBySeriesID(nil, series.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to list series characters",
+		})
+	}
+	for _, character := range characters {
+		imagePath := strings.TrimSpace(character.ImagePath)
+		if imagePath == "" {
+			continue
+		}
+		fileSet[imagePath] = struct{}{}
+	}
+
+	tx, err := database.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to start reset transaction",
+		})
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	err = h.seriesRepo.ResetMetadataBySeriesID(tx, series.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to reset series metadata",
+		})
+	}
+	err = h.seriesCharacterRepo.DeleteBySeriesID(tx, series.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to reset series characters",
+		})
+	}
+	err = tx.Commit()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to commit series reset",
+		})
+	}
+
+	sanitizeAssetWarningName := func(assetPath string) string {
+		name := filepath.Base(filepath.Clean(assetPath))
+		if name == "" || name == "." || name == string(filepath.Separator) {
+			return "asset"
+		}
+		return name
+	}
+
+	var warnings []string
+	for path := range fileSet {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, path)
+		assetName := sanitizeAssetWarningName(path)
+		if !removed {
+			log.Printf("series reset skipped unmanaged asset path %s", path)
+			warnings = append(warnings, fmt.Sprintf("asset_unmanaged:%s", assetName))
+			continue
+		}
+		if remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
+			log.Printf("series reset asset removal failed for %s: %v", path, remErr)
+			warnings = append(warnings, fmt.Sprintf("asset_remove_failed:%s", assetName))
+		}
+	}
+
+	refreshed, err := h.seriesRepo.FindByID(nil, series.ID, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch refreshed series",
+		})
+	}
+	if refreshed == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	h.enrichSingleSeries(refreshed, userID)
+	response := fiber.Map{
+		"series": refreshed,
+	}
+	if len(warnings) > 0 {
+		response["warnings"] = warnings
+	}
+	return c.JSON(response)
 }
 
 // UpdateVolume 볼륨 정보 수정
@@ -642,7 +773,10 @@ func (h *SeriesHandler) DeleteVolumeThumbnail(c *fiber.Ctx) error {
 	}
 
 	if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-		if remErr := os.Remove(*volume.ThumbnailPath); remErr != nil && !os.IsNotExist(remErr) {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, *volume.ThumbnailPath)
+		if !removed {
+			log.Printf("skipped unmanaged volume thumbnail path %s", *volume.ThumbnailPath)
+		} else if remErr != nil && !os.IsNotExist(remErr) {
 			log.Printf("failed to delete thumbnail file: %v", remErr)
 		}
 	}
@@ -928,7 +1062,10 @@ func (h *SeriesHandler) DeleteThumbnail(c *fiber.Ctx) error {
 	// 기존 썸네일 파일 삭제
 	if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
 		fmt.Printf("[DEBUG] Removing thumbnail file: %s\n", *series.ThumbnailPath)
-		if remErr := os.Remove(*series.ThumbnailPath); remErr != nil && !os.IsNotExist(remErr) {
+		removed, remErr := util.RemoveManagedAsset(h.config.DataDir, *series.ThumbnailPath)
+		if !removed {
+			log.Printf("[DEBUG] Skipped unmanaged thumbnail path: %s", *series.ThumbnailPath)
+		} else if remErr != nil && !os.IsNotExist(remErr) {
 			// 파일 삭제 실패해도 DB 업데이트는 진행 (로그만 남김)
 			fmt.Printf("failed to delete thumbnail file: %v\n", remErr)
 		}
@@ -1610,11 +1747,57 @@ func (h *SeriesHandler) UpdateViewerSettings(c *fiber.Ctx) error {
 // enrichSeriesList 시리즈 목록 데이터 보정
 func (h *SeriesHandler) enrichSeriesList(seriesList []model.Series, userID string) {
 	h.seriesEnrichSvc.EnrichList(seriesList, userID)
+	h.assignSeriesDisplayTitles(seriesList)
 }
 
 // enrichSingleSeries 단일 시리즈 데이터 보정 (썸네일 URL, 진행도 계산)
 func (h *SeriesHandler) enrichSingleSeries(s *model.Series, userID string) {
 	h.seriesEnrichSvc.EnrichSingle(s, userID)
+	h.assignSeriesDisplayTitle(s)
+}
+
+func (h *SeriesHandler) assignSeriesDisplayTitles(seriesList []model.Series) {
+	locale := repository.PreferredOriginalTitleLocale(h.settingRepo)
+	libraryCache := make(map[string]*model.Library, len(seriesList))
+	for i := range seriesList {
+		series := &seriesList[i]
+		if _, ok := libraryCache[series.LibraryID]; !ok {
+			library, err := h.libraryRepo.FindByID(nil, series.LibraryID)
+			if err != nil {
+				libraryCache[series.LibraryID] = nil
+			} else {
+				libraryCache[series.LibraryID] = library
+			}
+		}
+		h.applySeriesDisplayTitle(series, libraryCache[series.LibraryID], locale)
+	}
+}
+
+func (h *SeriesHandler) assignSeriesDisplayTitle(series *model.Series) {
+	if series == nil {
+		return
+	}
+	locale := repository.PreferredOriginalTitleLocale(h.settingRepo)
+	library, err := h.libraryRepo.FindByID(nil, series.LibraryID)
+	if err != nil {
+		h.applySeriesDisplayTitle(series, nil, locale)
+		return
+	}
+	h.applySeriesDisplayTitle(series, library, locale)
+}
+
+func (h *SeriesHandler) applySeriesDisplayTitle(series *model.Series, library *model.Library, locale string) {
+	if series == nil {
+		return
+	}
+
+	displayTitle := strings.TrimSpace(series.Title)
+	if library != nil && library.OriginalTitleOverride {
+		if resolved := scanner.ResolveSeriesTitleFromOriginalTitle(series.Path, "", series.Metadata, true, locale); resolved != "" {
+			displayTitle = resolved
+		}
+	}
+	series.DisplayTitle = displayTitle
 }
 
 // Search 시리즈 검색

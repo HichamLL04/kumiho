@@ -13,11 +13,45 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  z-index: var(--z-toast, 1000);
+  z-index: var(--z-toast, 1600);
   animation: statusFadeIn 0.3s ease-out;
   cursor: pointer;
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.anchored {
+  position: absolute;
+  top: 5.75rem;
+  left: 50%;
+  width: min(calc(100% - 2rem), 420px);
+  transform: translateX(-50%);
+}
+
+.inline {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  width: 100%;
+  transform: none;
+  justify-content: center;
+  margin: 0 0 1rem;
+  z-index: auto;
+  animation: statusFadeInFlow 0.2s ease-out;
+}
+
+.sticky {
+  position: sticky;
+  top: 0;
+  left: auto;
+  right: auto;
+  width: 100%;
+  transform: none;
+  justify-content: center;
+  margin: 0 0 1rem;
+  z-index: 20;
+  animation: statusFadeInFlow 0.2s ease-out;
 }
 
 .statusMessage.success {
@@ -52,6 +86,17 @@
   }
 }
 
+@keyframes statusFadeInFlow {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 768px) {
   .statusMessage {
     top: 0.5rem;
@@ -59,6 +104,22 @@
     left: 0.5rem;
     transform: none;
     justify-content: center;
+  }
+
+  .anchored {
+    top: 5.25rem;
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    transform: none;
+  }
+
+  .inline {
+    margin-bottom: 0.75rem;
+  }
+
+  .sticky {
+    margin-bottom: 0.75rem;
   }
 
   @keyframes statusFadeIn {

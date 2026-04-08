@@ -1,12 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen } from "lucide-react";
-import type { Series, Volume, ReadingProgress, SeriesProgressSummary } from "../types/series";
+import type { Series, Volume, ReadingProgress, SeriesProgressSummary, SeriesCharacter, Library } from "../types/series";
 import { EditSeriesModal } from "./modals/EditSeriesModal";
 import { EditVolumeModal } from "./modals/EditVolumeModal";
 import { AlertModal, type AlertType } from "./modals/AlertModal";
 import { seriesAPI, volumeAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
+import { localizedOriginalTitle } from "../utils/originalTitles";
 import { calculateProgressDisplay } from "../utils/progressUtils";
 import { useAuthStore } from "../stores/authStore";
 import { Tooltip } from "./common/Tooltip";
@@ -14,11 +16,13 @@ import styles from "./SeriesInfoCard.module.css";
 
 interface SeriesInfoCardProps {
   series: Series;
+  library?: Library | null;
   volume?: Volume;
   type?: "series" | "volume";
   progress?: ReadingProgress;
   summary?: SeriesProgressSummary;
   preferPercentLabel?: boolean;
+  characters?: SeriesCharacter[];
   onUpdate?: (updated: Series | Volume) => void;
   onPlay: (incognito?: boolean) => void | Promise<void>;
   onRefresh?: () => void;
@@ -28,23 +32,100 @@ interface SeriesInfoCardProps {
 
 export function SeriesInfoCard({
   series,
+  library,
   volume,
   type = "series",
   progress,
   summary,
   preferPercentLabel = false,
+  characters,
   onUpdate,
   onPlay,
   onRefresh,
   onAlert,
   onDownload,
 }: SeriesInfoCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const incognitoMenuId = useId();
+  const characterModalTitleId = useId();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
+  const characterModalRef = useRef<HTMLDivElement | null>(null);
+  const characterModalCloseRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isCharacterModalOpen) {
+      return undefined;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    characterModalCloseRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsCharacterModalOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const root = characterModalRef.current;
+      if (!root) {
+        return;
+      }
+
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (!root.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      previousFocusRef.current?.focus();
+    };
+  }, [isCharacterModalOpen]);
   const [imageError, setImageError] = useState(false);
   const splitButtonRef = useRef<HTMLDivElement | null>(null);
   const user = useAuthStore((state) => state.user);
@@ -64,6 +145,13 @@ export function SeriesInfoCard({
   });
 
   const isVolumeType = type === "volume";
+  const displayedOriginalTitle = localizedOriginalTitle(
+    series.metadata?.original_titles,
+    i18n.language || "ko",
+    series.metadata?.original_title || "",
+  );
+  const shouldHideOriginalTitle = Boolean(library?.original_title_override);
+  const visibleSeriesTitle = series.display_title || series.title;
   const displayPath = (isVolumeType ? volume?.path : series.path) || "";
   const lowerDisplayPath = displayPath.toLowerCase();
   const isTextFile = lowerDisplayPath.endsWith(".txt") || (!isVolumeType && series.extension === "TXT");
@@ -249,90 +337,136 @@ export function SeriesInfoCard({
         )}
       </div>
 
-      {/* 썸네일 */}
-      <div className={styles.seriesThumbnailContainer}>
-        {thumbnailUrl && !imageError ? (
-          isAudiobook ? (
-            <>
+      {/* 썸네일 + 등장인물 */}
+      <div className={styles.seriesThumbnailColumn}>
+        <div className={styles.seriesThumbnailContainer}>
+          {thumbnailUrl && !imageError ? (
+            isAudiobook ? (
+              <>
+                <img
+                  src={thumbnailUrl}
+                  alt=""
+                  className={styles.seriesThumbnailBlur}
+                  aria-hidden="true"
+                />
+                <img
+                  src={thumbnailUrl}
+                  alt={isVolumeType ? volume?.title : visibleSeriesTitle}
+                  className={styles.seriesThumbnailContain}
+                  onError={() => setImageError(true)}
+                />
+              </>
+            ) : (
               <img
                 src={thumbnailUrl}
-                alt=""
-                className={styles.seriesThumbnailBlur}
-                aria-hidden="true"
-              />
-              <img
-                src={thumbnailUrl}
-                alt={isVolumeType ? volume?.title : series.title}
-                className={styles.seriesThumbnailContain}
+                alt={isVolumeType ? volume?.title : visibleSeriesTitle}
+                className={styles.seriesThumbnail}
                 onError={() => setImageError(true)}
               />
-            </>
+            )
+          ) : isAudiobook ? (
+            <div className={styles.seriesThumbnailPlaceholder}>
+              <img
+                src="/audio-kumiho.png"
+                alt=""
+                className={styles.seriesPlaceholderImage}
+                draggable={false}
+              />
+            </div>
+          ) : isTextFile ? (
+            <div className={styles.seriesThumbnailPlaceholder}>
+              <img
+                src="/reading-kumiho.png"
+                alt=""
+                className={styles.seriesPlaceholderImage}
+                draggable={false}
+              />
+            </div>
           ) : (
-            <img
-              src={thumbnailUrl}
-              alt={isVolumeType ? volume?.title : series.title}
-              className={styles.seriesThumbnail}
-              onError={() => setImageError(true)}
-            />
-          )
-        ) : isAudiobook ? (
-          <div className={styles.seriesThumbnailPlaceholder}>
-            <img
-              src="/audio-kumiho.png"
-              alt=""
-              className={styles.seriesPlaceholderImage}
-              draggable={false}
-            />
-          </div>
-        ) : isTextFile ? (
-          <div className={styles.seriesThumbnailPlaceholder}>
-            <img
-              src="/reading-kumiho.png"
-              alt=""
-              className={styles.seriesPlaceholderImage}
-              draggable={false}
-            />
-          </div>
-        ) : (
-          <div className={styles.seriesThumbnailPlaceholder}>
-            {lowerDisplayPath.endsWith(".pdf") ? (
-              <FileText
-                size={64}
-                style={{ opacity: 0.5 }}
-              />
-            ) : (
-              <BookOpen
-                size={64}
-                style={{ opacity: 0.5 }}
-              />
-            )}
-          </div>
-        )}
+            <div className={styles.seriesThumbnailPlaceholder}>
+              {lowerDisplayPath.endsWith(".pdf") ? (
+                <FileText
+                  size={64}
+                  style={{ opacity: 0.5 }}
+                />
+              ) : (
+                <BookOpen
+                  size={64}
+                  style={{ opacity: 0.5 }}
+                />
+              )}
+            </div>
+          )}
 
-        {/* 재생 오버레이 */}
-        <div
-          className={styles.thumbnailPlayOverlay}
-          onClick={() => {
-            void onPlay();
-          }}
-        >
-          <div className={styles.playIconWrapper}>
-            <Play
-              size={32}
-              fill="currentColor"
-            />
-          </div>
+          {/* 재생 오버레이 */}
+          <button
+            type="button"
+            className={styles.thumbnailPlayOverlay}
+            aria-label={isAudiobook ? t("series.actions.listen_now") : t("series.actions.read_now")}
+            onClick={() => {
+              void onPlay();
+            }}
+          >
+            <div className={styles.playIconWrapper}>
+              <Play
+                size={32}
+                fill="currentColor"
+              />
+            </div>
+          </button>
+
+          {!isVolumeType && (
+            <div className={`${styles.seriesStatusBadge} ${styles[`status${series.metadata?.status}`]}`}>
+              {series.metadata?.status === "ONGOING"
+                ? t("series.status.ongoing")
+                : series.metadata?.status === "COMPLETED"
+                  ? t("series.status.completed")
+                  : series.metadata?.status === "HIATUS"
+                    ? t("series.status.hiatus")
+                    : series.metadata?.status}
+            </div>
+          )}
         </div>
 
-        {!isVolumeType && (
-          <div className={`${styles.seriesStatusBadge} ${styles[`status${series.metadata?.status}`]}`}>
-            {series.metadata?.status === "ONGOING"
-              ? t("series.status.ongoing")
-              : series.metadata?.status === "COMPLETED"
-                ? t("series.status.completed")
-                : series.metadata?.status === "HIATUS"
-                  ? t("series.status.hiatus")
-                  : series.metadata?.status}
+        {!isVolumeType && characters && characters.length > 0 && (
+          <div className={styles.characterAvatars}>
+            {characters.slice(0, 4).map((character) => (
+              <div
+                key={character.id}
+                className={styles.characterAvatar}
+              >
+                {character.image_url ? (
+                  <img
+                    src={getAuthenticatedImageUrl(character.image_url)}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.characterAvatarImage}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                      (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "flex");
+                    }}
+                  />
+                ) : null}
+                <span
+                  className={styles.characterAvatarInitial}
+                  aria-hidden="true"
+                  style={character.image_url ? { display: "none" } : undefined}
+                >
+                  {character.name.charAt(0)}
+                </span>
+                <span className={styles.characterAvatarName}>{character.name}</span>
+              </div>
+            ))}
+            {characters.length > 4 && (
+              <button
+                type="button"
+                className={`${styles.characterAvatar} ${styles.characterAvatarMore}`}
+                onClick={() => setIsCharacterModalOpen(true)}
+                aria-label={t("series.characters.title")}
+              >
+                +{characters.length - 4}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -354,7 +488,7 @@ export function SeriesInfoCard({
             </>
           ) : (
             <>
-              <h1>{series.title}</h1>
+              <h1>{visibleSeriesTitle}</h1>
               <div className={styles.seriesMeta}>
                 {series.metadata?.authors}
                 {series.metadata?.authors && series.metadata?.publication_year && (
@@ -362,10 +496,10 @@ export function SeriesInfoCard({
                 )}
                 {series.metadata?.publication_year}
               </div>
-              {series.metadata?.original_title && (
+              {displayedOriginalTitle && !shouldHideOriginalTitle && (
                 <div className={styles.seriesExtraMeta}>
                   <span className={styles.seriesExtraMetaLabel}>{t("series.metainfo.original_title")}</span>
-                  <span>{series.metadata.original_title}</span>
+                  <span>{displayedOriginalTitle}</span>
                 </div>
               )}
             </>
@@ -400,29 +534,42 @@ export function SeriesInfoCard({
         </div>
 
         {/* 줄거리 */}
-        {(isVolumeType ? volume?.description || series.description : series.description) && (
-          <div className={styles.seriesDescription}>
-            <p
-              style={{
-                margin: 0,
-                display: "-webkit-box",
-                WebkitLineClamp: isDescriptionExpanded ? "unset" : 3,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-              }}
-            >
-              {isVolumeType ? volume?.description || series.description : series.description}
-            </p>
-            {(isVolumeType ? volume?.description || series.description : series.description)!.length > 150 && (
-              <button
-                onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                className={styles.btnMore}
+        {(() => {
+          const shouldUseSeriesDescriptionFallback = isVolumeType && !volume?.description?.trim();
+          const rawDescription =
+            isVolumeType && !shouldUseSeriesDescriptionFallback ? volume?.description ?? "" : series.description;
+          const translatedDescription =
+            !isVolumeType || shouldUseSeriesDescriptionFallback
+              ? series.metadata?.description_translated
+              : undefined;
+          const displayDescription = translatedDescription || rawDescription;
+
+          if (!displayDescription) return null;
+
+          return (
+            <div className={styles.seriesDescription}>
+              <p
+                style={{
+                  margin: 0,
+                  display: "-webkit-box",
+                  WebkitLineClamp: isDescriptionExpanded ? "unset" : 3,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
               >
-                {isDescriptionExpanded ? t("series.action.less") : t("series.action.more")}
-              </button>
-            )}
-          </div>
-        )}
+                {displayDescription}
+              </p>
+              {displayDescription.length > 150 && (
+                <button
+                  onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                  className={styles.btnMore}
+                >
+                  {isDescriptionExpanded ? t("series.action.less") : t("series.action.more")}
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* 액션 버튼 */}
         <div className={styles.seriesActions}>
@@ -558,6 +705,74 @@ export function SeriesInfoCard({
           onUpdate={onUpdate as (updatedVolume: Volume) => void}
         />
       )}
+
+      {isCharacterModalOpen &&
+        characters &&
+        createPortal(
+          <div
+            className={styles.characterModalBackdrop}
+            onClick={() => setIsCharacterModalOpen(false)}
+          >
+            <div
+              className={styles.characterModalBox}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={characterModalTitleId}
+              ref={characterModalRef}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={styles.characterModalHeader}>
+                <span id={characterModalTitleId}>{t("series.characters.title")}</span>
+                <button
+                  type="button"
+                  className={styles.characterModalClose}
+                  onClick={() => setIsCharacterModalOpen(false)}
+                  aria-label={t("common.close")}
+                  ref={characterModalCloseRef}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className={styles.characterModalScroll}>
+                <div className={styles.characterModalGrid}>
+                  {characters.map((character) => (
+                    <div
+                      key={character.id}
+                      className={styles.characterModalItem}
+                    >
+                      <div className={styles.characterModalAvatar}>
+                        {character.image_url ? (
+                          <img
+                            src={getAuthenticatedImageUrl(character.image_url)}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.characterModalImage}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                              (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty(
+                                "display",
+                                "flex",
+                              );
+                            }}
+                          />
+                        ) : null}
+                        <span
+                          className={styles.characterModalInitial}
+                          aria-hidden="true"
+                          style={character.image_url ? { display: "none" } : undefined}
+                        >
+                          {character.name.charAt(0)}
+                        </span>
+                      </div>
+                      <span className={styles.characterModalName}>{character.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       <AlertModal
         isOpen={confirmModal.isOpen}

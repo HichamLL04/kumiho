@@ -15,10 +15,13 @@ data/*.db-shm
 
 # Generated content
 data/thumbnails/
+data/plugins/
 
 # Go tests
 *.test
 *.out
+go.work
+go.work.sum
 
 *.db
 *.db-shm

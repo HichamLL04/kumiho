@@ -11,6 +11,7 @@
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  overscroll-behavior: contain;
 }
 
 .modalContent {
@@ -18,12 +19,32 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   width: 100%;
-  max-width: 800px;
+  max-width: 550px;
   padding: 0;
   max-height: 90vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   color: white;
+}
+
+.modalContentExpanded {
+  max-width: 1180px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modalContentCharactersOnly {
+  max-width: 1180px;
+}
+
+.modalContentMetadataOnly {
+  max-width: 1180px;
+}
+
+.modalContentDualPane {
+  max-width: 1180px;
 }
 
 .modalHeader {
@@ -32,6 +53,12 @@
   justify-content: space-between;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .modalHeader h2 {
@@ -61,6 +88,56 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.toolbarRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.metadataButtonRight {
+  margin-left: auto;
+}
+
+.metadataButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #d1d5db;
+  cursor: pointer;
+  font-weight: 600;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.metadataButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.metadataButtonActive {
+  background: rgba(102, 126, 234, 0.14);
+  border-color: rgba(102, 126, 234, 0.32);
+  color: #ffffff;
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.workspaceWithCharacters,
+.workspaceWithMetadata {
+  min-height: 0;
+}
+
+.formPane {
+  min-width: 0;
 }
 
 .thumbnailUploadTabs {
@@ -111,7 +188,6 @@
   color: #667eea;
   background: rgba(102, 126, 234, 0.1);
   box-shadow: 0 0 15px rgba(102, 126, 234, 0.3);
-  transform: scale(1.02);
 }
 
 .urlInputGroup {
@@ -150,28 +226,13 @@
   gap: 1.25rem;
 }
 
-@media (min-width: 768px) {
-  .editFormGrid {
-    display: grid;
-    grid-template-columns: 1.2fr 1fr;
-    gap: 1.5rem;
-    align-items: flex-start;
-  }
+.formGroup.hFull {
+  display: flex;
+  flex-direction: column;
+}
 
-  .editFormRight {
-    height: 100%;
-  }
-
-  .formGroup.hFull {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .formGroup.hFull textarea {
-    flex: 1;
-    min-height: 200px;
-  }
+.formGroup.hFull textarea {
+  min-height: 200px;
 }
 
 .editFormLeft,
@@ -193,6 +254,137 @@
   color: #9ca3af;
 }
 
+.fieldLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.descriptionLabelRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.descriptionTranslateRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.descriptionViewMenu {
+  position: relative;
+  top: -1px;
+}
+
+.descriptionViewButton {
+  min-width: 70px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  height: 24px;
+  padding: 0 1rem 0 0.5rem;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.descriptionViewButton span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  text-align: center;
+}
+
+.descriptionViewButton svg {
+  flex-shrink: 0;
+  position: absolute;
+  right: 0.34rem;
+}
+
+.descriptionViewButton:focus {
+  outline: none;
+  border-color: rgba(102, 126, 234, 0.5);
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.18);
+}
+
+.descriptionViewMenuList {
+  position: absolute;
+  top: calc(100% + 0.28rem);
+  left: 0;
+  z-index: 30;
+  min-width: 70px;
+  padding: 0.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: #111827;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+}
+
+.descriptionViewOption {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.34rem 0.42rem;
+}
+
+.descriptionViewOption:hover,
+.descriptionViewOptionActive {
+  background: rgba(102, 126, 234, 0.18);
+}
+
+.translationLanguageBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(102, 126, 234, 0.14);
+  border: 1px solid rgba(102, 126, 234, 0.28);
+  color: #c7d2fe;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.translateButton {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  padding: 0.38rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.translateButton:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 0.16);
+  border-color: rgba(102, 126, 234, 0.34);
+}
+
+.translateButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
 .formGroup input,
 .formGroup select,
 .formGroup textarea {
@@ -202,6 +394,87 @@
   padding: 0.5rem 0.75rem;
   color: white;
   font-size: 0.95rem;
+}
+
+.inlineSelectField {
+  position: relative;
+}
+
+.inlineSelectField input {
+  width: 100%;
+  padding-right: 2.75rem;
+}
+
+.inlineSelectButton {
+  position: absolute;
+  top: 50%;
+  right: 0.4rem;
+  transform: translateY(-50%);
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d1d5db;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.inlineSelectButton:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.inlineSelectButton svg {
+  flex-shrink: 0;
+  stroke-width: 2.3;
+}
+
+.inlineSelectMenu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 20;
+  min-width: 240px;
+  padding: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: #111827;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+}
+
+.inlineSelectOption {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.inlineSelectOption:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.inlineSelectOptionLabel {
+  font-size: 0.78rem;
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.inlineSelectOptionValue {
+  font-size: 0.88rem;
+  color: #e5e7eb;
+  word-break: break-word;
 }
 
 .formGroup input:focus,
@@ -217,18 +490,21 @@
   gap: 1rem;
 }
 
-.modalFooter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+.formRow > .formGroup {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
-.modalActions {
-  display: flex;
-  gap: 0.75rem;
+.metadataPane {
+  min-width: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  padding-left: 1.25rem;
+}
+
+.charactersPane {
+  min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding-right: 1.25rem;
 }
 
 .btnPrimary {
@@ -245,27 +521,135 @@
   color: white;
 }
 
+.btnReset {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.26);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+}
+
+.btnReset:hover:not(:disabled) {
+  background: rgba(153, 27, 27, 0.28);
+  border-color: rgba(252, 165, 165, 0.34);
+  transform: translateY(-1px);
+}
+
 .btnPrimary:hover {
   background: #5a67d8;
   transform: translateY(-1px);
 }
 
-.btnSecondary {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  border: none;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+@media (max-width: 1199px) {
+  .modalContentExpanded {
+    max-width: 550px;
+    overflow-y: auto;
+  }
+
+  .modalContentExpanded .editForm {
+    overflow: visible;
+  }
+
+  .modalContentExpanded .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modalContentExpanded .metadataPane {
+    order: -1;
+    border-left: none;
+    border-top: none;
+    padding-left: 0;
+    padding-top: 0;
+  }
+
+  .modalContentExpanded .charactersPane {
+    order: -1;
+    border-right: none;
+    padding-right: 0;
+  }
 }
 
-.btnSecondary:hover {
-  background: rgba(255, 255, 255, 0.2);
+@media (min-width: 1200px) {
+  .modalContentExpanded {
+    height: min(90vh, 980px);
+  }
+
+  .modalContentExpanded .editForm {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .modalContentExpanded .workspace {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .modalContentExpanded .workspace {
+    grid-template-columns: minmax(0, 520px);
+  }
+
+  .modalContentExpanded .workspace.workspaceWithCharacters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .modalContentExpanded .workspace.workspaceWithMetadata {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .modalContentExpanded .workspace.workspaceWithCharacters.workspaceWithMetadata {
+    grid-template-columns: minmax(0, 360px) minmax(0, 520px) minmax(0, 1fr);
+  }
+
+  .modalContentExpanded .charactersPane,
+  .modalContentExpanded .formPane,
+  .modalContentExpanded .metadataPane {
+    min-height: 0;
+  }
+
+  .modalContentExpanded .charactersPane,
+  .modalContentExpanded .formPane {
+    min-height: 0;
+  }
+
+  .modalContentExpanded .charactersPane {
+    display: flex;
+    overflow: hidden;
+  }
+
+  .modalContentExpanded .charactersPane > * {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .modalContentExpanded .formPane {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.25rem;
+  }
+
+  .modalContentExpanded .metadataPane {
+    display: flex;
+    overflow: hidden;
+  }
+
+  .modalContentExpanded .metadataPane > * {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.25rem;
+  }
 }

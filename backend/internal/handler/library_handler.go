@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
@@ -47,6 +48,7 @@ type CreateLibraryRequest struct {
 	DefaultEpubClickDirection    string   `json:"default_epub_click_direction"`
 	LibraryType                  string   `json:"library_type"`
 	ScanExcludes                 string   `json:"scan_excludes"`
+	OriginalTitleOverride        bool     `json:"original_title_override"`
 }
 
 func normalizeLibraryType(value string) (string, bool) {
@@ -377,6 +379,7 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		Type:                   "LOCAL",
 		LibraryType:            libraryType,
 		ScanExcludes:           req.ScanExcludes,
+		OriginalTitleOverride:  req.OriginalTitleOverride,
 	}
 
 	if err := h.libraryRepo.Create(nil, library); err != nil {
@@ -622,6 +625,7 @@ type UpdateLibraryRequest struct {
 	LibraryType                  string    `json:"library_type"`
 	IsVisible                    *bool     `json:"is_visible"` // Optional, pointer to distinguish false vs missing
 	ScanExcludes                 *string   `json:"scan_excludes"`
+	OriginalTitleOverride        *bool     `json:"original_title_override"`
 }
 
 // Update 라이브러리 수정
@@ -662,7 +666,7 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		if req.Name != "" || req.Paths != nil || req.DefaultViewMode != "" || req.DefaultReadDirection != "" ||
 			req.DefaultPageTransition != "" || req.DefaultEpubRenderMode != "" || req.DefaultEpubTheme != "" ||
 			req.DefaultEpubSpread != "" || req.DefaultEpubWheelDirection != "" || req.DefaultEpubKeyboardDirection != "" ||
-			req.DefaultEpubClickDirection != "" {
+			req.DefaultEpubClickDirection != "" || req.OriginalTitleOverride != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": "system libraries cannot use name, paths, or default settings",
 			})
@@ -834,10 +838,35 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 			}
 			pendingLibrary.ScanExcludes = *req.ScanExcludes
 		}
+		overrideChanged := false
+		if req.OriginalTitleOverride != nil {
+			overrideChanged = pendingLibrary.OriginalTitleOverride != *req.OriginalTitleOverride
+			pendingLibrary.OriginalTitleOverride = *req.OriginalTitleOverride
+		}
 
-		if err := h.libraryRepo.UpdateWithPaths(nil, &pendingLibrary, pendingPaths); err != nil {
+		tx, err := database.DB.BeginTx(c.Context(), nil)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to start library update transaction",
+			})
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		if err := h.libraryRepo.UpdateWithPaths(tx, &pendingLibrary, pendingPaths); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "failed to update library",
+			})
+		}
+		if overrideChanged {
+			if err := h.scanner.NormalizeStoredSeriesTitlesForLibraryWithTx(tx, pendingLibrary.ID); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "failed to apply original title override",
+				})
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to commit library update",
 			})
 		}
 		*library = pendingLibrary

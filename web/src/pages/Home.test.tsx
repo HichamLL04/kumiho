@@ -91,6 +91,7 @@ vi.mock("../components/SeriesCard", () => ({
 describe("HomePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const now = new Date().toISOString();
     mocks.fetchLibrariesMock.mockResolvedValue(undefined);
     mocks.getRecentMock.mockResolvedValue({ data: { recent_progress: [] } });
     mocks.settingListMock.mockResolvedValue({ updated_series_period: "7" });
@@ -105,8 +106,8 @@ describe("HomePage", () => {
                 library_id: "library-1",
                 title: "새 시리즈",
                 path: "/books/series-1",
-                created_at: "2026-03-22T00:00:00Z",
-                updated_at: "2026-03-22T00:00:00Z",
+                created_at: now,
+                updated_at: now,
               },
             ],
           },

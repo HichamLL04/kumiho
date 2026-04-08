@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Library, Users, Server, User, Settings, Monitor, BarChart3 } from "lucide-react";
+import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle, Database } from "lucide-react";
+import { pluginAPI, systemAPI } from "../api/client";
+import { UpdateBadge } from "../components/common/UpdateBadge";
 import { Header } from "../components/headers/Header";
 import { Sidebar } from "../components/Sidebar";
 import { SubHeader } from "../components/headers/SubHeader";
@@ -13,10 +15,21 @@ import { UsersTab } from "../components/settings/UsersTab";
 import { SystemTab } from "../components/settings/SystemTab";
 import { AccountTab } from "../components/settings/AccountTab";
 import { StatisticsTab } from "../components/settings/StatisticsTab";
+import { PluginsTab } from "../components/settings/PluginsTab";
+import { MetadataTab } from "../components/settings/MetadataTab";
 import styles from "./Settings.module.css";
 
 // 설정 탭 타입
-type SettingsTab = "general" | "statistics" | "viewer" | "libraries" | "users" | "system" | "account";
+type SettingsTab =
+  | "general"
+  | "statistics"
+  | "metadata"
+  | "viewer"
+  | "libraries"
+  | "users"
+  | "plugins"
+  | "system"
+  | "account";
 
 // 탭 정보
 const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: boolean }[] = [
@@ -24,7 +37,9 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: 
   { id: "statistics", label: "settings.tabs.statistics", icon: BarChart3 },
   { id: "viewer", label: "settings.tabs.viewer", icon: Monitor, adminOnly: true },
   { id: "libraries", label: "settings.tabs.libraries", icon: Library, adminOnly: true },
+  { id: "metadata", label: "settings.tabs.metadata", icon: Database, adminOnly: true },
   { id: "users", label: "settings.tabs.users", icon: Users, adminOnly: true },
+  { id: "plugins", label: "settings.tabs.plugins", icon: Puzzle, adminOnly: true },
   { id: "system", label: "settings.tabs.system", icon: Server, adminOnly: true },
   { id: "account", label: "settings.tabs.account", icon: User },
 ];
@@ -34,6 +49,8 @@ export function SettingsPage() {
   const user = useAuthStore((state) => state.user);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [hasSystemUpdate, setHasSystemUpdate] = useState(false);
+  const [hasPluginUpdate, setHasPluginUpdate] = useState(false);
 
   // 사용자 역할에 따른 탭 필터링
   const availableTabs = TABS.filter((tab) => !tab.adminOnly || user?.role === "MASTER");
@@ -58,6 +75,23 @@ export function SettingsPage() {
     setSearchParams(nextParams, { replace: true });
   }, [activeTab, availableTabs, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    if (user?.role !== "MASTER") return undefined;
+
+    const loadUpdates = async () => {
+      try {
+        const [systemInfo, pluginInfo] = await Promise.all([systemAPI.getVersion(), pluginAPI.getUpdates()]);
+        setHasSystemUpdate(systemInfo.needs_update);
+        setHasPluginUpdate(pluginInfo.has_updates);
+      } catch (error) {
+        console.error("Failed to load settings update state:", error);
+      }
+    };
+
+    void loadUpdates();
+    return undefined;
+  }, [user?.role]);
+
   // 콘텐츠 렌더링
   const renderContent = () => {
     switch (activeTab) {
@@ -65,12 +99,16 @@ export function SettingsPage() {
         return <GeneralTab />;
       case "statistics":
         return <StatisticsTab />;
+      case "metadata":
+        return <MetadataTab />;
       case "viewer":
         return <ViewerTab />;
       case "libraries":
         return <LibrariesTab />;
       case "users":
         return <UsersTab />;
+      case "plugins":
+        return <PluginsTab onUpdateStateChange={setHasPluginUpdate} />;
       case "system":
         return <SystemTab />;
       case "account":
@@ -101,6 +139,11 @@ export function SettingsPage() {
                 <button
                   key={tab.id}
                   className={`${styles.navItem} ${activeTab === tab.id ? styles.active : ""}`}
+                  aria-label={`${t(tab.label)}${
+                    (tab.id === "system" && hasSystemUpdate) || (tab.id === "plugins" && hasPluginUpdate)
+                      ? ` - ${t("header.new_update_available")}`
+                      : ""
+                  }`}
                   onClick={() => {
                     const nextParams = new URLSearchParams(searchParams);
                     nextParams.set("tab", tab.id);
@@ -109,6 +152,18 @@ export function SettingsPage() {
                 >
                   <Icon size={18} />
                   <span>{t(tab.label)}</span>
+                  {tab.id === "system" && hasSystemUpdate && (
+                    <UpdateBadge
+                      className={styles.navUpdateBadge}
+                      ariaLabel={t("header.new_update_available")}
+                    />
+                  )}
+                  {tab.id === "plugins" && hasPluginUpdate && (
+                    <UpdateBadge
+                      className={styles.navUpdateBadge}
+                      ariaLabel={t("header.new_update_available")}
+                    />
+                  )}
                 </button>
               );
             })}

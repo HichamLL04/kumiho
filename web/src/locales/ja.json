@@ -16,6 +16,7 @@
     "loading_settings": "設定を 読み込み中...",
     "loading": "読み込み中...",
     "checking": "確認中...",
+    "select": "選択",
     "unit": {
       "pages": "ページ",
       "hours": "時間"
@@ -91,9 +92,161 @@
       "viewer": "ビューア",
       "libraries": "ライブラリ",
       "users": "ユーザー管理",
+      "plugins": "プラグイン",
       "system": "システム",
       "account": "アカウント",
-      "statistics": "統計"
+      "statistics": "統計",
+      "metadata": "メタデータ"
+    },
+    "metadata": {
+      "title": "メタデータ管理",
+      "description": "ライブラリ内のシリーズをスキャンし、不足しているメタデータを見つけて一括適用します。",
+      "search_title": "メタデータ検索",
+      "search_description": "選択したライブラリのシリーズを検索し、一致したメタデータを一括適用します。",
+      "reset_title": "ライブラリメタデータ初期化",
+      "reset_description": "スキャン時の状態に戻します。",
+      "reset_card_description": "作者、タグ、出版情報、あらすじ、翻訳あらすじ、カスタムサムネイル、登場人物とその画像まですべて初期化します。",
+      "reset_action": "メタデータ初期化",
+      "reset_confirm": "{{library}} ライブラリのメタデータ、翻訳あらすじ、カスタムサムネイル、登場人物とその画像をすべて初期化します。この操作は元に戻せません。",
+      "reset_complete": "{{library}} ライブラリの {{count}} 件のシリーズメタデータを初期化しました。",
+      "reset_failed": "ライブラリメタデータの初期化に失敗しました。",
+      "batch_translate": {
+        "title": "一括翻訳 (Beta)",
+        "description": "サーバー全体で未翻訳のシリーズあらすじを選択した言語へ翻訳します。アクティブな翻訳プラグインが必要です。",
+        "card_title": "全シリーズのあらすじ翻訳",
+        "card_description": "翻訳済みでない項目のみ翻訳を試みます。",
+        "target_label": "出力言語",
+        "server_language_hint": "既定値は現在のアプリ言語です。現在のアプリ言語は {{language}} です。",
+        "server_language_badge": "現在のアプリ言語",
+        "language_search_placeholder": "言語を検索",
+        "language_search_empty": "検索結果がありません。",
+        "action": "一括翻訳を実行",
+        "translating": "翻訳中...",
+        "starting": "一括翻訳を開始しています...",
+        "complete": "一括翻訳が完了しました: {{total}} 件中 {{success}} 件成功しました。",
+        "cancelled": "一括翻訳は中断されました。{{total}} 件中 {{success}} 件のみ処理されました。",
+        "failed": "一括翻訳が一部または全体で失敗しました。{{total}} 件中 {{failed}} 件エラーです。",
+        "request_failed": "一括翻訳の実行に失敗しました。"
+      },
+      "settings_description": "保存済みの原題をシリーズ名へ反映するか設定します。無効にするとパスベースのタイトルへ戻します。",
+      "start_scan": "メタデータ検索開始",
+      "cancel_scan": "メタデータ検索中止",
+      "apply_all": "一括適用",
+      "total_series_count": "全{{count}}シリーズ",
+      "manual_search": "手動検索",
+      "view_details": "詳細を見る",
+      "preview_result_for": "{{title}} のプレビュー結果を開くまたは閉じる",
+      "scanning_progress": "スキャン中: {{current}} / {{total}}",
+      "no_series": "このライブラリにはシリーズがありません。",
+      "error_load_series": "シリーズ一覧の読み込みに失敗しました。",
+      "scan_complete": "メタデータ検索が完了しました。",
+      "scan_cancelled": "メタデータ検索を中断しました。",
+      "apply_complete": "{{count}}件のシリーズにメタデータを適用しました。",
+      "apply_complete_with_warnings": "{{count}}件のシリーズにメタデータを適用しましたが、{{warnings}}件で登場人物の同期に失敗しました。再適用してください。",
+      "status": {
+        "idle": "待機中",
+        "searching": "検索中...",
+        "matched": "一致",
+        "failed": "一致失敗",
+        "applied": "適用完了",
+        "applied_with_warnings": "一部適用"
+      },
+      "table": {
+        "series": "シリーズ",
+        "local_info": "ローカル情報",
+        "match_status": "状態",
+        "match_result": "結果",
+        "actions": "操作"
+      }
+    },
+    "plugins": {
+      "title": "プラグイン",
+      "desc": "メタデータプラグインをインストールし、実行状態を確認します。",
+      "loading": "プラグイン情報を読み込み中...",
+      "catalog_title": "インストール可能なプラグイン",
+      "installed_title": "インストール済みプラグイン",
+      "empty": "表示できるプラグインがありません。",
+      "installed_empty": "まだインストールされたプラグインはありません。",
+      "check_updates": "更新を確認",
+      "install": "インストール",
+      "update": "更新",
+      "reinstall": "再インストール",
+      "uninstall": "削除",
+      "author": "作成者",
+      "activate": "有効化",
+      "deactivate": "無効化",
+      "health": "状態確認",
+      "state": "状態",
+      "update_available": "更新あり · {{current}} → {{latest}}",
+      "api_key": {
+        "configure": "APIキー",
+        "title": "APIキー",
+        "desc": "リクエスト上限を増やすには APIキーの設定が必要です。",
+        "label": "APIキー",
+        "placeholder": "AIza...",
+        "save": "保存",
+        "delete": "削除",
+        "configured": "設定済み",
+        "not_configured": "未設定",
+        "required_hint": "このプラグインを有効化する前に APIキーを保存してください。",
+        "configured_hint": "現在のキー: {{masked}}",
+        "source_hint": "適用元: {{source}}",
+        "apply_hint": "APIキーを保存すると現在有効なプラグインは無効化されます。新しい設定を適用するには再度有効化してください。",
+        "flow_hint": "プラグインを削除すると保存済み APIキーも一緒に削除されます。"
+      },
+      "secret": {
+        "configure": "認証設定",
+        "title": "認証設定",
+        "desc": "プラグインで使用する秘密値を保存します。",
+        "auth_modal_desc": "プラグイン認証フローを実行し、必要な値を保存します。",
+        "placeholder": "値を入力",
+        "save": "保存",
+        "delete": "削除",
+        "configured": "設定済み",
+        "not_configured": "未設定",
+        "required_hint": "必須の秘密値を保存してからこのプラグインを有効化してください。",
+        "configured_hint": "{{field}}: {{masked}}",
+        "source_hint": "適用元: {{source}}",
+        "apply_hint": "秘密値を保存すると現在有効なプラグインは無効化されます。新しい設定を適用するには再度有効化してください。",
+        "flow_hint": "プラグインを削除すると保存済みの秘密値も一緒に削除されます。"
+      },
+      "plugin_key_warning": {
+        "title": "プラグインシークレットキー未設定",
+        "message": "PLUGIN_SECRET_KEY が設定されていないため、自動生成されたキーを使用しています。サーバーの再インストールや data ディレクトリの初期化を行うと、プラグインの API キーを再入力する必要が生じる場合があります。"
+      },
+      "toast": {
+        "load_failed": "プラグイン情報の読み込みに失敗しました。",
+        "install_success": "プラグインをインストールしました。",
+        "install_failed": "プラグインのインストールに失敗しました。",
+        "uninstall_success": "プラグインを削除しました。",
+        "uninstall_failed": "プラグインの削除に失敗しました。",
+        "update_checked": "プラグインの更新を確認しました。",
+        "update_found": "更新可能なプラグインが {{count}} 件あります。",
+        "update_check_failed": "プラグインの更新確認に失敗しました。",
+        "update_rate_limited": "手動の更新確認回数が上限を超えました。",
+        "activated": "プラグインを有効化しました。",
+        "deactivated": "プラグインを無効化しました。",
+        "action_failed": "プラグイン操作に失敗しました。",
+        "api_key_required": "先に APIキーを入力してください。",
+        "api_key_saved": "APIキーを保存しました。",
+        "api_key_saved_reactivate": "APIキーを保存しました。プラグインを再度有効化すると適用されます。",
+        "api_key_save_failed": "APIキーの保存に失敗しました。",
+        "api_key_deleted": "保存済み APIキーを削除しました。",
+        "api_key_delete_failed": "保存済み APIキーの削除に失敗しました。",
+        "secret_required": "先に {{field}} を入力してください。",
+        "secret_saved": "{{field}} を保存しました。",
+        "secret_saved_reactivate": "{{field}} を保存しました。プラグインを再度有効化すると適用されます。",
+        "secret_save_failed": "{{field}} の保存に失敗しました。",
+        "secret_deleted": "保存済み {{field}} を削除しました。",
+        "secret_delete_failed": "保存済み {{field}} の削除に失敗しました。",
+        "auth_required": "先に {{field}} を入力してください。",
+        "auth_saved": "{{title}} を完了しました。",
+        "auth_saved_reactivate": "{{title}} を完了しました。プラグインを再度有効化すると適用されます。",
+        "auth_failed": "{{title}} に失敗しました。",
+        "auth_deleted": "{{title}} で保存した値を削除しました。",
+        "auth_deleted_reactivate": "{{title}} で保存した値を削除しました。再度有効化すると既定動作になります。",
+        "auth_delete_failed": "{{title}} で保存した値の削除に失敗しました。"
+      }
     },
     "statistics": {
       "title": "マイ統計",
@@ -150,8 +303,8 @@
         "keyboard_direction_desc": "キーボード矢印で次ページへ移動する方向を設定します。",
         "click_direction_label": "次へ進むクリック",
         "click_direction_desc": "クリックで次ページに進む領域の方向を設定します。",
-        "title_override_label": "EPUB タイトル上書き",
-        "title_override_desc": "再スキャン時、EPUB メタデータの title があればシリーズ名に反映します。無効時はパスベースのタイトルへ戻します。"
+        "title_override_label": "原題タイトル上書き",
+        "title_override_desc": "再スキャン時、サーバーに保存された原題があればシリーズ名に反映します。無効時はパスベースのタイトルへ戻します。"
       },
       "mode": {
         "single": "1ページ表示",
@@ -513,7 +666,6 @@
       "title": "ライブラリが空です",
       "desc": "設定からライブラリを追加して始めましょう！"
     },
-
     "library": {
       "not_found": "ライブラリが見つかりません",
       "go_home": "ホームへ",
@@ -525,12 +677,76 @@
     }
   },
   "series": {
+    "metadata": {
+      "title": "メタデータ検索",
+      "desc": "現在のシリーズを基準にメタデータ候補を検索して適用できます。",
+      "search": "候補検索",
+      "fetch": "選択候補取得",
+      "apply": "シリーズへ適用",
+      "candidates": "候補一覧",
+      "preview": "取得したメタデータ",
+      "empty_candidates": "まだ検索した候補がありません。",
+      "empty_preview": "候補を取得するとここで結果を確認できます。",
+      "character_count": "全{{count}}人",
+      "fields": {
+        "title": "タイトル",
+        "original_title": "原題",
+        "authors": "作家",
+        "publisher": "出版社",
+        "publication_date": "刊行日",
+        "language": "言語",
+        "description": "説明",
+        "tags": "タグ",
+        "characters": "登場人物",
+        "identifiers": "識別子"
+      },
+      "toast": {
+        "search_success": "メタデータ候補を読み込みました。",
+        "search_failed": "メタデータ候補の検索に失敗しました。",
+        "fetch_success": "メタデータ詳細を読み込みました。",
+        "fetch_failed": "メタデータ詳細の取得に失敗しました。",
+        "apply_success": "{{count}}個のフィールドを適用しました。",
+        "apply_success_with_character_sync": "{{count}}個のフィールドを適用し、登場人物の変更を{{characters}}件同期しました。",
+        "apply_success_with_character_warning": "{{count}}個のフィールドを適用しましたが、登場人物の同期に失敗しました。再試行してください。",
+        "apply_no_changes": "適用する変更がありません。",
+        "apply_failed": "メタデータの適用に失敗しました。"
+      }
+    },
+    "characters": {
+      "title": "登場人物",
+      "desc": "シリーズの登場人物、画像、並び順を管理します。",
+      "add": "登場人物を追加",
+      "reorder": "並び替え",
+      "role_display": "役割: {{role}}",
+      "empty": "保存された登場人物がありません。",
+      "save": "変更を保存",
+      "save_new": "保存",
+      "cancel": "キャンセル",
+      "upload": "ファイルアップロード",
+      "reset_image": "画像をリセット",
+      "new_name": "新しい登場人物",
+      "fields": {
+        "name": "名前",
+        "role": "役割",
+        "image_url": "画像URL"
+      },
+      "toast": {
+        "load_failed": "登場人物一覧の読み込みに失敗しました。",
+        "create_failed": "登場人物の追加に失敗しました。",
+        "save_success": "登場人物を保存しました。",
+        "save_failed": "登場人物の保存に失敗しました。",
+        "delete_failed": "登場人物の削除に失敗しました。",
+        "reorder_failed": "登場人物の並び替えに失敗しました。",
+        "image_updated": "登場人物の画像を更新しました。",
+        "image_failed": "登場人物の画像変更に失敗しました。",
+        "name_required": "登場人物名を入力してください。"
+      }
+    },
     "count": "全 <strong>{{count}}</strong> 巻",
     "chapter_count": "全 <strong>{{count}}</strong> 話",
     "empty_volumes": "スキャンされた巻がありません",
     "empty_chapters": "スキャンされた話がありません",
     "not_found": "シリーズが見つかりません",
-
     "unit": {
       "volume": "{{count}}巻",
       "chapter": "{{count}}話",
@@ -594,7 +810,6 @@
       "complete_failed": "既読処理に失敗しました。",
       "reset_success": "リセットしました。",
       "reset_failed": "リセットに失敗しました。",
-
       "like_failed": "いいねの更新に失敗しました。",
       "reset_chapter_msg": "読書記録をリセットしますか？",
       "reset_chapter_complete_msg": "既読状態を解除して読書記録をリセットしますか？",
@@ -634,6 +849,10 @@
         "tags": "タグ (カンマ区切り)",
         "tags_placeholder": "例: ファンタジー, アクション",
         "description": "あらすじ",
+        "description_view": "あらすじ表示",
+        "description_view_translated": "翻訳",
+        "description_view_original": "原文",
+        "translation_target": "翻訳言語: {{language}}",
         "sync_file": "ファイル同期 (ComicInfo.xml) - 準備中",
         "status_options": {
           "completed": "完結",
@@ -644,8 +863,12 @@
       },
       "actions": {
         "cancel": "キャンセル",
+        "reset": "初期化",
+        "resetting": "初期化中...",
         "save": "保存",
-        "saving": "保存中..."
+        "saving": "保存中...",
+        "translate": "翻訳",
+        "translating": "翻訳中..."
       },
       "alert": {
         "upload_failed": "サムネイルのアップロードに失敗しました。",
@@ -655,7 +878,18 @@
         "reset_success": "サムネイルがリセットされました。",
         "reset_failed": "リセットに失敗しました。",
         "upload_success": "サムネイルがアップロードされました。",
-        "update_failed": "シリーズ情報の更新に失敗しました。"
+        "update_failed": "シリーズ情報の更新に失敗しました。",
+        "translate_empty": "翻訳するあらすじがありません。",
+        "translate_save_first": "あらすじの変更を先に保存してから翻訳してください。",
+        "translate_save_translated_first": "翻訳済みあらすじの変更を先に保存してから再翻訳してください。",
+        "translate_success": "{{language}} 翻訳を更新しました。",
+        "translate_failed": "あらすじの翻訳に失敗しました。",
+        "reset_metadata_title": "シリーズメタデータ初期化",
+        "reset_metadata_confirm": "このシリーズのメタデータ、翻訳あらすじ、カスタムサムネイル、登場人物を初期化します。この操作は元に戻せません。",
+        "reset_metadata_success": "シリーズメタデータを初期化しました。",
+        "reset_metadata_failed": "シリーズメタデータの初期化に失敗しました。",
+        "reset_warning_unmanaged_asset": "管理対象外のアセット {{asset}} はスキップしました。",
+        "reset_warning_remove_failed": "アセット {{asset}} の削除に失敗しました。"
       }
     }
   },
@@ -700,6 +934,7 @@
     "toc": {
       "title": "目次",
       "close": "閉じる",
+      "unknown": "不明",
       "empty": "目次がありません。"
     },
     "settings": {

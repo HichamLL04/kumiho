@@ -3,11 +3,67 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 )
+
+func NormalizeOriginalTitleLocale(locale string) string {
+	normalized := strings.ToLower(strings.TrimSpace(locale))
+	switch {
+	case strings.HasPrefix(normalized, "ko"):
+		return "ko"
+	case strings.HasPrefix(normalized, "ja"):
+		return "ja"
+	case strings.HasPrefix(normalized, "en"):
+		return "en"
+	default:
+		return ""
+	}
+}
+
+// IsOriginalTitleOverrideEnabled reads original_title_override, falling back to the legacy epub_title_override key.
+func IsOriginalTitleOverrideEnabled(repo SettingRepository) bool {
+	return IsOriginalTitleOverrideEnabledWithQuery(nil, repo)
+}
+
+// IsOriginalTitleOverrideEnabledWithQuery reads original title override settings using the provided query context.
+func IsOriginalTitleOverrideEnabledWithQuery(q database.Queryer, repo SettingRepository) bool {
+	if repo == nil {
+		return false
+	}
+	for _, key := range []string{"original_title_override", "epub_title_override"} {
+		setting, err := repo.GetByKey(q, key)
+		if err != nil || setting == nil {
+			continue
+		}
+		return strings.EqualFold(strings.TrimSpace(setting.Value), "true")
+	}
+	return false
+}
+
+func PreferredOriginalTitleLocale(repo SettingRepository) string {
+	return PreferredOriginalTitleLocaleWithQuery(nil, repo)
+}
+
+func PreferredOriginalTitleLocaleWithQuery(q database.Queryer, repo SettingRepository) string {
+	if repo == nil {
+		return "ko"
+	}
+
+	for _, key := range []string{"original_title_locale"} {
+		setting, err := repo.GetByKey(q, key)
+		if err != nil || setting == nil {
+			continue
+		}
+		if normalized := NormalizeOriginalTitleLocale(setting.Value); normalized != "" {
+			return normalized
+		}
+	}
+	return "ko"
+}
 
 type SettingRepository interface {
 	GetByKey(q database.Queryer, key string) (*model.Setting, error)

@@ -9,15 +9,32 @@ export interface EbookMetadata {
   tags: string;
   publication_year: string;
   original_title: string;
+  original_titles?: string;
   publisher: string;
   published_at: string;
   isbn: string;
+  description_translated?: string;
+}
+
+export interface SeriesCharacter {
+  id: string;
+  series_id: string;
+  name: string;
+  sort_order: number;
+  role: string;
+  image_url: string;
+  source_provider: string;
+  source_character_id: string;
+  source_relation_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Series {
   id: string;
   library_id: string;
   title: string;
+  display_title?: string;
   path?: string;
   author?: string;
   thumbnail_url?: string;
@@ -33,6 +50,21 @@ export interface Series {
   extension?: ExtensionBadge | "";
   library_type?: LibraryType;
   has_audio?: boolean;
+}
+
+export interface UpdateSeriesRequest {
+  title?: string;
+  description?: string;
+  description_translated?: string;
+  status?: string;
+  authors?: string;
+  tags?: string;
+  is_bookmarked?: boolean;
+  publication_year?: string;
+  original_title?: string;
+  publisher?: string;
+  published_at?: string;
+  isbn?: string;
 }
 
 export interface Volume {
@@ -153,8 +185,12 @@ export interface Library {
   id: string;
   name: string;
   paths?: string[];
+  type?: string;
   default_view_mode?: string;
   default_read_direction?: string;
   default_page_transition?: string;
   library_type?: LibraryType;
+  is_visible?: boolean;
+  scan_excludes?: string;
+  original_title_override?: boolean;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { Check, CheckCircle, Folder, FileText, Music, MoreVertical, EyeOff, Download } from "lucide-react";
@@ -16,7 +16,7 @@ import { useAudioPlayerStore } from "../stores/audioPlayerStore";
 import { Tooltip } from "../components/common/Tooltip";
 import styles from "./Volume.module.css";
 
-import type { Volume, Chapter, Series, ReadingProgress } from "../types/series";
+import type { Volume, Chapter, Series, ReadingProgress, Library } from "../types/series";
 import { AlertModal, type AlertType } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 
@@ -30,12 +30,14 @@ export function VolumePage() {
   const [subVolumes, setSubVolumes] = useState<Volume[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [series, setSeries] = useState<Series | null>(null);
+  const [library, setLibrary] = useState<Library | null>(null);
   const [lastProgress, setLastProgress] = useState<ReadingProgress | null>(null);
   const [progressList, setProgressList] = useState<ReadingProgress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [activeMenuChapterId, setActiveMenuChapterId] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const loadRequestIdRef = useRef(0);
 
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -66,16 +68,30 @@ export function VolumePage() {
   };
 
   const loadData = useCallback(async () => {
+    const requestId = ++loadRequestIdRef.current;
+    const isStale = () => loadRequestIdRef.current !== requestId;
+
+    setIsLoading(true);
+    setVolume(null);
+    setSubVolumes([]);
+    setChapters([]);
+    setSeries(null);
+    setLibrary(null);
+    setLastProgress(null);
+    setProgressList([]);
+
     try {
       // 볼륨 상세 정보
       const volRes = await api.get(`/volumes/${volumeId}`);
       const volData = volRes.data as Volume;
+      if (isStale()) return;
       setVolume(volData);
 
       // 하위 볼륨 목록 조회
       if (volData.series_id) {
         const subVolsRes = await api.get(`/series/${volData.series_id}/volumes?parent_id=${volumeId}`);
         const rawSubVols = Array.isArray(subVolsRes.data?.volumes) ? subVolsRes.data.volumes : [];
+        if (isStale()) return;
         setSubVolumes(
           rawSubVols.map((v: Volume & { is_completed?: boolean }) => ({
             ...v,
@@ -85,17 +101,39 @@ export function VolumePage() {
 
         // 부모 시리즈 정보
         const seriesRes = await api.get(`/series/${volData.series_id}`);
-        setSeries(seriesRes.data);
+        const seriesData = seriesRes.data as Series;
+        if (isStale()) return;
+        setSeries(seriesData);
+
+        if (seriesData.library_id) {
+          try {
+            const libraryRes = await api.get(`/libraries/${seriesData.library_id}`);
+            if (isStale()) return;
+            setLibrary(libraryRes.data as Library);
+          } catch (error) {
+            if (isStale()) return;
+            console.error("Failed to load library data:", error);
+            setLibrary(null);
+          }
+        } else {
+          if (isStale()) return;
+          setLibrary(null);
+        }
+      } else {
+        if (isStale()) return;
+        setLibrary(null);
       }
 
       // 챕터 목록 (볼륨 단위 API 사용)
       const chaptersRes = await volumeAPI.getChapters(volumeId!);
       const chapterList = chaptersRes.data.chapters || [];
+      if (isStale()) return;
       setChapters(chapterList.sort((a: Chapter, b: Chapter) => a.chapter_number - b.chapter_number));
       // 최근 읽기 진행도 가져오기 (볼륨 단위)
       try {
         const progressRes = await api.get(`/volumes/${volumeId}/progress`);
         const list = progressRes.data.progress_list;
+        if (isStale()) return;
 
         if (Array.isArray(list)) {
           setProgressList(list);
@@ -122,13 +160,17 @@ export function VolumePage() {
           setLastProgress(null);
         }
       } catch {
+        if (isStale()) return;
         setProgressList([]);
         setLastProgress(null);
       }
     } catch (error) {
+      if (isStale()) return;
       console.error("Failed to load volume data:", error);
     } finally {
-      setIsLoading(false);
+      if (!isStale()) {
+        setIsLoading(false);
+      }
     }
   }, [volumeId]);
 
@@ -211,6 +253,12 @@ export function VolumePage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [activeMenuChapterId]);
+
+  useEffect(() => {
+    return () => {
+      loadRequestIdRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     if (volumeId) loadData();
@@ -352,6 +400,7 @@ export function VolumePage() {
         <main className={styles.volumeMain}>
           <SeriesInfoCard
             series={series}
+            library={library}
             volume={volume}
             type="volume"
             progress={lastProgress || undefined}

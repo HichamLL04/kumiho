@@ -1,0 +1,12 @@
+.progressContainer {
+  width: 100%;
+  background: var(--bg-card, rgba(0, 0, 0, 0.1));
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}

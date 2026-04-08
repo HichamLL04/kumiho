@@ -47,7 +47,8 @@ type Library struct {
 	Type                   string     `json:"type" db:"type"`                         // "LOCAL", "SYSTEM"
 	LibraryType            string     `json:"library_type" db:"library_type"`         // "book", "audiobook"
 	IsVisible              bool       `json:"is_visible" db:"is_visible"`
-	ScanExcludes           string     `json:"scan_excludes" db:"scan_excludes"` // comma-separated patterns
+	ScanExcludes           string     `json:"scan_excludes" db:"scan_excludes"`                     // comma-separated patterns
+	OriginalTitleOverride  bool       `json:"original_title_override" db:"original_title_override"` // 원제 덮어쓰기 옵션
 }
 
 // Series 시리즈 모델 (범용 컨테이너)
@@ -55,6 +56,7 @@ type Series struct {
 	ID            string    `json:"id"`
 	LibraryID     string    `json:"library_id"`
 	Title         string    `json:"title"`
+	DisplayTitle  string    `json:"display_title,omitempty" db:"-"`
 	Path          string    `json:"path"`
 	ThumbnailPath *string   `json:"thumbnail_path,omitempty"`
 	ThumbnailURL  *string   `json:"thumbnail_url,omitempty" db:"-"`
@@ -77,17 +79,37 @@ type Series struct {
 
 // SeriesMetadata 시리즈 부가 메타데이터
 type SeriesMetadata struct {
-	SeriesID        string `json:"series_id" db:"series_id"`
-	Description     string `json:"description" db:"description"`
-	IsBookmarked    bool   `json:"is_bookmarked" db:"is_bookmarked"`
-	Status          string `json:"status" db:"status"`   // "ONGOING", "COMPLETED", "HIATUS"
-	Authors         string `json:"authors" db:"authors"` // JSON string or comma-separated
-	Tags            string `json:"tags" db:"tags"`       // JSON string or comma-separated
-	PublicationYear string `json:"publication_year" db:"publication_year"`
-	OriginalTitle   string `json:"original_title" db:"original_title"`
-	Publisher       string `json:"publisher" db:"publisher"`
-	PublishedAt     string `json:"published_at" db:"published_at"`
-	ISBN            string `json:"isbn" db:"isbn"`
+	SeriesID              string `json:"series_id" db:"series_id"`
+	Description           string `json:"description" db:"description"`
+	DescriptionTranslated string `json:"description_translated" db:"description_translated"`
+	IsBookmarked          bool   `json:"is_bookmarked" db:"is_bookmarked"`
+	Status                string `json:"status" db:"status"`   // "ONGOING", "COMPLETED", "HIATUS"
+	Authors               string `json:"authors" db:"authors"` // JSON string or comma-separated
+	Tags                  string `json:"tags" db:"tags"`       // JSON string or comma-separated
+	PublicationYear       string `json:"publication_year" db:"publication_year"`
+	OriginalTitle         string `json:"original_title" db:"original_title"`
+	OriginalTitles        string `json:"original_titles" db:"original_titles"`
+	Publisher             string `json:"publisher" db:"publisher"`
+	PublishedAt           string `json:"published_at" db:"published_at"`
+	ISBN                  string `json:"isbn" db:"isbn"`
+}
+
+// SeriesCharacter 시리즈 등장인물 모델
+type SeriesCharacter struct {
+	ID                string    `json:"id" db:"id"`
+	SeriesID          string    `json:"series_id" db:"series_id"`
+	Name              string    `json:"name" db:"name"`
+	NormalizedName    string    `json:"-" db:"normalized_name"`
+	SortOrder         int       `json:"sort_order" db:"sort_order"`
+	Role              string    `json:"role" db:"role"`
+	ExternalImageURL  string    `json:"-" db:"external_image_url"`
+	ImagePath         string    `json:"-" db:"image_path"`
+	ImageURL          string    `json:"image_url" db:"-"`
+	SourceProvider    string    `json:"source_provider" db:"source_provider"`
+	SourceCharacterID string    `json:"source_character_id" db:"source_character_id"`
+	SourceRelationID  string    `json:"source_relation_id" db:"source_relation_id"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // Volume 볼륨(권) 모델
@@ -225,6 +247,14 @@ type UserSetting struct {
 	Key       string    `json:"key"`
 	Value     string    `json:"value"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// PluginSecret 플러그인별 비밀 설정 저장 모델
+type PluginSecret struct {
+	PluginID       string    `json:"plugin_id"`
+	FieldKey       string    `json:"field_key"`
+	ValueEncrypted string    `json:"-"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // UserSeriesSetting 사용자별 시리즈 개별 설정 모델

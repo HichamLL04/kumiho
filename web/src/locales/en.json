@@ -15,6 +15,7 @@
     "off": "Off",
     "loading_settings": "Loading settings...",
     "checking": "Checking...",
+    "select": "Select",
     "unit": {
       "pages": "Pages",
       "hours": "h"
@@ -91,9 +92,161 @@
       "viewer": "Viewer",
       "libraries": "Libraries",
       "users": "Users",
+      "plugins": "Plugins",
       "system": "System",
       "account": "Account",
-      "statistics": "Statistics"
+      "statistics": "Statistics",
+      "metadata": "Metadata"
+    },
+    "metadata": {
+      "title": "Metadata Management",
+      "description": "Scan series in a library, find missing metadata, and apply matches in bulk.",
+      "search_title": "Metadata Search",
+      "search_description": "Search series in the selected library and apply matched metadata in bulk.",
+      "reset_title": "Reset Library Metadata",
+      "reset_description": "Restore the library to its scanned state.",
+      "reset_card_description": "Clears authors, tags, publication info, synopsis, translated synopsis, custom thumbnails, and series characters with their images.",
+      "reset_action": "Reset Metadata",
+      "reset_confirm": "This will clear all metadata, translated synopses, custom thumbnails, and series characters with their images in the {{library}} library. This action cannot be undone.",
+      "reset_complete": "Reset metadata for {{count}} series in {{library}}.",
+      "reset_failed": "Failed to reset library metadata.",
+      "batch_translate": {
+        "title": "Batch Translation (Beta)",
+        "description": "Translate series synopses in the selected language for every untranslated series on the server. An active translation plugin is required.",
+        "card_title": "Translate all series synopses",
+        "card_description": "Only untranslated items with an empty translated synopsis will be processed.",
+        "target_label": "Output language",
+        "server_language_hint": "The default is the current app language. The current app language is {{language}}.",
+        "server_language_badge": "Current app language",
+        "language_search_placeholder": "Search language",
+        "language_search_empty": "No matching languages found.",
+        "action": "Run Batch Translation",
+        "translating": "Translating...",
+        "starting": "Starting batch translation...",
+        "complete": "Batch translation complete: {{success}} of {{total}} succeeded.",
+        "cancelled": "Batch translation was cancelled after {{success}} of {{total}} items were processed.",
+        "failed": "Batch translation partially or fully failed. {{failed}} errors out of {{total}} items.",
+        "request_failed": "Failed to run batch translation."
+      },
+      "settings_description": "Control whether stored original titles should overwrite series titles. Disable to restore path-based titles.",
+      "start_scan": "Start Metadata Scan",
+      "cancel_scan": "Cancel Metadata Scan",
+      "apply_all": "Apply All",
+      "total_series_count": "{{count}} series",
+      "manual_search": "Manual Search",
+      "view_details": "View Details",
+      "preview_result_for": "Open or close preview result for {{title}}",
+      "scanning_progress": "Scanning: {{current}} / {{total}}",
+      "no_series": "There are no series in this library.",
+      "error_load_series": "Failed to load the series list.",
+      "scan_complete": "Metadata scan completed.",
+      "scan_cancelled": "Metadata scan stopped.",
+      "apply_complete": "Applied metadata to {{count}} series.",
+      "apply_complete_with_warnings": "Applied metadata to {{count}} series, but character sync failed for {{warnings}} series. Please retry.",
+      "status": {
+        "idle": "Idle",
+        "searching": "Searching...",
+        "matched": "Matched",
+        "failed": "Match Failed",
+        "applied": "Applied",
+        "applied_with_warnings": "Applied with warnings"
+      },
+      "table": {
+        "series": "Series",
+        "local_info": "Local Info",
+        "match_status": "Status",
+        "match_result": "Result",
+        "actions": "Actions"
+      }
+    },
+    "plugins": {
+      "title": "Plugins",
+      "desc": "Install metadata plugins and verify their runtime state.",
+      "loading": "Loading plugin information...",
+      "catalog_title": "Available Plugins",
+      "installed_title": "Installed Plugins",
+      "empty": "No plugins available.",
+      "installed_empty": "No plugins have been installed yet.",
+      "check_updates": "Check updates",
+      "install": "Install",
+      "update": "Update",
+      "reinstall": "Reinstall",
+      "uninstall": "Remove",
+      "author": "Author",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "health": "Healthcheck",
+      "state": "State",
+      "update_available": "Update available · {{current}} → {{latest}}",
+      "api_key": {
+        "configure": "API Key",
+        "title": "API Key",
+        "desc": "Set an API key to increase request limits.",
+        "label": "API Key",
+        "placeholder": "AIza...",
+        "save": "Save",
+        "delete": "Delete",
+        "configured": "Configured",
+        "not_configured": "Not configured",
+        "required_hint": "Save an API key before activating this plugin.",
+        "configured_hint": "Current key: {{masked}}",
+        "source_hint": "Applied from: {{source}}",
+        "apply_hint": "Saving an API key deactivates the currently running plugin. Activate it again to apply the new setting.",
+        "flow_hint": "Removing the plugin also removes the stored API key."
+      },
+      "secret": {
+        "configure": "Credentials",
+        "title": "Credentials",
+        "desc": "Store secret values used by the plugin.",
+        "auth_modal_desc": "Run the plugin auth flow and store the required values.",
+        "placeholder": "Enter value",
+        "save": "Save",
+        "delete": "Delete",
+        "configured": "Configured",
+        "not_configured": "Not configured",
+        "required_hint": "Save all required secrets before activating this plugin.",
+        "configured_hint": "{{field}}: {{masked}}",
+        "source_hint": "Applied from: {{source}}",
+        "apply_hint": "Saving a secret deactivates the currently running plugin. Activate it again to apply the new setting.",
+        "flow_hint": "Removing the plugin also removes the stored secrets."
+      },
+      "plugin_key_warning": {
+        "title": "Plugin Secret Key Not Configured",
+        "message": "PLUGIN_SECRET_KEY is not set — an auto-generated key is in use. If the server is reinstalled or the data directory is wiped, you may need to re-enter plugin API keys."
+      },
+      "toast": {
+        "load_failed": "Failed to load plugin information.",
+        "install_success": "Plugin installed successfully.",
+        "install_failed": "Failed to install plugin.",
+        "uninstall_success": "Plugin removed successfully.",
+        "uninstall_failed": "Failed to remove plugin.",
+        "update_checked": "Checked plugin updates.",
+        "update_found": "{{count}} plugin update(s) available.",
+        "update_check_failed": "Failed to check plugin updates.",
+        "update_rate_limited": "Manual plugin update checks exceeded the limit.",
+        "activated": "Plugin activated.",
+        "deactivated": "Plugin deactivated.",
+        "action_failed": "Plugin action failed.",
+        "api_key_required": "Enter an API key first.",
+        "api_key_saved": "API key saved.",
+        "api_key_saved_reactivate": "API key saved. Activate the plugin again to apply it.",
+        "api_key_save_failed": "Failed to save the API key.",
+        "api_key_deleted": "Stored API key removed.",
+        "api_key_delete_failed": "Failed to remove the stored API key.",
+        "secret_required": "Enter {{field}} first.",
+        "secret_saved": "{{field}} saved.",
+        "secret_saved_reactivate": "{{field}} saved. Activate the plugin again to apply it.",
+        "secret_save_failed": "Failed to save {{field}}.",
+        "secret_deleted": "Stored {{field}} removed.",
+        "secret_delete_failed": "Failed to remove the stored {{field}}.",
+        "auth_required": "Enter {{field}} first.",
+        "auth_saved": "{{title}} completed.",
+        "auth_saved_reactivate": "{{title}} completed. Activate the plugin again to apply it.",
+        "auth_failed": "{{title}} failed.",
+        "auth_deleted": "Values stored by {{title}} removed.",
+        "auth_deleted_reactivate": "Values stored by {{title}} removed. Activate the plugin again to use the default behavior.",
+        "auth_delete_failed": "Failed to remove values stored by {{title}}."
+      }
     },
     "statistics": {
       "title": "My Statistics",
@@ -150,8 +303,8 @@
         "keyboard_direction_desc": "Set the next-page direction for keyboard arrows.",
         "click_direction_label": "Next Page Click",
         "click_direction_desc": "Set which side click moves to the next page.",
-        "title_override_label": "EPUB Title Override",
-        "title_override_desc": "On rescan, apply EPUB metadata title to series title when available. Disable to restore path-based titles."
+        "title_override_label": "Original Title Override",
+        "title_override_desc": "On rescan, apply the stored original title to the series title when available. Disable to restore path-based titles."
       },
       "mode": {
         "single": "Single Page",
@@ -513,7 +666,6 @@
       "title": "Library is empty",
       "desc": "Add a library in settings to get started!"
     },
-
     "library": {
       "not_found": "Library not found",
       "go_home": "Go Home",
@@ -525,12 +677,76 @@
     }
   },
   "series": {
+    "metadata": {
+      "title": "Metadata Search",
+      "desc": "Search and apply metadata candidates for the current series.",
+      "search": "Search Candidates",
+      "fetch": "Fetch Selected Candidate",
+      "apply": "Apply To Series",
+      "candidates": "Candidates",
+      "preview": "Fetched Metadata",
+      "empty_candidates": "No metadata candidates yet.",
+      "empty_preview": "Fetched metadata will appear here.",
+      "character_count": "{{count}} total",
+      "fields": {
+        "title": "Title",
+        "original_title": "Original Title",
+        "authors": "Authors",
+        "publisher": "Publisher",
+        "publication_date": "Publication Date",
+        "language": "Language",
+        "description": "Description",
+        "tags": "Tags",
+        "characters": "Characters",
+        "identifiers": "Identifiers"
+      },
+      "toast": {
+        "search_success": "Metadata candidates loaded.",
+        "search_failed": "Failed to search metadata candidates.",
+        "fetch_success": "Metadata details loaded.",
+        "fetch_failed": "Failed to fetch metadata details.",
+        "apply_success": "Applied {{count}} fields.",
+        "apply_success_with_character_sync": "Applied {{count}} fields and synced {{characters}} character changes.",
+        "apply_success_with_character_warning": "Applied {{count}} fields, but character sync failed. Please retry.",
+        "apply_no_changes": "No metadata changes to apply.",
+        "apply_failed": "Failed to apply metadata."
+      }
+    },
+    "characters": {
+      "title": "Characters",
+      "desc": "Manage series characters, images, and ordering.",
+      "add": "Add Character",
+      "reorder": "Reorder",
+      "role_display": "Role: {{role}}",
+      "empty": "No characters saved yet.",
+      "save": "Save Changes",
+      "save_new": "Save",
+      "cancel": "Cancel",
+      "upload": "Upload File",
+      "reset_image": "Reset Image",
+      "new_name": "New Character",
+      "fields": {
+        "name": "Name",
+        "role": "Role",
+        "image_url": "Image URL"
+      },
+      "toast": {
+        "load_failed": "Failed to load characters.",
+        "create_failed": "Failed to add character.",
+        "save_success": "Character saved.",
+        "save_failed": "Failed to save character.",
+        "delete_failed": "Failed to delete character.",
+        "reorder_failed": "Failed to reorder characters.",
+        "image_updated": "Character image updated.",
+        "image_failed": "Failed to update character image.",
+        "name_required": "Character name is required."
+      }
+    },
     "count": "Total <strong>{{count}}</strong> volumes",
     "chapter_count": "Total <strong>{{count}}</strong> chapters",
     "empty_volumes": "No volumes found",
     "empty_chapters": "No chapters found",
     "not_found": "Series not found",
-
     "unit": {
       "volume": "Vol. {{count}}",
       "chapter": "Ch. {{count}}",
@@ -633,6 +849,10 @@
         "tags": "Tags (comma separated)",
         "tags_placeholder": "e.g. Fantasy, Action",
         "description": "Description",
+        "description_view": "Synopsis view",
+        "description_view_translated": "Translated",
+        "description_view_original": "Original",
+        "translation_target": "Translation language: {{language}}",
         "sync_file": "File Sync (ComicInfo.xml) - Coming Soon",
         "status_options": {
           "completed": "Completed",
@@ -643,8 +863,12 @@
       },
       "actions": {
         "cancel": "Cancel",
+        "reset": "Reset",
+        "resetting": "Resetting...",
         "save": "Save",
-        "saving": "Saving..."
+        "saving": "Saving...",
+        "translate": "Translate",
+        "translating": "Translating..."
       },
       "alert": {
         "upload_failed": "Failed to upload thumbnail.",
@@ -654,7 +878,18 @@
         "reset_success": "Thumbnail reset.",
         "reset_failed": "Failed to reset thumbnail.",
         "upload_success": "Thumbnail uploaded successfully.",
-        "update_failed": "Failed to update series info."
+        "update_failed": "Failed to update series info.",
+        "translate_empty": "There is no synopsis to translate.",
+        "translate_save_first": "Save description changes before translating.",
+        "translate_save_translated_first": "Save translated synopsis changes before retranslating.",
+        "translate_success": "Updated the {{language}} translation.",
+        "translate_failed": "Failed to translate the synopsis.",
+        "reset_metadata_title": "Reset Series Metadata",
+        "reset_metadata_confirm": "This will clear this series metadata, translated synopsis, custom thumbnail, and characters. This action cannot be undone.",
+        "reset_metadata_success": "Series metadata has been reset.",
+        "reset_metadata_failed": "Failed to reset series metadata.",
+        "reset_warning_unmanaged_asset": "Skipped unmanaged asset {{asset}}.",
+        "reset_warning_remove_failed": "Failed to remove asset {{asset}}."
       }
     }
   },
@@ -699,6 +934,7 @@
     "toc": {
       "title": "Table of Contents",
       "close": "Close",
+      "unknown": "Unknown",
       "empty": "No table of contents available."
     },
     "settings": {

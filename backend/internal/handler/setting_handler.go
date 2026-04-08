@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
@@ -83,6 +84,13 @@ func (h *SettingHandler) ListSettings(c *fiber.Ctx) error {
 	for _, s := range settings {
 		settingsMap[s.Key] = s.Value
 	}
+	if value, ok := settingsMap["original_title_override"]; ok {
+		if _, legacyExists := settingsMap["epub_title_override"]; !legacyExists {
+			settingsMap["epub_title_override"] = value
+		}
+	} else if legacyValue, ok := settingsMap["epub_title_override"]; ok {
+		settingsMap["original_title_override"] = legacyValue
+	}
 
 	// 2. 사용자별 설정이 있으면 덮어쓰기
 	if userID != "" {
@@ -100,9 +108,11 @@ func (h *SettingHandler) ListSettings(c *fiber.Ctx) error {
 // UpdateSetting 설정 업데이트
 func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+	role := middleware.GetUserRole(c)
 	key := c.Params("key")
 	var body struct {
-		Value string `json:"value"`
+		Value  string `json:"value"`
+		Locale string `json:"locale"`
 	}
 
 	if err := c.BodyParser(&body); err != nil {
@@ -121,21 +131,142 @@ func (h *SettingHandler) UpdateSetting(c *fiber.Ctx) error {
 	isUserSetting := userSplittableSettings[key]
 
 	if isUserSetting && userID != "" {
-		if err := h.userRepo.Update(nil, userID, key, body.Value); err != nil {
+		// MASTER가 서버 기본 언어를 변경하면 원제 locale 기준도 함께 갱신한다.
+		if key == "app_language" && role == model.RoleMaster {
+			tx, err := database.DB.BeginTx(c.Context(), nil)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to start transaction",
+				})
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			if err := h.userRepo.Update(tx, userID, key, body.Value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update user setting",
+				})
+			}
+			if err := h.repo.Update(tx, key, body.Value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update global setting",
+				})
+			}
+			if normalized := repository.NormalizeOriginalTitleLocale(body.Value); normalized != "" {
+				if err := h.repo.Update(tx, "original_title_locale", normalized); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": "Failed to update original title locale",
+					})
+				}
+			}
+			if err := tx.Commit(); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to commit setting update",
+				})
+			}
+		} else if err := h.userRepo.Update(nil, userID, key, body.Value); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to update user setting",
 			})
 		}
 	} else {
 		// 관리자만 전역 설정을 변경할 수 있도록 제한
-		role := middleware.GetUserRole(c)
 		if role != model.RoleMaster {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error": "Master access required to update global settings",
 			})
 		}
 
-		if err := h.repo.Update(nil, key, body.Value); err != nil {
+		if key == "epub_title_override" || key == "original_title_override" {
+			targetKey := "original_title_override"
+			locale := repository.NormalizeOriginalTitleLocale(body.Locale)
+
+			tx, err := database.DB.BeginTx(c.Context(), nil)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to start transaction",
+				})
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			if err := h.repo.Update(tx, targetKey, body.Value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update setting",
+				})
+			}
+			if err := h.repo.Update(tx, "epub_title_override", body.Value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update legacy setting",
+				})
+			}
+			if locale != "" {
+				if err := h.repo.Update(tx, "original_title_locale", locale); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": "Failed to update original title locale",
+					})
+				}
+			}
+			overrideEnabled := repository.IsOriginalTitleOverrideEnabledWithQuery(tx, h.repo)
+			if _, err := tx.Exec(`UPDATE libraries SET original_title_override = ? WHERE type = 'LOCAL'`, overrideEnabled); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update library original title override",
+				})
+			}
+			if err := h.scanner.NormalizeStoredSeriesTitlesWithTx(tx); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to normalize stored series titles",
+				})
+			}
+			if err := tx.Commit(); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to commit setting update",
+				})
+			}
+		} else if key == "app_language" {
+			tx, err := database.DB.BeginTx(c.Context(), nil)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to start transaction",
+				})
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			if err := h.repo.Update(tx, key, body.Value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update setting",
+				})
+			}
+			if normalized := repository.NormalizeOriginalTitleLocale(body.Value); normalized != "" {
+				if err := h.repo.Update(tx, "original_title_locale", normalized); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": "Failed to update original title locale",
+					})
+				}
+			}
+			if err := tx.Commit(); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to commit setting update",
+				})
+			}
+		} else if key == "original_title_locale" {
+			tx, err := database.DB.BeginTx(c.Context(), nil)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to start transaction",
+				})
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			if err := h.repo.Update(tx, key, body.Value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to update setting",
+				})
+			}
+			if err := tx.Commit(); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to commit setting update",
+				})
+			}
+		} else if err := h.repo.Update(nil, key, body.Value); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to update setting",
 			})
@@ -171,6 +302,10 @@ func (h *SettingHandler) validateSettingValue(key, value string) error {
 	case "app_language":
 		if !validLanguages[value] {
 			return fiber.NewError(fiber.StatusBadRequest, "Invalid app_language value")
+		}
+	case "original_title_locale":
+		if !validLanguages[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid original_title_locale value")
 		}
 	case "viewer_reading_mode":
 		if !validReadingModes[value] {
@@ -269,9 +404,9 @@ func (h *SettingHandler) validateSettingValue(key, value string) error {
 		if value != "true" && value != "false" {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Invalid %s value (must be 'true' or 'false')", key))
 		}
-	case "epub_title_override":
+	case "epub_title_override", "original_title_override":
 		if value != "true" && value != "false" {
-			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_title_override value (must be 'true' or 'false')")
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Invalid %s value (must be 'true' or 'false')", key))
 		}
 	default:
 		// 보안을 위해 정의되지 않은 키는 거부합니다.
