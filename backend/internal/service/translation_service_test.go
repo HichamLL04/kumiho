@@ -37,6 +37,7 @@ func TestTranslationServiceBatchTranslateRetriesRateLimitedPlugin(t *testing.T) 
 
 	seriesRepo := repository.NewSeriesRepository()
 	series := seedMetadataSeries(t, seriesRepo)
+	originalUpdatedAt := series.UpdatedAt
 	series.Description = "Hello world"
 	series.Metadata.Description = "Hello world"
 	if err := seriesRepo.Update(nil, series); err != nil {
@@ -72,6 +73,9 @@ func TestTranslationServiceBatchTranslateRetriesRateLimitedPlugin(t *testing.T) 
 	}
 	if refreshed.Metadata.DescriptionTranslated != "안녕하세요" {
 		t.Fatalf("translated description = %q", refreshed.Metadata.DescriptionTranslated)
+	}
+	if !refreshed.UpdatedAt.Equal(originalUpdatedAt) {
+		t.Fatalf("UpdatedAt = %v, want unchanged %v", refreshed.UpdatedAt, originalUpdatedAt)
 	}
 }
 
