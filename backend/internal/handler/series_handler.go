@@ -317,8 +317,6 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	if req.ISBN != nil {
 		series.Metadata.ISBN = *req.ISBN
 	}
-	series.UpdatedAt = time.Now()
-
 	// DB 업데이트
 	if err := h.seriesRepo.Update(nil, series); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

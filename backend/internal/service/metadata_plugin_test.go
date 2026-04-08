@@ -322,6 +322,7 @@ func TestMetadataServiceApplySeriesMetadataUpdatesDatabase(t *testing.T) {
 	connectMetadataTestDB(t)
 	seriesRepo := repository.NewSeriesRepository()
 	series := seedMetadataSeries(t, seriesRepo)
+	originalUpdatedAt := series.UpdatedAt
 	svc := newMetadataServiceForTests(t, (&configForMetadataTests{DataDir: t.TempDir()}).Config(), nil, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
 
 	result, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", &sdktypes.MetadataResult{
@@ -372,6 +373,9 @@ func TestMetadataServiceApplySeriesMetadataUpdatesDatabase(t *testing.T) {
 	}
 	if updated.Metadata.ISBN != "9781234567890" {
 		t.Fatalf("ISBN = %q", updated.Metadata.ISBN)
+	}
+	if !updated.UpdatedAt.Equal(originalUpdatedAt) {
+		t.Fatalf("UpdatedAt = %v, want unchanged %v", updated.UpdatedAt, originalUpdatedAt)
 	}
 }
 

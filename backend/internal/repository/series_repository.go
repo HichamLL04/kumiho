@@ -489,22 +489,19 @@ func (r *SeriesRepository) UpdateUpdatedAt(db database.Queryer, id string, updat
 	return err
 }
 
-func (r *SeriesRepository) UpdateDescriptionTranslated(db database.Queryer, seriesID string, translated string, updatedAt time.Time) error {
+func (r *SeriesRepository) UpdateDescriptionTranslated(db database.Queryer, seriesID string, translated string) error {
 	if db == nil {
 		tx, err := database.DB.BeginTx(context.Background(), nil)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err := r.UpdateDescriptionTranslated(tx, seriesID, translated, updatedAt); err != nil {
+		if err := r.UpdateDescriptionTranslated(tx, seriesID, translated); err != nil {
 			return err
 		}
 		return tx.Commit()
 	}
 
-	if _, err := db.Exec(`UPDATE series SET updated_at = ? WHERE id = ?`, updatedAt, seriesID); err != nil {
-		return err
-	}
 	_, err := db.Exec(
 		`UPDATE series_metadata
 		 SET description_translated = ?

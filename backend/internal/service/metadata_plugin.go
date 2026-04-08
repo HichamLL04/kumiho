@@ -370,7 +370,6 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 		}, nil
 	}
 
-	series.UpdatedAt = time.Now()
 	if err := s.seriesRepo.Update(nil, series); err != nil {
 		return nil, err
 	}
