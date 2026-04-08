@@ -112,7 +112,7 @@ func TestPluginInstallServiceInstallServiceRuntimeArtifact(t *testing.T) {
 						SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxDocker},
 						MinCoreVersion:     "0.1.0",
 						Artifacts: []sdkmanifest.Artifact{
-							{Platform: sdkmanifest.PlatformLinuxDocker, URL: server.URL + "/artifact", Checksum: checksum},
+							{Platform: sdkmanifest.PlatformLinuxDocker, Arch: runtime.GOARCH, URL: server.URL + "/artifact", Checksum: checksum},
 						},
 					}},
 				},
@@ -169,7 +169,7 @@ func TestPluginInstallServiceInstallUsesLocalFileArtifactDirectly(t *testing.T) 
 				SupportedPlatforms: []sdkmanifest.Platform{sdkmanifest.PlatformLinuxDocker},
 				MinCoreVersion:     "0.1.0",
 				Artifacts: []sdkmanifest.Artifact{
-					{Platform: sdkmanifest.PlatformLinuxDocker, URL: "file://" + artifactPath, Checksum: checksum},
+					{Platform: sdkmanifest.PlatformLinuxDocker, Arch: runtime.GOARCH, URL: "file://" + artifactPath, Checksum: checksum},
 				},
 			}},
 		},
@@ -248,6 +248,55 @@ func TestPluginInstallServiceInstallFailsOnChecksumMismatch(t *testing.T) {
 	}
 	if pluginErr.Code != pluginerrors.ErrCodeChecksumMismatch {
 		t.Fatalf("error code = %q", pluginErr.Code)
+	}
+}
+
+func TestSelectArtifactPrefersExactArchMatch(t *testing.T) {
+	manifest := sdkmanifest.Manifest{
+		RuntimeType: sdkmanifest.RuntimeTypeService,
+		Artifacts: []sdkmanifest.Artifact{
+			{Platform: sdkmanifest.PlatformLinuxDocker, Arch: "amd64", URL: "https://example.com/amd64"},
+			{Platform: sdkmanifest.PlatformLinuxDocker, Arch: "arm64", URL: "https://example.com/arm64"},
+		},
+	}
+
+	artifact, err := selectArtifactForTarget(manifest, currentArtifactTarget(sdkmanifest.RuntimeTypeService, "linux", "arm64"))
+	if err != nil {
+		t.Fatalf("selectArtifactForTarget() error = %v", err)
+	}
+	if artifact.URL != "https://example.com/arm64" {
+		t.Fatalf("artifact.URL = %q, want arm64 artifact", artifact.URL)
+	}
+}
+
+func TestSelectArtifactFallsBackToWildcardArch(t *testing.T) {
+	manifest := sdkmanifest.Manifest{
+		RuntimeType: sdkmanifest.RuntimeTypeService,
+		Artifacts: []sdkmanifest.Artifact{
+			{Platform: sdkmanifest.PlatformLinuxDocker, URL: "https://example.com/any"},
+		},
+	}
+
+	artifact, err := selectArtifactForTarget(manifest, currentArtifactTarget(sdkmanifest.RuntimeTypeService, "linux", "arm64"))
+	if err != nil {
+		t.Fatalf("selectArtifactForTarget() error = %v", err)
+	}
+	if artifact.URL != "https://example.com/any" {
+		t.Fatalf("artifact.URL = %q, want wildcard artifact", artifact.URL)
+	}
+}
+
+func TestSelectArtifactReturnsNotFoundOnArchMismatch(t *testing.T) {
+	manifest := sdkmanifest.Manifest{
+		RuntimeType: sdkmanifest.RuntimeTypeService,
+		Artifacts: []sdkmanifest.Artifact{
+			{Platform: sdkmanifest.PlatformLinuxDocker, Arch: "amd64", URL: "https://example.com/amd64"},
+		},
+	}
+
+	_, err := selectArtifactForTarget(manifest, currentArtifactTarget(sdkmanifest.RuntimeTypeService, "linux", "arm64"))
+	if err == nil {
+		t.Fatal("selectArtifactForTarget() error = nil")
 	}
 }
 

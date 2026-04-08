@@ -395,29 +395,63 @@ func findRegistryEntry(plugins []RegistryEntry, pluginID string) (RegistryEntry,
 	return RegistryEntry{}, false
 }
 
+type artifactTarget struct {
+	platform sdkmanifest.Platform
+	arch     string
+}
+
 func selectArtifact(manifest sdkmanifest.Manifest) (sdkmanifest.Artifact, error) {
-	target := currentPlatform(manifest.RuntimeType)
+	target := currentArtifactTarget(manifest.RuntimeType, runtime.GOOS, runtime.GOARCH)
+	return selectArtifactForTarget(manifest, target)
+}
+
+func selectArtifactForTarget(manifest sdkmanifest.Manifest, target artifactTarget) (sdkmanifest.Artifact, error) {
+	var fallback *sdkmanifest.Artifact
 	for _, artifact := range manifest.Artifacts {
-		if artifact.Platform == target {
+		if artifact.Platform != target.platform {
+			continue
+		}
+
+		artifactArch := strings.TrimSpace(artifact.Arch)
+		if artifactArch == "" {
+			if fallback == nil {
+				candidate := artifact
+				fallback = &candidate
+			}
+			continue
+		}
+
+		if strings.EqualFold(artifactArch, target.arch) {
 			return artifact, nil
 		}
 	}
-	return sdkmanifest.Artifact{}, pluginerrors.New(pluginerrors.ErrCodeArtifactNotFound, "no artifact available for current platform")
+
+	if fallback != nil {
+		return *fallback, nil
+	}
+
+	return sdkmanifest.Artifact{}, pluginerrors.New(
+		pluginerrors.ErrCodeArtifactNotFound,
+		fmt.Sprintf("no artifact available for platform %q and arch %q", target.platform, target.arch),
+	)
 }
 
-func currentPlatform(runtimeType sdkmanifest.RuntimeType) sdkmanifest.Platform {
+func currentArtifactTarget(runtimeType sdkmanifest.RuntimeType, goos string, goarch string) artifactTarget {
+	target := artifactTarget{arch: strings.TrimSpace(goarch)}
 	if runtimeType == sdkmanifest.RuntimeTypeService {
-		return sdkmanifest.PlatformLinuxDocker
+		target.platform = sdkmanifest.PlatformLinuxDocker
+		return target
 	}
 
-	switch runtime.GOOS {
+	switch goos {
 	case "windows":
-		return sdkmanifest.PlatformWindowsBinary
+		target.platform = sdkmanifest.PlatformWindowsBinary
 	case "darwin":
-		return sdkmanifest.PlatformMacOSBinary
+		target.platform = sdkmanifest.PlatformMacOSBinary
 	default:
-		return sdkmanifest.PlatformLinuxBinary
+		target.platform = sdkmanifest.PlatformLinuxBinary
 	}
+	return target
 }
 
 func verifyChecksum(actual string, expected string) error {

@@ -20,6 +20,8 @@ data/plugins/
 # Go tests
 *.test
 *.out
+go.work
+go.work.sum
 
 *.db
 *.db-shm
