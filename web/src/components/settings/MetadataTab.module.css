@@ -584,7 +584,7 @@
     rgba(255, 255, 255, 0.03);
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .libraryActionPanel {
     flex-direction: row;
     align-items: flex-end;
@@ -601,7 +601,7 @@
     width: auto;
     flex: 1;
     justify-content: flex-end;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 }
 
