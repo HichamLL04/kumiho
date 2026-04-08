@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"context"
 	"database/sql"
 	"math"
 	"strings"
@@ -508,18 +507,7 @@ func (r *SeriesRepository) UpdateUpdatedAt(db database.Queryer, id string, updat
 }
 
 func (r *SeriesRepository) UpdateDescriptionTranslated(db database.Queryer, seriesID string, translated string) error {
-	if db == nil {
-		tx, err := database.DB.BeginTx(context.Background(), nil)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = tx.Rollback() }()
-		if err := r.UpdateDescriptionTranslated(tx, seriesID, translated); err != nil {
-			return err
-		}
-		return tx.Commit()
-	}
-
+	db = database.GetQueryer(db)
 	_, err := db.Exec(
 		`UPDATE series_metadata
 		 SET description_translated = ?
