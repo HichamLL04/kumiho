@@ -193,7 +193,7 @@ func (s *TranslationService) TranslateSeriesDescription(
 
 	series.Metadata.Description = series.Description
 	series.Metadata.DescriptionTranslated = translated
-	if err := s.seriesRepo.Update(nil, series); err != nil {
+	if err := s.seriesRepo.UpdatePreservingUpdatedAt(nil, series); err != nil {
 		return nil, err
 	}
 

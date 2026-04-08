@@ -444,29 +444,47 @@ func (r *SeriesRepository) Delete(db database.Queryer, id string) error {
 // Update 시리즈 정보 업데이트
 func (r *SeriesRepository) Update(db database.Queryer, series *model.Series) error {
 	db = database.GetQueryer(db)
-	// 1. series 테이블 업데이트
-	_, err := db.Exec(
-		`UPDATE series SET title = ?, path = ?, thumbnail_path = ?, extension = ?, updated_at = ? WHERE id = ?`,
-		series.Title, series.Path, series.ThumbnailPath, series.Extension, series.UpdatedAt, series.ID,
+	return r.updateSeries(db, series, true)
+}
+
+// UpdatePreservingUpdatedAt updates series fields without modifying updated_at.
+func (r *SeriesRepository) UpdatePreservingUpdatedAt(db database.Queryer, series *model.Series) error {
+	db = database.GetQueryer(db)
+	return r.updateSeries(db, series, false)
+}
+
+func (r *SeriesRepository) updateSeries(db database.Queryer, series *model.Series, updateTimestamp bool) error {
+	var (
+		err error
 	)
+	if updateTimestamp {
+		_, err = db.Exec(
+			`UPDATE series SET title = ?, path = ?, thumbnail_path = ?, extension = ?, updated_at = ? WHERE id = ?`,
+			series.Title, series.Path, series.ThumbnailPath, series.Extension, series.UpdatedAt, series.ID,
+		)
+	} else {
+		_, err = db.Exec(
+			`UPDATE series SET title = ?, path = ?, thumbnail_path = ?, extension = ? WHERE id = ?`,
+			series.Title, series.Path, series.ThumbnailPath, series.Extension, series.ID,
+		)
+	}
 	if err != nil {
 		return err
 	}
 
-	// 2. series_metadata 테이블 업데이트
-	if series.Metadata != nil {
-		_, err = db.Exec(
-			`UPDATE series_metadata
-			 SET description = ?, description_translated = ?, is_bookmarked = ?, status = ?, authors = ?, tags = ?, publication_year = ?,
-			     original_title = ?, original_titles = ?, publisher = ?, published_at = ?, isbn = ?
-			 WHERE series_id = ?`,
-			series.Description, series.Metadata.DescriptionTranslated, series.IsBookmarked, series.Metadata.Status, series.Metadata.Authors, series.Metadata.Tags, series.Metadata.PublicationYear,
-			series.Metadata.OriginalTitle, series.Metadata.OriginalTitles, series.Metadata.Publisher, series.Metadata.PublishedAt, series.Metadata.ISBN, series.ID,
-		)
-		return err
+	if series.Metadata == nil {
+		return nil
 	}
 
-	return nil
+	_, err = db.Exec(
+		`UPDATE series_metadata
+		 SET description = ?, description_translated = ?, is_bookmarked = ?, status = ?, authors = ?, tags = ?, publication_year = ?,
+		     original_title = ?, original_titles = ?, publisher = ?, published_at = ?, isbn = ?
+		 WHERE series_id = ?`,
+		series.Description, series.Metadata.DescriptionTranslated, series.IsBookmarked, series.Metadata.Status, series.Metadata.Authors, series.Metadata.Tags, series.Metadata.PublicationYear,
+		series.Metadata.OriginalTitle, series.Metadata.OriginalTitles, series.Metadata.Publisher, series.Metadata.PublishedAt, series.Metadata.ISBN, series.ID,
+	)
+	return err
 }
 
 // UpdateBookmark 사용자별 시리즈 북마크 상태 업데이트
