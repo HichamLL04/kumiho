@@ -609,8 +609,8 @@ func TestScanLibraryKeepsDirectImageLeafVolumeTreeWhenContentUnchanged(t *testin
 	initialChapterID := initialChapters[0].ID
 	initialUpdatedAt := seriesList[0].UpdatedAt
 
-	if _, err := s.ScanLibrary(context.Background(), library); err != nil {
-		t.Fatalf("ScanLibrary() unchanged rescan error = %v", err)
+	if _, rescanErr := s.ScanLibrary(context.Background(), library); rescanErr != nil {
+		t.Fatalf("ScanLibrary() unchanged rescan error = %v", rescanErr)
 	}
 
 	updatedVolumes, err := volumeRepo.FindBySeriesID(nil, seriesList[0].ID)
@@ -749,12 +749,4 @@ func TestRemoveLibraryWatchKeepsNestedLibraryWatches(t *testing.T) {
 	if slices.Contains(watchList, rootPath) {
 		t.Fatalf("watch list still contains removed root %q: %v", rootPath, watchList)
 	}
-}
-
-func writeTestChapter(seriesPath, chapterName string) error {
-	chapterPath := filepath.Join(seriesPath, chapterName)
-	if err := os.MkdirAll(chapterPath, 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(chapterPath, "001.png"), tinyPNG, 0o644)
 }

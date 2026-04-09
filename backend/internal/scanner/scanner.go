@@ -1638,8 +1638,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := s.volumeRepo.DeleteBySeriesID(tx, series.ID); err != nil {
-			return nil, err
+		if deleteErr := s.volumeRepo.DeleteBySeriesID(tx, series.ID); deleteErr != nil {
+			return nil, deleteErr
 		}
 
 		saveRes, saveErr := s.saveVolumeRecursive(tx, series.ID, nil, volData)
@@ -1655,8 +1655,8 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 			series.UpdatedAt = now
 		}
 
-		if err := tx.Commit(); err != nil {
-			return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		if commitErr := tx.Commit(); commitErr != nil {
+			return nil, fmt.Errorf("failed to commit transaction: %w", commitErr)
 		}
 
 		if representativeExt := resolveScannedSeriesExtension(volData); series.Extension != representativeExt {
