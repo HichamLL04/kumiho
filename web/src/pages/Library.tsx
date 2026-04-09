@@ -277,7 +277,7 @@ export function LibraryPage() {
             <div className={styles.seriesLayout}>
               <nav
                 className={styles.seriesIndex}
-                aria-label={t("home.library.total_series", { count: sortedSeriesList.length })}
+                aria-label={t("home.library.series_index_nav", { count: sortedSeriesList.length })}
               >
                 {groupedSeriesList.map((group) => (
                   <button
@@ -285,7 +285,7 @@ export function LibraryPage() {
                     type="button"
                     className={styles.seriesIndexButton}
                     onClick={() => scrollToGroup(group.key)}
-                    aria-label={`${group.key} 섹션으로 이동`}
+                    aria-label={t("home.library.series_index_jump", { key: group.key })}
                   >
                     {group.key}
                   </button>

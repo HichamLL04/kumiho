@@ -672,6 +672,8 @@
       "scan_in_progress": "스캔 중...",
       "scan": "스캔",
       "total_series": "총 <strong>{{count}}</strong>개의 시리즈",
+      "series_index_nav": "시리즈 인덱스, 총 {{count}}개 시리즈",
+      "series_index_jump": "{{key}} 섹션으로 이동",
       "empty_series": "스캔된 시리즈가 없습니다",
       "scan_now": "지금 스캔하기"
     }

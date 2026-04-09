@@ -709,6 +709,135 @@ func TestAnalyzeVolumeRecursiveSetsMixExtensionForMixedChapterFormats(t *testing
 	}
 }
 
+func TestHasDirectPageLikeSeriesContentRequiresNoVolumeCandidates(t *testing.T) {
+	baseDir := t.TempDir()
+	s := &Scanner{}
+
+	t.Run("direct images only", func(t *testing.T) {
+		seriesPath := filepath.Join(baseDir, "images-only")
+		if err := os.MkdirAll(seriesPath, 0o755); err != nil {
+			t.Fatalf("os.MkdirAll() error = %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(seriesPath, "001.png"), tinyPNG, 0o644); err != nil {
+			t.Fatalf("os.WriteFile() error = %v", err)
+		}
+		entries, err := os.ReadDir(seriesPath)
+		if err != nil {
+			t.Fatalf("os.ReadDir() error = %v", err)
+		}
+		if !s.hasDirectPageLikeSeriesContent(entries, nil, "book") {
+			t.Fatal("hasDirectPageLikeSeriesContent() = false, want true for direct image leaf")
+		}
+	})
+
+	t.Run("cover image with chapter dir", func(t *testing.T) {
+		seriesPath := filepath.Join(baseDir, "cover-and-dir")
+		if err := os.MkdirAll(filepath.Join(seriesPath, "Chapter 01"), 0o755); err != nil {
+			t.Fatalf("os.MkdirAll() error = %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(seriesPath, "cover.jpg"), tinyPNG, 0o644); err != nil {
+			t.Fatalf("os.WriteFile() error = %v", err)
+		}
+		entries, err := os.ReadDir(seriesPath)
+		if err != nil {
+			t.Fatalf("os.ReadDir() error = %v", err)
+		}
+		if s.hasDirectPageLikeSeriesContent(entries, nil, "book") {
+			t.Fatal("hasDirectPageLikeSeriesContent() = true, want false when volume candidate directory exists")
+		}
+	})
+
+	t.Run("cover image with archive file", func(t *testing.T) {
+		seriesPath := filepath.Join(baseDir, "cover-and-archive")
+		if err := os.MkdirAll(seriesPath, 0o755); err != nil {
+			t.Fatalf("os.MkdirAll() error = %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(seriesPath, "cover.jpg"), tinyPNG, 0o644); err != nil {
+			t.Fatalf("os.WriteFile(cover.jpg) error = %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(seriesPath, "001.zip"), []byte("zip"), 0o644); err != nil {
+			t.Fatalf("os.WriteFile(001.zip) error = %v", err)
+		}
+		entries, err := os.ReadDir(seriesPath)
+		if err != nil {
+			t.Fatalf("os.ReadDir() error = %v", err)
+		}
+		if s.hasDirectPageLikeSeriesContent(entries, nil, "book") {
+			t.Fatal("hasDirectPageLikeSeriesContent() = true, want false when archive volume candidate exists")
+		}
+	})
+}
+
+func TestScanLibraryCollectsMixedFolderWarningsWithoutErrorStatus(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("database.Connect() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("database.Close() error = %v", err)
+		}
+	})
+
+	dataDir := t.TempDir()
+	libraryPath := filepath.Join(t.TempDir(), "library")
+	seriesPath := filepath.Join(libraryPath, "Mixed Series")
+	if err := os.MkdirAll(filepath.Join(seriesPath, "Chapter 01"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seriesPath, "cover.jpg"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(cover.jpg) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seriesPath, "Chapter 01", "001.png"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(001.png) error = %v", err)
+	}
+
+	libraryRepo := repository.NewLibraryRepository()
+	seriesRepo := repository.NewSeriesRepository()
+	volumeRepo := repository.NewVolumeRepository()
+	chapterRepo := repository.NewChapterRepository()
+	library := &model.Library{
+		Name:        "Mixed Warning Library",
+		Paths:       []string{libraryPath},
+		LibraryType: "book",
+	}
+	if err := libraryRepo.Create(nil, library); err != nil {
+		t.Fatalf("LibraryRepository.Create() error = %v", err)
+	}
+
+	s := NewScanner(
+		libraryRepo,
+		seriesRepo,
+		volumeRepo,
+		chapterRepo,
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{DataDir: dataDir},
+	)
+
+	result, err := s.ScanLibrary(context.Background(), library)
+	if err != nil {
+		t.Fatalf("ScanLibrary() error = %v", err)
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("result.Errors = %v, want no hard errors for mixed-folder warning", result.Errors)
+	}
+	if len(result.Warnings) == 0 {
+		t.Fatal("result.Warnings = empty, want mixed-folder warning")
+	}
+
+	refreshedLibrary, err := libraryRepo.FindByID(nil, library.ID)
+	if err != nil {
+		t.Fatalf("LibraryRepository.FindByID() error = %v", err)
+	}
+	if refreshedLibrary == nil {
+		t.Fatal("LibraryRepository.FindByID() = nil, want library")
+	}
+	if refreshedLibrary.ScanStatus != "IDLE" {
+		t.Fatalf("ScanStatus = %q, want %q", refreshedLibrary.ScanStatus, "IDLE")
+	}
+}
+
 func TestRemoveLibraryWatchKeepsNestedLibraryWatches(t *testing.T) {
 	baseDir := t.TempDir()
 	rootPath := filepath.Join(baseDir, "data")

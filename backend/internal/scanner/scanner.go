@@ -443,6 +443,7 @@ type ScanResult struct {
 	VolumeCount  int      `json:"volume_count"`
 	ChapterCount int      `json:"chapter_count"`
 	PageCount    int      `json:"page_count"`
+	Warnings     []string `json:"warnings,omitempty"`
 	Errors       []string `json:"errors,omitempty"`
 }
 
@@ -565,13 +566,13 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 				readFailed = true
 				result.Errors = append(result.Errors, fmt.Sprintf("failed to collect series targets from %s: %v", rootPath, collectErr))
 				for _, warning := range warnings {
-					result.Errors = append(result.Errors, warning)
+					result.Warnings = append(result.Warnings, warning)
 				}
 				continue
 			}
 			allTargets = append(allTargets, targets...)
 			for _, warning := range warnings {
-				result.Errors = append(result.Errors, warning)
+				result.Warnings = append(result.Warnings, warning)
 			}
 		}
 	}
@@ -712,6 +713,8 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	if len(result.Errors) > 0 {
 		status = "ERROR"
 		summary = "스캔 완료 (일부 오류 발생)"
+	} else if len(result.Warnings) > 0 {
+		summary = fmt.Sprintf("스캔 완료 (경고 %d건)", len(result.Warnings))
 	}
 	if updateErr := s.libraryRepo.UpdateScanStatus(nil, library.ID, status, summary); updateErr != nil {
 		log.Printf("Failed to update final scan status for library %s: %v", library.ID, updateErr)
@@ -836,16 +839,24 @@ func (s *Scanner) inspectSeriesCandidateFolder(
 func (s *Scanner) hasDirectPageLikeSeriesContent(entries []fs.DirEntry, excludePatterns []string, libraryType string) bool {
 	// 시리즈가 이미 확정된 뒤, 시리즈 루트 자체가 direct image/audio leaf인지 판단한다.
 	// inspectSeriesCandidateFolder와 비슷해 보여도 "leaf series 후보 수집"이 아니라 "series content 저장 전략 분기"용이다.
+	// direct image/audio file이 있더라도 하위 볼륨 후보(디렉터리, 아카이브, 오디오 엔트리)가 함께 있으면 일반 series 레이아웃으로 본다.
 	isAudiobook := libraryType == "audiobook"
+	hasDirectMedia := false
 	for _, entry := range entries {
-		if isExcluded(entry.Name(), excludePatterns) || entry.IsDir() {
+		if isExcluded(entry.Name(), excludePatterns) {
 			continue
 		}
-		if isImage(entry.Name()) || (isAudiobook && isAudio(entry.Name())) {
-			return true
+		if entry.IsDir() {
+			return false
+		}
+		if isArchive(entry.Name()) || (isAudiobook && isAudio(entry.Name())) {
+			return false
+		}
+		if isImage(entry.Name()) {
+			hasDirectMedia = true
 		}
 	}
-	return false
+	return hasDirectMedia
 }
 
 // CancelScan 진행 중인 스캔 취소. 취소가 수행되었으면 true, 진행 중인 스캔이 없었으면 false 반환.
@@ -1618,6 +1629,9 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 				return nil, changeErr
 			}
 			contentChanged = changed
+		} else if len(existingVolumes) > 0 {
+			// 기존 저장 구조는 있었지만 root synthetic volume이 없으면 direct leaf 레이아웃 전환으로 보고 재구성한다.
+			contentChanged = true
 		}
 
 		if !contentChanged {
