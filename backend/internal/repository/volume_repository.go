@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -113,6 +114,9 @@ func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) 
 		}
 		volumes = append(volumes, v)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return volumes, nil
 }
 
@@ -162,7 +166,82 @@ func (r *VolumeRepository) FindRootVolumesBySeriesID(db database.Queryer, series
 		}
 		volumes = append(volumes, v)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return volumes, nil
+}
+
+func (r *VolumeRepository) FindRootDisplayUnitsBySeriesIDs(db database.Queryer, seriesIDs []string) (map[string]string, error) {
+	db = database.GetQueryer(db)
+	if len(seriesIDs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	const batchSize = 900
+	displayUnits := make(map[string]string, len(seriesIDs))
+	for start := 0; start < len(seriesIDs); start += batchSize {
+		end := start + batchSize
+		if end > len(seriesIDs) {
+			end = len(seriesIDs)
+		}
+		chunkUnits, err := r.findRootDisplayUnitsBySeriesIDsChunk(db, seriesIDs[start:end])
+		if err != nil {
+			return nil, err
+		}
+		for seriesID, displayUnit := range chunkUnits {
+			displayUnits[seriesID] = displayUnit
+		}
+	}
+
+	return displayUnits, nil
+}
+
+func (r *VolumeRepository) findRootDisplayUnitsBySeriesIDsChunk(db database.Queryer, seriesIDs []string) (map[string]string, error) {
+	if len(seriesIDs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(seriesIDs)), ",")
+	query := fmt.Sprintf(`
+		SELECT
+			series_id,
+			CASE
+				WHEN SUM(CASE WHEN unit != 'chapter' THEN 1 ELSE 0 END) = 0 THEN 'chapter'
+				ELSE 'volume'
+			END AS display_unit
+		FROM volumes
+		WHERE parent_id IS NULL
+		  AND series_id IN (%s)
+		GROUP BY series_id
+	`, placeholders)
+
+	args := make([]any, len(seriesIDs))
+	for i, seriesID := range seriesIDs {
+		args[i] = seriesID
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	displayUnits := make(map[string]string, len(seriesIDs))
+	for rows.Next() {
+		var (
+			seriesID    string
+			displayUnit string
+		)
+		if err := rows.Scan(&seriesID, &displayUnit); err != nil {
+			return nil, err
+		}
+		displayUnits[seriesID] = displayUnit
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return displayUnits, nil
 }
 
 // FindByID ID로 볼륨 조회

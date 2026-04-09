@@ -32,13 +32,22 @@ func NewSeriesEnrichService(
 
 // EnrichList 시리즈 목록 전체를 보정
 func (svc *SeriesEnrichService) EnrichList(seriesList []model.Series, userID string) {
+	displayUnits, err := svc.prefetchDisplayUnits(seriesList)
+	if err != nil {
+		log.Printf("prefetchDisplayUnits failed, falling back to per-series query: %v", err)
+	}
+	usePrefetchedDisplayUnit := err == nil
 	for i := range seriesList {
-		svc.EnrichSingle(&seriesList[i], userID)
+		svc.enrichSingle(&seriesList[i], userID, displayUnits, usePrefetchedDisplayUnit)
 	}
 }
 
 // EnrichSingle 단일 시리즈 데이터 보정 (썸네일 URL, 진행도 계산)
 func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
+	svc.enrichSingle(s, userID, nil, false)
+}
+
+func (svc *SeriesEnrichService) enrichSingle(s *model.Series, userID string, displayUnits map[string]string, usePrefetchedDisplayUnit bool) {
 	// 썸네일 URL 설정
 	if s.ThumbnailPath != nil && *s.ThumbnailPath != "" {
 		url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", s.ID, s.UpdatedAt.Unix())
@@ -73,7 +82,11 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 	if chapCount, err := svc.chapterRepo.CountBySeriesID(nil, s.ID); err == nil {
 		s.ChapterCount = chapCount
 	}
-	svc.assignDisplayUnit(s)
+	if usePrefetchedDisplayUnit {
+		s.DisplayUnit = displayUnits[s.ID]
+	} else {
+		svc.assignDisplayUnit(s)
+	}
 
 	// PDF 또는 누락된 페이지 정보 보정 (Data Repair/Fallback)
 	// 스캔 시점에 페이지 수가 추출되지 않은 PDF 등을 위해 온더플라이로 보정합니다.
@@ -116,6 +129,19 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 			s.ReadPageCount = readPages
 		}
 	}
+}
+
+func (svc *SeriesEnrichService) prefetchDisplayUnits(seriesList []model.Series) (map[string]string, error) {
+	if len(seriesList) == 0 {
+		return map[string]string{}, nil
+	}
+
+	seriesIDs := make([]string, 0, len(seriesList))
+	for _, series := range seriesList {
+		seriesIDs = append(seriesIDs, series.ID)
+	}
+
+	return svc.volumeRepo.FindRootDisplayUnitsBySeriesIDs(nil, seriesIDs)
 }
 
 func (svc *SeriesEnrichService) assignDisplayUnit(s *model.Series) {

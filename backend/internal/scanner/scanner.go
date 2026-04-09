@@ -564,6 +564,9 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 			if collectErr != nil {
 				readFailed = true
 				result.Errors = append(result.Errors, fmt.Sprintf("failed to collect series targets from %s: %v", rootPath, collectErr))
+				for _, warning := range warnings {
+					result.Errors = append(result.Errors, warning)
+				}
 				continue
 			}
 			allTargets = append(allTargets, targets...)
@@ -768,6 +771,17 @@ func (s *Scanner) collectSeriesScanTargets(
 			}
 
 			if directContent {
+				hasChildDir := false
+				for _, childEntry := range childEntries {
+					if isExcluded(childEntry.Name(), excludePatterns) || !childEntry.IsDir() {
+						continue
+					}
+					hasChildDir = true
+					break
+				}
+				if hasChildDir {
+					warnings = append(warnings, fmt.Sprintf("mixed folder detected (has both media and subdirs): %s", entryPath))
+				}
 				if _, ok := seen[entryPath]; !ok {
 					targets = append(targets, seriesScanTarget{
 						Path:  entryPath,
@@ -796,6 +810,8 @@ func (s *Scanner) inspectSeriesCandidateFolder(
 	excludePatterns []string,
 	libraryType string,
 ) (bool, []fs.DirEntry, error) {
+	// 재귀 수집 단계에서 "이 폴더 자체를 leaf series 후보로 볼지"를 판정한다.
+	// child entries를 함께 반환해 mixed folder warning, 하위 재귀 여부 결정을 한 번의 ReadDir 결과로 처리한다.
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return false, nil, err
@@ -818,6 +834,8 @@ func (s *Scanner) inspectSeriesCandidateFolder(
 }
 
 func (s *Scanner) hasDirectPageLikeSeriesContent(entries []fs.DirEntry, excludePatterns []string, libraryType string) bool {
+	// 시리즈가 이미 확정된 뒤, 시리즈 루트 자체가 direct image/audio leaf인지 판단한다.
+	// inspectSeriesCandidateFolder와 비슷해 보여도 "leaf series 후보 수집"이 아니라 "series content 저장 전략 분기"용이다.
 	isAudiobook := libraryType == "audiobook"
 	for _, entry := range entries {
 		if isExcluded(entry.Name(), excludePatterns) || entry.IsDir() {
@@ -1602,6 +1620,18 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 			contentChanged = changed
 		}
 
+		if !contentChanged {
+			representativeExt := resolveScannedSeriesExtension(volData)
+			if series.Extension != representativeExt {
+				if _, upErr := database.DB.Exec(`UPDATE series SET extension = ? WHERE id = ?`, representativeExt, series.ID); upErr != nil {
+					log.Printf("failed to update extension for series %s: %v", series.ID, upErr)
+				} else {
+					series.Extension = representativeExt
+				}
+			}
+			return summarizeScannedVolume(volData), nil
+		}
+
 		tx, txErr := database.DB.BeginTx(ctx, nil)
 		if txErr != nil {
 			return nil, txErr
@@ -1629,17 +1659,11 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 			return nil, fmt.Errorf("failed to commit transaction: %w", err)
 		}
 
-		if exts, extErr := s.volumeRepo.GetDistinctExtensions(nil, series.ID); extErr == nil {
-			representativeExt := ""
-			if len(exts) > 1 {
-				representativeExt = "MIX"
-			} else if len(exts) == 1 {
-				representativeExt = exts[0]
-			}
-			if series.Extension != representativeExt {
-				if _, upErr := database.DB.Exec(`UPDATE series SET extension = ? WHERE id = ?`, representativeExt, series.ID); upErr == nil {
-					series.Extension = representativeExt
-				}
+		if representativeExt := resolveScannedSeriesExtension(volData); series.Extension != representativeExt {
+			if _, upErr := database.DB.Exec(`UPDATE series SET extension = ? WHERE id = ?`, representativeExt, series.ID); upErr != nil {
+				log.Printf("failed to update extension for series %s: %v", series.ID, upErr)
+			} else {
+				series.Extension = representativeExt
 			}
 		}
 
@@ -2166,6 +2190,41 @@ func normalizeScannedChapterPageCount(chapter scannedChapter) int {
 	return pageCount
 }
 
+func summarizeScannedVolume(vol *scannedVolume) *ScanResult {
+	result := &ScanResult{}
+	if vol == nil {
+		return result
+	}
+
+	var walk func(*scannedVolume)
+	walk = func(current *scannedVolume) {
+		if current == nil {
+			return
+		}
+		result.VolumeCount++
+		result.ChapterCount += len(current.Chapters)
+		for _, chapter := range current.Chapters {
+			result.PageCount += len(chapter.Pages)
+		}
+		for _, child := range current.SubVolumes {
+			walk(child)
+		}
+	}
+
+	walk(vol)
+	return result
+}
+
+func resolveScannedSeriesExtension(vol *scannedVolume) string {
+	if vol == nil {
+		return ""
+	}
+	// 현재 helper는 leaf-first 경로의 root scannedVolume 확장자를 시리즈 대표 확장자로 사용한다.
+	// direct image leaf도 analyzeVolumeRecursive에서 page 확장자까지 합산해 MIX를 계산하므로,
+	// 여기서는 root.Extension을 그대로 반환한다.
+	return vol.Extension
+}
+
 func (s *Scanner) getCachedChaptersForVolume(
 	volumeID string,
 	existingChapterMap map[string][]model.Chapter,
@@ -2393,7 +2452,23 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 	for _, ch := range result.Chapters {
 		ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(ch.Path), "."))
 		if ext == "" && len(ch.Pages) > 0 {
-			ext = "IMG" // 폴더 챕터 (이미지 포함)
+			pageExtSet := make(map[string]bool)
+			for _, page := range ch.Pages {
+				pageExt := strings.ToUpper(strings.TrimPrefix(filepath.Ext(page.Path), "."))
+				if pageExt != "" {
+					pageExtSet[pageExt] = true
+				}
+			}
+			switch len(pageExtSet) {
+			case 0:
+				ext = "IMG"
+			case 1:
+				for pageExt := range pageExtSet {
+					ext = pageExt
+				}
+			default:
+				ext = "MIX"
+			}
 		}
 		if ext != "" {
 			extSet[ext] = true

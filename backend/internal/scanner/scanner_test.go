@@ -497,6 +497,146 @@ func TestScanLibraryTreatsDirectImageLeafFoldersAsSeries(t *testing.T) {
 	}
 }
 
+func TestCollectSeriesScanTargetsWarnsForMixedFolders(t *testing.T) {
+	libraryPath := filepath.Join(t.TempDir(), "books")
+	mixedPath := filepath.Join(libraryPath, "혼합 폴더")
+	if err := os.MkdirAll(filepath.Join(mixedPath, "하위 폴더"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mixedPath, "001.png"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	s := NewScanner(
+		repository.NewLibraryRepository(),
+		repository.NewSeriesRepository(),
+		repository.NewVolumeRepository(),
+		repository.NewChapterRepository(),
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{DataDir: t.TempDir()},
+	)
+
+	targets, warnings, err := s.collectSeriesScanTargets(context.Background(), libraryPath, nil, "book")
+	if err != nil {
+		t.Fatalf("collectSeriesScanTargets() error = %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("len(targets) = %d, want 1", len(targets))
+	}
+	if targets[0].Path != mixedPath {
+		t.Fatalf("targets[0].Path = %q, want %q", targets[0].Path, mixedPath)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("len(warnings) = %d, want 1", len(warnings))
+	}
+}
+
+func TestScanLibraryKeepsDirectImageLeafVolumeTreeWhenContentUnchanged(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("database.Connect() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("database.Close() error = %v", err)
+		}
+	})
+
+	dataDir := t.TempDir()
+	libraryPath := filepath.Join(t.TempDir(), "books")
+	seriesPath := filepath.Join(libraryPath, "테스트 시리즈")
+	if err := os.MkdirAll(seriesPath, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(seriesPath) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seriesPath, "001.png"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(001.png) error = %v", err)
+	}
+
+	libraryRepo := repository.NewLibraryRepository()
+	seriesRepo := repository.NewSeriesRepository()
+	volumeRepo := repository.NewVolumeRepository()
+	chapterRepo := repository.NewChapterRepository()
+
+	library := &model.Library{
+		Name:        "테스트 라이브러리",
+		Paths:       []string{libraryPath},
+		LibraryType: "book",
+	}
+	if err := libraryRepo.Create(nil, library); err != nil {
+		t.Fatalf("LibraryRepository.Create() error = %v", err)
+	}
+
+	s := NewScanner(
+		libraryRepo,
+		seriesRepo,
+		volumeRepo,
+		chapterRepo,
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{DataDir: dataDir},
+	)
+
+	if _, err := s.ScanLibrary(context.Background(), library); err != nil {
+		t.Fatalf("ScanLibrary() initial error = %v", err)
+	}
+
+	seriesList, err := seriesRepo.FindByLibraryID(nil, library.ID, "")
+	if err != nil {
+		t.Fatalf("SeriesRepository.FindByLibraryID() error = %v", err)
+	}
+	if len(seriesList) != 1 {
+		t.Fatalf("len(seriesList) = %d, want 1", len(seriesList))
+	}
+
+	initialVolumes, err := volumeRepo.FindBySeriesID(nil, seriesList[0].ID)
+	if err != nil {
+		t.Fatalf("VolumeRepository.FindBySeriesID() error = %v", err)
+	}
+	if len(initialVolumes) != 1 {
+		t.Fatalf("len(initialVolumes) = %d, want 1", len(initialVolumes))
+	}
+
+	initialChapters, err := chapterRepo.FindBySeriesID(nil, seriesList[0].ID)
+	if err != nil {
+		t.Fatalf("ChapterRepository.FindBySeriesID() error = %v", err)
+	}
+	if len(initialChapters) != 1 {
+		t.Fatalf("len(initialChapters) = %d, want 1", len(initialChapters))
+	}
+
+	initialVolumeID := initialVolumes[0].ID
+	initialChapterID := initialChapters[0].ID
+	initialUpdatedAt := seriesList[0].UpdatedAt
+
+	if _, err := s.ScanLibrary(context.Background(), library); err != nil {
+		t.Fatalf("ScanLibrary() unchanged rescan error = %v", err)
+	}
+
+	updatedVolumes, err := volumeRepo.FindBySeriesID(nil, seriesList[0].ID)
+	if err != nil {
+		t.Fatalf("VolumeRepository.FindBySeriesID() after rescan error = %v", err)
+	}
+	updatedChapters, err := chapterRepo.FindBySeriesID(nil, seriesList[0].ID)
+	if err != nil {
+		t.Fatalf("ChapterRepository.FindBySeriesID() after rescan error = %v", err)
+	}
+	updatedSeries, err := seriesRepo.FindByID(nil, seriesList[0].ID, "")
+	if err != nil {
+		t.Fatalf("SeriesRepository.FindByID() after rescan error = %v", err)
+	}
+
+	if len(updatedVolumes) != 1 || updatedVolumes[0].ID != initialVolumeID {
+		t.Fatalf("updatedVolumes = %v, want preserved volume ID %q", updatedVolumes, initialVolumeID)
+	}
+	if len(updatedChapters) != 1 || updatedChapters[0].ID != initialChapterID {
+		t.Fatalf("updatedChapters = %v, want preserved chapter ID %q", updatedChapters, initialChapterID)
+	}
+	if !updatedSeries.UpdatedAt.Equal(initialUpdatedAt) {
+		t.Fatalf("UpdatedAt = %v, want unchanged %v", updatedSeries.UpdatedAt, initialUpdatedAt)
+	}
+}
+
 func TestHasScannedVolumeContentChangeTreatsSentinelPageCountAsUnchanged(t *testing.T) {
 	s := &Scanner{}
 
@@ -543,6 +683,29 @@ func TestHasScannedVolumeContentChangeTreatsSentinelPageCountAsUnchanged(t *test
 
 	if changed {
 		t.Fatal("hasScannedVolumeContentChange() = true, want false")
+	}
+}
+
+func TestAnalyzeVolumeRecursiveSetsMixExtensionForMixedChapterFormats(t *testing.T) {
+	baseDir := t.TempDir()
+	seriesPath := filepath.Join(baseDir, "mixed-series")
+	if err := os.MkdirAll(seriesPath, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seriesPath, "001.jpg"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(001.jpg) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seriesPath, "002.png"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(002.png) error = %v", err)
+	}
+
+	s := &Scanner{}
+	vol, err := s.analyzeVolumeRecursive(seriesPath, "mixed-series", 1, "volume", nil, "book")
+	if err != nil {
+		t.Fatalf("analyzeVolumeRecursive() error = %v", err)
+	}
+	if vol.Extension != "MIX" {
+		t.Fatalf("Extension = %q, want %q", vol.Extension, "MIX")
 	}
 }
 

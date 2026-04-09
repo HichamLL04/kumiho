@@ -106,5 +106,7 @@ export function getSeriesGroupKey(name: string): string {
     return firstChar;
   }
 
+  // 현재 인덱스는 숫자/영문/한글 초성만 별도 그룹으로 제공한다.
+  // 그 외 문자권(가나, 아랍 문자, 특수문자 등)은 의도적으로 '#' 아래에 묶는다.
   return "#";
 }
