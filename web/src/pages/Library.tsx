@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, Link } from "react-router-dom";
 import { Folder, RefreshCw } from "lucide-react";
@@ -13,6 +13,7 @@ import { SeriesCard } from "../components/SeriesCard";
 import { Toast } from "../components/common/Toast";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import type { Series } from "../types/series";
+import { compareSeriesByDisplayName, getSeriesDisplayContext, getSeriesDisplayName, getSeriesGroupKey } from "../utils/librarySeries";
 import styles from "./Library.module.css";
 
 const POLL_INTERVAL_MS = 3000;
@@ -34,11 +35,30 @@ export function LibraryPage() {
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const loadSequenceRef = useRef(0);
   const lastFetchedIdRef = useRef<string | null>(null);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const user = useAuthStore((state) => state.user);
 
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const sortedSeriesList = useMemo(() => {
+    return [...seriesList].sort(compareSeriesByDisplayName);
+  }, [seriesList]);
+
+  const groupedSeriesList = useMemo(() => {
+    const groups: { key: string; items: Series[] }[] = [];
+    for (const series of sortedSeriesList) {
+      const groupKey = getSeriesGroupKey(getSeriesDisplayName(series));
+      const lastGroup = groups[groups.length - 1];
+      if (!lastGroup || lastGroup.key !== groupKey) {
+        groups.push({ key: groupKey, items: [series] });
+        continue;
+      }
+      lastGroup.items.push(series);
+    }
+    return groups;
+  }, [sortedSeriesList]);
 
   const loadData = useCallback(
     async (isInitial = false) => {
@@ -143,6 +163,13 @@ export function LibraryPage() {
     }
   };
 
+  const scrollToGroup = (groupKey: string) => {
+    const target = sectionRefs.current[groupKey];
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className={styles.libraryContainer}>
@@ -229,12 +256,12 @@ export function LibraryPage() {
           <div className={styles.seriesCount}>
             <Trans
               i18nKey="home.library.total_series"
-              count={seriesList.length}
+              count={sortedSeriesList.length}
               components={{ strong: <strong /> }}
             />
           </div>
 
-          {seriesList.length === 0 ? (
+          {sortedSeriesList.length === 0 ? (
             <div className={styles.emptyState}>
               <p>{t("home.library.empty_series")}</p>
               {library.type !== "SYSTEM" && user?.role === "MASTER" && (
@@ -247,17 +274,53 @@ export function LibraryPage() {
               )}
             </div>
           ) : (
-            <div className={styles.seriesGrid}>
-              {seriesList.map((series) => (
-                <SeriesCard
-                  key={series.id}
-                  item={series}
-                  type="series"
-                  progressStyle="overlay"
-                  showExtensionBadge
-                  onStatusChange={loadData}
-                />
-              ))}
+            <div className={styles.seriesLayout}>
+              <nav
+                className={styles.seriesIndex}
+                aria-label={t("home.library.total_series", { count: sortedSeriesList.length })}
+              >
+                {groupedSeriesList.map((group) => (
+                  <button
+                    key={group.key}
+                    type="button"
+                    className={styles.seriesIndexButton}
+                    onClick={() => scrollToGroup(group.key)}
+                    aria-label={`${group.key} 섹션으로 이동`}
+                  >
+                    {group.key}
+                  </button>
+                ))}
+              </nav>
+
+              <div className={styles.seriesGrid}>
+                {groupedSeriesList.map((group) => (
+                  <Fragment key={group.key}>
+                    {group.items.map((series, index) => {
+                      const displayContext = getSeriesDisplayContext(series.path, library.paths);
+                      return (
+                        <div
+                          key={series.id}
+                          ref={(node) => {
+                            if (index === 0) {
+                              sectionRefs.current[group.key] = node;
+                            }
+                          }}
+                          className={styles.seriesCardAnchor}
+                        >
+                          <SeriesCard
+                            item={series}
+                            type="series"
+                            customSubtitle={displayContext || undefined}
+                            progressStyle="overlay"
+                            showExtensionBadge
+                            onStatusChange={loadData}
+                          />
+                        </div>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </div>
             </div>
           )}
         </main>

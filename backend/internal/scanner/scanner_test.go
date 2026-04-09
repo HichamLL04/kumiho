@@ -151,6 +151,28 @@ func TestResolveSeriesTitleFromOriginalTitleKeepsManualSelectedLocaleValue(t *te
 	}
 }
 
+func TestParseVolumeNumberPrefersExplicitMarkersOverKoreanSeriesSuffix(t *testing.T) {
+	t.Run("explicit chapter marker wins over earlier korean part suffix", func(t *testing.T) {
+		gotNum, gotUnit, ok := parseVolumeNumber("열렙전사 1부 - c001")
+		if !ok {
+			t.Fatal("parseVolumeNumber() = not matched, want explicit chapter match")
+		}
+		if gotNum != 1 || gotUnit != "chapter" {
+			t.Fatalf("parseVolumeNumber() = (%d, %q), want (1, %q)", gotNum, gotUnit, "chapter")
+		}
+	})
+
+	t.Run("explicit volume marker still wins when both volume and chapter markers exist", func(t *testing.T) {
+		gotNum, gotUnit, ok := parseVolumeNumber("둥굴레차! - v029 c001_시즌1 후기")
+		if !ok {
+			t.Fatal("parseVolumeNumber() = not matched, want explicit volume match")
+		}
+		if gotNum != 29 || gotUnit != "volume" {
+			t.Fatalf("parseVolumeNumber() = (%d, %q), want (29, %q)", gotNum, gotUnit, "volume")
+		}
+	})
+}
+
 func TestNormalizeStoredSeriesTitlesUpdatesLegacyStoredTitles(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
 	if err := database.Connect(dbPath); err != nil {
@@ -217,7 +239,7 @@ func TestNormalizeStoredSeriesTitlesUpdatesLegacyStoredTitles(t *testing.T) {
 	}
 }
 
-func TestScanLibraryBumpsSeriesUpdatedAtWhenNewChapterIsAdded(t *testing.T) {
+func TestScanLibraryBumpsSeriesUpdatedAtWhenLeafSeriesContentChanges(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
 	if err := database.Connect(dbPath); err != nil {
 		t.Fatalf("database.Connect() error = %v", err)
@@ -232,8 +254,11 @@ func TestScanLibraryBumpsSeriesUpdatedAtWhenNewChapterIsAdded(t *testing.T) {
 	libraryPath := filepath.Join(t.TempDir(), "library")
 	seriesPath := filepath.Join(libraryPath, "테스트 시리즈")
 
-	if err := writeTestChapter(seriesPath, "1화"); err != nil {
-		t.Fatalf("writeTestChapter(1화) error = %v", err)
+	if err := os.MkdirAll(seriesPath, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(seriesPath) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seriesPath, "001.png"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(001.png) error = %v", err)
 	}
 
 	libraryRepo := repository.NewLibraryRepository()
@@ -277,9 +302,9 @@ func TestScanLibraryBumpsSeriesUpdatedAtWhenNewChapterIsAdded(t *testing.T) {
 		t.Fatalf("SeriesRepository.UpdateUpdatedAt() error = %v", err)
 	}
 
-	err = writeTestChapter(seriesPath, "2화")
+	err = os.WriteFile(filepath.Join(seriesPath, "002.png"), tinyPNG, 0o644)
 	if err != nil {
-		t.Fatalf("writeTestChapter(2화) error = %v", err)
+		t.Fatalf("os.WriteFile(002.png) error = %v", err)
 	}
 	err = os.Chtimes(seriesPath, staleUpdatedAt, staleUpdatedAt)
 	if err != nil {
@@ -306,8 +331,169 @@ func TestScanLibraryBumpsSeriesUpdatedAtWhenNewChapterIsAdded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChapterRepository.CountBySeriesID() error = %v", err)
 	}
-	if chapterCount != 2 {
-		t.Fatalf("chapterCount = %d, want 2", chapterCount)
+	if chapterCount != 1 {
+		t.Fatalf("chapterCount = %d, want 1", chapterCount)
+	}
+}
+
+func TestScanLibraryRecursivelyCollectsLeafSeriesFolders(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("database.Connect() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("database.Close() error = %v", err)
+		}
+	})
+
+	dataDir := t.TempDir()
+	libraryPath := filepath.Join(t.TempDir(), "books")
+	if err := os.MkdirAll(filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "가면라이더"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "괴수 8호"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "가면라이더", "001.zip"), []byte("zip"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(가면라이더) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "괴수 8호", "001.zip"), []byte("zip"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(괴수 8호) error = %v", err)
+	}
+
+	libraryRepo := repository.NewLibraryRepository()
+	seriesRepo := repository.NewSeriesRepository()
+
+	library := &model.Library{
+		Name:        "테스트 라이브러리",
+		Paths:       []string{libraryPath},
+		LibraryType: "book",
+	}
+	if err := libraryRepo.Create(nil, library); err != nil {
+		t.Fatalf("LibraryRepository.Create() error = %v", err)
+	}
+
+	s := NewScanner(
+		libraryRepo,
+		seriesRepo,
+		repository.NewVolumeRepository(),
+		repository.NewChapterRepository(),
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{DataDir: dataDir},
+	)
+
+	if _, err := s.ScanLibrary(context.Background(), library); err != nil {
+		t.Fatalf("ScanLibrary() error = %v", err)
+	}
+
+	seriesList, err := seriesRepo.FindByLibraryID(nil, library.ID, "")
+	if err != nil {
+		t.Fatalf("SeriesRepository.FindByLibraryID() error = %v", err)
+	}
+	if len(seriesList) != 2 {
+		t.Fatalf("len(seriesList) = %d, want 2", len(seriesList))
+	}
+
+	paths := []string{seriesList[0].Path, seriesList[1].Path}
+	titles := []string{seriesList[0].Title, seriesList[1].Title}
+	slices.Sort(paths)
+	slices.Sort(titles)
+
+	expectedPaths := []string{
+		filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "가면라이더"),
+		filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "괴수 8호"),
+	}
+	expectedTitles := []string{"가면라이더", "괴수 8호"}
+
+	if !slices.Equal(paths, expectedPaths) {
+		t.Fatalf("paths = %v, want %v", paths, expectedPaths)
+	}
+	if !slices.Equal(titles, expectedTitles) {
+		t.Fatalf("titles = %v, want %v", titles, expectedTitles)
+	}
+}
+
+func TestScanLibraryTreatsDirectImageLeafFoldersAsSeries(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("database.Connect() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("database.Close() error = %v", err)
+		}
+	})
+
+	dataDir := t.TempDir()
+	libraryPath := filepath.Join(t.TempDir(), "books")
+	part1Path := filepath.Join(libraryPath, "초인의 시대", "Part 1")
+	part2Path := filepath.Join(libraryPath, "초인의 시대", "Part 2")
+	if err := os.MkdirAll(part1Path, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(part1) error = %v", err)
+	}
+	if err := os.MkdirAll(part2Path, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(part2) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(part1Path, "001.png"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(part1 image) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(part2Path, "001.png"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(part2 image) error = %v", err)
+	}
+
+	libraryRepo := repository.NewLibraryRepository()
+	seriesRepo := repository.NewSeriesRepository()
+	volumeRepo := repository.NewVolumeRepository()
+	chapterRepo := repository.NewChapterRepository()
+
+	library := &model.Library{
+		Name:        "테스트 라이브러리",
+		Paths:       []string{libraryPath},
+		LibraryType: "book",
+	}
+	if err := libraryRepo.Create(nil, library); err != nil {
+		t.Fatalf("LibraryRepository.Create() error = %v", err)
+	}
+
+	s := NewScanner(
+		libraryRepo,
+		seriesRepo,
+		volumeRepo,
+		chapterRepo,
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{DataDir: dataDir},
+	)
+
+	if _, err := s.ScanLibrary(context.Background(), library); err != nil {
+		t.Fatalf("ScanLibrary() error = %v", err)
+	}
+
+	seriesList, err := seriesRepo.FindByLibraryID(nil, library.ID, "")
+	if err != nil {
+		t.Fatalf("SeriesRepository.FindByLibraryID() error = %v", err)
+	}
+	if len(seriesList) != 2 {
+		t.Fatalf("len(seriesList) = %d, want 2", len(seriesList))
+	}
+
+	for _, series := range seriesList {
+		volumeCount, volumeErr := volumeRepo.CountBySeriesID(nil, series.ID)
+		if volumeErr != nil {
+			t.Fatalf("VolumeRepository.CountBySeriesID() error = %v", volumeErr)
+		}
+		chapterCount, chapterErr := chapterRepo.CountBySeriesID(nil, series.ID)
+		if chapterErr != nil {
+			t.Fatalf("ChapterRepository.CountBySeriesID() error = %v", chapterErr)
+		}
+		if volumeCount != 1 {
+			t.Fatalf("volumeCount = %d, want 1 for %s", volumeCount, series.Title)
+		}
+		if chapterCount != 1 {
+			t.Fatalf("chapterCount = %d, want 1 for %s", chapterCount, series.Title)
+		}
 	}
 }
 

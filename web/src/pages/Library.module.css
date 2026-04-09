@@ -28,6 +28,54 @@
   gap: 16px;
 }
 
+.seriesLayout {
+  position: relative;
+  padding-right: 88px;
+}
+
+.seriesCardAnchor {
+  scroll-margin-top: 112px;
+}
+
+.seriesIndex {
+  position: fixed;
+  top: 172px;
+  right: 18px;
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px 8px;
+  border: 1px solid rgba(109, 213, 240, 0.18);
+  border-radius: 16px;
+  background: rgba(9, 20, 36, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 2;
+}
+
+.seriesIndexButton {
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #9ac7da;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 4px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.seriesIndexButton:hover,
+.seriesIndexButton:focus-visible {
+  background: rgba(109, 213, 240, 0.16);
+  color: #ffffff;
+  outline: none;
+  transform: translateY(-1px);
+}
+
 /* 빈 상태 */
 .emptyState {
   text-align: center;
@@ -171,6 +219,14 @@
   .seriesGrid {
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: 12px;
+  }
+
+  .seriesLayout {
+    padding-right: 0;
+  }
+
+  .seriesIndex {
+    display: none;
   }
 }
 

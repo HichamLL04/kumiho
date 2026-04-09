@@ -35,6 +35,7 @@ export interface Series {
   library_id: string;
   title: string;
   display_title?: string;
+  display_unit?: "volume" | "chapter";
   path?: string;
   author?: string;
   thumbnail_url?: string;

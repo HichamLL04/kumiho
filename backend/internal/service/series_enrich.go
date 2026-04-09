@@ -73,6 +73,7 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 	if chapCount, err := svc.chapterRepo.CountBySeriesID(nil, s.ID); err == nil {
 		s.ChapterCount = chapCount
 	}
+	svc.assignDisplayUnit(s)
 
 	// PDF 또는 누락된 페이지 정보 보정 (Data Repair/Fallback)
 	// 스캔 시점에 페이지 수가 추출되지 않은 PDF 등을 위해 온더플라이로 보정합니다.
@@ -115,4 +116,31 @@ func (svc *SeriesEnrichService) EnrichSingle(s *model.Series, userID string) {
 			s.ReadPageCount = readPages
 		}
 	}
+}
+
+func (svc *SeriesEnrichService) assignDisplayUnit(s *model.Series) {
+	if s == nil {
+		return
+	}
+
+	rootVolumes, err := svc.volumeRepo.FindRootVolumesBySeriesID(nil, s.ID)
+	if err != nil || len(rootVolumes) == 0 {
+		s.DisplayUnit = ""
+		return
+	}
+
+	allChapterRoots := true
+	for _, volume := range rootVolumes {
+		if volume.Unit != "chapter" {
+			allChapterRoots = false
+			break
+		}
+	}
+
+	if allChapterRoots {
+		s.DisplayUnit = "chapter"
+		return
+	}
+
+	s.DisplayUnit = "volume"
 }

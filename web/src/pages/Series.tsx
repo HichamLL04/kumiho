@@ -469,9 +469,13 @@ export function SeriesPage() {
 
             <div className={styles.volumeCount}>
               <Trans
-                i18nKey={series.chapter_count && series.chapter_count > 0 ? "series.chapter_count" : "series.count"}
+                i18nKey={
+                  series.display_unit === "chapter" && series.chapter_count && series.chapter_count > 0
+                    ? "series.chapter_count"
+                    : "series.count"
+                }
                 count={
-                  series.chapter_count && series.chapter_count > 0
+                  series.display_unit === "chapter" && series.chapter_count && series.chapter_count > 0
                     ? series.chapter_count
                     : series.volume_count || volumes.length
                 }
