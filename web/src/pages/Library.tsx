@@ -166,7 +166,11 @@ export function LibraryPage() {
   const scrollToGroup = (groupKey: string) => {
     const target = sectionRefs.current[groupKey];
     if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      const prefersReducedMotion =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
     }
   };
 

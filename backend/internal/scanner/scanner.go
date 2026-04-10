@@ -568,6 +568,9 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 				for _, warning := range warnings {
 					result.Warnings = append(result.Warnings, warning)
 				}
+				if collectErr == context.Canceled || collectErr == context.DeadlineExceeded {
+					return result, collectErr
+				}
 				continue
 			}
 			allTargets = append(allTargets, targets...)
@@ -617,7 +620,9 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 			}
 
 			if scanCtx.Err() != nil {
-				errChan <- scanCtx.Err()
+				if scanCtx.Err() != context.Canceled && scanCtx.Err() != context.DeadlineExceeded {
+					errChan <- scanCtx.Err()
+				}
 				return
 			}
 
@@ -680,6 +685,9 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	close(errChan)
 
 	for err := range errChan {
+		if err == context.Canceled || err == context.DeadlineExceeded {
+			return result, err
+		}
 		result.Errors = append(result.Errors, err.Error())
 	}
 
@@ -748,6 +756,9 @@ func (s *Scanner) collectSeriesScanTargets(
 		}
 
 		for _, entry := range entries {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			if isExcluded(entry.Name(), excludePatterns) {
 				continue
 			}
@@ -767,6 +778,9 @@ func (s *Scanner) collectSeriesScanTargets(
 				continue
 			}
 
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			directContent, childEntries, err := s.inspectSeriesCandidateFolder(entryPath, excludePatterns, libraryType)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("failed to inspect %s: %v", entryPath, err))
