@@ -29,6 +29,7 @@ const INDEX_TOP_RETRY_DELAY_MS = 100;
 const INDEX_SCROLL_LOCK_MS = 600;
 const GRID_MIN_VISIBLE_TOP_PX = 92; // 카드 그리드 top이 이 값 이상일 때만 유효한 측정으로 본다.
 const INDEX_BOTTOM_VIEWPORT_GAP_PX = 24;
+const INDEX_MIN_HEIGHT_PX = 160;
 const INDEX_SCROLLBAR_VISIBILITY_MS = 900;
 const INDEX_SCROLLBAR_MIN_THUMB_PX = 28;
 
@@ -382,11 +383,23 @@ export function LibraryPage() {
     }
 
     updateIndexScrollbarThumb();
-    const resizeObserver = new ResizeObserver(scheduleIndexScrollbarThumbUpdate);
-    resizeObserver.observe(scrollArea);
+    let resizeObserver: ResizeObserver | null = null;
+    const handleWindowResize = () => {
+      scheduleIndexScrollbarThumbUpdate();
+    };
+
+    if (typeof ResizeObserver === "function") {
+      resizeObserver = new ResizeObserver(scheduleIndexScrollbarThumbUpdate);
+      resizeObserver.observe(scrollArea);
+    } else {
+      window.addEventListener("resize", handleWindowResize);
+    }
 
     return () => {
-      resizeObserver.disconnect();
+      resizeObserver?.disconnect();
+      if (resizeObserver === null) {
+        window.removeEventListener("resize", handleWindowResize);
+      }
       if (indexScrollbarFrameRef.current !== null) {
         window.cancelAnimationFrame(indexScrollbarFrameRef.current);
         indexScrollbarFrameRef.current = null;
@@ -426,7 +439,10 @@ export function LibraryPage() {
           return current ?? null;
         }
 
-        const nextMaxHeight = Math.max(160, window.innerHeight - resolvedTop - INDEX_BOTTOM_VIEWPORT_GAP_PX);
+        const nextMaxHeight = Math.max(
+          INDEX_MIN_HEIGHT_PX,
+          window.innerHeight - resolvedTop - INDEX_BOTTOM_VIEWPORT_GAP_PX,
+        );
 
         if (
           current &&
