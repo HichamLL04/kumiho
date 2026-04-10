@@ -87,6 +87,7 @@ docker-data/
 # AI Agent (로컬 전용)
 # =============
 .agent/
+.agents
 .claude/
 .github/agents/
 
