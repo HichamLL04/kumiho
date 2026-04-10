@@ -849,9 +849,9 @@ func (s *Scanner) inspectSeriesCandidateFolder(
 }
 
 func (s *Scanner) hasDirectPageLikeSeriesContent(entries []fs.DirEntry, excludePatterns []string, libraryType string) bool {
-	// 시리즈가 이미 확정된 뒤, 시리즈 루트 자체가 direct image/audio leaf인지 판단한다.
+	// 시리즈가 이미 확정된 뒤, 시리즈 루트 자체가 direct image leaf인지 판단한다.
 	// inspectSeriesCandidateFolder와 비슷해 보여도 "leaf series 후보 수집"이 아니라 "series content 저장 전략 분기"용이다.
-	// direct image/audio file이 있더라도 하위 볼륨 후보(디렉터리, 아카이브, 오디오 엔트리)가 함께 있으면 일반 series 레이아웃으로 본다.
+	// direct image file이 있더라도 하위 볼륨 후보(디렉터리, 아카이브, 오디오 엔트리)가 함께 있으면 일반 series 레이아웃으로 본다.
 	isAudiobook := libraryType == "audiobook"
 	hasDirectMedia := false
 	for _, entry := range entries {
