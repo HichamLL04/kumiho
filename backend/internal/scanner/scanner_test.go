@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"archive/zip"
 	"context"
 	"os"
 	"path/filepath"
@@ -25,6 +26,30 @@ var tinyPNG = []byte{
 	0x00, 0x03, 0x01, 0x01, 0x00, 0xc9, 0xfe, 0x92,
 	0xef, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
 	0x44, 0xae, 0x42, 0x60, 0x82,
+}
+
+func writeTestZipArchive(t *testing.T, archivePath string, files map[string][]byte) {
+	t.Helper()
+
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("os.Create(%s) error = %v", archivePath, err)
+	}
+	defer func() { _ = file.Close() }()
+
+	zw := zip.NewWriter(file)
+	for name, data := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("zip.Create(%s) error = %v", name, err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatalf("zip write(%s) error = %v", name, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("zip.Close() error = %v", err)
+	}
 }
 
 type scannerTestSettingRepo struct {
@@ -638,6 +663,68 @@ func TestScanLibraryKeepsDirectImageLeafVolumeTreeWhenContentUnchanged(t *testin
 	}
 	if !updatedSeries.UpdatedAt.Equal(initialUpdatedAt) {
 		t.Fatalf("UpdatedAt = %v, want unchanged %v", updatedSeries.UpdatedAt, initialUpdatedAt)
+	}
+}
+
+func TestScanLibraryPreservesArchiveCountsWhenArchiveUnchanged(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("database.Connect() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("database.Close() error = %v", err)
+		}
+	})
+
+	dataDir := t.TempDir()
+	libraryPath := filepath.Join(t.TempDir(), "books")
+	if err := os.MkdirAll(libraryPath, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(libraryPath) error = %v", err)
+	}
+
+	archivePath := filepath.Join(libraryPath, "archive-series.cbz")
+	writeTestZipArchive(t, archivePath, map[string][]byte{
+		"001.png": tinyPNG,
+		"002.png": tinyPNG,
+	})
+
+	libraryRepo := repository.NewLibraryRepository()
+	seriesRepo := repository.NewSeriesRepository()
+
+	library := &model.Library{
+		Name:        "테스트 라이브러리",
+		Paths:       []string{libraryPath},
+		LibraryType: "book",
+	}
+	if err := libraryRepo.Create(nil, library); err != nil {
+		t.Fatalf("LibraryRepository.Create() error = %v", err)
+	}
+
+	s := NewScanner(
+		libraryRepo,
+		seriesRepo,
+		repository.NewVolumeRepository(),
+		repository.NewChapterRepository(),
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{DataDir: dataDir},
+	)
+
+	initialResult, err := s.ScanLibrary(context.Background(), library)
+	if err != nil {
+		t.Fatalf("ScanLibrary() initial error = %v", err)
+	}
+	if initialResult.SeriesCount != 1 || initialResult.VolumeCount != 1 || initialResult.ChapterCount != 1 || initialResult.PageCount != 2 {
+		t.Fatalf("initial result = %+v, want series=1 volume=1 chapter=1 page=2", initialResult)
+	}
+
+	unchangedResult, err := s.ScanLibrary(context.Background(), library)
+	if err != nil {
+		t.Fatalf("ScanLibrary() unchanged rescan error = %v", err)
+	}
+	if unchangedResult.SeriesCount != 1 || unchangedResult.VolumeCount != 1 || unchangedResult.ChapterCount != 1 || unchangedResult.PageCount != 2 {
+		t.Fatalf("unchanged result = %+v, want series=1 volume=1 chapter=1 page=2", unchangedResult)
 	}
 }
 

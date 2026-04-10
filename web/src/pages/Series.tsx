@@ -470,9 +470,7 @@ export function SeriesPage() {
             <div className={styles.volumeCount}>
               {(() => {
                 const hasChapterCount = !!series.chapter_count && series.chapter_count > 0;
-                const useChapterLabel =
-                  (series.display_unit === "chapter" && hasChapterCount)
-                  || (series.display_unit !== "volume" && hasChapterCount);
+                const useChapterLabel = hasChapterCount && series.display_unit !== "volume";
                 const displayCount = useChapterLabel
                   ? (series.chapter_count ?? 0)
                   : series.volume_count || volumes.length;

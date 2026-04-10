@@ -563,14 +563,14 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 		for _, rootPath := range library.Paths {
 			targets, warnings, collectErr := s.collectSeriesScanTargets(scanCtx, rootPath, excludePatterns, library.LibraryType)
 			if collectErr != nil {
-				readFailed = true
-				result.Errors = append(result.Errors, fmt.Sprintf("failed to collect series targets from %s: %v", rootPath, collectErr))
 				for _, warning := range warnings {
 					result.Warnings = append(result.Warnings, warning)
 				}
 				if collectErr == context.Canceled || collectErr == context.DeadlineExceeded {
 					return result, collectErr
 				}
+				readFailed = true
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to collect series targets from %s: %v", rootPath, collectErr))
 				continue
 			}
 			allTargets = append(allTargets, targets...)
@@ -1394,7 +1394,7 @@ func (s *Scanner) processArchiveAsSeries(
 			if cErr := tx.Commit(); cErr != nil {
 				return nil, fmt.Errorf("failed to commit transaction: %w", cErr)
 			}
-			return &ScanResult{}, nil
+			return s.buildExistingSeriesScanResult(series.ID)
 		}
 	} else {
 		// 새 시리즈 생성
@@ -1479,6 +1479,34 @@ func (s *Scanner) processArchiveAsSeries(
 	result.VolumeCount = saveRes.VolumeCount
 	result.ChapterCount = saveRes.ChapterCount
 	result.PageCount = saveRes.PageCount
+
+	return result, nil
+}
+
+func (s *Scanner) buildExistingSeriesScanResult(seriesID string) (*ScanResult, error) {
+	result := &ScanResult{}
+
+	volumeCount, err := s.volumeRepo.CountBySeriesID(nil, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	result.VolumeCount = volumeCount
+
+	chapterCount, err := s.chapterRepo.CountBySeriesID(nil, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	result.ChapterCount = chapterCount
+
+	chapters, err := s.chapterRepo.FindBySeriesID(nil, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	for _, chapter := range chapters {
+		if chapter.PageCount > 0 {
+			result.PageCount += chapter.PageCount
+		}
+	}
 
 	return result, nil
 }
