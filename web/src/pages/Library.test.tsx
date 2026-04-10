@@ -134,6 +134,11 @@ vi.mock("../components/common/LoadingSpinner", () => ({
 }));
 
 const originalResizeObserver = globalThis.ResizeObserver;
+const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+  window.HTMLElement.prototype,
+  "scrollIntoView",
+);
+const originalScrollToDescriptor = Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, "scrollTo");
 
 const createRect = (overrides: Partial<DOMRect> = {}): DOMRect => ({
   x: overrides.x ?? 0,
@@ -256,6 +261,16 @@ describe("LibraryPage series index", () => {
   afterEach(() => {
     defaultRectSpy.mockRestore();
     globalThis.ResizeObserver = originalResizeObserver;
+    if (originalScrollIntoViewDescriptor) {
+      Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", originalScrollIntoViewDescriptor);
+    } else {
+      Reflect.deleteProperty(window.HTMLElement.prototype, "scrollIntoView");
+    }
+    if (originalScrollToDescriptor) {
+      Object.defineProperty(window.HTMLElement.prototype, "scrollTo", originalScrollToDescriptor);
+    } else {
+      Reflect.deleteProperty(window.HTMLElement.prototype, "scrollTo");
+    }
   });
 
   it("활성 목차 항목이 스크롤 영역 중앙에 오도록 이동한다", async () => {
