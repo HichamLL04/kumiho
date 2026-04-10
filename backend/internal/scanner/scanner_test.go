@@ -380,12 +380,12 @@ func TestScanLibraryRecursivelyCollectsLeafSeriesFolders(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "괴수 8호"), 0o755); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "가면라이더", "001.zip"), []byte("zip"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile(가면라이더) error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "괴수 8호", "001.zip"), []byte("zip"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile(괴수 8호) error = %v", err)
-	}
+	writeTestZipArchive(t, filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "가면라이더", "001.cbz"), map[string][]byte{
+		"001.png": tinyPNG,
+	})
+	writeTestZipArchive(t, filepath.Join(libraryPath, "만화(정발)", "1.단편", "[ ㄱ ]", "괴수 8호", "001.cbz"), map[string][]byte{
+		"001.png": tinyPNG,
+	})
 
 	libraryRepo := repository.NewLibraryRepository()
 	seriesRepo := repository.NewSeriesRepository()
