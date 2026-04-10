@@ -61,6 +61,7 @@ export function LibraryPage() {
   const indexInteractionTimeoutRef = useRef<number | null>(null);
   const syncingIndexScrollRef = useRef(false);
   const syncingIndexScrollFrameRef = useRef<number | null>(null);
+  const indexScrollbarFrameRef = useRef<number | null>(null);
   const seriesGridRef = useRef<HTMLDivElement | null>(null);
   const seriesIndexRef = useRef<HTMLElement | null>(null);
   const seriesIndexScrollAreaRef = useRef<HTMLDivElement | null>(null);
@@ -243,6 +244,17 @@ export function LibraryPage() {
     });
   }, []);
 
+  const scheduleIndexScrollbarThumbUpdate = useCallback(() => {
+    if (indexScrollbarFrameRef.current !== null) {
+      return;
+    }
+
+    indexScrollbarFrameRef.current = window.requestAnimationFrame(() => {
+      indexScrollbarFrameRef.current = null;
+      updateIndexScrollbarThumb();
+    });
+  }, [updateIndexScrollbarThumb]);
+
   const scrollToGroup = (groupKey: string) => {
     setActiveGroupKey(groupKey);
     scrollingToGroupRef.current = groupKey;
@@ -361,17 +373,21 @@ export function LibraryPage() {
     }
 
     updateIndexScrollbarThumb();
-    const resizeObserver = new ResizeObserver(updateIndexScrollbarThumb);
+    const resizeObserver = new ResizeObserver(scheduleIndexScrollbarThumbUpdate);
     resizeObserver.observe(scrollArea);
 
     return () => {
       resizeObserver.disconnect();
+      if (indexScrollbarFrameRef.current !== null) {
+        window.cancelAnimationFrame(indexScrollbarFrameRef.current);
+        indexScrollbarFrameRef.current = null;
+      }
       if (syncingIndexScrollFrameRef.current !== null) {
         window.cancelAnimationFrame(syncingIndexScrollFrameRef.current);
         syncingIndexScrollFrameRef.current = null;
       }
     };
-  }, [groupedSeriesList, indexPosition, updateIndexScrollbarThumb]);
+  }, [groupedSeriesList, indexPosition, scheduleIndexScrollbarThumbUpdate, updateIndexScrollbarThumb]);
 
   useEffect(() => {
     if (groupedSeriesList.length === 0) {
@@ -561,7 +577,7 @@ export function LibraryPage() {
                   ref={seriesIndexScrollAreaRef}
                   className={styles.seriesIndexScrollArea}
                   onScroll={() => {
-                    updateIndexScrollbarThumb();
+                    scheduleIndexScrollbarThumbUpdate();
                     if (!syncingIndexScrollRef.current) {
                       showIndexScrollbar();
                     }
