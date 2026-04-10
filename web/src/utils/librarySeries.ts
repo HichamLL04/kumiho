@@ -6,6 +6,10 @@ const NATURAL_COLLATOR = new Intl.Collator(["ko", "en"], {
 });
 
 const CHOSEONG = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
+const GROUP_ORDER_COLLATOR = new Intl.Collator(["en", "ko"], {
+  numeric: true,
+  sensitivity: "base",
+});
 
 function normalizePathSeparators(value: string): string {
   return value.replace(/\\/g, "/");
@@ -113,4 +117,42 @@ export function getSeriesGroupKey(name: string): string {
   // 현재 인덱스는 숫자/영문/한글 초성만 별도 그룹으로 제공한다.
   // 그 외 문자권(가나, 아랍 문자, 특수문자 등)은 의도적으로 '#' 아래에 묶는다.
   return "#";
+}
+
+export function compareSeriesGroupKey(a: string, b: string): number {
+  const getRank = (value: string): number => {
+    if (value === "0-9") return 0;
+    if (/^[A-Z]$/.test(value)) return 1;
+    if (CHOSEONG.includes(value)) return 2;
+    return 3;
+  };
+
+  const rankDiff = getRank(a) - getRank(b);
+  if (rankDiff !== 0) {
+    return rankDiff;
+  }
+
+  return GROUP_ORDER_COLLATOR.compare(a, b);
+}
+
+export function getLibrarySeriesCountLabelKey(
+  series: Series,
+): { key: "series.unit.total_volume" | "series.unit.total_chapter"; count: number } | null {
+  if (series.display_unit === "volume" && series.volume_count && series.volume_count > 0) {
+    return { key: "series.unit.total_volume", count: series.volume_count };
+  }
+
+  if (series.display_unit === "chapter" && series.chapter_count && series.chapter_count > 0) {
+    return { key: "series.unit.total_chapter", count: series.chapter_count };
+  }
+
+  if (series.chapter_count && series.chapter_count > 0) {
+    return { key: "series.unit.total_chapter", count: series.chapter_count };
+  }
+
+  if (series.volume_count && series.volume_count > 0) {
+    return { key: "series.unit.total_volume", count: series.volume_count };
+  }
+
+  return null;
 }

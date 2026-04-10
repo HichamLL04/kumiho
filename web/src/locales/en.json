@@ -751,7 +751,9 @@
     "not_found": "Series not found",
     "unit": {
       "volume": "Vol. {{count}}",
+      "total_volume": "Total {{count}} volumes",
       "chapter": "Ch. {{count}}",
+      "total_chapter": "Total {{count}} chapters",
       "chapter_count": "{{count}} chapters",
       "page": "{{count}} P"
     },

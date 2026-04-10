@@ -13,7 +13,14 @@ import { SeriesCard } from "../components/SeriesCard";
 import { Toast } from "../components/common/Toast";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import type { Series } from "../types/series";
-import { compareSeriesByDisplayName, getSeriesDisplayContext, getSeriesDisplayName, getSeriesGroupKey } from "../utils/librarySeries";
+import {
+  compareSeriesGroupKey,
+  compareSeriesByDisplayName,
+  getLibrarySeriesCountLabelKey,
+  getSeriesDisplayContext,
+  getSeriesDisplayName,
+  getSeriesGroupKey,
+} from "../utils/librarySeries";
 import styles from "./Library.module.css";
 
 const POLL_INTERVAL_MS = 3000;
@@ -57,7 +64,9 @@ export function LibraryPage() {
         groupsByKey.set(groupKey, [series]);
       }
     }
-    return Array.from(groupsByKey.entries()).map(([key, items]) => ({ key, items }));
+    return Array.from(groupsByKey.entries())
+      .sort(([a], [b]) => compareSeriesGroupKey(a, b))
+      .map(([key, items]) => ({ key, items }));
   }, [sortedSeriesList]);
 
   const loadData = useCallback(
@@ -301,6 +310,8 @@ export function LibraryPage() {
                   <Fragment key={group.key}>
                     {group.items.map((series, index) => {
                       const displayContext = getSeriesDisplayContext(series.path, library.paths);
+                      const countLabel = getLibrarySeriesCountLabelKey(series);
+                      const customSubtitle = displayContext || (countLabel ? t(countLabel.key, { count: countLabel.count }) : undefined);
                       return (
                         <div
                           key={series.id}
@@ -314,7 +325,7 @@ export function LibraryPage() {
                           <SeriesCard
                             item={series}
                             type="series"
-                            customSubtitle={displayContext || undefined}
+                            customSubtitle={customSubtitle}
                             progressStyle="overlay"
                             showExtensionBadge
                             onStatusChange={loadData}

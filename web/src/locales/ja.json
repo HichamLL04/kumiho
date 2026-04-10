@@ -751,7 +751,9 @@
     "not_found": "シリーズが見つかりません",
     "unit": {
       "volume": "{{count}}巻",
+      "total_volume": "全 {{count}} 巻",
       "chapter": "{{count}}話",
+      "total_chapter": "全 {{count}} 話",
       "chapter_count": "{{count}}話",
       "page": "{{count}}ページ"
     },

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { Series } from "../types/series";
-import { compareSeriesByDisplayName, getSeriesDisplayContext, getSeriesDisplayName, getSeriesGroupKey } from "./librarySeries";
+import {
+  compareSeriesGroupKey,
+  compareSeriesByDisplayName,
+  getLibrarySeriesCountLabelKey,
+  getSeriesDisplayContext,
+  getSeriesDisplayName,
+  getSeriesGroupKey,
+} from "./librarySeries";
 
 function createSeries(overrides: Partial<Series>): Series {
   return {
@@ -56,5 +63,59 @@ describe("librarySeries helpers", () => {
     expect(getSeriesGroupKey("가면라이더")).toBe("ㄱ");
     expect(getSeriesGroupKey("Part 2")).toBe("P");
     expect(getSeriesGroupKey("86 - Eighty Six")).toBe("0-9");
+  });
+
+  it("orders group keys as digits, latin, chosung, then other", () => {
+    const keys = ["ㄱ", "#", "M", "0-9", "A", "ㅍ"];
+
+    keys.sort(compareSeriesGroupKey);
+
+    expect(keys).toEqual(["0-9", "A", "M", "ㄱ", "ㅍ", "#"]);
+  });
+
+  it("returns total volume label when display unit is volume", () => {
+    const label = getLibrarySeriesCountLabelKey(
+      createSeries({
+        display_unit: "volume",
+        volume_count: 24,
+        chapter_count: 100,
+      }),
+    );
+
+    expect(label).toEqual({ key: "series.unit.total_volume", count: 24 });
+  });
+
+  it("returns total chapter label when display unit is chapter", () => {
+    const label = getLibrarySeriesCountLabelKey(
+      createSeries({
+        display_unit: "chapter",
+        volume_count: 10,
+        chapter_count: 87,
+      }),
+    );
+
+    expect(label).toEqual({ key: "series.unit.total_chapter", count: 87 });
+  });
+
+  it("falls back to available chapter count before volume count", () => {
+    const label = getLibrarySeriesCountLabelKey(
+      createSeries({
+        volume_count: 10,
+        chapter_count: 87,
+      }),
+    );
+
+    expect(label).toEqual({ key: "series.unit.total_chapter", count: 87 });
+  });
+
+  it("returns null when no positive counts exist", () => {
+    const label = getLibrarySeriesCountLabelKey(
+      createSeries({
+        volume_count: 0,
+        chapter_count: 0,
+      }),
+    );
+
+    expect(label).toBeNull();
   });
 });
