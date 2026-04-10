@@ -682,6 +682,9 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	}
 
 	wg.Wait()
+	if scanErr := scanCtx.Err(); scanErr == context.Canceled || scanErr == context.DeadlineExceeded {
+		return result, scanErr
+	}
 	close(errChan)
 
 	for err := range errChan {
