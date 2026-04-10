@@ -207,7 +207,7 @@ func (r *VolumeRepository) findRootDisplayUnitsBySeriesIDsChunk(db database.Quer
 		SELECT
 			series_id,
 			CASE
-				WHEN SUM(CASE WHEN unit != 'chapter' THEN 1 ELSE 0 END) = 0 THEN 'chapter'
+				WHEN SUM(CASE WHEN COALESCE(unit, 'volume') != 'chapter' THEN 1 ELSE 0 END) = 0 THEN 'chapter'
 				ELSE 'volume'
 			END AS display_unit
 		FROM volumes

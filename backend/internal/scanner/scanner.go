@@ -773,18 +773,26 @@ func (s *Scanner) collectSeriesScanTargets(
 				continue
 			}
 
-			if directContent {
-				hasChildDir := false
-				for _, childEntry := range childEntries {
-					if isExcluded(childEntry.Name(), excludePatterns) || !childEntry.IsDir() {
-						continue
-					}
+			hasChildDir := false
+			hasDirectMedia := false
+			isAudiobook := libraryType == "audiobook"
+			for _, childEntry := range childEntries {
+				if isExcluded(childEntry.Name(), excludePatterns) {
+					continue
+				}
+				if childEntry.IsDir() {
 					hasChildDir = true
-					break
+					continue
 				}
-				if hasChildDir {
-					warnings = append(warnings, fmt.Sprintf("mixed folder detected (has both media and subdirs): %s", entryPath))
+				if isImage(childEntry.Name()) || isArchive(childEntry.Name()) || (isAudiobook && isAudio(childEntry.Name())) {
+					hasDirectMedia = true
 				}
+			}
+			if hasDirectMedia && hasChildDir {
+				warnings = append(warnings, fmt.Sprintf("mixed folder detected (has both media and subdirs): %s", entryPath))
+			}
+
+			if directContent {
 				if _, ok := seen[entryPath]; !ok {
 					targets = append(targets, seriesScanTarget{
 						Path:  entryPath,
@@ -815,25 +823,29 @@ func (s *Scanner) inspectSeriesCandidateFolder(
 ) (bool, []fs.DirEntry, error) {
 	// 재귀 수집 단계에서 "이 폴더 자체를 leaf series 후보로 볼지"를 판정한다.
 	// child entries를 함께 반환해 mixed folder warning, 하위 재귀 여부 결정을 한 번의 ReadDir 결과로 처리한다.
+	// direct media가 있더라도 하위 디렉터리가 남아 있으면 leaf 수집을 중단하지 않고 계속 하위 폴더를 탐색한다.
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return false, nil, err
 	}
 
 	isAudiobook := libraryType == "audiobook"
+	hasDirectMedia := false
+	hasChildDir := false
 	for _, entry := range entries {
 		if isExcluded(entry.Name(), excludePatterns) {
 			continue
 		}
 		if entry.IsDir() {
+			hasChildDir = true
 			continue
 		}
 		if isImage(entry.Name()) || isArchive(entry.Name()) || (isAudiobook && isAudio(entry.Name())) {
-			return true, entries, nil
+			hasDirectMedia = true
 		}
 	}
 
-	return false, entries, nil
+	return hasDirectMedia && !hasChildDir, entries, nil
 }
 
 func (s *Scanner) hasDirectPageLikeSeriesContent(entries []fs.DirEntry, excludePatterns []string, libraryType string) bool {

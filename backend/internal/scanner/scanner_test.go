@@ -500,11 +500,15 @@ func TestScanLibraryTreatsDirectImageLeafFoldersAsSeries(t *testing.T) {
 func TestCollectSeriesScanTargetsWarnsForMixedFolders(t *testing.T) {
 	libraryPath := filepath.Join(t.TempDir(), "books")
 	mixedPath := filepath.Join(libraryPath, "혼합 폴더")
-	if err := os.MkdirAll(filepath.Join(mixedPath, "하위 폴더"), 0o755); err != nil {
+	childLeafPath := filepath.Join(mixedPath, "하위 폴더")
+	if err := os.MkdirAll(childLeafPath, 0o755); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(mixedPath, "001.png"), tinyPNG, 0o644); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(childLeafPath, "001.png"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(child leaf) error = %v", err)
 	}
 
 	s := NewScanner(
@@ -524,8 +528,8 @@ func TestCollectSeriesScanTargetsWarnsForMixedFolders(t *testing.T) {
 	if len(targets) != 1 {
 		t.Fatalf("len(targets) = %d, want 1", len(targets))
 	}
-	if targets[0].Path != mixedPath {
-		t.Fatalf("targets[0].Path = %q, want %q", targets[0].Path, mixedPath)
+	if targets[0].Path != childLeafPath {
+		t.Fatalf("targets[0].Path = %q, want %q", targets[0].Path, childLeafPath)
 	}
 	if len(warnings) != 1 {
 		t.Fatalf("len(warnings) = %d, want 1", len(warnings))
@@ -768,6 +772,29 @@ func TestHasDirectPageLikeSeriesContentRequiresNoVolumeCandidates(t *testing.T) 
 	})
 }
 
+func TestInspectSeriesCandidateFolderKeepsRecursingWhenChildDirectoriesExist(t *testing.T) {
+	baseDir := t.TempDir()
+	seriesPath := filepath.Join(baseDir, "series-with-cover-and-parts")
+	if err := os.MkdirAll(filepath.Join(seriesPath, "Part 1"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seriesPath, "cover.jpg"), tinyPNG, 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	s := &Scanner{}
+	directContent, childEntries, err := s.inspectSeriesCandidateFolder(seriesPath, nil, "book")
+	if err != nil {
+		t.Fatalf("inspectSeriesCandidateFolder() error = %v", err)
+	}
+	if directContent {
+		t.Fatal("inspectSeriesCandidateFolder() = true, want false when child directories exist")
+	}
+	if len(childEntries) == 0 {
+		t.Fatal("childEntries = empty, want populated entries")
+	}
+}
+
 func TestScanLibraryCollectsMixedFolderWarningsWithoutErrorStatus(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
 	if err := database.Connect(dbPath); err != nil {
@@ -824,6 +851,16 @@ func TestScanLibraryCollectsMixedFolderWarningsWithoutErrorStatus(t *testing.T) 
 	}
 	if len(result.Warnings) == 0 {
 		t.Fatal("result.Warnings = empty, want mixed-folder warning")
+	}
+	seriesList, err := seriesRepo.FindByLibraryID(nil, library.ID, "")
+	if err != nil {
+		t.Fatalf("SeriesRepository.FindByLibraryID() error = %v", err)
+	}
+	if len(seriesList) != 1 {
+		t.Fatalf("len(seriesList) = %d, want 1", len(seriesList))
+	}
+	if seriesList[0].Path != filepath.Join(seriesPath, "Chapter 01") {
+		t.Fatalf("series path = %q, want child leaf path", seriesList[0].Path)
 	}
 
 	refreshedLibrary, err := libraryRepo.FindByID(nil, library.ID)

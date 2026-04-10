@@ -47,17 +47,17 @@ export function LibraryPage() {
   }, [seriesList]);
 
   const groupedSeriesList = useMemo(() => {
-    const groups: { key: string; items: Series[] }[] = [];
+    const groupsByKey = new Map<string, Series[]>();
     for (const series of sortedSeriesList) {
       const groupKey = getSeriesGroupKey(getSeriesDisplayName(series));
-      const lastGroup = groups[groups.length - 1];
-      if (!lastGroup || lastGroup.key !== groupKey) {
-        groups.push({ key: groupKey, items: [series] });
-        continue;
+      const existingItems = groupsByKey.get(groupKey);
+      if (existingItems) {
+        existingItems.push(series);
+      } else {
+        groupsByKey.set(groupKey, [series]);
       }
-      lastGroup.items.push(series);
     }
-    return groups;
+    return Array.from(groupsByKey.entries()).map(([key, items]) => ({ key, items }));
   }, [sortedSeriesList]);
 
   const loadData = useCallback(
