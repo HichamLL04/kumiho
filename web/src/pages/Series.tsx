@@ -471,9 +471,10 @@ export function SeriesPage() {
               {(() => {
                 const hasChapterCount = !!series.chapter_count && series.chapter_count > 0;
                 const useChapterLabel =
-                  series.display_unit === "chapter" || (series.display_unit !== "volume" && hasChapterCount);
+                  (series.display_unit === "chapter" && hasChapterCount)
+                  || (series.display_unit !== "volume" && hasChapterCount);
                 const displayCount = useChapterLabel
-                  ? series.chapter_count
+                  ? (series.chapter_count ?? 0)
                   : series.volume_count || volumes.length;
 
                 return (

@@ -7,8 +7,12 @@ const NATURAL_COLLATOR = new Intl.Collator(["ko", "en"], {
 
 const CHOSEONG = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
 
+function normalizePathSeparators(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
 function trimSlashes(value: string): string {
-  return value.replace(/^\/+|\/+$/g, "");
+  return normalizePathSeparators(value).replace(/^\/+|\/+$/g, "");
 }
 
 function normalizeSegment(value: string): string {
