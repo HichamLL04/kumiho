@@ -1658,7 +1658,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 		loadedChapterVolumes[existingVolumes[i].ID] = false
 	}
 
-	// 제외 패턴 파싱 (쉼표로 구분)
+	// excludePatterns를 방어적으로 복사해서 scanner 전용으로 사용한다.
 	excludePatterns = append([]string(nil), excludePatterns...)
 
 	// 2. 디스크 탐색
