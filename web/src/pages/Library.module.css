@@ -45,6 +45,8 @@
   right: 18px;
   width: 56px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   max-height: calc(100vh - 196px);
   padding: 12px 8px;
   border: 1px solid rgba(109, 213, 240, 0.18);
@@ -60,33 +62,52 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  flex: 1;
+  min-height: 0;
   gap: 8px;
-  max-height: calc(100vh - 222px);
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 0;
   padding-top: 2px;
   padding-bottom: 2px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(109, 213, 240, 0.42) transparent;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
 }
 
 .seriesIndexScrollArea::-webkit-scrollbar {
-  width: 6px;
+  width: 0;
 }
 
 .seriesIndexScrollArea::-webkit-scrollbar-track {
-  margin: 4px 0;
   background: transparent;
 }
 
 .seriesIndexScrollArea::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(109, 213, 240, 0.42);
+  background: transparent;
 }
 
-.seriesIndexScrollArea::-webkit-scrollbar-thumb:hover {
-  background: rgba(109, 213, 240, 0.58);
+.seriesIndexScrollbar {
+  position: absolute;
+  top: 12px;
+  right: 4px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.24s ease;
+}
+
+.seriesIndexScrollbarVisible {
+  opacity: 1;
+}
+
+.seriesIndexScrollbarThumb {
+  width: 100%;
+  border-radius: inherit;
+  background: rgba(109, 213, 240, 0.48);
+  box-shadow: 0 0 10px rgba(109, 213, 240, 0.24);
+  transition: transform 0.12s ease, height 0.12s ease;
 }
 
 .seriesIndexButton {
@@ -302,20 +323,21 @@
     top: 182px;
     right: 8px;
     width: 40px;
-    max-height: calc(100vh - 210px);
     padding: 10px 4px;
     border-radius: 14px;
   }
 
+  .seriesIndexScrollbar {
+    top: 10px;
+    right: 3px;
+    bottom: 10px;
+    width: 2px;
+  }
+
   .seriesIndexScrollArea {
-    max-height: calc(100vh - 232px);
     gap: 6px;
     padding-top: 1px;
     padding-bottom: 1px;
-  }
-
-  .seriesIndexScrollArea::-webkit-scrollbar {
-    width: 5px;
   }
 
   .seriesIndexButton {
@@ -347,12 +369,7 @@
     top: 176px;
     right: 6px;
     width: 36px;
-    max-height: calc(100vh - 208px);
     padding: 9px 3px;
-  }
-
-  .seriesIndexScrollArea {
-    max-height: calc(100vh - 226px);
   }
 
   .seriesIndexButton {
