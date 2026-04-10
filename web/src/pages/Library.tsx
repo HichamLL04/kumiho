@@ -587,10 +587,12 @@ export function LibraryPage() {
                   ref={seriesIndexScrollAreaRef}
                   className={styles.seriesIndexScrollArea}
                   onScroll={() => {
-                    scheduleIndexScrollbarThumbUpdate();
-                    if (!syncingIndexScrollRef.current) {
-                      showIndexScrollbar();
+                    if (syncingIndexScrollRef.current) {
+                      return;
                     }
+
+                    scheduleIndexScrollbarThumbUpdate();
+                    showIndexScrollbar();
                   }}
                   onWheel={showIndexScrollbar}
                   onTouchStart={showIndexScrollbar}
