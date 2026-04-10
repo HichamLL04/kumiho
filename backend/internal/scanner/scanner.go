@@ -443,6 +443,7 @@ type ScanResult struct {
 	VolumeCount  int      `json:"volume_count"`
 	ChapterCount int      `json:"chapter_count"`
 	PageCount    int      `json:"page_count"`
+	Warnings     []string `json:"warnings,omitempty"`
 	Errors       []string `json:"errors,omitempty"`
 }
 
@@ -481,6 +482,12 @@ type scannedVolume struct {
 	Chapters        []scannedChapter
 	SubVolumes      []*scannedVolume // Added for recursion
 	ThumbnailPath   *string          // Added for folder-based thumbnails (e.g., cover.jpg)
+}
+
+type seriesScanTarget struct {
+	Path      string
+	Title     string
+	IsArchive bool
 }
 
 // ScanLibrary 라이브러리 스캔
@@ -543,207 +550,147 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 		existingMap[existingList[i].Path] = &existingList[i]
 	}
 
-	// 2. 디스크 탐색 (멀티 경로 순회)
-	var allEntries []struct {
-		entry    fs.DirEntry
-		basePath string
-	}
+	// 제외 패턴 파싱 (쉼표로 구분)
+	excludePatterns := strings.Split(library.ScanExcludes, ",")
+
+	// 2. 디스크 탐색 (멀티 경로 재귀 수집)
+	var allTargets []seriesScanTarget
 	readFailed := false
 	if len(library.Paths) == 0 {
 		readFailed = true
 		result.Errors = append(result.Errors, "library has no paths configured")
 	} else {
 		for _, rootPath := range library.Paths {
-			entries, err := os.ReadDir(rootPath)
-			if err != nil {
+			targets, warnings, collectErr := s.collectSeriesScanTargets(scanCtx, rootPath, excludePatterns, library.LibraryType)
+			if collectErr != nil {
+				for _, warning := range warnings {
+					result.Warnings = append(result.Warnings, warning)
+				}
+				if collectErr == context.Canceled || collectErr == context.DeadlineExceeded {
+					return result, collectErr
+				}
 				readFailed = true
-				result.Errors = append(result.Errors, fmt.Sprintf("failed to read %s: %v", rootPath, err))
+				result.Errors = append(result.Errors, fmt.Sprintf("failed to collect series targets from %s: %v", rootPath, collectErr))
 				continue
 			}
-			for _, entry := range entries {
-				allEntries = append(allEntries, struct {
-					entry    fs.DirEntry
-					basePath string
-				}{entry, rootPath})
+			allTargets = append(allTargets, targets...)
+			for _, warning := range warnings {
+				result.Warnings = append(result.Warnings, warning)
 			}
 		}
 	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	errChan := make(chan error, len(allEntries))
+	errChan := make(chan error, len(allTargets))
 
 	// 처리된 시리즈 Path 추적 (나중에 삭제할 것 식별용)
 	processedPaths := make(map[string]bool)
 
-	// 제외 패턴 파싱 (쉼표로 구분)
-	excludePatterns := strings.Split(library.ScanExcludes, ",")
-
 	// 처리할 항목 수 계산 (진행률 표시용)
 	var totalItems int
 	var processedItems int32 // atomic 연산용
-	for _, ae := range allEntries {
-		if isExcluded(ae.entry.Name(), excludePatterns) {
-			continue
-		}
-		if ae.entry.IsDir() || isArchive(ae.entry.Name()) {
-			totalItems++
-		}
-	}
+	totalItems = len(allTargets)
 
 	// 3. 성능 설정 로드
 	perf := s.getPerfConfig()
 	// 시리즈 레벨 동시성 제어
 	seriesSemaphore := make(chan struct{}, perf.SeriesConcurrent)
 
-	for _, ae := range allEntries {
-		entry := ae.entry
-		basePath := ae.basePath
-
+	for _, target := range allTargets {
 		// 컨텍스트 취소 확인
 		select {
 		case <-scanCtx.Done():
 			return result, scanCtx.Err()
 		default:
 		}
-		// 제외 패턴 확인
-		if isExcluded(entry.Name(), excludePatterns) {
-			continue
-		}
+		mu.Lock()
+		processedPaths[target.Path] = true
+		mu.Unlock()
 
-		entryPath := filepath.Join(basePath, entry.Name())
+		wg.Add(1)
+		go func(target seriesScanTarget) {
+			defer wg.Done()
 
-		if entry.IsDir() {
-			// 폴더 → 시리즈로 처리
-			mu.Lock()
-			processedPaths[entryPath] = true
-			mu.Unlock()
+			select {
+			case seriesSemaphore <- struct{}{}:
+				defer func() { <-seriesSemaphore }()
+			case <-scanCtx.Done():
+				return
+			}
 
-			wg.Add(1)
-			go func(entry fs.DirEntry, path string) {
-				defer wg.Done()
-
-				// 세마포어 획득
-				select {
-				case seriesSemaphore <- struct{}{}:
-					defer func() { <-seriesSemaphore }()
-				case <-scanCtx.Done():
-					return
-				}
-
-				if scanCtx.Err() != nil {
+			if scanCtx.Err() != nil {
+				if scanCtx.Err() != context.Canceled && scanCtx.Err() != context.DeadlineExceeded {
 					errChan <- scanCtx.Err()
-					return
 				}
+				return
+			}
 
-				// 진행률 업데이트 함수
-				updateProgress := func(detail string) {
-					current := atomic.LoadInt32(&processedItems)
-					percent := 0
-					if totalItems > 0 {
-						percent = int((float64(current) / float64(totalItems)) * 100)
-					}
-					if updateErr := s.libraryRepo.UpdateScanProgress(nil, library.ID, detail, percent); updateErr != nil {
-						log.Printf("Failed to update progress for library %s: %v", library.ID, updateErr)
-					}
+			updateProgress := func(detail string) {
+				current := atomic.LoadInt32(&processedItems)
+				percent := 0
+				if totalItems > 0 {
+					percent = int((float64(current) / float64(totalItems)) * 100)
 				}
+				if updateErr := s.libraryRepo.UpdateScanProgress(nil, library.ID, detail, percent); updateErr != nil {
+					log.Printf("Failed to update progress for library %s: %v", library.ID, updateErr)
+				}
+			}
 
-				// 초기 진행 상태 업데이트 (시리즈 시작)
-				updateProgress(scanProgressDetail(entry.Name(), path))
+			updateProgress(scanProgressDetail(target.Title, target.Path))
 
-				seriesResult, err := s.processSeries(
+			var (
+				seriesResult *ScanResult
+				processErr   error
+			)
+			if target.IsArchive {
+				seriesResult, processErr = s.processArchiveAsSeries(
 					scanCtx,
 					library.ID,
-					path,
-					entry.Name(),
+					target.Path,
+					target.Title,
+					existingMap,
+					library.LibraryType,
+				)
+			} else {
+				seriesResult, processErr = s.processSeries(
+					scanCtx,
+					library.ID,
+					target.Path,
+					target.Title,
 					existingMap,
 					excludePatterns,
 					updateProgress,
 					perf,
 					library.LibraryType,
 				)
-				if err != nil {
-					errChan <- err
-					return
-				}
+			}
+			if processErr != nil {
+				errChan <- processErr
+				return
+			}
 
-				// 처리 완료 카운트 증가
-				atomic.AddInt32(&processedItems, 1)
+			atomic.AddInt32(&processedItems, 1)
 
-				mu.Lock()
-				result.SeriesCount++
-				result.VolumeCount += seriesResult.VolumeCount
-				result.ChapterCount += seriesResult.ChapterCount
-				result.PageCount += seriesResult.PageCount
-				mu.Unlock()
-			}(entry, entryPath)
-		} else if isArchive(entry.Name()) {
-			// zip/cbz 파일 → 단일 볼륨 시리즈로 처리
 			mu.Lock()
-			processedPaths[entryPath] = true
+			result.SeriesCount++
+			result.VolumeCount += seriesResult.VolumeCount
+			result.ChapterCount += seriesResult.ChapterCount
+			result.PageCount += seriesResult.PageCount
 			mu.Unlock()
-
-			wg.Add(1)
-			go func(entry fs.DirEntry, path string) {
-				defer wg.Done()
-
-				// 세마포어 획득
-				select {
-				case seriesSemaphore <- struct{}{}:
-					defer func() { <-seriesSemaphore }()
-				case <-scanCtx.Done():
-					return
-				}
-
-				if scanCtx.Err() != nil {
-					errChan <- scanCtx.Err()
-					return
-				}
-
-				// 진행률 업데이트 함수
-				updateProgress := func(detail string) {
-					current := atomic.LoadInt32(&processedItems)
-					percent := 0
-					if totalItems > 0 {
-						percent = int((float64(current) / float64(totalItems)) * 100)
-					}
-					if updateErr := s.libraryRepo.UpdateScanProgress(nil, library.ID, detail, percent); updateErr != nil {
-						log.Printf("Failed to update progress for library %s: %v", library.ID, updateErr)
-					}
-				}
-
-				updateProgress(scanProgressDetail(entry.Name(), path))
-
-				seriesResult, err := s.processArchiveAsSeries(
-					scanCtx,
-					library.ID,
-					path,
-					entry.Name(),
-					existingMap,
-					library.LibraryType,
-				)
-				if err != nil {
-					errChan <- err
-					return
-				}
-
-				// 처리 완료 카운트 증가
-				atomic.AddInt32(&processedItems, 1)
-
-				mu.Lock()
-				result.SeriesCount++
-				result.VolumeCount += seriesResult.VolumeCount
-				result.ChapterCount += seriesResult.ChapterCount
-				result.PageCount += seriesResult.PageCount
-				mu.Unlock()
-			}(entry, entryPath)
-		}
+		}(target)
 	}
 
 	wg.Wait()
+	if scanErr := scanCtx.Err(); scanErr == context.Canceled || scanErr == context.DeadlineExceeded {
+		return result, scanErr
+	}
 	close(errChan)
 
 	for err := range errChan {
+		if err == context.Canceled || err == context.DeadlineExceeded {
+			return result, err
+		}
 		result.Errors = append(result.Errors, err.Error())
 	}
 
@@ -777,6 +724,8 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	if len(result.Errors) > 0 {
 		status = "ERROR"
 		summary = "스캔 완료 (일부 오류 발생)"
+	} else if len(result.Warnings) > 0 {
+		summary = fmt.Sprintf("스캔 완료 (경고 %d건)", len(result.Warnings))
 	}
 	if updateErr := s.libraryRepo.UpdateScanStatus(nil, library.ID, status, summary); updateErr != nil {
 		log.Printf("Failed to update final scan status for library %s: %v", library.ID, updateErr)
@@ -784,6 +733,159 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	}
 
 	return result, nil
+}
+
+func (s *Scanner) collectSeriesScanTargets(
+	ctx context.Context,
+	rootPath string,
+	excludePatterns []string,
+	libraryType string,
+) ([]seriesScanTarget, []string, error) {
+	entries, err := os.ReadDir(rootPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var (
+		targets  []seriesScanTarget
+		warnings []string
+		seen     = make(map[string]struct{})
+	)
+
+	var walk func(string, []fs.DirEntry) error
+	walk = func(currentPath string, entries []fs.DirEntry) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		for _, entry := range entries {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if isExcluded(entry.Name(), excludePatterns) {
+				continue
+			}
+
+			entryPath := filepath.Join(currentPath, entry.Name())
+			if !entry.IsDir() {
+				if isArchive(entry.Name()) {
+					if _, ok := seen[entryPath]; !ok {
+						targets = append(targets, seriesScanTarget{
+							Path:      entryPath,
+							Title:     entry.Name(),
+							IsArchive: true,
+						})
+						seen[entryPath] = struct{}{}
+					}
+				}
+				continue
+			}
+
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			directContent, childEntries, err := s.inspectSeriesCandidateFolder(entryPath, excludePatterns, libraryType)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to inspect %s: %v", entryPath, err))
+				continue
+			}
+
+			hasChildDir := false
+			hasDirectMedia := false
+			isAudiobook := libraryType == "audiobook"
+			for _, childEntry := range childEntries {
+				if isExcluded(childEntry.Name(), excludePatterns) {
+					continue
+				}
+				if childEntry.IsDir() {
+					hasChildDir = true
+					continue
+				}
+				if isImage(childEntry.Name()) || isArchive(childEntry.Name()) || (isAudiobook && isAudio(childEntry.Name())) {
+					hasDirectMedia = true
+				}
+			}
+			if hasDirectMedia && hasChildDir {
+				warnings = append(warnings, fmt.Sprintf("mixed folder detected (has both media and subdirs): %s", entryPath))
+			}
+
+			if directContent {
+				if _, ok := seen[entryPath]; !ok {
+					targets = append(targets, seriesScanTarget{
+						Path:  entryPath,
+						Title: entry.Name(),
+					})
+					seen[entryPath] = struct{}{}
+				}
+				continue
+			}
+
+			if err := walk(entryPath, childEntries); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if err := walk(rootPath, entries); err != nil {
+		return nil, warnings, err
+	}
+	return targets, warnings, nil
+}
+
+func (s *Scanner) inspectSeriesCandidateFolder(
+	path string,
+	excludePatterns []string,
+	libraryType string,
+) (bool, []fs.DirEntry, error) {
+	// 재귀 수집 단계에서 "이 폴더 자체를 leaf series 후보로 볼지"를 판정한다.
+	// child entries를 함께 반환해 mixed folder warning, 하위 재귀 여부 결정을 한 번의 ReadDir 결과로 처리한다.
+	// direct media가 있더라도 하위 디렉터리가 남아 있으면 leaf 수집을 중단하지 않고 계속 하위 폴더를 탐색한다.
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false, nil, err
+	}
+
+	isAudiobook := libraryType == "audiobook"
+	hasDirectMedia := false
+	hasChildDir := false
+	for _, entry := range entries {
+		if isExcluded(entry.Name(), excludePatterns) {
+			continue
+		}
+		if entry.IsDir() {
+			hasChildDir = true
+			continue
+		}
+		if isImage(entry.Name()) || isArchive(entry.Name()) || (isAudiobook && isAudio(entry.Name())) {
+			hasDirectMedia = true
+		}
+	}
+
+	return hasDirectMedia && !hasChildDir, entries, nil
+}
+
+func (s *Scanner) hasDirectPageLikeSeriesContent(entries []fs.DirEntry, excludePatterns []string, libraryType string) bool {
+	// 시리즈가 이미 확정된 뒤, 시리즈 루트 자체가 direct image leaf인지 판단한다.
+	// inspectSeriesCandidateFolder와 비슷해 보여도 "leaf series 후보 수집"이 아니라 "series content 저장 전략 분기"용이다.
+	// direct image file이 있더라도 하위 볼륨 후보(디렉터리, 아카이브, 오디오 엔트리)가 함께 있으면 일반 series 레이아웃으로 본다.
+	isAudiobook := libraryType == "audiobook"
+	hasDirectMedia := false
+	for _, entry := range entries {
+		if isExcluded(entry.Name(), excludePatterns) {
+			continue
+		}
+		if entry.IsDir() {
+			return false
+		}
+		if isArchive(entry.Name()) || (isAudiobook && isAudio(entry.Name())) {
+			return false
+		}
+		if isImage(entry.Name()) {
+			hasDirectMedia = true
+		}
+	}
+	return hasDirectMedia
 }
 
 // CancelScan 진행 중인 스캔 취소. 취소가 수행되었으면 true, 진행 중인 스캔이 없었으면 false 반환.
@@ -1295,7 +1397,7 @@ func (s *Scanner) processArchiveAsSeries(
 			if cErr := tx.Commit(); cErr != nil {
 				return nil, fmt.Errorf("failed to commit transaction: %w", cErr)
 			}
-			return &ScanResult{}, nil
+			return s.buildExistingSeriesScanResult(series.ID)
 		}
 	} else {
 		// 새 시리즈 생성
@@ -1380,6 +1482,34 @@ func (s *Scanner) processArchiveAsSeries(
 	result.VolumeCount = saveRes.VolumeCount
 	result.ChapterCount = saveRes.ChapterCount
 	result.PageCount = saveRes.PageCount
+
+	return result, nil
+}
+
+func (s *Scanner) buildExistingSeriesScanResult(seriesID string) (*ScanResult, error) {
+	result := &ScanResult{}
+
+	volumeCount, err := s.volumeRepo.CountBySeriesID(nil, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	result.VolumeCount = volumeCount
+
+	chapterCount, err := s.chapterRepo.CountBySeriesID(nil, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	result.ChapterCount = chapterCount
+
+	chapters, err := s.chapterRepo.FindBySeriesID(nil, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	for _, chapter := range chapters {
+		if chapter.PageCount > 0 {
+			result.PageCount += chapter.PageCount
+		}
+	}
 
 	return result, nil
 }
@@ -1528,10 +1658,87 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 		loadedChapterVolumes[existingVolumes[i].ID] = false
 	}
 
+	// excludePatterns를 방어적으로 복사해서 scanner 전용으로 사용한다.
+	excludePatterns = append([]string(nil), excludePatterns...)
+
 	// 2. 디스크 탐색
 	entries, err := os.ReadDir(seriesPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if s.hasDirectPageLikeSeriesContent(entries, excludePatterns, libraryType) {
+		volData, analyzeErr := s.analyzeVolumeRecursive(seriesPath, resolveSeriesTitleFromPath(seriesPath, series.Title), 1, "volume", excludePatterns, libraryType)
+		if analyzeErr != nil {
+			return nil, analyzeErr
+		}
+
+		contentChanged := len(existingVolumes) == 0
+		if existingRootVol, ok := existingVolMap[seriesPath]; ok {
+			changed, changeErr := s.hasScannedVolumeContentChange(
+				volData,
+				existingRootVol,
+				existingSubVolMap,
+				existingChapterMap,
+				loadedChapterVolumes,
+			)
+			if changeErr != nil {
+				return nil, changeErr
+			}
+			contentChanged = changed
+		} else if len(existingVolumes) > 0 {
+			// 기존 저장 구조는 있었지만 root synthetic volume이 없으면 direct leaf 레이아웃 전환으로 보고 재구성한다.
+			contentChanged = true
+		}
+
+		if !contentChanged {
+			representativeExt := resolveScannedSeriesExtension(volData)
+			if series.Extension != representativeExt {
+				if _, upErr := database.DB.Exec(`UPDATE series SET extension = ? WHERE id = ?`, representativeExt, series.ID); upErr != nil {
+					log.Printf("failed to update extension for series %s: %v", series.ID, upErr)
+				} else {
+					series.Extension = representativeExt
+				}
+			}
+			return summarizeScannedVolume(volData), nil
+		}
+
+		tx, txErr := database.DB.BeginTx(ctx, nil)
+		if txErr != nil {
+			return nil, txErr
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		if deleteErr := s.volumeRepo.DeleteBySeriesID(tx, series.ID); deleteErr != nil {
+			return nil, deleteErr
+		}
+
+		saveRes, saveErr := s.saveVolumeRecursive(tx, series.ID, nil, volData)
+		if saveErr != nil {
+			return nil, saveErr
+		}
+
+		if contentChanged {
+			now := time.Now()
+			if upErr := s.seriesRepo.UpdateUpdatedAt(tx, series.ID, now); upErr != nil {
+				return nil, upErr
+			}
+			series.UpdatedAt = now
+		}
+
+		if commitErr := tx.Commit(); commitErr != nil {
+			return nil, fmt.Errorf("failed to commit transaction: %w", commitErr)
+		}
+
+		if representativeExt := resolveScannedSeriesExtension(volData); series.Extension != representativeExt {
+			if _, upErr := database.DB.Exec(`UPDATE series SET extension = ? WHERE id = ?`, representativeExt, series.ID); upErr != nil {
+				log.Printf("failed to update extension for series %s: %v", series.ID, upErr)
+			} else {
+				series.Extension = representativeExt
+			}
+		}
+
+		return saveRes, nil
 	}
 
 	// 자연 정렬 및 전처리 (제외 대상 미리 제거)
@@ -2054,6 +2261,41 @@ func normalizeScannedChapterPageCount(chapter scannedChapter) int {
 	return pageCount
 }
 
+func summarizeScannedVolume(vol *scannedVolume) *ScanResult {
+	result := &ScanResult{}
+	if vol == nil {
+		return result
+	}
+
+	var walk func(*scannedVolume)
+	walk = func(current *scannedVolume) {
+		if current == nil {
+			return
+		}
+		result.VolumeCount++
+		result.ChapterCount += len(current.Chapters)
+		for _, chapter := range current.Chapters {
+			result.PageCount += len(chapter.Pages)
+		}
+		for _, child := range current.SubVolumes {
+			walk(child)
+		}
+	}
+
+	walk(vol)
+	return result
+}
+
+func resolveScannedSeriesExtension(vol *scannedVolume) string {
+	if vol == nil {
+		return ""
+	}
+	// 현재 helper는 leaf-first 경로의 root scannedVolume 확장자를 시리즈 대표 확장자로 사용한다.
+	// direct image leaf도 analyzeVolumeRecursive에서 page 확장자까지 합산해 MIX를 계산하므로,
+	// 여기서는 root.Extension을 그대로 반환한다.
+	return vol.Extension
+}
+
 func (s *Scanner) getCachedChaptersForVolume(
 	volumeID string,
 	existingChapterMap map[string][]model.Chapter,
@@ -2281,7 +2523,23 @@ func (s *Scanner) analyzeVolumeRecursive(volumePath, title string, volumeNum int
 	for _, ch := range result.Chapters {
 		ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(ch.Path), "."))
 		if ext == "" && len(ch.Pages) > 0 {
-			ext = "IMG" // 폴더 챕터 (이미지 포함)
+			pageExtSet := make(map[string]bool)
+			for _, page := range ch.Pages {
+				pageExt := strings.ToUpper(strings.TrimPrefix(filepath.Ext(page.Path), "."))
+				if pageExt != "" {
+					pageExtSet[pageExt] = true
+				}
+			}
+			switch len(pageExtSet) {
+			case 0:
+				ext = "IMG"
+			case 1:
+				for pageExt := range pageExtSet {
+					ext = pageExt
+				}
+			default:
+				ext = "MIX"
+			}
 		}
 		if ext != "" {
 			extSet[ext] = true
@@ -2832,21 +3090,6 @@ func parseVolumeNumber(name string) (int, string, bool) {
 		return 0, "volume", true
 	}
 
-	// Pattern 0: Korean "권", "화", "회", "부" (e.g. 01권, 1권, 1화, 1부) -> Volume or Chapter
-	// reVolKorean is `(\d+)\s*(권|회|화|부)` so mKor[1] is number, mKor[2] is unit ("권"/"부" as volume, "회"/"화" as chapter)
-	mKor := reVolKorean.FindStringSubmatch(name)
-	if len(mKor) > 2 {
-		n, err := strconv.Atoi(mKor[1])
-		if err == nil {
-			unitStr := mKor[2]
-			unit := "volume"
-			if unitStr == "회" || unitStr == "화" {
-				unit = "chapter"
-			}
-			return n, unit, true
-		}
-	}
-
 	// Pattern 1: v000, vol000, volume 000 -> Volume
 	m := reVolPrefix.FindStringSubmatch(name)
 	if len(m) > 1 {
@@ -2862,6 +3105,22 @@ func parseVolumeNumber(name string) (int, string, bool) {
 		n, err := strconv.Atoi(mCh[1])
 		if err == nil {
 			return n, "chapter", true
+		}
+	}
+
+	// Pattern 0: Korean "권", "화", "회", "부" (e.g. 01권, 1권, 1화, 1부) -> Volume or Chapter
+	// 명시적 c/v 패턴보다 우선순위가 낮다. (예: "열렙전사 1부 - c001"은 챕터로 해석)
+	// reVolKorean is `(\d+)\s*(권|회|화|부)` so mKor[1] is number, mKor[2] is unit ("권"/"부" as volume, "회"/"화" as chapter)
+	mKor := reVolKorean.FindStringSubmatch(name)
+	if len(mKor) > 2 {
+		n, err := strconv.Atoi(mKor[1])
+		if err == nil {
+			unitStr := mKor[2]
+			unit := "volume"
+			if unitStr == "회" || unitStr == "화" {
+				unit = "chapter"
+			}
+			return n, unit, true
 		}
 	}
 

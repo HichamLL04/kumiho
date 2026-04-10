@@ -112,6 +112,10 @@ export function calculateProgressDisplay(params: {
     } else if (series.total_page_count && series.total_page_count > 0) {
       const p = Math.floor(percent);
       label = preferPercentLabel ? `${p}%` : `${p}% (${series.read_page_count || 0} / ${series.total_page_count} P)`;
+    } else if (series.display_unit === "volume" && series.volume_count && series.volume_count > 0) {
+      label = t("series.unit.volume", { count: series.volume_count });
+    } else if (series.display_unit === "chapter" && series.chapter_count && series.chapter_count > 0) {
+      label = t("series.unit.chapter_count", { count: series.chapter_count });
     } else if (series.chapter_count && series.chapter_count > 0) {
       label = t("series.unit.chapter_count", { count: series.chapter_count });
     } else if (series.volume_count && series.volume_count > 0) {

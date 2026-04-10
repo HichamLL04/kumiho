@@ -57,6 +57,7 @@ type Series struct {
 	LibraryID     string    `json:"library_id"`
 	Title         string    `json:"title"`
 	DisplayTitle  string    `json:"display_title,omitempty" db:"-"`
+	DisplayUnit   string    `json:"display_unit,omitempty" db:"-"`
 	Path          string    `json:"path"`
 	ThumbnailPath *string   `json:"thumbnail_path,omitempty"`
 	ThumbnailURL  *string   `json:"thumbnail_url,omitempty" db:"-"`

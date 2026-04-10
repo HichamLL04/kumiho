@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -113,7 +114,134 @@ func (r *VolumeRepository) FindBySeriesID(db database.Queryer, seriesID string) 
 		}
 		volumes = append(volumes, v)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return volumes, nil
+}
+
+func (r *VolumeRepository) FindRootVolumesBySeriesID(db database.Queryer, seriesID string) ([]model.Volume, error) {
+	db = database.GetQueryer(db)
+	rows, err := db.Query(
+		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at
+		 FROM volumes
+		 WHERE series_id = ? AND parent_id IS NULL
+		 ORDER BY volume_number`,
+		seriesID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var volumes []model.Volume
+	for rows.Next() {
+		var v model.Volume
+		var thumbnail, unit, parentID sql.NullString
+		var description, authors, pubYear, extension sql.NullString
+
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &parentID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if unit.Valid {
+			v.Unit = unit.String
+		}
+		if thumbnail.Valid {
+			v.ThumbnailPath = &thumbnail.String
+		}
+		if parentID.Valid {
+			v.ParentID = &parentID.String
+		}
+		if description.Valid {
+			v.Description = description.String
+		}
+		if authors.Valid {
+			v.Authors = authors.String
+		}
+		if pubYear.Valid {
+			v.PublicationYear = pubYear.String
+		}
+		if extension.Valid {
+			v.Extension = extension.String
+		}
+		volumes = append(volumes, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return volumes, nil
+}
+
+func (r *VolumeRepository) FindRootDisplayUnitsBySeriesIDs(db database.Queryer, seriesIDs []string) (map[string]string, error) {
+	db = database.GetQueryer(db)
+	if len(seriesIDs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	const batchSize = 900
+	displayUnits := make(map[string]string, len(seriesIDs))
+	for start := 0; start < len(seriesIDs); start += batchSize {
+		end := start + batchSize
+		if end > len(seriesIDs) {
+			end = len(seriesIDs)
+		}
+		chunkUnits, err := r.findRootDisplayUnitsBySeriesIDsChunk(db, seriesIDs[start:end])
+		if err != nil {
+			return nil, err
+		}
+		for seriesID, displayUnit := range chunkUnits {
+			displayUnits[seriesID] = displayUnit
+		}
+	}
+
+	return displayUnits, nil
+}
+
+func (r *VolumeRepository) findRootDisplayUnitsBySeriesIDsChunk(db database.Queryer, seriesIDs []string) (map[string]string, error) {
+	if len(seriesIDs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(seriesIDs)), ",")
+	query := fmt.Sprintf(`
+		SELECT
+			series_id,
+			CASE
+				WHEN SUM(CASE WHEN COALESCE(unit, 'volume') != 'chapter' THEN 1 ELSE 0 END) = 0 THEN 'chapter'
+				ELSE 'volume'
+			END AS display_unit
+		FROM volumes
+		WHERE parent_id IS NULL
+		  AND series_id IN (%s)
+		GROUP BY series_id
+	`, placeholders)
+
+	args := make([]any, len(seriesIDs))
+	for i, seriesID := range seriesIDs {
+		args[i] = seriesID
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	displayUnits := make(map[string]string, len(seriesIDs))
+	for rows.Next() {
+		var (
+			seriesID    string
+			displayUnit string
+		)
+		if err := rows.Scan(&seriesID, &displayUnit); err != nil {
+			return nil, err
+		}
+		displayUnits[seriesID] = displayUnit
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return displayUnits, nil
 }
 
 // FindByID ID로 볼륨 조회
@@ -528,53 +656,6 @@ func (r *VolumeRepository) CountByParentID(db database.Queryer, parentID string)
 	return count, nil
 }
 
-// FindRootVolumesBySeriesID 시리즈의 최상위 볼륨 목록 조회
-func (r *VolumeRepository) FindRootVolumesBySeriesID(db database.Queryer, seriesID string) ([]model.Volume, error) {
-	db = database.GetQueryer(db)
-	rows, err := db.Query(
-		`SELECT id, series_id, title, volume_number, path, thumbnail_path, has_audio, unit, chapter_count, parent_id, description, authors, publication_year, extension, created_at, updated_at 
-		 FROM volumes WHERE series_id = ? AND parent_id IS NULL ORDER BY volume_number`,
-		seriesID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var volumes []model.Volume
-	for rows.Next() {
-		var v model.Volume
-		var thumbnail, unit, pID sql.NullString
-		var description, authors, pubYear, extension sql.NullString
-
-		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.VolumeNumber, &v.Path, &thumbnail, &v.HasAudio, &unit, &v.ChapterCount, &pID, &description, &authors, &pubYear, &extension, &v.CreatedAt, &v.UpdatedAt); err != nil {
-			return nil, err
-		}
-		if unit.Valid {
-			v.Unit = unit.String
-		}
-		if thumbnail.Valid {
-			v.ThumbnailPath = &thumbnail.String
-		}
-		if pID.Valid {
-			v.ParentID = &pID.String
-		}
-		if description.Valid {
-			v.Description = description.String
-		}
-		if authors.Valid {
-			v.Authors = authors.String
-		}
-		if pubYear.Valid {
-			v.PublicationYear = pubYear.String
-		}
-		if extension.Valid {
-			v.Extension = extension.String
-		}
-		volumes = append(volumes, v)
-	}
-	return volumes, nil
-}
 
 // GetDistinctExtensions 시리즈 내 모든 볼륨의 고유한 확장자 목록 조회
 func (r *VolumeRepository) GetDistinctExtensions(db database.Queryer, seriesID string) ([]string, error) {

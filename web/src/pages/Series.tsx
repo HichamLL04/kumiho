@@ -468,15 +468,21 @@ export function SeriesPage() {
             />
 
             <div className={styles.volumeCount}>
-              <Trans
-                i18nKey={series.chapter_count && series.chapter_count > 0 ? "series.chapter_count" : "series.count"}
-                count={
-                  series.chapter_count && series.chapter_count > 0
-                    ? series.chapter_count
-                    : series.volume_count || volumes.length
-                }
-                components={{ strong: <strong /> }}
-              />
+              {(() => {
+                const hasChapterCount = !!series.chapter_count && series.chapter_count > 0;
+                const useChapterLabel = hasChapterCount && series.display_unit !== "volume";
+                const displayCount = useChapterLabel
+                  ? (series.chapter_count ?? 0)
+                  : series.volume_count || volumes.length;
+
+                return (
+                  <Trans
+                    i18nKey={useChapterLabel ? "series.chapter_count" : "series.count"}
+                    count={displayCount}
+                    components={{ strong: <strong /> }}
+                  />
+                );
+              })()}
             </div>
 
             {volumes.length === 0 ? (

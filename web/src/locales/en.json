@@ -672,6 +672,8 @@
       "scan_in_progress": "Scanning...",
       "scan": "Scan",
       "total_series": "Total <strong>{{count}}</strong> series",
+      "series_index_nav": "Series index, {{count}} total series",
+      "series_index_jump": "Jump to {{key}} section",
       "empty_series": "No series found",
       "scan_now": "Scan Now"
     }
@@ -749,7 +751,9 @@
     "not_found": "Series not found",
     "unit": {
       "volume": "Vol. {{count}}",
+      "total_volume": "Total {{count}} volumes",
       "chapter": "Ch. {{count}}",
+      "total_chapter": "Total {{count}} chapters",
       "chapter_count": "{{count}} chapters",
       "page": "{{count}} P"
     },
