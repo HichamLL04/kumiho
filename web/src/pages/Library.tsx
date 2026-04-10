@@ -24,6 +24,10 @@ import {
 import styles from "./Library.module.css";
 
 const POLL_INTERVAL_MS = 3000;
+const HEADER_SCROLL_THRESHOLD_PX = 184; // 헤더 높이(172px)와 시각적 여유(12px)를 합친 활성화 기준선
+const INDEX_TOP_RETRY_DELAY_MS = 100;
+const INDEX_SCROLL_LOCK_MS = 600;
+const GRID_MIN_VISIBLE_TOP_PX = 92; // 카드 그리드 top이 이 값 이상일 때만 유효한 측정으로 본다.
 
 export function LibraryPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,9 +44,15 @@ export function LibraryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
+  const [indexPosition, setIndexPosition] = useState<{ top: number; right: number } | null>(null);
   const loadSequenceRef = useRef(0);
   const lastFetchedIdRef = useRef<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrollingToGroupRef = useRef<string | null>(null);
+  const scrollReleaseTimeoutRef = useRef<number | null>(null);
+  const seriesGridRef = useRef<HTMLDivElement | null>(null);
+  const seriesIndexRef = useRef<HTMLElement | null>(null);
 
   const user = useAuthStore((state) => state.user);
 
@@ -173,6 +183,11 @@ export function LibraryPage() {
   };
 
   const scrollToGroup = (groupKey: string) => {
+    setActiveGroupKey(groupKey);
+    scrollingToGroupRef.current = groupKey;
+    if (scrollReleaseTimeoutRef.current !== null) {
+      window.clearTimeout(scrollReleaseTimeoutRef.current);
+    }
     const target = sectionRefs.current[groupKey];
     if (target) {
       const prefersReducedMotion =
@@ -180,8 +195,130 @@ export function LibraryPage() {
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       target.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
+      scrollReleaseTimeoutRef.current = window.setTimeout(() => {
+        scrollingToGroupRef.current = null;
+        scrollReleaseTimeoutRef.current = null;
+      }, prefersReducedMotion ? 0 : INDEX_SCROLL_LOCK_MS);
+    } else {
+      scrollingToGroupRef.current = null;
     }
   };
+
+  useEffect(() => {
+    if (groupedSeriesList.length === 0) {
+      setActiveGroupKey(null);
+      return;
+    }
+
+    const updateActiveGroup = () => {
+      if (scrollingToGroupRef.current !== null) {
+        return;
+      }
+
+      let nextActiveKey = groupedSeriesList[0]?.key ?? null;
+
+      for (const group of groupedSeriesList) {
+        const node = sectionRefs.current[group.key];
+        if (!node) continue;
+
+        if (node.getBoundingClientRect().top <= HEADER_SCROLL_THRESHOLD_PX) {
+          nextActiveKey = group.key;
+        } else {
+          break;
+        }
+      }
+
+      setActiveGroupKey((current) => (current === nextActiveKey ? current : nextActiveKey));
+    };
+
+    let frameId: number | null = null;
+    const scheduleActiveGroupUpdate = () => {
+      if (frameId !== null) return;
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateActiveGroup();
+      });
+    };
+
+    updateActiveGroup();
+    window.addEventListener("scroll", scheduleActiveGroupUpdate, { passive: true });
+    window.addEventListener("resize", scheduleActiveGroupUpdate);
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      if (scrollReleaseTimeoutRef.current !== null) {
+        window.clearTimeout(scrollReleaseTimeoutRef.current);
+        scrollReleaseTimeoutRef.current = null;
+      }
+      window.removeEventListener("scroll", scheduleActiveGroupUpdate);
+      window.removeEventListener("resize", scheduleActiveGroupUpdate);
+    };
+  }, [groupedSeriesList]);
+
+  useEffect(() => {
+    if (groupedSeriesList.length === 0) {
+      setIndexPosition(null);
+      return;
+    }
+
+    const updateIndexPosition = () => {
+      const grid = seriesGridRef.current;
+      const index = seriesIndexRef.current;
+      if (!grid || !index) return;
+
+      const gridRect = grid.getBoundingClientRect();
+      const indexRect = index.getBoundingClientRect();
+      const viewportRight = window.innerWidth;
+      const gutterWidth = Math.max(0, viewportRight - gridRect.right);
+      const centeredRight = Math.max(8, gutterWidth / 2 - indexRect.width / 2);
+      const nextTop = gridRect.top;
+      const minValidTop = GRID_MIN_VISIBLE_TOP_PX;
+      const maxValidTop = window.innerHeight * 0.7; // 뷰포트 하단에 너무 가까우면 초기 측정이 흔들린 것으로 간주한다.
+      const hasValidTop = nextTop > minValidTop && nextTop < maxValidTop;
+
+      setIndexPosition((current) => {
+        const resolvedTop = hasValidTop ? nextTop : current?.top;
+        if (resolvedTop === undefined) {
+          return current ?? null;
+        }
+
+        if (
+          current &&
+          Math.abs(current.right - centeredRight) < 0.5 &&
+          Math.abs(current.top - resolvedTop) < 0.5
+        ) {
+          return current;
+        }
+
+        return { top: resolvedTop, right: centeredRight };
+      });
+    };
+
+    let frameId: number | null = null;
+    const scheduleIndexPositionUpdate = () => {
+      if (frameId !== null) return;
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateIndexPosition();
+      });
+    };
+
+    scheduleIndexPositionUpdate();
+    const retryId = window.setTimeout(scheduleIndexPositionUpdate, INDEX_TOP_RETRY_DELAY_MS);
+    window.addEventListener("resize", scheduleIndexPositionUpdate);
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.clearTimeout(retryId);
+      window.removeEventListener("resize", scheduleIndexPositionUpdate);
+    };
+  }, [groupedSeriesList, sidebarOpen]);
 
   if (isLoading) {
     return (
@@ -289,23 +426,38 @@ export function LibraryPage() {
           ) : (
             <div className={styles.seriesLayout}>
               <nav
+                ref={seriesIndexRef}
                 className={styles.seriesIndex}
                 aria-label={t("home.library.series_index_nav", { count: sortedSeriesList.length })}
+                style={
+                  indexPosition
+                    ? {
+                        top: `${indexPosition.top}px`,
+                        right: `${indexPosition.right}px`,
+                      }
+                    : undefined
+                }
               >
-                {groupedSeriesList.map((group) => (
-                  <button
-                    key={group.key}
-                    type="button"
-                    className={styles.seriesIndexButton}
-                    onClick={() => scrollToGroup(group.key)}
-                    aria-label={t("home.library.series_index_jump", { key: group.key })}
-                  >
-                    {group.key}
-                  </button>
-                ))}
+                <div className={styles.seriesIndexScrollArea}>
+                  {groupedSeriesList.map((group) => (
+                    <button
+                      key={group.key}
+                      type="button"
+                      className={`${styles.seriesIndexButton} ${activeGroupKey === group.key ? styles.seriesIndexButtonActive : ""}`}
+                      onClick={() => scrollToGroup(group.key)}
+                      aria-label={t("home.library.series_index_jump", { key: group.key })}
+                      aria-current={activeGroupKey === group.key ? "location" : undefined}
+                    >
+                      {group.key}
+                    </button>
+                  ))}
+                </div>
               </nav>
 
-              <div className={styles.seriesGrid}>
+              <div
+                ref={seriesGridRef}
+                className={styles.seriesGrid}
+              >
                 {groupedSeriesList.map((group) => (
                   <Fragment key={group.key}>
                     {group.items.map((series, index) => {

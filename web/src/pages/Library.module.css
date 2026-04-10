@@ -30,6 +30,8 @@
 
 .seriesLayout {
   position: relative;
+  box-sizing: border-box;
+  width: 100%;
   padding-right: 88px;
 }
 
@@ -42,22 +44,53 @@
   top: 172px;
   right: 18px;
   width: 56px;
+  box-sizing: border-box;
   max-height: calc(100vh - 196px);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  overflow-y: auto;
   padding: 12px 8px;
   border: 1px solid rgba(109, 213, 240, 0.18);
   border-radius: 16px;
   background: rgba(9, 20, 36, 0.7);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  overflow: hidden;
   z-index: 2;
 }
 
+.seriesIndexScrollArea {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  max-height: calc(100vh - 222px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(109, 213, 240, 0.42) transparent;
+}
+
+.seriesIndexScrollArea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.seriesIndexScrollArea::-webkit-scrollbar-track {
+  margin: 4px 0;
+  background: transparent;
+}
+
+.seriesIndexScrollArea::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(109, 213, 240, 0.42);
+}
+
+.seriesIndexScrollArea::-webkit-scrollbar-thumb:hover {
+  background: rgba(109, 213, 240, 0.58);
+}
+
 .seriesIndexButton {
+  position: relative;
   border: none;
   border-radius: 10px;
   background: transparent;
@@ -67,20 +100,44 @@
   line-height: 1;
   padding: 6px 4px;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
-.seriesIndexButton:hover,
-.seriesIndexButton:focus-visible {
-  background: rgba(109, 213, 240, 0.16);
-  color: #ffffff;
-  transform: translateY(-1px);
+.seriesIndexButton::before {
+  content: "";
+  position: absolute;
+  inset: 4px 3px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(109, 213, 240, 0.32) 0%, rgba(109, 213, 240, 0.14) 42%, rgba(109, 213, 240, 0) 76%);
+  opacity: 0;
+  transform: scale(0.72);
+  transition: opacity 0.24s ease, transform 0.24s ease;
+  pointer-events: none;
+}
+
+.seriesIndexButtonActive {
+  color: #f4fdff;
+  text-shadow: 0 0 10px rgba(156, 231, 255, 0.65);
+}
+
+.seriesIndexButtonActive::before {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .seriesIndexButton:focus-visible {
   outline: 2px solid rgba(137, 203, 255, 0.9);
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(137, 203, 255, 0.18);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .seriesIndexButton:hover {
+    background: rgba(109, 213, 240, 0.16);
+    color: #ffffff;
+    transform: translateY(-1px);
+  }
 }
 
 /* 빈 상태 */
@@ -202,6 +259,14 @@
 
 /* 반응형 */
 @media screen and (max-width: 768px) {
+  .libraryContainer,
+  .libraryContentWrapper,
+  .libraryMain,
+  .seriesLayout {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   .subHeaderContent {
     padding: 16px 20px;
     flex-direction: column;
@@ -229,11 +294,38 @@
   }
 
   .seriesLayout {
-    padding-right: 0;
+    padding-right: 52px;
   }
 
   .seriesIndex {
-    display: none;
+    position: fixed;
+    top: 182px;
+    right: 8px;
+    width: 40px;
+    max-height: calc(100vh - 210px);
+    padding: 10px 4px;
+    border-radius: 14px;
+  }
+
+  .seriesIndexScrollArea {
+    max-height: calc(100vh - 232px);
+    gap: 6px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+  }
+
+  .seriesIndexScrollArea::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .seriesIndexButton {
+    border-radius: 8px;
+    font-size: 0.72rem;
+    padding: 5px 2px;
+  }
+
+  .seriesIndexButton::before {
+    inset: 3px 2px;
   }
 }
 
@@ -242,8 +334,29 @@
     padding: 20px 8px;
   }
 
+  .seriesLayout {
+    padding-right: 44px;
+  }
+
   .seriesGrid {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 8px;
+  }
+
+  .seriesIndex {
+    top: 176px;
+    right: 6px;
+    width: 36px;
+    max-height: calc(100vh - 208px);
+    padding: 9px 3px;
+  }
+
+  .seriesIndexScrollArea {
+    max-height: calc(100vh - 226px);
+  }
+
+  .seriesIndexButton {
+    font-size: 0.68rem;
+    padding: 5px 1px;
   }
 }
