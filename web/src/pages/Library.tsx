@@ -330,6 +330,7 @@ export function LibraryPage() {
       if (indexInteractionTimeoutRef.current !== null) {
         window.clearTimeout(indexInteractionTimeoutRef.current);
         indexInteractionTimeoutRef.current = null;
+        setIsIndexInteracting(false);
       }
       window.removeEventListener("scroll", scheduleActiveGroupUpdate);
       window.removeEventListener("resize", scheduleActiveGroupUpdate);
@@ -362,6 +363,14 @@ export function LibraryPage() {
       syncingIndexScrollRef.current = false;
       syncingIndexScrollFrameRef.current = null;
     });
+
+    return () => {
+      if (syncingIndexScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(syncingIndexScrollFrameRef.current);
+        syncingIndexScrollFrameRef.current = null;
+      }
+      syncingIndexScrollRef.current = false;
+    };
   }, [activeGroupKey, updateIndexScrollbarThumb]);
 
   useEffect(() => {
@@ -385,6 +394,7 @@ export function LibraryPage() {
       if (syncingIndexScrollFrameRef.current !== null) {
         window.cancelAnimationFrame(syncingIndexScrollFrameRef.current);
         syncingIndexScrollFrameRef.current = null;
+        syncingIndexScrollRef.current = false;
       }
     };
   }, [groupedSeriesList, indexPosition, scheduleIndexScrollbarThumbUpdate, updateIndexScrollbarThumb]);
@@ -582,7 +592,6 @@ export function LibraryPage() {
                       showIndexScrollbar();
                     }
                   }}
-                  onMouseEnter={showIndexScrollbar}
                   onWheel={showIndexScrollbar}
                   onTouchStart={showIndexScrollbar}
                   onPointerDown={showIndexScrollbar}
