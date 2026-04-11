@@ -23,19 +23,19 @@
 
 > [!IMPORTANT]
 >
-> **v0.15.0 Library Rescan Notice**: The recursive leaf-series scanner changes how nested folders are interpreted. After updating, a library rescan may be required, and existing reading progress or metadata links are not guaranteed to carry over for libraries whose series layout is rebuilt.
+> **v0.15.0 Library Rescan Notice**: The recursive leaf-series scanner changes how nested folders are interpreted. After updating, a library rescan is required, and existing reading progress or metadata links are not guaranteed to carry over for libraries whose series layout is rebuilt.
 >
 > **v0.14.0 Plugin Secret Key**
 > A `PLUGIN_SECRET_KEY` environment variable has been added to encrypt plugin credentials (API keys, tokens, etc.).
 >
 > If not set, a key is auto-generated and saved to `data/.plugin_secret_key`. The server will start without any configuration, but **without the original generated key file, stored plugin credentials cannot be decrypted**. For reliable operation, it is recommended to set `PLUGIN_SECRET_KEY` explicitly in your environment.
 >
+> **v0.10.x Docker update**: Docker base images were changed for CGO/native-library compatibility. Please re-pull the image and recreate the container when updating.
+>
 > **v0.9.0 Security Enhancement & Breaking Change**
 > For improved security, the container execution privilege has been changed from `root` to a standard user (`appuser`).
 >
 > **Note for existing users**: If thumbnails are broken or you encounter "Permission Denied" errors, please ensure you set the `PUID` and `PGID` environment variables to match your account IDs (check with the `id` command in your terminal).
->
-> **v0.10.x Docker update**: Docker base images were changed for CGO/native-library compatibility. Please re-pull the image and recreate the container when updating.
 
 ---
 
