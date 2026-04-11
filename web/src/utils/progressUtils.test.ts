@@ -192,6 +192,27 @@ describe("Progress Utilities", () => {
       expect(result.percent).toBe(100);
       expect(result.label).toBe("100% (2:00 / 2:00)");
     });
+
+    it("should prefer volume count label when display_unit is volume and page counts are missing", () => {
+      const series: Series = { ...mockSeries, display_unit: "volume", volume_count: 4, chapter_count: 12 };
+      const result = calculateProgressDisplay({ type: "series", series, t: mockT });
+      expect(result.percent).toBe(0);
+      expect(result.label).toBe("series.unit.volume");
+    });
+
+    it("should prefer chapter count label when display_unit is chapter and page counts are missing", () => {
+      const series: Series = { ...mockSeries, display_unit: "chapter", chapter_count: 12, volume_count: 4 };
+      const result = calculateProgressDisplay({ type: "series", series, t: mockT });
+      expect(result.percent).toBe(0);
+      expect(result.label).toBe("series.unit.chapter_count");
+    });
+
+    it("should keep legacy fallback order when display_unit is missing", () => {
+      const series = { ...mockSeries, chapter_count: 12, volume_count: 4 };
+      const result = calculateProgressDisplay({ type: "series", series, t: mockT });
+      expect(result.percent).toBe(0);
+      expect(result.label).toBe("series.unit.chapter_count");
+    });
   });
 
   describe("calculateProgressDisplay - Audiobook Volume", () => {

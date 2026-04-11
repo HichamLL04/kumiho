@@ -421,7 +421,11 @@ export function SeriesCard({
   if (!displaySubtitle) {
     if (type === "series") {
       const s = item as Series;
-      if (s.chapter_count && s.chapter_count > 0) {
+      if (s.display_unit === "volume" && s.volume_count && s.volume_count > 0) {
+        displaySubtitle = t("series.unit.volume", { count: s.volume_count });
+      } else if (s.display_unit === "chapter" && s.chapter_count && s.chapter_count > 0) {
+        displaySubtitle = t("series.unit.chapter_count", { count: s.chapter_count });
+      } else if (s.chapter_count && s.chapter_count > 0) {
         displaySubtitle = t("series.unit.chapter_count", { count: s.chapter_count });
       } else if (s.volume_count && s.volume_count > 0) {
         displaySubtitle = t("series.unit.volume", { count: s.volume_count });

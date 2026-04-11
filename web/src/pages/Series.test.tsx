@@ -22,7 +22,12 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
   }),
-  Trans: ({ children }: { children: ReactNode }) => children,
+  Trans: ({ i18nKey, count }: { children?: ReactNode; i18nKey?: string; count?: number }) => (
+    <span>
+      {i18nKey}
+      {typeof count === "number" ? ` ${count}` : ""}
+    </span>
+  ),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -41,6 +46,7 @@ vi.mock("../api/client", () => ({
   seriesAPI: {
     getChapters: vi.fn(),
     getVolumes: vi.fn(),
+    getCharacters: vi.fn(() => Promise.resolve({ data: { characters: [] } })),
   },
   volumeAPI: {
     findFirstChapterRecursively: vi.fn(),
@@ -219,5 +225,64 @@ describe("SeriesPage audiobook bootstrap guard", () => {
         }),
       });
     });
+  });
+});
+
+describe("SeriesPage count label", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const renderPage = () =>
+    render(
+      <MemoryRouter initialEntries={["/series/series-1"]}>
+        <Routes>
+          <Route
+            path="/series/:id"
+            element={<SeriesPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+  it("display_unit이 chapter이면 시리즈 요약에서 챕터 수를 우선 사용한다", async () => {
+    mocks.apiGetMock.mockImplementation((url: string) => {
+      if (url === "/series/series-1") {
+        return Promise.resolve({
+          data: {
+            id: "series-1",
+            library_id: "library-1",
+            title: "챕터 시리즈",
+            path: "/books/series",
+            library_type: "book",
+            display_unit: "chapter",
+            chapter_count: 12,
+            volume_count: 12,
+            created_at: "2026-03-21T00:00:00Z",
+            updated_at: "2026-03-21T00:00:00Z",
+          },
+        });
+      }
+      if (url === "/series/series-1/volumes?parent_id=root") {
+        return Promise.resolve({ data: { volumes: [] } });
+      }
+      if (url === "/series/series-1/progress") {
+        return Promise.resolve({ data: { progress: null, summary: null } });
+      }
+      if (url === "/libraries/library-1") {
+        return Promise.resolve({
+          data: {
+            id: "library-1",
+            name: "서재",
+          },
+        });
+      }
+      throw new Error(`Unhandled api.get(${url})`);
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("series.chapter_count 12")).toBeInTheDocument();
+    expect(screen.queryByText("series.count")).toBeNull();
   });
 });

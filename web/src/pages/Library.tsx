@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, Link } from "react-router-dom";
 import { Folder, RefreshCw } from "lucide-react";
@@ -13,9 +13,25 @@ import { SeriesCard } from "../components/SeriesCard";
 import { Toast } from "../components/common/Toast";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import type { Series } from "../types/series";
+import {
+  compareSeriesGroupKey,
+  compareSeriesByDisplayName,
+  getLibrarySeriesCountLabelKey,
+  getSeriesDisplayContext,
+  getSeriesDisplayName,
+  getSeriesGroupKey,
+} from "../utils/librarySeries";
 import styles from "./Library.module.css";
 
 const POLL_INTERVAL_MS = 3000;
+const HEADER_SCROLL_THRESHOLD_PX = 184; // 헤더 높이(172px)와 시각적 여유(12px)를 합친 활성화 기준선
+const INDEX_TOP_RETRY_DELAY_MS = 100;
+const INDEX_SCROLL_LOCK_MS = 600;
+const GRID_MIN_VISIBLE_TOP_PX = 92; // 카드 그리드 top이 이 값 이상일 때만 유효한 측정으로 본다.
+const INDEX_BOTTOM_VIEWPORT_GAP_PX = 24;
+const INDEX_MIN_HEIGHT_PX = 160;
+const INDEX_SCROLLBAR_VISIBILITY_MS = 900;
+const INDEX_SCROLLBAR_MIN_THUMB_PX = 28;
 
 export function LibraryPage() {
   const { id } = useParams<{ id: string }>();
@@ -32,13 +48,49 @@ export function LibraryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
+  const [indexPosition, setIndexPosition] = useState<{ top: number; right: number; maxHeight: number } | null>(null);
+  const [isIndexInteracting, setIsIndexInteracting] = useState(false);
+  const [hasIndexOverflow, setHasIndexOverflow] = useState(false);
+  const [indexScrollbarThumb, setIndexScrollbarThumb] = useState<{ top: number; height: number } | null>(null);
   const loadSequenceRef = useRef(0);
   const lastFetchedIdRef = useRef<string | null>(null);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const indexButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const scrollingToGroupRef = useRef<string | null>(null);
+  const scrollReleaseTimeoutRef = useRef<number | null>(null);
+  const indexInteractionTimeoutRef = useRef<number | null>(null);
+  const syncingIndexScrollRef = useRef(false);
+  const syncingIndexScrollFrameRef = useRef<number | null>(null);
+  const indexScrollbarFrameRef = useRef<number | null>(null);
+  const seriesGridRef = useRef<HTMLDivElement | null>(null);
+  const seriesIndexRef = useRef<HTMLElement | null>(null);
+  const seriesIndexScrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   const user = useAuthStore((state) => state.user);
 
   // 사이드바 상태
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const sortedSeriesList = useMemo(() => {
+    return [...seriesList].sort(compareSeriesByDisplayName);
+  }, [seriesList]);
+
+  const groupedSeriesList = useMemo(() => {
+    const groupsByKey = new Map<string, Series[]>();
+    for (const series of sortedSeriesList) {
+      const groupKey = getSeriesGroupKey(getSeriesDisplayName(series));
+      const existingItems = groupsByKey.get(groupKey);
+      if (existingItems) {
+        existingItems.push(series);
+      } else {
+        groupsByKey.set(groupKey, [series]);
+      }
+    }
+    return Array.from(groupsByKey.entries())
+      .sort(([a], [b]) => compareSeriesGroupKey(a, b))
+      .map(([key, items]) => ({ key, items }));
+  }, [sortedSeriesList]);
 
   const loadData = useCallback(
     async (isInitial = false) => {
@@ -143,6 +195,291 @@ export function LibraryPage() {
     }
   };
 
+  const showIndexScrollbar = useCallback(() => {
+    if (!hasIndexOverflow) {
+      return;
+    }
+
+    setIsIndexInteracting(true);
+    if (indexInteractionTimeoutRef.current !== null) {
+      window.clearTimeout(indexInteractionTimeoutRef.current);
+    }
+    indexInteractionTimeoutRef.current = window.setTimeout(() => {
+      setIsIndexInteracting(false);
+      indexInteractionTimeoutRef.current = null;
+    }, INDEX_SCROLLBAR_VISIBILITY_MS);
+  }, [hasIndexOverflow]);
+
+  const updateIndexScrollbarThumb = useCallback(() => {
+    const scrollArea = seriesIndexScrollAreaRef.current;
+    if (!scrollArea) {
+      setIndexScrollbarThumb(null);
+      return;
+    }
+
+    const { scrollTop, scrollHeight, clientHeight } = scrollArea;
+    const nextHasOverflow = scrollHeight > clientHeight + 1;
+    setHasIndexOverflow((current) => (current === nextHasOverflow ? current : nextHasOverflow));
+
+    if (!nextHasOverflow) {
+      setIndexScrollbarThumb(null);
+      setIsIndexInteracting(false);
+      return;
+    }
+
+    const thumbHeight = Math.max(INDEX_SCROLLBAR_MIN_THUMB_PX, (clientHeight / scrollHeight) * clientHeight);
+    const maxThumbTop = Math.max(0, clientHeight - thumbHeight);
+    const maxScrollTop = Math.max(1, scrollHeight - clientHeight);
+    const thumbTop = (scrollTop / maxScrollTop) * maxThumbTop;
+
+    setIndexScrollbarThumb((current) => {
+      if (
+        current &&
+        Math.abs(current.top - thumbTop) < 0.5 &&
+        Math.abs(current.height - thumbHeight) < 0.5
+      ) {
+        return current;
+      }
+
+      return { top: thumbTop, height: thumbHeight };
+    });
+  }, []);
+
+  const scheduleIndexScrollbarThumbUpdate = useCallback(() => {
+    if (indexScrollbarFrameRef.current !== null) {
+      return;
+    }
+
+    indexScrollbarFrameRef.current = window.requestAnimationFrame(() => {
+      indexScrollbarFrameRef.current = null;
+      updateIndexScrollbarThumb();
+    });
+  }, [updateIndexScrollbarThumb]);
+
+  const scrollToGroup = (groupKey: string) => {
+    setActiveGroupKey(groupKey);
+    scrollingToGroupRef.current = groupKey;
+    showIndexScrollbar();
+    if (scrollReleaseTimeoutRef.current !== null) {
+      window.clearTimeout(scrollReleaseTimeoutRef.current);
+    }
+    const target = sectionRefs.current[groupKey];
+    if (target) {
+      const prefersReducedMotion =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
+      scrollReleaseTimeoutRef.current = window.setTimeout(() => {
+        scrollingToGroupRef.current = null;
+        scrollReleaseTimeoutRef.current = null;
+      }, prefersReducedMotion ? 0 : INDEX_SCROLL_LOCK_MS);
+    } else {
+      scrollingToGroupRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (groupedSeriesList.length === 0) {
+      setActiveGroupKey(null);
+      return;
+    }
+
+    const updateActiveGroup = () => {
+      if (scrollingToGroupRef.current !== null) {
+        return;
+      }
+
+      let nextActiveKey = groupedSeriesList[0]?.key ?? null;
+
+      for (const group of groupedSeriesList) {
+        const node = sectionRefs.current[group.key];
+        if (!node) continue;
+
+        if (node.getBoundingClientRect().top <= HEADER_SCROLL_THRESHOLD_PX) {
+          nextActiveKey = group.key;
+        } else {
+          break;
+        }
+      }
+
+      setActiveGroupKey((current) => (current === nextActiveKey ? current : nextActiveKey));
+    };
+
+    let frameId: number | null = null;
+    const scheduleActiveGroupUpdate = () => {
+      if (frameId !== null) return;
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateActiveGroup();
+      });
+    };
+
+    updateActiveGroup();
+    window.addEventListener("scroll", scheduleActiveGroupUpdate, { passive: true });
+    window.addEventListener("resize", scheduleActiveGroupUpdate);
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      if (scrollReleaseTimeoutRef.current !== null) {
+        window.clearTimeout(scrollReleaseTimeoutRef.current);
+        scrollReleaseTimeoutRef.current = null;
+      }
+      if (indexInteractionTimeoutRef.current !== null) {
+        window.clearTimeout(indexInteractionTimeoutRef.current);
+        indexInteractionTimeoutRef.current = null;
+        setIsIndexInteracting(false);
+      }
+      window.removeEventListener("scroll", scheduleActiveGroupUpdate);
+      window.removeEventListener("resize", scheduleActiveGroupUpdate);
+    };
+  }, [groupedSeriesList]);
+
+  useEffect(() => {
+    if (!activeGroupKey) return;
+
+    const scrollArea = seriesIndexScrollAreaRef.current;
+    const activeButton = indexButtonRefs.current[activeGroupKey];
+    if (!scrollArea || !activeButton) return;
+
+    syncingIndexScrollRef.current = true;
+    const scrollAreaRect = scrollArea.getBoundingClientRect();
+    const activeButtonRect = activeButton.getBoundingClientRect();
+    const buttonCenterInScrollArea =
+      activeButtonRect.top - scrollAreaRect.top + scrollArea.scrollTop + activeButtonRect.height / 2;
+    const targetScrollTop =
+      buttonCenterInScrollArea - scrollArea.clientHeight / 2;
+    scrollArea.scrollTo({
+      top: Math.max(0, targetScrollTop),
+      behavior: "auto",
+    });
+    if (syncingIndexScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(syncingIndexScrollFrameRef.current);
+    }
+    syncingIndexScrollFrameRef.current = window.requestAnimationFrame(() => {
+      updateIndexScrollbarThumb();
+      syncingIndexScrollRef.current = false;
+      syncingIndexScrollFrameRef.current = null;
+    });
+
+    return () => {
+      if (syncingIndexScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(syncingIndexScrollFrameRef.current);
+        syncingIndexScrollFrameRef.current = null;
+      }
+      syncingIndexScrollRef.current = false;
+    };
+  }, [activeGroupKey, updateIndexScrollbarThumb]);
+
+  useEffect(() => {
+    const scrollArea = seriesIndexScrollAreaRef.current;
+    if (!scrollArea) {
+      setHasIndexOverflow(false);
+      setIndexScrollbarThumb(null);
+      return;
+    }
+
+    updateIndexScrollbarThumb();
+    let resizeObserver: ResizeObserver | null = null;
+    const handleWindowResize = () => {
+      scheduleIndexScrollbarThumbUpdate();
+    };
+
+    if (typeof ResizeObserver === "function") {
+      resizeObserver = new ResizeObserver(scheduleIndexScrollbarThumbUpdate);
+      resizeObserver.observe(scrollArea);
+    } else {
+      window.addEventListener("resize", handleWindowResize);
+    }
+
+    return () => {
+      resizeObserver?.disconnect();
+      if (resizeObserver === null) {
+        window.removeEventListener("resize", handleWindowResize);
+      }
+      if (indexScrollbarFrameRef.current !== null) {
+        window.cancelAnimationFrame(indexScrollbarFrameRef.current);
+        indexScrollbarFrameRef.current = null;
+      }
+      if (syncingIndexScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(syncingIndexScrollFrameRef.current);
+        syncingIndexScrollFrameRef.current = null;
+        syncingIndexScrollRef.current = false;
+      }
+    };
+  }, [groupedSeriesList, indexPosition, scheduleIndexScrollbarThumbUpdate, updateIndexScrollbarThumb]);
+
+  useEffect(() => {
+    if (groupedSeriesList.length === 0) {
+      setIndexPosition(null);
+      return;
+    }
+
+    const updateIndexPosition = () => {
+      const grid = seriesGridRef.current;
+      const index = seriesIndexRef.current;
+      if (!grid || !index) return;
+
+      const gridRect = grid.getBoundingClientRect();
+      const indexRect = index.getBoundingClientRect();
+      const viewportRight = window.innerWidth;
+      const gutterWidth = Math.max(0, viewportRight - gridRect.right);
+      const centeredRight = Math.max(8, gutterWidth / 2 - indexRect.width / 2);
+      const nextTop = gridRect.top;
+      const minValidTop = GRID_MIN_VISIBLE_TOP_PX;
+      const maxValidTop = window.innerHeight * 0.7; // 뷰포트 하단에 너무 가까우면 초기 측정이 흔들린 것으로 간주한다.
+      const hasValidTop = nextTop > minValidTop && nextTop < maxValidTop;
+
+      setIndexPosition((current) => {
+        const resolvedTop = hasValidTop ? nextTop : current?.top;
+        if (resolvedTop === undefined) {
+          return current ?? null;
+        }
+
+        const nextMaxHeight = Math.max(
+          INDEX_MIN_HEIGHT_PX,
+          window.innerHeight - resolvedTop - INDEX_BOTTOM_VIEWPORT_GAP_PX,
+        );
+
+        if (
+          current &&
+          Math.abs(current.right - centeredRight) < 0.5 &&
+          Math.abs(current.top - resolvedTop) < 0.5 &&
+          Math.abs(current.maxHeight - nextMaxHeight) < 0.5
+        ) {
+          return current;
+        }
+
+        return { top: resolvedTop, right: centeredRight, maxHeight: nextMaxHeight };
+      });
+    };
+
+    let frameId: number | null = null;
+    const scheduleIndexPositionUpdate = () => {
+      if (frameId !== null) return;
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateIndexPosition();
+      });
+    };
+
+    scheduleIndexPositionUpdate();
+    const retryId = window.setTimeout(scheduleIndexPositionUpdate, INDEX_TOP_RETRY_DELAY_MS);
+    window.addEventListener("resize", scheduleIndexPositionUpdate);
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.clearTimeout(retryId);
+      window.removeEventListener("resize", scheduleIndexPositionUpdate);
+    };
+  }, [groupedSeriesList, sidebarOpen]);
+
   if (isLoading) {
     return (
       <div className={styles.libraryContainer}>
@@ -229,12 +566,12 @@ export function LibraryPage() {
           <div className={styles.seriesCount}>
             <Trans
               i18nKey="home.library.total_series"
-              count={seriesList.length}
+              count={sortedSeriesList.length}
               components={{ strong: <strong /> }}
             />
           </div>
 
-          {seriesList.length === 0 ? (
+          {sortedSeriesList.length === 0 ? (
             <div className={styles.emptyState}>
               <p>{t("home.library.empty_series")}</p>
               {library.type !== "SYSTEM" && user?.role === "MASTER" && (
@@ -247,17 +584,103 @@ export function LibraryPage() {
               )}
             </div>
           ) : (
-            <div className={styles.seriesGrid}>
-              {seriesList.map((series) => (
-                <SeriesCard
-                  key={series.id}
-                  item={series}
-                  type="series"
-                  progressStyle="overlay"
-                  showExtensionBadge
-                  onStatusChange={loadData}
-                />
-              ))}
+            <div className={styles.seriesLayout}>
+              <nav
+                ref={seriesIndexRef}
+                className={styles.seriesIndex}
+                aria-label={t("home.library.series_index_nav", { count: sortedSeriesList.length })}
+                style={
+                  indexPosition
+                    ? {
+                        top: `${indexPosition.top}px`,
+                        right: `${indexPosition.right}px`,
+                        maxHeight: `${indexPosition.maxHeight}px`,
+                      }
+                    : undefined
+                }
+              >
+                <div
+                  ref={seriesIndexScrollAreaRef}
+                  className={styles.seriesIndexScrollArea}
+                  onScroll={() => {
+                    if (syncingIndexScrollRef.current) {
+                      return;
+                    }
+
+                    scheduleIndexScrollbarThumbUpdate();
+                    showIndexScrollbar();
+                  }}
+                  onWheel={showIndexScrollbar}
+                  onTouchStart={showIndexScrollbar}
+                  onPointerDown={showIndexScrollbar}
+                  onFocus={showIndexScrollbar}
+                >
+                  {groupedSeriesList.map((group) => (
+                    <button
+                      ref={(node) => {
+                        indexButtonRefs.current[group.key] = node;
+                      }}
+                      key={group.key}
+                      type="button"
+                      className={`${styles.seriesIndexButton} ${activeGroupKey === group.key ? styles.seriesIndexButtonActive : ""}`}
+                      onClick={() => scrollToGroup(group.key)}
+                      aria-label={t("home.library.series_index_jump", { key: group.key })}
+                      aria-current={activeGroupKey === group.key ? "location" : undefined}
+                    >
+                      {group.key}
+                    </button>
+                  ))}
+                </div>
+                {hasIndexOverflow && indexScrollbarThumb && (
+                  <div
+                    className={`${styles.seriesIndexScrollbar} ${isIndexInteracting ? styles.seriesIndexScrollbarVisible : ""}`}
+                    aria-hidden="true"
+                  >
+                    <div
+                      className={styles.seriesIndexScrollbarThumb}
+                      style={{
+                        height: `${indexScrollbarThumb.height}px`,
+                        transform: `translateY(${indexScrollbarThumb.top}px)`,
+                      }}
+                    />
+                  </div>
+                )}
+              </nav>
+
+              <div
+                ref={seriesGridRef}
+                className={styles.seriesGrid}
+              >
+                {groupedSeriesList.map((group) => (
+                  <Fragment key={group.key}>
+                    {group.items.map((series, index) => {
+                      const displayContext = getSeriesDisplayContext(series.path, library.paths);
+                      const countLabel = getLibrarySeriesCountLabelKey(series);
+                      const customSubtitle = displayContext || (countLabel ? t(countLabel.key, { count: countLabel.count }) : undefined);
+                      return (
+                        <div
+                          key={series.id}
+                          ref={(node) => {
+                            if (index === 0) {
+                              sectionRefs.current[group.key] = node;
+                            }
+                          }}
+                          className={styles.seriesCardAnchor}
+                        >
+                          <SeriesCard
+                            item={series}
+                            type="series"
+                            customSubtitle={customSubtitle}
+                            progressStyle="overlay"
+                            showExtensionBadge
+                            onStatusChange={loadData}
+                          />
+                        </div>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </div>
             </div>
           )}
         </main>

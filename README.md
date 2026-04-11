@@ -23,19 +23,19 @@
 
 > [!IMPORTANT]
 >
+> **v0.15.0 Library Rescan Notice**: The recursive leaf-series scanner changes how nested folders are interpreted. After updating, a library rescan is required, and existing reading progress or metadata links are not guaranteed to carry over for libraries whose series layout is rebuilt.
+>
 > **v0.14.0 Plugin Secret Key**
 > A `PLUGIN_SECRET_KEY` environment variable has been added to encrypt plugin credentials (API keys, tokens, etc.).
 >
 > If not set, a key is auto-generated and saved to `data/.plugin_secret_key`. The server will start without any configuration, but **without the original generated key file, stored plugin credentials cannot be decrypted**. For reliable operation, it is recommended to set `PLUGIN_SECRET_KEY` explicitly in your environment.
 >
+> **v0.10.x Docker update**: Docker base images were changed for CGO/native-library compatibility. Please re-pull the image and recreate the container when updating.
+>
 > **v0.9.0 Security Enhancement & Breaking Change**
 > For improved security, the container execution privilege has been changed from `root` to a standard user (`appuser`).
 >
 > **Note for existing users**: If thumbnails are broken or you encounter "Permission Denied" errors, please ensure you set the `PUID` and `PGID` environment variables to match your account IDs (check with the `id` command in your terminal).
->
-> **v0.10.x Docker update**: Docker base images were changed for CGO/native-library compatibility. Please re-pull the image and recreate the container when updating.
->
-> **v0.11.1 Library Rescan**: Due to metadata structural changes, a full library rescan is required after updating to v0.11.1.
 
 ---
 
@@ -50,7 +50,7 @@ It was originally developed by a developer for personal convenience, after feeli
 | Feature                      | Description                                                                                                                                   |
 | :--------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
 | **🚀 Blazing Fast**          | Built with Golang, Kumiho runs as a native binary without JVM overhead, offering incredible scan speeds.                                      |
-| **📂 File-System Mirroring** | It mirrors your physical folder structure directly. No complex metadata matching required—what you see in your OS is what you get in the app. |
+| **📂 Recursive Leaf Discovery** | It recursively scans nested folders and collects actual readable leaf series without requiring complex metadata matching. |
 | **⚡ Lightweight**           | Optimized for low-resource environments. It runs smoothly with minimal memory footprint.                                                      |
 | **📱 Responsive Viewer**     | Provides a seamless streaming experience on PC, Tablet, and Mobile devices. Supports 'Webtoon' scrolling mode.                                |
 | **🎧 Audiobook Support**     | Supports audiobook libraries with chapter list, resume playback, progress tracking, bookmarks, and sleep timer.                               |
@@ -106,7 +106,7 @@ It was originally developed by a developer for personal convenience, after feeli
 
 #### 3) Nested Folders (Infinite Hierarchy)
 
-Kumiho supports **infinite folder hierarchy**. You can organize your series with any level of subfolders.
+Kumiho supports **infinite folder hierarchy** through recursive leaf discovery. You can organize your files with any level of subfolders, and Kumiho will scan down to the actual readable leaf series.
 
 ```text
 /books
@@ -119,6 +119,8 @@ Kumiho supports **infinite folder hierarchy**. You can organize your series with
             │   └── Chapter 02.pdf
             └── 002.epub
 ```
+
+In the example above, Kumiho uses the nested folders for discovery, then adds the resulting leaf series to the library list instead of rendering the entire folder tree as a separate browse UI.
 
 ### 🎵 BGM Auto-Play Rule
 

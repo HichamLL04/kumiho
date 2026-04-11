@@ -170,4 +170,26 @@ describe("SeriesCard audiobook bootstrap guard", () => {
     expect(container.querySelector('img[aria-hidden="true"]')).toBeNull();
     expect(images[0]).toHaveAttribute("alt", "볼륨 2");
   });
+
+  it("시리즈 display_unit이 volume이면 볼륨 개수를 우선 표시한다", () => {
+    render(
+      <SeriesCard
+        type="series"
+        item={{
+          id: "series-volume-unit",
+          library_id: "library-1",
+          title: "볼륨형 시리즈",
+          display_unit: "volume",
+          volume_count: 13,
+          chapter_count: 13,
+          path: "/books/series",
+          created_at: "2026-03-21T00:00:00Z",
+          updated_at: "2026-03-21T00:00:00Z",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("series.unit.volume")).toBeInTheDocument();
+    expect(screen.queryByText("series.unit.chapter_count")).toBeNull();
+  });
 });
