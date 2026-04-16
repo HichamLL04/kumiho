@@ -888,6 +888,18 @@ func (s *Scanner) hasDirectPageLikeSeriesContent(entries []fs.DirEntry, excludeP
 	return hasDirectMedia
 }
 
+// ResetStaleScanStates 서버 시작 시 이전 실행에서 잔류한 SCANNING 상태를 IDLE로 초기화
+func (s *Scanner) ResetStaleScanStates() error {
+	n, err := s.libraryRepo.ResetStaleScanStates(nil)
+	if err != nil {
+		return fmt.Errorf("failed to reset stale scan states: %w", err)
+	}
+	if n > 0 {
+		log.Printf("[SCANNER] %d stale SCANNING state(s) have been reset to IDLE.", n)
+	}
+	return nil
+}
+
 // CancelScan 진행 중인 스캔 취소. 취소가 수행되었으면 true, 진행 중인 스캔이 없었으면 false 반환.
 func (s *Scanner) CancelScan(libraryID string) bool {
 	if cancel, ok := s.scanCancelFuncs.Load(libraryID); ok {

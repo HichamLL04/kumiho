@@ -74,6 +74,11 @@ func main() {
 	defer fileScanner.StopScheduler()
 	defer fileScanner.StopWatcher()
 
+	// 서버 재시작으로 잔류한 SCANNING 상태 초기화
+	if err := fileScanner.ResetStaleScanStates(); err != nil {
+		log.Printf("Failed to reset stale scan states: %v", err)
+	}
+
 	// 저장된 스캔 설정 로드 및 적용
 	if setting, err := settingRepo.GetByKey(nil, "scan_interval"); err == nil && setting != nil {
 		var interval int
