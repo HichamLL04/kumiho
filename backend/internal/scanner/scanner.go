@@ -890,10 +890,13 @@ func (s *Scanner) hasDirectPageLikeSeriesContent(entries []fs.DirEntry, excludeP
 
 // ResetStaleScanStates 서버 시작 시 이전 실행에서 잔류한 SCANNING 상태를 IDLE로 초기화
 func (s *Scanner) ResetStaleScanStates() error {
-	if err := s.libraryRepo.ResetStaleScanStates(); err != nil {
+	n, err := s.libraryRepo.ResetStaleScanStates(nil)
+	if err != nil {
 		return fmt.Errorf("failed to reset stale scan states: %w", err)
 	}
-	log.Printf("[SCANNER] Stale SCANNING states have been reset to IDLE.")
+	if n > 0 {
+		log.Printf("[SCANNER] %d stale SCANNING state(s) have been reset to IDLE.", n)
+	}
 	return nil
 }
 
