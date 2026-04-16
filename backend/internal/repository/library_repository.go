@@ -383,6 +383,17 @@ func (r *LibraryRepository) UpdateScanStatus(db database.Queryer, id string, sta
 	return err
 }
 
+// ResetStaleScanStates 서버 재시작 시 잔류하는 SCANNING 상태를 IDLE로 초기화
+func (r *LibraryRepository) ResetStaleScanStates() error {
+	db := database.GetQueryer(nil)
+	now := time.Now()
+	_, err := db.Exec(
+		`UPDATE libraries SET scan_status = 'IDLE', last_scan_result = '서버 재시작으로 스캔이 중단되었습니다.', updated_at = ? WHERE scan_status = 'SCANNING'`,
+		now,
+	)
+	return err
+}
+
 // UpdateScanProgress 스캔 진행률 업데이트 (현재 처리 중인 항목 정보)
 func (r *LibraryRepository) UpdateScanProgress(db database.Queryer, id string, currentItem string, progress int) error {
 	db = database.GetQueryer(db)
