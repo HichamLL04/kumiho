@@ -394,7 +394,10 @@ func (r *LibraryRepository) ResetStaleScanStates(db database.Queryer) (int64, er
 	if err != nil {
 		return 0, err
 	}
-	n, _ := result.RowsAffected()
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
 	return n, nil
 }
 
