@@ -41,8 +41,9 @@ const toPageRatio = (page: number, total: number): number => {
 };
 
 const toPercentPage = (ratio: number, totalPages: number): number => {
+  if (!Number.isFinite(totalPages) || totalPages <= 1) return 1;
   const clampedRatio = Math.max(0, Math.min(1, ratio));
-  return Math.max(1, Math.min(totalPages, Math.round(clampedRatio * totalPages)));
+  return Math.max(1, Math.min(totalPages, Math.round(clampedRatio * (totalPages - 1)) + 1));
 };
 
 const getHeaderValue = (headers: unknown, key: string): string | null => {
