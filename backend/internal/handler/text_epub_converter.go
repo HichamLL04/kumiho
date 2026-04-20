@@ -245,7 +245,7 @@ func writeStoredZipFile(zipWriter *zip.Writer, name string, data []byte) error {
 		Name:   name,
 		Method: zip.Store,
 	}
-	header.SetModTime(time.Unix(0, 0))
+	header.Modified = time.Unix(0, 0)
 	writer, err := zipWriter.CreateHeader(header)
 	if err != nil {
 		return err
@@ -259,7 +259,7 @@ func writeDeflatedZipFile(zipWriter *zip.Writer, name string, data []byte) error
 		Name:   name,
 		Method: zip.Deflate,
 	}
-	header.SetModTime(time.Unix(0, 0))
+	header.Modified = time.Unix(0, 0)
 	writer, err := zipWriter.CreateHeader(header)
 	if err != nil {
 		return err
