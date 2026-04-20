@@ -261,6 +261,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const resizeFrameRef = useRef<number | null>(null);
     const lastContainerSizeRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
     const hasStableLocationRef = useRef(false);
+    // 레이아웃 전환(spread/settings 변경) 직전에 캡처한 CFI — reflowRendition에서 currentLocation() 대신 사용
+    const layoutTransitionAnchorRef = useRef<string | null>(null);
+    // flow 변경으로 rendition 재생성 시 보존할 CFI — 새 rendition 초기화 시 initialCFI보다 우선 사용
+    const flowTransitionAnchorRef = useRef<{ cfi: string; chapterId: string } | null>(null);
 
     useEffect(() => {
       onViewerClickRef.current = onViewerClick;
@@ -310,11 +314,19 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         display: (target?: string) => Promise<unknown>;
       };
 
+      // 레이아웃 전환(spread/settings 변경) 직전에 캡처한 anchor가 있으면 우선 사용.
+      // 새 레이아웃 기준으로 오염된 currentLocation()의 CFI를 사용하면 보던 위치에서 벗어날 수 있어,
+      // applySettings 호출 전에 미리 캡처한 CFI를 여기서 소비한다.
       let currentCfi: string | undefined;
-      try {
-        currentCfi = anyRendition.currentLocation?.()?.start?.cfi;
-      } catch {
-        return;
+      if (layoutTransitionAnchorRef.current) {
+        currentCfi = layoutTransitionAnchorRef.current;
+        layoutTransitionAnchorRef.current = null;
+      } else {
+        try {
+          currentCfi = anyRendition.currentLocation?.()?.start?.cfi;
+        } catch {
+          return;
+        }
       }
 
       try {
@@ -1077,7 +1089,16 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
               refreshTOCWithPreciseRatios();
 
               const expectedRatio = typeof initialProgressRatio === "number" ? initialProgressRatio : 0;
-              let targetCFI: string | undefined = initialCFI || undefined;
+
+              // flow 변경으로 rendition을 재생성한 경우, 모드 전환 직전 위치를 우선 복원한다.
+              // chapterId가 일치하는 경우에만 사용하여, 챕터 이동 시 anchor가 오염되는 것을 방지한다.
+              const flowAnchor =
+                flowTransitionAnchorRef.current?.chapterId === chapterId
+                  ? flowTransitionAnchorRef.current.cfi
+                  : null;
+              flowTransitionAnchorRef.current = null;
+
+              let targetCFI: string | undefined = flowAnchor || initialCFI || undefined;
 
               // CFI가 없고 진행률만 있는 경우, locations 정보를 이용해 즉시 targetCFI 계산
               if (!targetCFI && expectedRatio > 0.01) {
@@ -1101,7 +1122,18 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           // 캐시 미스 → 기본 디스플레이 시도 + 백그라운드 생성
           console.log("[EpubChapterViewer] No cached locations, initial display then background generate");
           const expectedRatio = typeof initialProgressRatio === "number" ? initialProgressRatio : 0;
-          const initialDisplayTarget = initialOpenMode === "last" && lastSpineHref ? lastSpineHref : (initialCFI ?? undefined);
+
+          // flow 변경으로 rendition을 재생성한 경우, 모드 전환 직전 위치를 우선 복원한다.
+          const flowAnchor =
+            flowTransitionAnchorRef.current?.chapterId === chapterId
+              ? flowTransitionAnchorRef.current.cfi
+              : null;
+          flowTransitionAnchorRef.current = null;
+
+          const initialDisplayTarget =
+            initialOpenMode === "last" && lastSpineHref
+              ? lastSpineHref
+              : (flowAnchor ?? initialCFI ?? undefined);
 
           void displayWithFallback(initialDisplayTarget, expectedRatio).then(() => {
             if (isDisposed) return;
@@ -1130,7 +1162,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                 const currentLoc = rendition.currentLocation() as unknown as EpubjsLocation;
                 const currentPct = currentLoc?.start?.percentage ?? 0;
                 const expectedRatio = typeof initialProgressRatio === "number" ? initialProgressRatio : 0;
-                const shouldCorrectFromProgress = initialOpenMode !== "last" && !initialCFI && expectedRatio > 0.01;
+                // flowAnchor 또는 initialCFI로 이미 위치를 복원한 경우 보정하지 않는다
+                const shouldCorrectFromProgress =
+                  initialOpenMode !== "last" && !initialCFI && !flowAnchor && expectedRatio > 0.01;
 
                 if (currentPct < 0.01 && shouldCorrectFromProgress) {
                   try {
@@ -1175,6 +1209,21 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           }
         });
         contentDisposers.clear();
+
+        // flow 변경으로 rendition을 재생성하기 직전, 현재 텍스트 위치를 보존한다.
+        // 새 rendition이 initialCFI 대신 이 anchor를 우선 사용하여 모드 전환 위치를 복원한다.
+        // chapterId를 함께 저장하여, 다른 챕터로 이동할 때는 anchor가 무시되도록 한다.
+        if (hasStableLocationRef.current) {
+          try {
+            const loc = rendition.currentLocation() as unknown as EpubjsLocation;
+            if (loc?.start?.cfi) {
+              flowTransitionAnchorRef.current = { cfi: loc.start.cfi, chapterId };
+            }
+          } catch {
+            // ignore — anchor 없이 진행
+          }
+        }
+
         try {
           book.destroy();
         } catch (err) {
@@ -1241,6 +1290,24 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
     useEffect(() => {
       if (!renditionRef.current) return;
+
+      // applySettings(spread 변경 등)가 epub.js 내부 레이아웃을 재계산하기 전에
+      // 현재 텍스트 위치를 CFI로 캡처해 둔다.
+      // reflowRendition이 이 anchor를 소비하여 새 레이아웃 기준으로 오염된
+      // currentLocation() 대신 올바른 위치로 복원한다.
+      if (hasStableLocationRef.current) {
+        try {
+          const loc = (
+            renditionRef.current as unknown as { currentLocation?: () => EpubjsLocation }
+          ).currentLocation?.();
+          if (loc?.start?.cfi) {
+            layoutTransitionAnchorRef.current = loc.start.cfi;
+          }
+        } catch {
+          // ignore — anchor 없이 진행 (currentLocation() 사용)
+        }
+      }
+
       const effectiveLayout = resolveEffectiveLayout(settings.renderMode, detectedLayoutRef.current);
       effectiveLayoutRef.current = effectiveLayout;
       onRenderLayoutChangeRef.current?.(effectiveLayout);
