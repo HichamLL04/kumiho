@@ -12,6 +12,7 @@ import {
 } from "../../utils/layoutMode";
 import { buildEpubInjectedStyle, getEpubThemeStyle } from "./styleBuilder";
 import styles from "./EpubChapterViewer.module.css";
+import { getSafeLocationFromCfi, isLikelyEpubCfi } from "./cfiGuards";
 import { applyOldIOSSafariPointerEventFallback } from "./iosTouchFallback";
 import { applyEpubLineHeightScale } from "./lineHeightScale";
 
@@ -163,18 +164,6 @@ const getSafeLocationLength = (locations: unknown): number => {
     return 0;
   }
 };
-const getSafeLocationFromCfi = (locations: unknown, cfi: string): number | null => {
-  const locationSet = locations as Partial<EpubjsLocationsExtended> | null | undefined;
-  if (typeof locationSet?.locationFromCfi !== "function") return null;
-
-  try {
-    const position = locationSet.locationFromCfi(cfi);
-    return typeof position === "number" && Number.isFinite(position) && position >= 0 ? position : null;
-  } catch (err) {
-    console.warn("[EpubChapterViewer] locationFromCfi failed:", err);
-    return null;
-  }
-};
 const getSafeCfiFromPercentage = (locations: unknown, ratio: number): string | undefined => {
   const locationSet = locations as Partial<EpubjsLocationsExtended> | null | undefined;
   if (typeof locationSet?.cfiFromPercentage !== "function") return undefined;
@@ -244,6 +233,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const bookRef = useRef<Book | null>(null);
     const renditionRef = useRef<Rendition | null>(null);
     const locationsReadyRef = useRef(false);
+    const invalidPreciseHrefSetRef = useRef<Set<string>>(new Set());
     const generatedTotalRef = useRef(0);
 
     // 최신 콜백을 ref로 유지 (stale closure 방지)
@@ -530,12 +520,14 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       if (!containerRef.current) return;
       lastAppliedSpreadRef.current = null; // 새 rendition 생성 시 초기화
       const contentDisposers = contentDisposersRef.current;
+      const invalidPreciseHrefSet = invalidPreciseHrefSetRef.current;
 
       let isDisposed = false;
       const book = Epub(epubUrl, { openAs: "epub" });
 
       bookRef.current = book;
       locationsReadyRef.current = false;
+      invalidPreciseHrefSet.clear();
       allowContentHeuristicRef.current = true;
       autoLayoutLockedRef.current = false;
       hasStableLocationRef.current = false;
@@ -1019,19 +1011,26 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                 let preciseRatio = item.progressRatio;
                 try {
                   // href의 앵커까지 반영한 CFI를 계산해 같은 파일 내 여러 TOC 항목이 합쳐지는 문제를 줄임
-                  resolvedCfi = await resolveCfiFromHref(item.href);
+                  if (!invalidPreciseHrefSet.has(item.href)) {
+                    resolvedCfi = await resolveCfiFromHref(item.href);
+                  }
 
-                  if (resolvedCfi) {
+                  if (resolvedCfi && isLikelyEpubCfi(resolvedCfi)) {
                     const locations = book.locations as unknown as EpubjsLocationsExtended;
                     const pos = getSafeLocationFromCfi(locations, resolvedCfi);
                     const total = getSafeLocationLength(locations);
                     if (pos !== null && total > 0) {
                       preciseRatio = toLocationRatio(pos, total);
                       validNavigationCfi = resolvedCfi;
+                    } else {
+                      invalidPreciseHrefSet.add(item.href);
                     }
+                  } else if (resolvedCfi) {
+                    invalidPreciseHrefSet.add(item.href);
                   }
                 } catch {
                   // 실패 시 기존 비율 유지
+                  invalidPreciseHrefSet.add(item.href);
                 }
 
                 result.push({
@@ -1184,6 +1183,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         bookRef.current = null;
         renditionRef.current = null;
         locationsReadyRef.current = false;
+        invalidPreciseHrefSet.clear();
         generatedTotalRef.current = 0;
         hasStableLocationRef.current = false;
       };

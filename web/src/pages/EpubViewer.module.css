@@ -123,6 +123,12 @@
   }
 }
 
+@media (max-width: 640px) {
+  .main {
+    padding: 0;
+  }
+}
+
 /* 초고해상도 대응 (선택 사항: 기존 유지 시) */
 @media (min-width: 2560px) {
   .main {

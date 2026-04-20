@@ -111,6 +111,19 @@ export function buildEpubInjectedStyle(settings: EpubViewerSettings, layout: Epu
       padding-right: 8px !important;
     }
 
+    @media (max-width: 640px) {
+      body {
+        width: 100% !important;
+        max-width: 960px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        padding-left: 32px !important;
+        padding-right: 32px !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
+      }
+    }
+
     ${scrolledDocumentRule}
 
     ${EPUB_TEXT_STYLE_SELECTOR} {

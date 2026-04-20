@@ -48,6 +48,19 @@ export function EpubSettingsPanel({
   const lineHeightValueLabel = isOriginalLineHeight
     ? t("epub_viewer.settings.line_height.original", { defaultValue: "원본" })
     : `${settings.lineHeight.toFixed(2)}x`;
+  const currentPageMode = settings.flow === "scrolled" ? "scrolled" : settings.spread;
+
+  const handlePageModeChange = (mode: "none" | "auto" | "scrolled") => {
+    if (mode === "scrolled") {
+      onFlowChange("scrolled");
+      return;
+    }
+
+    if (settings.flow !== "paginated") {
+      onFlowChange("paginated");
+    }
+    onSpreadChange(mode);
+  };
 
   return (
     <div className={styles.panel}>
@@ -88,59 +101,24 @@ export function EpubSettingsPanel({
           </select>
         </div>
 
-        {/* 레이아웃 */}
-        <div className={styles.section}>
-          <label
-            className={styles.label}
-            id="flow-label"
-          >
-            {t("epub_viewer.settings.flow.label", { defaultValue: "레이아웃" })}
-          </label>
-          <div
-            className={styles.buttonGroup}
-            aria-labelledby="flow-label"
-          >
-            <button
-              type="button"
-              aria-pressed={settings.flow === "paginated"}
-              className={`${styles.optionBtn} ${settings.flow === "paginated" ? styles.active : ""}`}
-              onClick={() => onFlowChange("paginated")}
-              title={t("epub_viewer.settings.flow.paginated", { defaultValue: "페이지" })}
-              aria-label={t("epub_viewer.settings.flow.paginated", { defaultValue: "페이지" })}
-            >
-              {t("epub_viewer.settings.flow.paginated", { defaultValue: "페이지" })}
-            </button>
-            <button
-              type="button"
-              aria-pressed={settings.flow === "scrolled"}
-              className={`${styles.optionBtn} ${settings.flow === "scrolled" ? styles.active : ""}`}
-              onClick={() => onFlowChange("scrolled")}
-              title={t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
-              aria-label={t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
-            >
-              {t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
-            </button>
-          </div>
-        </div>
-
         {/* 페이지 모드 */}
         <div className={styles.section}>
           <label
             className={styles.label}
-            id="spread-label"
+            id="page-mode-label"
           >
             {t("epub_viewer.settings.spread.label", { defaultValue: "페이지 모드" })}
           </label>
           <div
             className={styles.buttonGroup}
-            aria-labelledby="spread-label"
+            aria-labelledby="page-mode-label"
           >
             <button
               type="button"
-              aria-pressed={settings.spread === "none"}
-              className={`${styles.optionBtn} ${settings.spread === "none" ? styles.active : ""}`}
-              onClick={() => onSpreadChange("none")}
-              disabled={settings.flow === "scrolled" || isTypographyControlLimited || settings.renderMode === "comic"}
+              aria-pressed={currentPageMode === "none"}
+              className={`${styles.optionBtn} ${currentPageMode === "none" ? styles.active : ""}`}
+              onClick={() => handlePageModeChange("none")}
+              disabled={isTypographyControlLimited || settings.renderMode === "comic"}
               title={t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
               aria-label={t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
             >
@@ -148,21 +126,26 @@ export function EpubSettingsPanel({
             </button>
             <button
               type="button"
-              aria-pressed={settings.spread === "auto"}
-              className={`${styles.optionBtn} ${settings.spread === "auto" ? styles.active : ""}`}
-              onClick={() => onSpreadChange("auto")}
-              disabled={settings.flow === "scrolled" || isTypographyControlLimited || settings.renderMode === "comic"}
+              aria-pressed={currentPageMode === "auto"}
+              className={`${styles.optionBtn} ${currentPageMode === "auto" ? styles.active : ""}`}
+              onClick={() => handlePageModeChange("auto")}
+              disabled={isTypographyControlLimited || settings.renderMode === "comic"}
               title={t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
               aria-label={t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
             >
               {t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
             </button>
+            <button
+              type="button"
+              aria-pressed={currentPageMode === "scrolled"}
+              className={`${styles.optionBtn} ${currentPageMode === "scrolled" ? styles.active : ""}`}
+              onClick={() => handlePageModeChange("scrolled")}
+              title={t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
+              aria-label={t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
+            >
+              {t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
+            </button>
           </div>
-          {settings.flow === "scrolled" && (
-            <p className={styles.helperText}>
-              {t("epub_viewer.settings.flow.spread_disabled", { defaultValue: "세로 스크롤에서는 페이지 수를 나누지 않습니다." })}
-            </p>
-          )}
           {settings.flow !== "scrolled" && (isTypographyControlLimited || settings.renderMode === "comic") && (
             <p className={styles.helperText}>{t("epub_viewer.settings.render_mode.typography_limited")}</p>
           )}
