@@ -329,7 +329,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   const [restoreAnchor, setRestoreAnchor] = useState<SavedTextAnchor | null>(null);
   const [settledRestoreChapterId, setSettledRestoreChapterId] = useState<string | null>(null);
   const [currentOffsetX, setCurrentOffsetX] = useState(0);
-  const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const [highlightParagraphId, setHighlightParagraphId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1613,7 +1613,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
   useRestoreFullscreenAfterChapterSwitch(routeChapterId);
   useExitFullscreenOnViewerUnmount();
 
-  if (!chapter || chapterLoading || isLoadingText) {
+  if (!chapter || chapter.id !== chapterId || chapterLoading || isLoadingText) {
     return (
       <div className={viewerStyles.viewerContainer}>
         <LoadingSpinner
@@ -1735,7 +1735,7 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
                   ...(settings.readingMode !== "vertical"
                     ? {
                         transform: `translateX(-${currentOffsetX}px)`,
-                        "--viewport-width": `${viewportWidth}px`,
+                        ...(viewportWidth > 0 ? { "--viewport-width": `${viewportWidth}px` } : {}),
                       }
                     : {}),
                 } as React.CSSProperties
