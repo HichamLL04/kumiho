@@ -35,6 +35,16 @@ const toPositionRatio = (position: number, total: number): number => {
   return Math.max(0, Math.min(1, position / (total - 1)));
 };
 
+const toPageRatio = (page: number, total: number): number => {
+  if (!Number.isFinite(page) || !Number.isFinite(total) || total <= 1) return 0;
+  return Math.max(0, Math.min(1, (page - 1) / (total - 1)));
+};
+
+const toPercentPage = (ratio: number, totalPages: number): number => {
+  const clampedRatio = Math.max(0, Math.min(1, ratio));
+  return Math.max(1, Math.min(totalPages, Math.round(clampedRatio * totalPages)));
+};
+
 const getHeaderValue = (headers: unknown, key: string): string | null => {
   if (!headers || typeof headers !== "object") return null;
   const maybeHeaders = headers as {
@@ -83,6 +93,36 @@ function isLocationAtEnd(location: {
   }
 
   return location.atEnd ?? false;
+}
+
+function getGeneratedTextProgressRatio(
+  isGeneratedFromText: boolean,
+  location: {
+    chapterPage: number;
+    chapterTotal: number;
+    spineIndex?: number;
+    spineLength?: number;
+  },
+  atEnd = false,
+): number | null {
+  if (!isGeneratedFromText) return null;
+  if (atEnd) return 1;
+
+  const sectionRatio = toPageRatio(location.chapterPage, location.chapterTotal);
+  const spineLength = Number.isFinite(location.spineLength) ? Math.max(0, Math.floor(location.spineLength ?? 0)) : 0;
+
+  if (spineLength > 0) {
+    const spineIndex = Number.isFinite(location.spineIndex)
+      ? Math.max(0, Math.min(spineLength - 1, Math.floor(location.spineIndex ?? 0)))
+      : 0;
+    return Math.max(0, Math.min(1, (spineIndex + sectionRatio) / spineLength));
+  }
+
+  if (location.chapterTotal > 1) {
+    return sectionRatio;
+  }
+
+  return null;
 }
 
 export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
@@ -144,6 +184,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const [toc, setToc] = useState<EpubTOCItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [epubUrl, setEpubUrl] = useState<string | null>(null);
+  const [loadedEpubChapterId, setLoadedEpubChapterId] = useState<string | null>(null);
   const [isGeneratedFromText, setIsGeneratedFromText] = useState(false);
   const [initialCFI, setInitialCFI] = useState<string | null>(null);
   const [initialProgressRatio, setInitialProgressRatio] = useState<number | null>(null);
@@ -190,6 +231,11 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setVisiblePage(1);
     setVisibleTotalPages(1);
     setIsGeneratedFromText(false);
+    setEpubUrl(null);
+    setInitialCFI(null);
+    setInitialProgressRatio(null);
+    setToc([]);
+    setLoadedEpubChapterId(null);
     reset();
 
     // 초기화 완료 신호가 오지 않을 경우를 대비한 세이프티 폴백 (20초)
@@ -253,9 +299,11 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           }
           objectUrlRef.current = objectUrl;
           setEpubUrl(objectUrl);
+          setLoadedEpubChapterId(chapterId);
         } catch (error) {
           console.error("[EpubViewerRoute] Failed to load epub blob:", error);
           setEpubUrl(null);
+          setLoadedEpubChapterId(null);
         } finally {
           setIsLoading(false);
           // 뷰어 자체의 초기화 완료 대기로 변경 (기존 setTimeout 제거)
@@ -263,6 +311,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       } else {
         setInitialCFI(null);
         setEpubUrl(null);
+        setLoadedEpubChapterId(null);
         setIsLoading(false);
         setIsInitializing(false);
         isInitializingRef.current = false;
@@ -520,20 +569,14 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   }, [toggleUIWithTimer]);
 
   // 진행도 저장 (EPUB은 CFI 및 가상 포지션 기반 저장)
-  const canSaveProgress = useCallback(
-    (location: {
-      currentPosition: number;
-      totalPositions: number;
-    }) => {
-      const totalPositions = Math.max(0, location.totalPositions);
-      if (totalPositions <= 1) {
-        return false;
-      }
+  const canSaveProgress = useCallback((location: { currentPosition: number; totalPositions: number }) => {
+    const totalPositions = Math.max(0, location.totalPositions);
+    if (totalPositions <= 1) {
+      return false;
+    }
 
-      return true;
-    },
-    [],
-  );
+    return true;
+  }, []);
 
   const toPseudoProgressPayload = useCallback(
     (location: {
@@ -581,6 +624,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         globalRatio: number;
         currentPosition: number;
         totalPositions: number;
+        spineIndex?: number;
+        spineLength?: number;
       },
       atEnd = false,
     ) => {
@@ -589,27 +634,42 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         return;
       }
 
-      const payload = canSaveProgress(location)
-        ? (() => {
-            const totalPositions = Math.max(0, location.totalPositions);
-            // atEnd일 때는 마지막 위치로 보정하여 100% 저장 (완독 처리)
-            const currentPosition = atEnd
-              ? Math.max(0, totalPositions - 1)
-              : Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
-            const calculatedCurrentPage = currentPosition + 1;
-            const calculatedTotalPages = totalPositions;
-            const progressPercent = atEnd ? 100 : toPositionRatio(currentPosition, calculatedTotalPages) * 100;
+      const generatedTextRatio = getGeneratedTextProgressRatio(isGeneratedFromText, location, atEnd);
+      const payload =
+        generatedTextRatio !== null
+          ? (() => {
+              const totalPages = 100;
+              const currentPage = atEnd ? totalPages : toPercentPage(generatedTextRatio, totalPages);
+              return {
+                current_page: currentPage,
+                total_pages: totalPages,
+                progress_percent: Math.max(0, Math.min(100, generatedTextRatio * 100)),
+                current_position: Math.max(0, currentPage - 1),
+                total_positions: totalPages,
+                current_cfi: location.cfi,
+              };
+            })()
+          : canSaveProgress(location)
+            ? (() => {
+                const totalPositions = Math.max(0, location.totalPositions);
+                // atEnd일 때는 마지막 위치로 보정하여 100% 저장 (완독 처리)
+                const currentPosition = atEnd
+                  ? Math.max(0, totalPositions - 1)
+                  : Math.max(0, Math.min(totalPositions - 1, location.currentPosition));
+                const calculatedCurrentPage = currentPosition + 1;
+                const calculatedTotalPages = totalPositions;
+                const progressPercent = atEnd ? 100 : toPositionRatio(currentPosition, calculatedTotalPages) * 100;
 
-            return {
-              current_page: calculatedCurrentPage,
-              total_pages: calculatedTotalPages,
-              progress_percent: progressPercent,
-              current_position: currentPosition,
-              total_positions: totalPositions,
-              current_cfi: location.cfi,
-            };
-          })()
-        : toPseudoProgressPayload(location);
+                return {
+                  current_page: calculatedCurrentPage,
+                  total_pages: calculatedTotalPages,
+                  progress_percent: progressPercent,
+                  current_position: currentPosition,
+                  total_positions: totalPositions,
+                  current_cfi: location.cfi,
+                };
+              })()
+            : toPseudoProgressPayload(location);
 
       if (!payload) {
         return;
@@ -621,7 +681,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         console.error("Failed to save progress:", error);
       }
     },
-    [canSaveProgress, chapterId, effectiveIncognito, toPseudoProgressPayload],
+    [canSaveProgress, chapterId, effectiveIncognito, isGeneratedFromText, toPseudoProgressPayload],
   );
 
   const handleLocationChange = useCallback(
@@ -657,8 +717,14 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         return;
       }
 
+      const generatedTextRatio = getGeneratedTextProgressRatio(isGeneratedFromText, location, atEnd);
       // totalPositions가 1 이하면 페이지 축으로는 신뢰하지 않고 chapter 축을 우선 사용한다.
-      if (location.totalPositions > 1) {
+      if (generatedTextRatio !== null) {
+        const pseudoTotalPages = 100;
+        setCurrentPage(toPercentPage(generatedTextRatio, pseudoTotalPages));
+        setTotalPages(pseudoTotalPages);
+        setGlobalProgress(Math.max(0, Math.min(100, generatedTextRatio * 100)));
+      } else if (location.totalPositions > 1) {
         // atEnd일 때는 마지막 위치로 보정하여 100%로 저장
         const clampedPosition = atEnd
           ? location.totalPositions - 1
@@ -692,7 +758,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       // (초기 relocated가 beginning CFI를 반복 전달해 기존 위치를 덮어쓰는 문제 방지)
       if (!baselineCFIRef.current) {
         // 초기 위치 저장 보호: 기존 진행률이 있는데 0% 근처라면 저장하지 않음 (레이스 보호)
-        const isAtBeginning = location.globalRatio < 0.02 && location.currentPosition <= 0;
+        const effectiveProgressRatio = generatedTextRatio ?? location.globalRatio;
+        const isAtBeginning = effectiveProgressRatio < 0.02 && location.currentPosition <= 0;
         const hadSavedProgress = initialCFI !== null || (initialProgressRatio !== null && initialProgressRatio > 0.02);
         if (isAtBeginning && hadSavedProgress) {
           return;
@@ -718,6 +785,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       saveProgress,
       initialCFI,
       initialProgressRatio,
+      isGeneratedFromText,
     ],
   );
 
@@ -936,7 +1004,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   }, []);
 
   // 챕터 정보/진행도 로딩까지만 대기하고, 이후 뷰어 초기화는 컴포넌트 내부에서 진행
-  if (isLoading || !chapter || !epubUrl) {
+  if (isLoading || !chapter || !epubUrl || loadedEpubChapterId !== chapterId) {
     return (
       <div style={{ width: "100%", height: "100vh" }}>
         <LoadingSpinner
