@@ -111,6 +111,11 @@ func buildTextEpub(source textEpubSource) ([]byte, string, error) {
 }
 
 func decodeRawTextForEpub(raw []byte) (string, string, error) {
+	if bytes.HasPrefix(raw, []byte{0xFF, 0xFE}) || bytes.HasPrefix(raw, []byte{0xFE, 0xFF}) {
+		// 명시적으로 UTF-16 BOM 거부
+		return "", "", errUnsupportedTextEncoding
+	}
+
 	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 	if utf8.Valid(raw) {
 		return normalizeDecodedTextForEpub(string(raw)), "utf-8", nil

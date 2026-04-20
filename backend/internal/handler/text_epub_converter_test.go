@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -156,10 +157,12 @@ func TestBuildTextEpubRejectsInvalidEncoding(t *testing.T) {
 		FileName:  "invalid.txt",
 		Raw:       raw,
 	})
-	// CP949 디코더가 수용하더라도 결과적으로 readable content가 없거나 에러가 발생해야 한다
+	// 명시적인 UTF-16 BOM이 들어있으므로 errUnsupportedTextEncoding 발생
 	if err == nil {
-		// CP949 디코더가 이 바이트를 수용할 수도 있으므로 에러가 아닌 경우도 허용
-		t.Log("decoder accepted invalid bytes — not necessarily an error for this edge case")
+		t.Fatal("expected error for unsupported encoding (UTF-16 BOM), got nil")
+	}
+	if !errors.Is(err, errUnsupportedTextEncoding) {
+		t.Fatalf("expected errUnsupportedTextEncoding, got: %v", err)
 	}
 }
 
