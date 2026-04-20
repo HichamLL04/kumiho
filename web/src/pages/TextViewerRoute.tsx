@@ -1023,7 +1023,15 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
         setText(normalizedText);
 
         const progress = progressRes.data?.progress;
-        if (progress?.current_cfi) {
+        const searchParams = new URL(window.location.href).searchParams;
+        const urlPage = searchParams.get("page");
+
+        if (urlPage === "last") {
+          setRestoreAnchor({
+            kind: "txt_anchor",
+            offset: Math.max(0, normalizedText.length),
+          });
+        } else if (progress?.current_cfi) {
           setRestoreAnchor(parseAnchor(progress.current_cfi));
         } else if (typeof progress?.current_position === "number" && progress.current_position >= 0) {
           setRestoreAnchor({
