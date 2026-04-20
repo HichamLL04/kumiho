@@ -16,7 +16,13 @@ import {
   Sparkles,
   LayoutGrid,
 } from "lucide-react";
-import type { EpubFontFamily, EpubRenderMode, EpubViewerSettings, EpubTheme } from "../stores/epubViewerStore";
+import type {
+  EpubFlow,
+  EpubFontFamily,
+  EpubRenderMode,
+  EpubViewerSettings,
+  EpubTheme,
+} from "../stores/epubViewerStore";
 import type { BGMInfo } from "../features/viewer/types";
 import { useAtmosphereStore } from "../stores/atmosphereStore";
 import { AtmospherePopover } from "../features/viewer/components/AtmospherePopover";
@@ -79,6 +85,8 @@ interface EpubViewerProps {
   onLineHeightChange: (height: number) => void;
   onThemeChange: (theme: EpubTheme) => void;
   onRenderModeChange: (mode: EpubRenderMode) => void;
+  onFlowChange: (flow: EpubFlow) => void;
+  hideChapterPageInfo?: boolean;
   onWheelDirectionChange: (direction: "down" | "up") => void;
   onKeyboardDirectionChange: (direction: "right" | "left") => void;
   onClickDirectionChange: (direction: "right" | "left") => void;
@@ -142,6 +150,8 @@ export function EpubViewer({
   onLineHeightChange,
   onThemeChange,
   onRenderModeChange,
+  onFlowChange,
+  hideChapterPageInfo = false,
   onWheelDirectionChange,
   onKeyboardDirectionChange,
   onClickDirectionChange,
@@ -521,8 +531,6 @@ export function EpubViewer({
         return;
       }
 
-      if (settings.flow !== "paginated") return;
-
       // 좌/우 클릭 → 페이지 이동
       const isRTL = settings.clickDirection === "left";
       if (xRatio < 0.3) {
@@ -533,12 +541,10 @@ export function EpubViewer({
         else handleNext();
       }
     },
-    [getZoneRatio, handleNext, handlePrev, onViewerClick, settings.flow, settings.clickDirection],
+    [getZoneRatio, handleNext, handlePrev, onViewerClick, settings.clickDirection],
   );
 
   useEffect(() => {
-    if (settings.flow !== "paginated") return;
-
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName?.toLowerCase();
@@ -560,7 +566,7 @@ export function EpubViewer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.keyboardDirection, settings.flow, handleNext, handlePrev]);
+  }, [settings.keyboardDirection, handleNext, handlePrev]);
 
   // === 구형 iOS Safari: <main>에 터치 이벤트 핸들러 등록 ===
   // iframe pointer-events:none으로 터치가 관통하므로 부모에서 처리한다.
@@ -600,7 +606,7 @@ export function EpubViewer({
       if (dragging) {
         // 스와이프 감지
         const touch = e.changedTouches[0];
-        if (touch && settings.flow === "paginated") {
+        if (touch) {
           const dx = touch.clientX - startPos.x;
           const dy = touch.clientY - startPos.y;
           const SWIPE_THRESHOLD = 50;
@@ -627,7 +633,7 @@ export function EpubViewer({
 
       if (ratio >= 0.3 && ratio <= 0.7) {
         onViewerClick();
-      } else if (settings.flow === "paginated") {
+      } else {
         const isRTL = settings.clickDirection === "left";
         if (ratio < 0.3) {
           if (isRTL) handleNext();
@@ -648,7 +654,7 @@ export function EpubViewer({
       mainEl.removeEventListener("touchmove", onTouchMove);
       mainEl.removeEventListener("touchend", onTouchEnd);
     };
-  }, [getZoneRatio, settings.flow, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
+  }, [getZoneRatio, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
 
   return (
     <div
@@ -772,6 +778,7 @@ export function EpubViewer({
               onLineHeightChange={onLineHeightChange}
               onThemeChange={onThemeChange}
               onRenderModeChange={onRenderModeChange}
+              onFlowChange={onFlowChange}
               onSpreadChange={onSpreadChange}
               onWheelDirectionChange={onWheelDirectionChange}
               onKeyboardDirectionChange={onKeyboardDirectionChange}
@@ -811,7 +818,7 @@ export function EpubViewer({
       {/* EPUB 뷰어 영역 */}
       <main
         ref={mainRef}
-        className={styles.main}
+        className={`${styles.main} ${settings.flow === "scrolled" ? styles.mainScrolled : ""}`}
         onClick={handleMainClick}
       >
         <EpubChapterViewer
@@ -835,6 +842,7 @@ export function EpubViewer({
           onPageNext={handleNext}
           onPagePrev={handlePrev}
           onRenderLayoutChange={setEffectiveLayout}
+          hideChapterPageInfo={hideChapterPageInfo}
         />
       </main>
 
@@ -862,13 +870,12 @@ export function EpubViewer({
       )}
 
       {/* 푸터 */}
-      {settings.flow === "paginated" && (
-        <footer
-          className={`${styles.footer} ${!isUIVisible ? styles.hidden : ""}`}
-          onClick={(e) => e.stopPropagation()}
-          onMouseEnter={onInteractionStart}
-          onMouseLeave={onInteractionEnd}
-        >
+      <footer
+        className={`${styles.footer} ${!isUIVisible ? styles.hidden : ""}`}
+        onClick={(e) => e.stopPropagation()}
+        onMouseEnter={onInteractionStart}
+        onMouseLeave={onInteractionEnd}
+      >
           <div className={styles.footerControls}>
             <button
               className={styles.navBtn}
@@ -1004,14 +1011,16 @@ export function EpubViewer({
             </button>
 
             {/* 토글 버튼 (태블릿/데스크탑) */}
-            <div className={styles.footerToggles}>
-              <button
-                className={`${styles.toggleBtn} ${settings.spread === "auto" ? styles.active : ""}`}
-                onClick={handleSpreadToggle}
-              >
-                {settings.spread === "auto" ? t("epub_viewer.footer.pages_2") : t("epub_viewer.footer.pages_1")}
-              </button>
-            </div>
+            {settings.flow === "paginated" && (
+              <div className={styles.footerToggles}>
+                <button
+                  className={`${styles.toggleBtn} ${settings.spread === "auto" ? styles.active : ""}`}
+                  onClick={handleSpreadToggle}
+                >
+                  {settings.spread === "auto" ? t("epub_viewer.footer.pages_2") : t("epub_viewer.footer.pages_1")}
+                </button>
+              </div>
+            )}
 
             {/* 시리즈 목록 */}
             {seriesId && onOpenChapterList && (
@@ -1025,8 +1034,7 @@ export function EpubViewer({
               </button>
             )}
           </div>
-        </footer>
-      )}
+      </footer>
     </div>
   );
 }

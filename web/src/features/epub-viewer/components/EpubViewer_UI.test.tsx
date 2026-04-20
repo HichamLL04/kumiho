@@ -85,6 +85,7 @@ function createDefaultProps() {
     onLineHeightChange: vi.fn(),
     onThemeChange: vi.fn(),
     onRenderModeChange: vi.fn(),
+    onFlowChange: vi.fn(),
     onWheelDirectionChange: vi.fn(),
     onKeyboardDirectionChange: vi.fn(),
     onClickDirectionChange: vi.fn(),

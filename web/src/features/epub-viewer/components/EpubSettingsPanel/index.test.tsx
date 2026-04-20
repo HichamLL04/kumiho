@@ -31,6 +31,7 @@ describe("EpubSettingsPanel", () => {
         onLineHeightChange={vi.fn()}
         onThemeChange={vi.fn()}
         onRenderModeChange={vi.fn()}
+        onFlowChange={vi.fn()}
         onWheelDirectionChange={vi.fn()}
         onKeyboardDirectionChange={vi.fn()}
         onClickDirectionChange={vi.fn()}
@@ -66,6 +67,7 @@ describe("EpubSettingsPanel", () => {
         onLineHeightChange={vi.fn()}
         onThemeChange={vi.fn()}
         onRenderModeChange={vi.fn()}
+        onFlowChange={vi.fn()}
         onWheelDirectionChange={vi.fn()}
         onKeyboardDirectionChange={vi.fn()}
         onClickDirectionChange={vi.fn()}
@@ -82,5 +84,42 @@ describe("EpubSettingsPanel", () => {
 
     fireEvent.click(btn2Page);
     expect(onSpreadChange).toHaveBeenCalledWith("auto");
+  });
+
+  it("레이아웃 버튼 클릭 시 onFlowChange를 올바른 인자로 호출한다", () => {
+    const onFlowChange = vi.fn();
+    render(
+      <EpubSettingsPanel
+        settings={{
+          fontSize: 100,
+          fontFamily: "sans-serif",
+          lineHeight: 1.5,
+          theme: "light",
+          renderMode: "auto",
+          flow: "paginated",
+          spread: "auto",
+          wheelDirection: "down",
+          keyboardDirection: "right",
+          clickDirection: "right",
+        }}
+        onFontSizeChange={vi.fn()}
+        onFontFamilyChange={vi.fn()}
+        onLineHeightChange={vi.fn()}
+        onThemeChange={vi.fn()}
+        onRenderModeChange={vi.fn()}
+        onFlowChange={onFlowChange}
+        onWheelDirectionChange={vi.fn()}
+        onKeyboardDirectionChange={vi.fn()}
+        onClickDirectionChange={vi.fn()}
+        onSpreadChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("epub_viewer.settings.flow.scrolled"));
+    expect(onFlowChange).toHaveBeenCalledWith("scrolled");
+
+    fireEvent.click(screen.getByText("epub_viewer.settings.flow.paginated"));
+    expect(onFlowChange).toHaveBeenCalledWith("paginated");
   });
 });

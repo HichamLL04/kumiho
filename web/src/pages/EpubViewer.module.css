@@ -101,6 +101,10 @@
   padding: 0 150px; /* 기본 패딩 (PC/대화면) - 클릭 영역 확대를 위해 증량 */
 }
 
+.mainScrolled {
+  padding: 0;
+}
+
 .backdrop {
   position: fixed;
   inset: 0;
@@ -113,12 +117,20 @@
   .main {
     padding: 0 70px;
   }
+
+  .mainScrolled {
+    padding: 0;
+  }
 }
 
 /* 초고해상도 대응 (선택 사항: 기존 유지 시) */
 @media (min-width: 2560px) {
   .main {
     padding: 0 230px;
+  }
+
+  .mainScrolled {
+    padding: 0;
   }
 }
 

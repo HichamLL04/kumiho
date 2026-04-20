@@ -5,6 +5,7 @@ import {
   normalizeEpubLineHeightScale,
   useEpubViewerStore,
   type EpubFontFamily,
+  type EpubFlow,
   type EpubRenderMode,
 } from "../stores/epubViewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
@@ -32,6 +33,19 @@ interface EpubViewerRouteProps {
 const toPositionRatio = (position: number, total: number): number => {
   if (!Number.isFinite(position) || !Number.isFinite(total) || total <= 1) return 0;
   return Math.max(0, Math.min(1, position / (total - 1)));
+};
+
+const getHeaderValue = (headers: unknown, key: string): string | null => {
+  if (!headers || typeof headers !== "object") return null;
+  const maybeHeaders = headers as {
+    get?: (name: string) => unknown;
+    [name: string]: unknown;
+  };
+  const fromGetter = maybeHeaders.get?.(key);
+  if (typeof fromGetter === "string") return fromGetter;
+  const lowerKey = key.toLowerCase();
+  const fromIndex = maybeHeaders[lowerKey] ?? maybeHeaders[key];
+  return typeof fromIndex === "string" ? fromIndex : null;
 };
 
 // epub.js의 atEnd는 일부 EPUB에서 섹션 단위로 true가 될 수 있어 직접 위치 기준으로 안정화한다.
@@ -130,6 +144,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const [toc, setToc] = useState<EpubTOCItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [epubUrl, setEpubUrl] = useState<string | null>(null);
+  const [isGeneratedFromText, setIsGeneratedFromText] = useState(false);
   const [initialCFI, setInitialCFI] = useState<string | null>(null);
   const [initialProgressRatio, setInitialProgressRatio] = useState<number | null>(null);
   const isInitializingRef = useRef(true);
@@ -174,6 +189,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setIsInitializing(true);
     setVisiblePage(1);
     setVisibleTotalPages(1);
+    setIsGeneratedFromText(false);
     reset();
 
     // 초기화 완료 신호가 오지 않을 경우를 대비한 세이프티 폴백 (20초)
@@ -219,6 +235,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
         try {
           const response = await api.get(`/chapters/${chapterId}/epub`, { responseType: "blob" });
+          const sourceFormat = getHeaderValue(response.headers, "x-kumiho-source-format");
+          setIsGeneratedFromText(sourceFormat?.toLowerCase() === "txt");
           const objectUrl = URL.createObjectURL(response.data);
           if (objectUrlRevokeTimerRef.current) {
             window.clearTimeout(objectUrlRevokeTimerRef.current);
@@ -265,14 +283,6 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     };
   }, [chapterId, reset, scheduleObjectUrlRevoke, setCurrentCFI, setGlobalProgress]);
 
-
-  // 스크롤 모드 제거: 기존 상태가 scrolled이면 자동으로 페이지 모드로 보정
-  useEffect(() => {
-    if (settings.flow !== "paginated") {
-      setFlow("paginated");
-    }
-  }, [settings.flow, setFlow]);
-
   // EPUB 뷰어 사용자 설정 로드
   useEffect(() => {
     if (!chapterId) return;
@@ -287,6 +297,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         const lineHeight = Number(userSettings.epub_line_height);
         const fontFamily = userSettings.epub_font_family;
         const theme = userSettings.epub_theme;
+        const flow = userSettings.epub_flow;
         const spread = userSettings.epub_spread;
         const wheelDirection = userSettings.epub_wheel_direction;
         const keyboardDirection = userSettings.epub_keyboard_direction;
@@ -354,6 +365,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           setTheme(effectiveTheme);
         }
 
+        if (flow === "paginated" || flow === "scrolled") {
+          setFlow(flow);
+        }
+
         const effectiveSpread =
           (seriesSettings?.epub_spread as string | undefined) ||
           libraryDefaults.default_epub_spread ||
@@ -415,6 +430,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setLineHeight,
     setTheme,
     setRenderMode,
+    setFlow,
     setSpread,
     setWheelDirection,
     setKeyboardDirection,
@@ -791,6 +807,16 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     [seriesId, setSpread],
   );
 
+  const handleFlowChange = useCallback(
+    (flow: EpubFlow) => {
+      setFlow(flow);
+      void settingAPI.update("epub_flow", { value: flow }).catch((error) => {
+        console.warn("[EpubViewerRoute] Failed to save global epub_flow:", error);
+      });
+    },
+    [setFlow],
+  );
+
   const handleWheelDirectionChange = useCallback(
     (direction: "down" | "up") => {
       setWheelDirection(direction);
@@ -980,6 +1006,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           onLineHeightChange={handleLineHeightChange}
           onThemeChange={handleThemeChange}
           onRenderModeChange={handleRenderModeChange}
+          onFlowChange={handleFlowChange}
+          hideChapterPageInfo={isGeneratedFromText}
           onWheelDirectionChange={handleWheelDirectionChange}
           onKeyboardDirectionChange={handleKeyboardDirectionChange}
           onClickDirectionChange={handleClickDirectionChange}

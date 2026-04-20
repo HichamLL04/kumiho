@@ -66,6 +66,7 @@ interface EpubChapterViewerProps {
   onPageNext?: () => void;
   onPagePrev?: () => void;
   onRenderLayoutChange?: (layout: EpubRenderLayout) => void;
+  hideChapterPageInfo?: boolean;
 }
 
 const EPUB_VIEWER_STYLE_ID = "kumiho-epub-viewer-settings";
@@ -119,6 +120,17 @@ interface NavigationSnapshot {
   page: number;
   index: number;
   scrollLeft: number;
+  scrollTop: number;
+}
+
+interface EpubManagerSnapshot {
+  container?: {
+    scrollLeft?: number;
+    scrollTop?: number;
+    scrollHeight?: number;
+    clientHeight?: number;
+  };
+  isPaginated?: boolean;
 }
 
 const EPUB_LOCATION_STRIDE = 6144; // 6KB 단위로 가상 페이지(위치) 정의. backend/internal/util/epub.go의 EpubPositionStride와 일치해야 함.
@@ -162,6 +174,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       onPageNext,
       onPagePrev,
       onRenderLayoutChange,
+      hideChapterPageInfo = false,
     },
     ref,
   ) => {
@@ -304,7 +317,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
       // spread()는 내부적으로 updateLayout() → contents.columns()를 트리거하여 iframe을 재레이아웃함.
       // 값이 실제로 바뀔 때만 호출해야 blank screen 버그를 방지할 수 있음.
-      const desiredSpread: "auto" | "none" = isComic ? "none" : s.spread;
+      const desiredSpread: "auto" | "none" = s.flow === "scrolled" || isComic ? "none" : s.spread;
       if (desiredSpread !== lastAppliedSpreadRef.current) {
         anyRendition.spread?.(desiredSpread);
         lastAppliedSpreadRef.current = desiredSpread;
@@ -435,7 +448,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       hasStableLocationRef.current = false;
 
       const rendition = book.renderTo(containerRef.current, {
-        flow: settings.flow,
+        flow: settings.flow === "scrolled" ? "scrolled-doc" : "paginated",
         spread: settings.renderMode === "comic" ? "none" : settings.spread,
         width: "100%",
         height: "100%",
@@ -480,15 +493,25 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
         const wheelHandler = (event: WheelEvent) => {
           const currentSettings = settingsRef.current;
-          if (currentSettings.flow !== "paginated") return;
           if (Math.abs(event.deltaY) < 12) return;
+
+          const isNextDirection = currentSettings.wheelDirection === "down" ? event.deltaY > 0 : event.deltaY < 0;
+          if (currentSettings.flow !== "paginated") {
+            const manager = (renditionRef.current as unknown as { manager?: EpubManagerSnapshot })?.manager;
+            if (!manager || manager.isPaginated !== false || !manager.container) return;
+            const scrollTop = manager.container.scrollTop ?? 0;
+            const scrollHeight = manager.container.scrollHeight ?? 0;
+            const clientHeight = manager.container.clientHeight ?? 0;
+            const atStart = scrollTop <= 2;
+            const atEnd = scrollHeight <= clientHeight || scrollTop + clientHeight >= scrollHeight - 2;
+            if ((isNextDirection && !atEnd) || (!isNextDirection && !atStart)) return;
+          }
 
           const now = Date.now();
           if (now - lastWheelNavigationAtRef.current < 300) return;
           lastWheelNavigationAtRef.current = now;
 
           event.preventDefault();
-          const isNextDirection = currentSettings.wheelDirection === "down" ? event.deltaY > 0 : event.deltaY < 0;
           if (isNextDirection) {
             onPageNextRef.current?.();
           } else {
@@ -498,7 +521,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
         const keydownHandler = (event: KeyboardEvent) => {
           const currentSettings = settingsRef.current;
-          if (currentSettings.flow !== "paginated") return;
           const target = event.target as HTMLElement | null;
           const tagName = target?.tagName?.toLowerCase();
           const isEditable =
@@ -537,8 +559,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
             onViewerClickRef.current?.();
             return;
           }
-          // paginated 모드에서만 좌/우 클릭 페이지 이동
-          if (currentSettings.flow !== "paginated") return;
           const isRTL = currentSettings.clickDirection === "left";
           if (zone === "left") {
             if (isRTL) onPageNextRef.current?.();
@@ -645,7 +665,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                 const SWIPE_THRESHOLD = 50;
                 if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
                   const currentSettings = settingsRef.current;
-                  if (currentSettings.flow !== "paginated") return;
                   const isRTL = currentSettings.clickDirection === "left";
                   // 왼쪽으로 스와이프(dx < 0) = LTR에서 다음 페이지
                   const isSwipeLeft = dx < 0;
@@ -1012,7 +1031,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         hasStableLocationRef.current = false;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [epubUrl, chapterId, handleRelocated, applySettings, initialCFI, initialProgressRatio, settings.renderMode]);
+    }, [epubUrl, chapterId, handleRelocated, applySettings, initialCFI, initialProgressRatio, settings.renderMode, settings.flow]);
 
     useEffect(() => {
       const container = containerRef.current;
@@ -1072,7 +1091,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         const rendition = renditionRef.current;
         const currentLocation = rendition?.currentLocation() as EpubjsLocation | undefined;
         const manager = rendition as unknown as {
-          manager?: { container?: { scrollLeft?: number } };
+          manager?: EpubManagerSnapshot;
         };
 
         return {
@@ -1080,6 +1099,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           page: currentLocation?.start?.displayed?.page ?? 0,
           index: currentLocation?.start?.index ?? -1,
           scrollLeft: manager.manager?.container?.scrollLeft ?? 0,
+          scrollTop: manager.manager?.container?.scrollTop ?? 0,
         };
       };
 
@@ -1088,8 +1108,25 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           before.cfi !== after.cfi ||
           before.page !== after.page ||
           before.index !== after.index ||
-          Math.abs(before.scrollLeft - after.scrollLeft) > 2
+          Math.abs(before.scrollLeft - after.scrollLeft) > 2 ||
+          Math.abs(before.scrollTop - after.scrollTop) > 2
         );
+      };
+
+      const isScrolledManagerAtEnd = (): boolean => {
+        const manager = (renditionRef.current as unknown as { manager?: EpubManagerSnapshot })?.manager;
+        if (!manager || manager.isPaginated !== false || !manager.container) return false;
+        const scrollTop = manager.container.scrollTop ?? 0;
+        const scrollHeight = manager.container.scrollHeight ?? 0;
+        const clientHeight = manager.container.clientHeight ?? 0;
+        if (scrollHeight <= clientHeight) return true;
+        return scrollTop + clientHeight >= scrollHeight - 2;
+      };
+
+      const isScrolledManagerAtStart = (): boolean => {
+        const manager = (renditionRef.current as unknown as { manager?: EpubManagerSnapshot })?.manager;
+        if (!manager || manager.isPaginated !== false || !manager.container) return false;
+        return (manager.container.scrollTop ?? 0) <= 2;
       };
 
       const withNavigation = async (action: () => Promise<boolean | void> | boolean | void): Promise<boolean> => {
@@ -1166,7 +1203,18 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           } catch (err) {
             console.warn("[EpubChapterViewer] manager next correction failed:", err);
           }
-          return withNavigation(() => renditionRef.current!.next());
+          const beforeLocation = renditionRef.current.currentLocation() as unknown as EpubjsLocation;
+          const beforeIndex = beforeLocation?.start?.index ?? -1;
+          const scrolledAtEndBeforeMove = isScrolledManagerAtEnd();
+          const moved = await withNavigation(() => renditionRef.current!.next());
+          if (moved || !scrolledAtEndBeforeMove) return moved;
+
+          const book = bookRef.current;
+          const spine = book?.spine as unknown as EpubjsSpine | undefined;
+          const nextSpineItem = beforeIndex >= 0 ? spine?.spineItems?.[beforeIndex + 1] : undefined;
+          if (!nextSpineItem?.href) return false;
+
+          return withNavigation(() => renditionRef.current!.display(nextSpineItem.href));
         },
         prev: async () => {
           if (!renditionRef.current) return false;
@@ -1215,10 +1263,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           }
           // 섹션 경계를 넘는 prev()는 이전 섹션의 끝이 아닌 중간 위치로 이동하는
           // epub.js 버그가 있어, 섹션 변경 감지 후 마지막 페이지로 스크롤을 보정한다.
-          const beforeIndex = (
-            renditionRef.current.currentLocation() as unknown as EpubjsLocation
-          )?.start?.index;
-          return withNavigation(async () => {
+          const beforeLocation = renditionRef.current.currentLocation() as unknown as EpubjsLocation;
+          const beforeIndex = beforeLocation?.start?.index ?? -1;
+          const scrolledAtStartBeforeMove = isScrolledManagerAtStart();
+          const moved = await withNavigation(async () => {
             await renditionRef.current!.prev();
 
             const afterLoc =
@@ -1250,6 +1298,26 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
               }
             }
           });
+          if (moved || !scrolledAtStartBeforeMove) return moved;
+
+          const book = bookRef.current;
+          const spine = book?.spine as unknown as EpubjsSpine | undefined;
+          const prevSpineItem = beforeIndex > 0 ? spine?.spineItems?.[beforeIndex - 1] : undefined;
+          if (!prevSpineItem?.href) return false;
+
+          const movedToPrev = await withNavigation(() => renditionRef.current!.display(prevSpineItem.href));
+          try {
+            const manager = (renditionRef.current as unknown as { manager?: EpubManagerSnapshot })?.manager;
+            const container = manager?.container;
+            if (manager?.isPaginated === false && container) {
+              container.scrollTop = Math.max(0, (container.scrollHeight ?? 0) - (container.clientHeight ?? 0));
+              const loc = renditionRef.current?.currentLocation() as unknown as EpubjsLocation;
+              if (loc) handleRelocated(loc);
+            }
+          } catch (err) {
+            console.warn("[EpubChapterViewer] manager prev-scrolled fallback failed:", err);
+          }
+          return movedToPrev;
         },
         goToCFI: (cfi: string) => {
           if (!renditionRef.current) return;
@@ -1294,7 +1362,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
     return (
       <div
-        className={styles.container}
+        className={`${styles.container} ${settings.flow === "scrolled" ? styles.scrolled : ""}`}
         style={{ background: getEpubThemeStyle(settings.theme).background }}
       >
         <div
@@ -1302,10 +1370,12 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           className={styles.viewer}
           style={{ transition: "opacity 0.15s ease-out" }}
         />
-        <div className={`${styles.chapterPageInfo} ${isUIVisible ? styles.hidden : ""}`}>
-          {chapterTitle} - {Math.max(1, chapterPage || 1)}/{Math.max(1, chapterTotal || 1)}
-          {globalProgressPercent != null && ` | ${globalProgressPercent}%`}
-        </div>
+        {!hideChapterPageInfo && (
+          <div className={`${styles.chapterPageInfo} ${isUIVisible ? styles.hidden : ""}`}>
+            {chapterTitle} - {Math.max(1, chapterPage || 1)}/{Math.max(1, chapterTotal || 1)}
+            {globalProgressPercent != null && ` | ${globalProgressPercent}%`}
+          </div>
+        )}
       </div>
     );
   },

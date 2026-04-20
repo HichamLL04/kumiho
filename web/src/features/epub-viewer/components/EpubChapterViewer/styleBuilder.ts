@@ -40,9 +40,43 @@ export function buildEpubInjectedStyle(settings: EpubViewerSettings, layout: Epu
   const theme = getEpubThemeStyle(settings.theme);
   const isOriginal = settings.fontFamily === "original";
   const isComic = layout === "comic";
+  const isScrolled = settings.flow === "scrolled";
   const fontFamily = FONT_FAMILY_MAP[settings.fontFamily] || "inherit";
   const linkColor = settings.theme === "dark" ? "#7eb8f7" : "#1a6bb5";
   const hasFontSizeOverride = settings.fontSize !== 100;
+  const scrolledDocumentRule = isScrolled
+    ? `
+    html {
+      overflow-x: hidden !important;
+    }
+
+    body {
+      width: 100% !important;
+      max-width: 960px !important;
+      min-height: 100vh !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+      padding-top: 72px !important;
+      padding-bottom: 96px !important;
+      padding-left: 32px !important;
+      padding-right: 32px !important;
+      box-sizing: border-box !important;
+      overflow-x: hidden !important;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box !important;
+    }
+
+    img, svg, video, canvas, table {
+      max-width: 100% !important;
+    }
+
+    img, svg, video, canvas {
+      height: auto !important;
+    }
+  `
+    : "";
 
   if (isComic) {
     return `
@@ -76,6 +110,8 @@ export function buildEpubInjectedStyle(settings: EpubViewerSettings, layout: Epu
       padding-left: 8px !important;
       padding-right: 8px !important;
     }
+
+    ${scrolledDocumentRule}
 
     ${EPUB_TEXT_STYLE_SELECTOR} {
       ${textFontFamilyRule}
