@@ -570,7 +570,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
             reflowRendition(true);
           });
         }
-        console.log("[EpubChapterViewer] relocated:", cfi);
+        if (import.meta.env.DEV) {
+          console.log("[EpubChapterViewer] relocated:", cfi);
+        }
 
         const currentLocation = rendition.currentLocation() as unknown as EpubjsLocation;
         const start = currentLocation?.start || location.start;
@@ -695,9 +697,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           if (!autoLayoutLockedRef.current && allowContentHeuristicRef.current) {
             const docLayout = detectLayoutFromDocument(doc) || "book";
             if (docLayout !== effectiveLayoutRef.current) {
-              console.log(
-                `[EpubChapterViewer] auto layout switched by content heuristic: ${effectiveLayoutRef.current} -> ${docLayout}`,
-              );
+              if (import.meta.env.DEV) {
+                console.log(
+                  `[EpubChapterViewer] auto layout switched by content heuristic: ${effectiveLayoutRef.current} -> ${docLayout}`,
+                );
+              }
               detectedLayoutRef.current = docLayout;
               effectiveLayoutRef.current = docLayout;
               onRenderLayoutChangeRef.current?.(docLayout);
@@ -1006,9 +1010,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           allowContentHeuristicRef.current = !(detectedFromMetadata || detectedFromSpine);
           detectedLayoutRef.current = detectedFromMetadata || detectedFromSpine || "book";
           effectiveLayoutRef.current = resolveEffectiveLayout(settings.renderMode, detectedLayoutRef.current);
-          console.log(
-            `[EpubChapterViewer] layout resolved: metadata=${detectedFromMetadata ?? "none"}, spine=${detectedFromSpine ?? "none"}, mode=${settings.renderMode}, effective=${effectiveLayoutRef.current}`,
-          );
+          if (import.meta.env.DEV) {
+            console.log(
+              `[EpubChapterViewer] layout resolved: metadata=${detectedFromMetadata ?? "none"}, spine=${detectedFromSpine ?? "none"}, mode=${settings.renderMode}, effective=${effectiveLayoutRef.current}`,
+            );
+          }
           onRenderLayoutChangeRef.current?.(effectiveLayoutRef.current);
 
           applySettings(rendition, settings, effectiveLayoutRef.current);
@@ -1209,7 +1215,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
           if (cachedLocations) {
             // 캐시 히트 → 즉시 로드 + 최적화된 초기 디스플레이
-            console.log("[EpubChapterViewer] Loading cached locations");
+            if (import.meta.env.DEV) {
+              console.log("[EpubChapterViewer] Loading cached locations");
+            }
             try {
               book.locations.load(cachedLocations);
               locationsReadyRef.current = true;
@@ -1239,7 +1247,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                     : getSafeCfiFromPercentage(book.locations, expectedRatio);
               }
 
-              console.log("[EpubChapterViewer] Displaying final position (cached):", targetCFI || "beginning");
+              if (import.meta.env.DEV) {
+                console.log("[EpubChapterViewer] Displaying final position (cached):", targetCFI || "beginning");
+              }
               // flow 변경 또는 이어보기 위치가 있으면 finalizeInit에서 highlight 표시
               pendingAnchorHighlightRef.current = flowAnchor ?? initialCFI ?? null;
               void displayWithFallback(targetCFI, expectedRatio);
@@ -1253,7 +1263,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           }
 
           // 캐시 미스 → 기본 디스플레이 시도 + 백그라운드 생성
-          console.log("[EpubChapterViewer] No cached locations, initial display then background generate");
+          if (import.meta.env.DEV) {
+            console.log("[EpubChapterViewer] No cached locations, initial display then background generate");
+          }
           const expectedRatio = typeof initialProgressRatio === "number" ? initialProgressRatio : 0;
 
           // flow 변경으로 rendition을 재생성한 경우, 모드 전환 직전 위치를 우선 복원한다.
@@ -1277,7 +1289,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                 try {
                   const serialized = locationsObj.save();
                   localStorage.setItem(CACHE_KEY, serialized);
-                  console.log("[EpubChapterViewer] Locations generated and cached");
+                  if (import.meta.env.DEV) {
+                    console.log("[EpubChapterViewer] Locations generated and cached");
+                  }
                 } catch (err) {
                   console.warn("[EpubChapterViewer] Failed to cache locations:", err);
                 }

@@ -12,6 +12,9 @@ import (
 // ErrUnsupportedTextEncoding is returned when a text file's encoding cannot be safely determined or supported.
 var ErrUnsupportedTextEncoding = errors.New("unsupported text encoding")
 
+// ErrNoReadableTextContent is returned when a text file has no parseable text (e.g. empty or only spaces).
+var ErrNoReadableTextContent = errors.New("txt has no readable content")
+
 // DecodeRawText safely decodes a raw byte slice into a normalized Go string.
 // Currently supports UTF-8 and CP949 (EUC-KR).
 // Returns the decoded string and the determined encoding name, or an error if the encoding is unsupported.

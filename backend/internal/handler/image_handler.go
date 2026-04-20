@@ -990,6 +990,9 @@ func (h *ImageHandler) ServeChapterEpub(c *fiber.Ctx) error {
 			if errors.Is(err, util.ErrUnsupportedTextEncoding) {
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "unsupported text encoding"})
 			}
+			if errors.Is(err, util.ErrNoReadableTextContent) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "txt has no readable content"})
+			}
 			log.Printf("[IMAGE_HANDLER] failed to convert txt chapter %s to epub: %v", chapter.ID, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to convert txt to epub"})
 		}

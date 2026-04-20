@@ -3,7 +3,6 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
-	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -48,7 +47,7 @@ func buildTextEpub(source textEpubSource) ([]byte, string, error) {
 	paragraphs := splitTextParagraphsForEpub(normalized)
 	sections := buildTextEpubSections(paragraphs)
 	if len(sections) == 0 {
-		return nil, "", errors.New("txt has no readable content")
+		return nil, "", util.ErrNoReadableTextContent
 	}
 
 	title := strings.TrimSpace(source.Title)
