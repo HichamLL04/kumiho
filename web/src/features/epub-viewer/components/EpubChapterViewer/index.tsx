@@ -25,6 +25,8 @@ export interface EpubChapterViewerHandles {
   goToPage: (page: number) => void;
 }
 
+export type EpubInitialOpenMode = "default" | "last";
+
 export interface EpubTOCItem {
   id: string;
   label: string;
@@ -45,6 +47,7 @@ interface EpubChapterViewerProps {
   isUIVisible: boolean;
   initialCFI?: string | null;
   initialProgressRatio?: number | null;
+  initialOpenMode?: EpubInitialOpenMode;
   settings: EpubViewerSettings;
   onReady?: (totalLocations: number) => void;
   onTOCLoad?: (toc: EpubTOCItem[]) => void;
@@ -128,10 +131,19 @@ interface EpubManagerSnapshot {
   container?: {
     scrollLeft?: number;
     scrollTop?: number;
+    scrollWidth?: number;
     scrollHeight?: number;
+    clientWidth?: number;
     clientHeight?: number;
   };
   isPaginated?: boolean;
+  settings?: {
+    direction?: "ltr" | "rtl";
+  };
+  layout?: {
+    delta?: number;
+  };
+  updateOffset?: () => void;
 }
 
 const EPUB_LOCATION_STRIDE = 6144; // 6KB 단위로 가상 페이지(위치) 정의. backend/internal/util/epub.go의 EpubPositionStride와 일치해야 함.
@@ -214,6 +226,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       isUIVisible,
       initialCFI,
       initialProgressRatio,
+      initialOpenMode = "default",
       settings,
       onReady,
       onTOCLoad,
@@ -324,6 +337,39 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
       void anyRendition.display(currentCfi).catch(() => {});
     }, []);
+
+    const snapRenditionToVisualEnd = useCallback((rendition: Rendition): boolean => {
+      try {
+        const manager = (rendition as unknown as { manager?: EpubManagerSnapshot })?.manager;
+        const container = manager?.container;
+        if (!manager || !container) return false;
+
+        if (manager.isPaginated === false) {
+          container.scrollTop = Math.max(0, (container.scrollHeight ?? 0) - (container.clientHeight ?? 0));
+          return true;
+        }
+
+        if (manager.isPaginated) {
+          const direction = manager.settings?.direction;
+          const scrollWidth = container.scrollWidth ?? 0;
+          const clientWidth = container.clientWidth ?? 0;
+          const delta = manager.layout?.delta || clientWidth;
+          if (direction === "rtl") {
+            container.scrollLeft = 0;
+          } else {
+            const maxScroll = Math.max(0, scrollWidth - clientWidth);
+            container.scrollLeft = delta > 0 ? Math.floor(maxScroll / delta) * delta : maxScroll;
+          }
+          manager.updateOffset?.();
+          return true;
+        }
+      } catch (err) {
+        console.warn("[EpubChapterViewer] visual end snap failed:", err);
+      }
+
+      return false;
+    }, []);
+
     const applyDocumentSettings = useCallback((doc: Document, s: EpubViewerSettings, layout: EpubRenderLayout) => {
       let styleEl = doc.getElementById(EPUB_VIEWER_STYLE_ID) as HTMLStyleElement | null;
 
@@ -767,8 +813,21 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       rendition.hooks.content.register(handleContentInput as unknown as (...args: unknown[]) => void);
 
       // === 초기화 헬퍼: 위치 복원 후 초기화 완료 처리 ===
-      const finalizeInit = () => {
+      const waitForLayoutFrame = () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+
+      const finalizeInit = async (snapToEnd = initialOpenMode === "last") => {
         if (isDisposed) return;
+        if (snapToEnd) {
+          await waitForLayoutFrame();
+          if (isDisposed) return;
+          snapRenditionToVisualEnd(rendition);
+          await waitForLayoutFrame();
+          if (isDisposed) return;
+          snapRenditionToVisualEnd(rendition);
+        }
         onReadyRef.current?.(generatedTotalRef.current);
         onInitializationCompleteRef.current?.();
         const loc = rendition.currentLocation() as unknown as EpubjsLocation;
@@ -783,20 +842,20 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         const displayBeginning = () =>
           rendition
             .display(undefined)
-            .then(finalizeInit)
+            .then(() => finalizeInit())
             .catch((fallbackErr: unknown) => {
               console.error("[EpubChapterViewer] Initial display fallback failed:", fallbackErr);
-              finalizeInit();
+              return finalizeInit();
             });
 
         const displayRatioFallback = () => {
           if (!fallbackCFI || fallbackCFI === targetCFI) return displayBeginning();
-          return rendition.display(fallbackCFI).then(finalizeInit).catch(displayBeginning);
+          return rendition.display(fallbackCFI).then(() => finalizeInit()).catch(displayBeginning);
         };
 
         return rendition
           .display(targetCFI)
-          .then(finalizeInit)
+          .then(() => finalizeInit())
           .catch((err: unknown) => {
             console.warn("[EpubChapterViewer] Initial display failed, falling back:", err);
             return displayRatioFallback();
@@ -826,6 +885,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
           const spine = book.spine as unknown as EpubjsSpine;
           const spineItems = spine.spineItems || [];
+          const lastSpineHref = spineItems[spineItems.length - 1]?.href;
           const spineHrefMap = new Map<string, number>();
           spineItems.forEach((item, idx) => {
             spineHrefMap.set(normalizeHref(item.href), idx);
@@ -1022,7 +1082,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
               // CFI가 없고 진행률만 있는 경우, locations 정보를 이용해 즉시 targetCFI 계산
               if (!targetCFI && expectedRatio > 0.01) {
-                targetCFI = getSafeCfiFromPercentage(book.locations, expectedRatio);
+                targetCFI =
+                  initialOpenMode === "last" && lastSpineHref
+                    ? lastSpineHref
+                    : getSafeCfiFromPercentage(book.locations, expectedRatio);
               }
 
               console.log("[EpubChapterViewer] Displaying final position (cached):", targetCFI || "beginning");
@@ -1039,8 +1102,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           // 캐시 미스 → 기본 디스플레이 시도 + 백그라운드 생성
           console.log("[EpubChapterViewer] No cached locations, initial display then background generate");
           const expectedRatio = typeof initialProgressRatio === "number" ? initialProgressRatio : 0;
+          const initialDisplayTarget = initialOpenMode === "last" && lastSpineHref ? lastSpineHref : (initialCFI ?? undefined);
 
-          void displayWithFallback(initialCFI ?? undefined, expectedRatio).then(() => {
+          void displayWithFallback(initialDisplayTarget, expectedRatio).then(() => {
             if (isDisposed) return;
             void book.locations
               .generate(EPUB_LOCATION_STRIDE)
@@ -1067,7 +1131,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                 const currentLoc = rendition.currentLocation() as unknown as EpubjsLocation;
                 const currentPct = currentLoc?.start?.percentage ?? 0;
                 const expectedRatio = typeof initialProgressRatio === "number" ? initialProgressRatio : 0;
-                const shouldCorrectFromProgress = !initialCFI && expectedRatio > 0.01;
+                const shouldCorrectFromProgress = initialOpenMode !== "last" && !initialCFI && expectedRatio > 0.01;
 
                 if (currentPct < 0.01 && shouldCorrectFromProgress) {
                   try {
@@ -1130,7 +1194,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       handleRelocated,
       applySettings,
       initialCFI,
+      initialOpenMode,
       initialProgressRatio,
+      snapRenditionToVisualEnd,
       settings.renderMode,
       settings.flow,
     ]);

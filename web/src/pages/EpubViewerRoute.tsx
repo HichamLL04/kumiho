@@ -185,6 +185,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [epubUrl, setEpubUrl] = useState<string | null>(null);
   const [loadedEpubChapterId, setLoadedEpubChapterId] = useState<string | null>(null);
+  const [epubSettingsLoaded, setEpubSettingsLoaded] = useState(false);
   const [isGeneratedFromText, setIsGeneratedFromText] = useState(false);
   const [initialCFI, setInitialCFI] = useState<string | null>(null);
   const [initialProgressRatio, setInitialProgressRatio] = useState<number | null>(null);
@@ -198,6 +199,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const location = useLocation();
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
   const routeIsIncognito = location.state?.isIncognito === true;
+  const shouldOpenLastPage = new URLSearchParams(location.search).get("page") === "last";
   const effectiveIncognito = isIncognito || routeIsIncognito;
   const uiTimerRef = useRef<number | null>(null);
   const uiShownTimeRef = useRef<number>(0);
@@ -236,6 +238,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setInitialProgressRatio(null);
     setToc([]);
     setLoadedEpubChapterId(null);
+    setEpubSettingsLoaded(false);
     reset();
 
     // 초기화 완료 신호가 오지 않을 경우를 대비한 세이프티 폴백 (20초)
@@ -250,33 +253,39 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
     const fetchProgress = async () => {
       if (chapterId) {
-        try {
-          const chapterRes = await epubProgressAPI.get(chapterId);
-          const chapterProgress = chapterRes.data.progress;
-          const hasSavedCFI =
-            typeof chapterProgress?.current_cfi === "string" && chapterProgress.current_cfi.trim().length > 0;
+        if (shouldOpenLastPage) {
+          setInitialCFI(null);
+          setInitialProgressRatio(1);
+          setGlobalProgress(100);
+        } else {
+          try {
+            const chapterRes = await epubProgressAPI.get(chapterId);
+            const chapterProgress = chapterRes.data.progress;
+            const hasSavedCFI =
+              typeof chapterProgress?.current_cfi === "string" && chapterProgress.current_cfi.trim().length > 0;
 
-          if (hasSavedCFI) {
-            setInitialCFI(chapterProgress.current_cfi);
-            setCurrentCFI(chapterProgress.current_cfi);
-          } else {
+            if (hasSavedCFI) {
+              setInitialCFI(chapterProgress.current_cfi);
+              setCurrentCFI(chapterProgress.current_cfi);
+            } else {
+              setInitialCFI(null);
+            }
+
+            if (chapterProgress?.progress_percent !== undefined) {
+              setGlobalProgress(chapterProgress.progress_percent);
+              // current_cfi가 있으면 위치 복원은 CFI를 우선 사용하고,
+              // progress_percent는 UI 표시용으로만 유지한다.
+              setInitialProgressRatio(
+                hasSavedCFI ? null : Math.max(0, Math.min(1, chapterProgress.progress_percent / 100)),
+              );
+            } else {
+              setInitialProgressRatio(null);
+            }
+          } catch (error) {
+            console.error("[EpubViewerRoute] Failed to load progress:", error);
             setInitialCFI(null);
-          }
-
-          if (chapterProgress?.progress_percent !== undefined) {
-            setGlobalProgress(chapterProgress.progress_percent);
-            // current_cfi가 있으면 위치 복원은 CFI를 우선 사용하고,
-            // progress_percent는 UI 표시용으로만 유지한다.
-            setInitialProgressRatio(
-              hasSavedCFI ? null : Math.max(0, Math.min(1, chapterProgress.progress_percent / 100)),
-            );
-          } else {
             setInitialProgressRatio(null);
           }
-        } catch (error) {
-          console.error("[EpubViewerRoute] Failed to load progress:", error);
-          setInitialCFI(null);
-          setInitialProgressRatio(null);
         }
 
         try {
@@ -330,12 +339,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         objectUrlRef.current = null;
       }
     };
-  }, [chapterId, reset, scheduleObjectUrlRevoke, setCurrentCFI, setGlobalProgress]);
+  }, [chapterId, reset, scheduleObjectUrlRevoke, setCurrentCFI, setGlobalProgress, shouldOpenLastPage]);
 
   // EPUB 뷰어 사용자 설정 로드
   useEffect(() => {
     if (!chapterId) return;
     let cancelled = false;
+    setEpubSettingsLoaded(false);
 
     const loadEpubSettings = async () => {
       try {
@@ -464,6 +474,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       } catch (error) {
         if (cancelled) return;
         console.warn("[EpubViewerRoute] Failed to load EPUB user settings:", error);
+      } finally {
+        if (!cancelled) {
+          setEpubSettingsLoaded(true);
+        }
       }
     };
 
@@ -977,7 +991,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const handlePrevAtStart = useCallback(() => {
     if (prevChapterId) {
       startChapterSwitching(isDocumentFullscreen());
-      navigate(`/viewer/${prevChapterId}`, {
+      navigate(`/viewer/${prevChapterId}?page=last`, {
         state: buildViewerRouteState({ from: viewerFrom, isIncognito: routeIsIncognito }),
       });
     }
@@ -1004,7 +1018,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   }, []);
 
   // 챕터 정보/진행도 로딩까지만 대기하고, 이후 뷰어 초기화는 컴포넌트 내부에서 진행
-  if (isLoading || !chapter || !epubUrl || loadedEpubChapterId !== chapterId) {
+  if (isLoading || !chapter || !epubUrl || loadedEpubChapterId !== chapterId || !epubSettingsLoaded) {
     return (
       <div style={{ width: "100%", height: "100vh" }}>
         <LoadingSpinner
@@ -1044,6 +1058,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           epubUrl={epubUrl}
           initialCFI={initialCFI}
           initialProgressRatio={initialProgressRatio}
+          initialOpenMode={shouldOpenLastPage ? "last" : "default"}
           currentPage={currentPage}
           totalPages={totalPages}
           visiblePage={visiblePage}

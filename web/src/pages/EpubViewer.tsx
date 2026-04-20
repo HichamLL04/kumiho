@@ -30,6 +30,7 @@ import { ChapterListModal } from "../features/viewer/components";
 import {
   EpubChapterViewer,
   type EpubTOCItem,
+  type EpubInitialOpenMode,
   type EpubRenderLayout,
 } from "../features/epub-viewer/components/EpubChapterViewer";
 import type { EpubChapterViewerHandles } from "../features/epub-viewer/components/EpubChapterViewer";
@@ -44,6 +45,7 @@ interface EpubViewerProps {
   epubUrl: string;
   initialCFI?: string | null;
   initialProgressRatio?: number | null;
+  initialOpenMode?: EpubInitialOpenMode;
   currentPage: number;
   totalPages: number;
   visiblePage: number;
@@ -123,6 +125,7 @@ export function EpubViewer({
   epubUrl,
   initialCFI,
   initialProgressRatio,
+  initialOpenMode = "default",
   currentPage,
   totalPages,
   visiblePage,
@@ -833,6 +836,7 @@ export function EpubViewer({
           isUIVisible={isUIVisible}
           initialCFI={initialCFI}
           initialProgressRatio={initialProgressRatio}
+          initialOpenMode={initialOpenMode}
           settings={settings}
           onReady={onReady}
           onTOCLoad={onTOCLoad}
