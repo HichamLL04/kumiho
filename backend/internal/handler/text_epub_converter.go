@@ -11,9 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode/utf8"
 
-	"golang.org/x/text/encoding/korean"
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 )
 
 const (
@@ -25,8 +24,6 @@ const (
 	// 이보다 큰 단락은 강제 분할하여 브라우저 렌더링 성능 저하를 방지한다.
 	textEpubMaxParagraphBytes = 128 * 1024 // 128KB
 )
-
-var errUnsupportedTextEncoding = errors.New("unsupported text encoding")
 
 type textEpubSource struct {
 	ChapterID string
@@ -43,7 +40,7 @@ type textEpubSection struct {
 }
 
 func buildTextEpub(source textEpubSource) ([]byte, string, error) {
-	normalized, encoding, err := decodeRawTextForEpub(source.Raw)
+	normalized, encoding, err := util.DecodeRawText(source.Raw)
 	if err != nil {
 		return nil, "", err
 	}
@@ -108,29 +105,6 @@ func buildTextEpub(source textEpubSource) ([]byte, string, error) {
 		return nil, "", err
 	}
 	return buf.Bytes(), encoding, nil
-}
-
-func decodeRawTextForEpub(raw []byte) (string, string, error) {
-	if bytes.HasPrefix(raw, []byte{0xFF, 0xFE}) || bytes.HasPrefix(raw, []byte{0xFE, 0xFF}) {
-		// 명시적으로 UTF-16 BOM 거부
-		return "", "", errUnsupportedTextEncoding
-	}
-
-	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
-	if utf8.Valid(raw) {
-		return normalizeDecodedTextForEpub(string(raw)), "utf-8", nil
-	}
-
-	decoded, err := korean.EUCKR.NewDecoder().Bytes(raw)
-	if err != nil {
-		return "", "", errUnsupportedTextEncoding
-	}
-	return normalizeDecodedTextForEpub(string(decoded)), "cp949", nil
-}
-
-func normalizeDecodedTextForEpub(content string) string {
-	normalized := strings.ReplaceAll(content, "\r\n", "\n")
-	return strings.ReplaceAll(normalized, "\r", "\n")
 }
 
 func splitTextParagraphsForEpub(content string) []string {

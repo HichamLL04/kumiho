@@ -286,6 +286,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
               setInitialProgressRatio(null);
             }
           } catch (error) {
+            if (cancelled) return;
             console.error("[EpubViewerRoute] Failed to load progress:", error);
             setInitialCFI(null);
             setInitialProgressRatio(null);
@@ -315,12 +316,14 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           setEpubUrl(objectUrl);
           setLoadedEpubChapterId(chapterId);
         } catch (error) {
+          if (cancelled) return;
           console.error("[EpubViewerRoute] Failed to load epub blob:", error);
           setEpubUrl(null);
           setLoadedEpubChapterId(null);
         } finally {
-          setIsLoading(false);
-          // 뷰어 자체의 초기화 완료 대기로 변경 (기존 setTimeout 제거)
+          if (!cancelled) {
+            setIsLoading(false);
+          }
         }
       } else {
         setInitialCFI(null);

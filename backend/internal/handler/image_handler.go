@@ -971,7 +971,6 @@ func (h *ImageHandler) ServeChapterEpub(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/epub+zip")
-	c.Set("Accept-Ranges", "bytes")
 	if strings.HasSuffix(chapterPathLower, ".txt") {
 		raw, err := os.ReadFile(realFullPath)
 		if err != nil {
@@ -988,18 +987,20 @@ func (h *ImageHandler) ServeChapterEpub(c *fiber.Ctx) error {
 			Raw:       raw,
 		})
 		if err != nil {
-			if errors.Is(err, errUnsupportedTextEncoding) {
+			if errors.Is(err, util.ErrUnsupportedTextEncoding) {
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "unsupported text encoding"})
 			}
 			log.Printf("[IMAGE_HANDLER] failed to convert txt chapter %s to epub: %v", chapter.ID, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to convert txt to epub"})
 		}
 
+		// TXT 변환 응답은 메모리 Buffer이므로 Range 요청을 지원하지 않음 (Accept-Ranges 제외)
 		c.Set("X-Kumiho-Source-Format", "txt")
 		c.Set("X-Kumiho-Text-Encoding", encoding)
 		return c.Send(epubData)
 	}
 
+	c.Set("Accept-Ranges", "bytes")
 	return c.SendFile(realFullPath)
 }
 

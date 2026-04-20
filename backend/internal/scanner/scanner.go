@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/md5"
 	"database/sql"
@@ -2622,19 +2621,21 @@ func (s *Scanner) analyzeArchiveAsChapter(archivePath, title string, chapterNum 
 			return nil, fmt.Errorf("failed to read txt file: %w", err)
 		}
 
-		raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
-		if !utf8.Valid(raw) {
-			return nil, fmt.Errorf("unsupported text encoding: utf-8 only")
+		decodedStr, _, err := util.DecodeRawText(raw)
+		if err != nil {
+			return nil, fmt.Errorf("unsupported text encoding: %w", err)
 		}
+
+		runeCount := utf8.RuneCountInString(decodedStr)
 
 		return &scannedChapter{
 			Title:          title,
 			ChapterNumber:  chapterNum,
 			Path:           archivePath,
 			Pages:          []scannedPage{},
-			PageCount:      int(math.Max(1, math.Ceil(float64(utf8.RuneCount(raw))/1000.0))),
+			PageCount:      int(math.Max(1, math.Ceil(float64(runeCount)/1000.0))),
 			TotalBytes:     int64(len(raw)),
-			TotalPositions: utf8.RuneCount(raw),
+			TotalPositions: runeCount,
 		}, nil
 	}
 

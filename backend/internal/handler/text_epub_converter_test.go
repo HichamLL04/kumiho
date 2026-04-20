@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 	"golang.org/x/text/encoding/korean"
 )
 
@@ -161,8 +162,8 @@ func TestBuildTextEpubRejectsInvalidEncoding(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported encoding (UTF-16 BOM), got nil")
 	}
-	if !errors.Is(err, errUnsupportedTextEncoding) {
-		t.Fatalf("expected errUnsupportedTextEncoding, got: %v", err)
+	if !errors.Is(err, util.ErrUnsupportedTextEncoding) {
+		t.Fatalf("expected util.ErrUnsupportedTextEncoding, got: %v", err)
 	}
 }
 
