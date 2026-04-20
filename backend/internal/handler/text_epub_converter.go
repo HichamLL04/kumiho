@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,8 +17,13 @@ import (
 )
 
 const (
-	textEpubTargetSectionBytes = 200 * 1024
-	textEpubMaxParagraphBytes  = 128 * 1024
+	// 섹션당 목표 크기: 메모리 사용량과 렌더링 성능 사이의 균형점.
+	// 너무 작으면 파일이 과도하게 분할되어 TOC가 복잡해지고,
+	// 너무 크면 e-reader 메모리 사용량이 증가하고 렌더링이 지연된다.
+	textEpubTargetSectionBytes = 200 * 1024 // 200KB
+	// 단일 <p> 태그의 최대 바이트 수.
+	// 이보다 큰 단락은 강제 분할하여 브라우저 렌더링 성능 저하를 방지한다.
+	textEpubMaxParagraphBytes = 128 * 1024 // 128KB
 )
 
 var errUnsupportedTextEncoding = errors.New("unsupported text encoding")
@@ -60,28 +66,40 @@ func buildTextEpub(source textEpubSource) ([]byte, string, error) {
 	zipWriter := zip.NewWriter(&buf)
 
 	if err := writeStoredZipFile(zipWriter, "mimetype", []byte("application/epub+zip")); err != nil {
-		_ = zipWriter.Close()
+		if closeErr := zipWriter.Close(); closeErr != nil {
+			log.Printf("[TEXT_EPUB] zip close error after mimetype write failure: %v", closeErr)
+		}
 		return nil, "", err
 	}
 	if err := writeDeflatedZipFile(zipWriter, "META-INF/container.xml", []byte(textEpubContainerXML)); err != nil {
-		_ = zipWriter.Close()
+		if closeErr := zipWriter.Close(); closeErr != nil {
+			log.Printf("[TEXT_EPUB] zip close error after container.xml write failure: %v", closeErr)
+		}
 		return nil, "", err
 	}
 	if err := writeDeflatedZipFile(zipWriter, "OEBPS/styles.css", []byte(textEpubCSS)); err != nil {
-		_ = zipWriter.Close()
+		if closeErr := zipWriter.Close(); closeErr != nil {
+			log.Printf("[TEXT_EPUB] zip close error after styles.css write failure: %v", closeErr)
+		}
 		return nil, "", err
 	}
 	if err := writeDeflatedZipFile(zipWriter, "OEBPS/nav.xhtml", []byte(renderTextEpubNav(title, sections))); err != nil {
-		_ = zipWriter.Close()
+		if closeErr := zipWriter.Close(); closeErr != nil {
+			log.Printf("[TEXT_EPUB] zip close error after nav.xhtml write failure: %v", closeErr)
+		}
 		return nil, "", err
 	}
 	if err := writeDeflatedZipFile(zipWriter, "OEBPS/content.opf", []byte(renderTextEpubOPF(source.ChapterID, title, encoding, sections))); err != nil {
-		_ = zipWriter.Close()
+		if closeErr := zipWriter.Close(); closeErr != nil {
+			log.Printf("[TEXT_EPUB] zip close error after content.opf write failure: %v", closeErr)
+		}
 		return nil, "", err
 	}
 	for _, section := range sections {
 		if err := writeDeflatedZipFile(zipWriter, "OEBPS/"+section.Href, []byte(renderTextEpubSection(title, section))); err != nil {
-			_ = zipWriter.Close()
+			if closeErr := zipWriter.Close(); closeErr != nil {
+				log.Printf("[TEXT_EPUB] zip close error after %s write failure: %v", section.Href, closeErr)
+			}
 			return nil, "", err
 		}
 	}

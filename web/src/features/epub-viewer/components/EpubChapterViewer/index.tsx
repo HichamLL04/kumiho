@@ -261,6 +261,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const resizeFrameRef = useRef<number | null>(null);
     const lastContainerSizeRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
     const hasStableLocationRef = useRef(false);
+    // 마지막으로 relocated 이벤트에서 받은 CFI — 리사이즈 시 epub.js가 내부 reflow로 위치를 잃기 전의 위치를 보존
+    const lastStableCfiRef = useRef<string | null>(null);
     // 레이아웃 전환(spread/settings 변경) 직전에 캡처한 CFI — reflowRendition에서 currentLocation() 대신 사용
     const layoutTransitionAnchorRef = useRef<string | null>(null);
     // flow 변경으로 rendition 재생성 시 보존할 CFI — 새 rendition 초기화 시 initialCFI보다 우선 사용
@@ -269,6 +271,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const pendingAnchorHighlightRef = useRef<string | null>(null);
     // highlight CSS 애니메이션 종료 후 클래스 제거를 위한 타이머
     const anchorHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // resize 안정화 후 앵커 하이라이트를 지연 표시하기 위한 debounce 타이머
+    const resizeHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // stale closure 방지 — showAnchorHighlight 최신 참조
     const showAnchorHighlightRef = useRef<((cfi: string) => void) | null>(null);
 
@@ -311,9 +315,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       }
 
       try {
-        const range = (
-          rendition as unknown as { getRange: (cfi: string) => Range | null }
-        ).getRange(cfi);
+        const range = (rendition as unknown as { getRange: (cfi: string) => Range | null }).getRange(cfi);
         if (!range) return;
 
         // 범위에서 블록 레벨 조상 요소로 이동
@@ -323,9 +325,22 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
             : range.commonAncestorContainer.parentElement;
 
         const BLOCK_TAGS = new Set([
-          "P", "DIV", "SECTION", "ARTICLE", "BLOCKQUOTE",
-          "H1", "H2", "H3", "H4", "H5", "H6",
-          "LI", "TD", "TH", "PRE", "FIGURE",
+          "P",
+          "DIV",
+          "SECTION",
+          "ARTICLE",
+          "BLOCKQUOTE",
+          "H1",
+          "H2",
+          "H3",
+          "H4",
+          "H5",
+          "H6",
+          "LI",
+          "TD",
+          "TH",
+          "PRE",
+          "FIGURE",
         ]);
         while (el && !BLOCK_TAGS.has(el.tagName)) {
           el = el.parentElement;
@@ -404,10 +419,15 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         currentCfi = layoutTransitionAnchorRef.current;
         layoutTransitionAnchorRef.current = null;
       } else {
-        try {
-          currentCfi = anyRendition.currentLocation?.()?.start?.cfi;
-        } catch {
-          return;
+        // 리사이즈 시 epub.js가 내부적으로 먼저 reflow하여 currentLocation()이 1페이지를 반환할 수 있음.
+        // relocated 이벤트에서 저장해 둔 lastStableCfiRef를 primary source로 사용한다.
+        currentCfi = lastStableCfiRef.current ?? undefined;
+        if (!currentCfi) {
+          try {
+            currentCfi = anyRendition.currentLocation?.()?.start?.cfi;
+          } catch {
+            return;
+          }
         }
       }
 
@@ -420,11 +440,25 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       if (!currentCfi || isNavigatingRef.current) return;
 
       const displayCfi = currentCfi;
-      void anyRendition.display(displayCfi).then(() => {
-        if (wasLayoutTransition) {
-          showAnchorHighlightRef.current?.(displayCfi);
-        }
-      }).catch(() => {});
+      void anyRendition
+        .display(displayCfi)
+        .then(() => {
+          if (wasLayoutTransition) {
+            // 레이아웃 전환(settings 변경)은 즉시 highlight 표시
+            showAnchorHighlightRef.current?.(displayCfi);
+          } else {
+            // 리사이즈는 debounce로 안정화 후 highlight 표시
+            // 드래그 중에는 타이머가 계속 리셋되어 깜빡임 방지
+            if (resizeHighlightTimerRef.current !== null) {
+              clearTimeout(resizeHighlightTimerRef.current);
+            }
+            resizeHighlightTimerRef.current = setTimeout(() => {
+              resizeHighlightTimerRef.current = null;
+              showAnchorHighlightRef.current?.(displayCfi);
+            }, 300);
+          }
+        })
+        .catch(() => {});
     }, []);
 
     const snapRenditionToVisualEnd = useCallback((rendition: Rendition): boolean => {
@@ -524,6 +558,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         if (!rendition || !book || !location?.start?.cfi) return;
 
         const cfi = location.start.cfi;
+        lastStableCfiRef.current = cfi;
         const wasStable = hasStableLocationRef.current;
         hasStableLocationRef.current = true;
         if (!wasStable) {
@@ -630,6 +665,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       allowContentHeuristicRef.current = true;
       autoLayoutLockedRef.current = false;
       hasStableLocationRef.current = false;
+      lastStableCfiRef.current = null;
 
       const rendition = book.renderTo(containerRef.current, {
         flow: settings.flow === "scrolled" ? "scrolled-doc" : "paginated",
@@ -948,7 +984,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
         const displayRatioFallback = () => {
           if (!fallbackCFI || fallbackCFI === targetCFI) return displayBeginning();
-          return rendition.display(fallbackCFI).then(() => finalizeInit()).catch(displayBeginning);
+          return rendition
+            .display(fallbackCFI)
+            .then(() => finalizeInit())
+            .catch(displayBeginning);
         };
 
         return rendition
@@ -1187,9 +1226,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
               // flow 변경으로 rendition을 재생성한 경우, 모드 전환 직전 위치를 우선 복원한다.
               // chapterId가 일치하는 경우에만 사용하여, 챕터 이동 시 anchor가 오염되는 것을 방지한다.
               const flowAnchor =
-                flowTransitionAnchorRef.current?.chapterId === chapterId
-                  ? flowTransitionAnchorRef.current.cfi
-                  : null;
+                flowTransitionAnchorRef.current?.chapterId === chapterId ? flowTransitionAnchorRef.current.cfi : null;
               flowTransitionAnchorRef.current = null;
 
               let targetCFI: string | undefined = flowAnchor || initialCFI || undefined;
@@ -1221,15 +1258,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
           // flow 변경으로 rendition을 재생성한 경우, 모드 전환 직전 위치를 우선 복원한다.
           const flowAnchor =
-            flowTransitionAnchorRef.current?.chapterId === chapterId
-              ? flowTransitionAnchorRef.current.cfi
-              : null;
+            flowTransitionAnchorRef.current?.chapterId === chapterId ? flowTransitionAnchorRef.current.cfi : null;
           flowTransitionAnchorRef.current = null;
 
           const initialDisplayTarget =
-            initialOpenMode === "last" && lastSpineHref
-              ? lastSpineHref
-              : (flowAnchor ?? initialCFI ?? undefined);
+            initialOpenMode === "last" && lastSpineHref ? lastSpineHref : (flowAnchor ?? initialCFI ?? undefined);
 
           // flow 변경 또는 이어보기 위치가 있으면 finalizeInit에서 highlight 표시
           pendingAnchorHighlightRef.current = flowAnchor ?? initialCFI ?? null;
@@ -1296,6 +1329,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           clearTimeout(anchorHighlightTimerRef.current);
           anchorHighlightTimerRef.current = null;
         }
+        if (resizeHighlightTimerRef.current !== null) {
+          clearTimeout(resizeHighlightTimerRef.current);
+          resizeHighlightTimerRef.current = null;
+        }
         if (resizeFrameRef.current !== null) {
           cancelAnimationFrame(resizeFrameRef.current);
           resizeFrameRef.current = null;
@@ -1317,14 +1354,21 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         // flow 변경으로 rendition을 재생성하기 직전, 현재 텍스트 위치를 보존한다.
         // 새 rendition이 initialCFI 대신 이 anchor를 우선 사용하여 모드 전환 위치를 복원한다.
         // chapterId를 함께 저장하여, 다른 챕터로 이동할 때는 anchor가 무시되도록 한다.
+        // lastStableCfiRef를 primary source로 사용 — cleanup 시점에 epub.js가 이미
+        // 내부 reflow를 수행하여 currentLocation()이 오염되었을 수 있으므로.
         if (hasStableLocationRef.current) {
-          try {
-            const loc = rendition.currentLocation() as unknown as EpubjsLocation;
-            if (loc?.start?.cfi) {
-              flowTransitionAnchorRef.current = { cfi: loc.start.cfi, chapterId };
+          const stableCfi = lastStableCfiRef.current;
+          if (stableCfi) {
+            flowTransitionAnchorRef.current = { cfi: stableCfi, chapterId };
+          } else {
+            try {
+              const loc = rendition.currentLocation() as unknown as EpubjsLocation;
+              if (loc?.start?.cfi) {
+                flowTransitionAnchorRef.current = { cfi: loc.start.cfi, chapterId };
+              }
+            } catch {
+              // ignore — anchor 없이 진행
             }
-          } catch {
-            // ignore — anchor 없이 진행
           }
         }
 
@@ -1384,6 +1428,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         if (resizeFrameRef.current !== null) {
           cancelAnimationFrame(resizeFrameRef.current);
           resizeFrameRef.current = null;
+        }
+        if (resizeHighlightTimerRef.current !== null) {
+          clearTimeout(resizeHighlightTimerRef.current);
+          resizeHighlightTimerRef.current = null;
         }
         observer?.disconnect();
         window.removeEventListener("resize", scheduleReflow);
