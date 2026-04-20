@@ -950,7 +950,8 @@ func (h *ImageHandler) ServeChapterEpub(c *fiber.Ctx) error {
 		}
 	}
 
-	if !strings.HasSuffix(strings.ToLower(chapter.Path), ".epub") {
+	chapterPathLower := strings.ToLower(chapter.Path)
+	if !strings.HasSuffix(chapterPathLower, ".epub") && !strings.HasSuffix(chapterPathLower, ".txt") {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "not an epub chapter"})
 	}
 
@@ -972,6 +973,34 @@ func (h *ImageHandler) ServeChapterEpub(c *fiber.Ctx) error {
 
 	c.Set("Content-Type", "application/epub+zip")
 	c.Set("Accept-Ranges", "bytes")
+	if strings.HasSuffix(chapterPathLower, ".txt") {
+		raw, err := os.ReadFile(realFullPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "file not found"})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to read txt file"})
+		}
+
+		epubData, encoding, err := buildTextEpub(textEpubSource{
+			ChapterID: chapter.ID,
+			Title:     chapter.Title,
+			FileName:  chapter.Path,
+			Raw:       raw,
+		})
+		if err != nil {
+			if errors.Is(err, errUnsupportedTextEncoding) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "unsupported text encoding"})
+			}
+			log.Printf("[IMAGE_HANDLER] failed to convert txt chapter %s to epub: %v", chapter.ID, err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to convert txt to epub"})
+		}
+
+		c.Set("X-Kumiho-Source-Format", "txt")
+		c.Set("X-Kumiho-Text-Encoding", encoding)
+		return c.Send(epubData)
+	}
+
 	return c.SendFile(realFullPath)
 }
 
