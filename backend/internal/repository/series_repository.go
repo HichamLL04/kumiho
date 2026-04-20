@@ -749,8 +749,8 @@ func (r *SeriesRepository) GetReadPages(db database.Queryer, userID, seriesID st
 }
 
 // GetTotalProgressUnits 시리즈 진행률 표시용 총량(용량 기반 단위) 조회
-// - total_positions > 0: total_positions 사용 (EPUB/TXT 등)
-// - 그 외 page_count > 0: page_count 사용 (이미지/PDF 등)
+// - page_count > 0: page_count 사용 (ZIP/PDF/일반 TXT 등 고정 파일 단위)
+// - 그 외 total_positions > 0: total_positions 사용 (EPUB 등 가상 위치 단위)
 func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
 	var total float64
@@ -758,8 +758,8 @@ func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID s
 		`SELECT COALESCE(SUM(
 			CASE
 				WHEN c.duration > 0 THEN c.duration
-				WHEN c.total_positions > 0 THEN c.total_positions
 				WHEN c.page_count > 0 THEN c.page_count
+				WHEN c.total_positions > 0 THEN c.total_positions
 				ELSE 0
 			END
 		), 0)
@@ -779,7 +779,7 @@ func (r *SeriesRepository) GetTotalProgressUnits(db database.Queryer, seriesID s
 
 // GetReadProgressUnits 시리즈 진행률 표시용 완료량 조회
 // - 완독 챕터: 해당 챕터 총량을 100% 반영
-// - 미완독 챕터: 뷰어 진행(current_page/total_pages, fallback: progress_percent) 비율만큼 반영
+// - 미완독 챕터: EPUB/CFI는 progress_percent, 일반 파일은 current_page/total_pages 비율만큼 반영
 func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, seriesID string) (int, error) {
 	db = database.GetQueryer(db)
 	var read float64
@@ -790,8 +790,8 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 				c.has_audio AS has_audio,
 				CASE
 					WHEN c.duration > 0 THEN c.duration
-					WHEN c.total_positions > 0 THEN c.total_positions
 					WHEN c.page_count > 0 THEN c.page_count
+					WHEN c.total_positions > 0 THEN c.total_positions
 					ELSE 0
 				END AS unit_total
 			FROM chapters c
@@ -810,6 +810,7 @@ func (r *SeriesRepository) GetReadProgressUnits(db database.Queryer, userID, ser
 					CASE
 						WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), cu.unit_total) > 0 THEN
 							MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), cu.unit_total)))
+						WHEN rp.current_cfi IS NOT NULL AND rp.current_cfi <> '' THEN MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
 						WHEN rp.total_pages > 0 THEN MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL)))
 						ELSE MIN(1.0, MAX(0.0, rp.progress_percent / 100.0))
 					END

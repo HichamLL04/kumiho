@@ -499,18 +499,18 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 			SELECT id FROM volumes WHERE id = ?
 			UNION ALL
 			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
-		),
-		chapter_units AS (
-			SELECT
-				c.id AS chapter_id,
-				CASE
-					WHEN c.has_audio = 1 AND c.duration > 0 THEN CAST(c.duration AS INTEGER)
-					WHEN c.total_positions > 0 THEN c.total_positions
-					WHEN c.page_count > 0 THEN c.page_count
-					ELSE 0
-				END AS unit_total,
-				c.has_audio
-			FROM chapters c
+			),
+			chapter_units AS (
+				SELECT
+					c.id AS chapter_id,
+					CASE
+						WHEN c.has_audio = 1 AND c.duration > 0 THEN CAST(c.duration AS INTEGER)
+						WHEN c.page_count > 0 THEN c.page_count
+						WHEN c.total_positions > 0 THEN c.total_positions
+						ELSE 0
+					END AS unit_total,
+					c.has_audio
+				FROM chapters c
 			WHERE c.volume_id IN (SELECT id FROM descendant_volumes)
 		),
 		total_units AS (
@@ -522,18 +522,20 @@ func (r *VolumeRepository) GetProgressPercent(db database.Queryer, userID, volum
 			FROM chapter_units cu
 			JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id
 			WHERE cc.user_id = ?
-		),
-		inprogress_units AS (
+			),
+			inprogress_units AS (
 				SELECT COALESCE(SUM(
 					CASE
 						WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)) > 0 THEN
 							MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)))) * cu.unit_total
-					WHEN rp.total_pages > 0 THEN
-						MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL))) * cu.unit_total
-					ELSE
-						MIN(1.0, MAX(0.0, rp.progress_percent / 100.0)) * cu.unit_total
-				END
-			), 0.0) AS value
+						WHEN rp.current_cfi IS NOT NULL AND rp.current_cfi <> '' THEN
+							MIN(1.0, MAX(0.0, rp.progress_percent / 100.0)) * cu.unit_total
+						WHEN rp.total_pages > 0 THEN
+							MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL))) * cu.unit_total
+						ELSE
+							MIN(1.0, MAX(0.0, rp.progress_percent / 100.0)) * cu.unit_total
+					END
+				), 0.0) AS value
 			FROM chapter_units cu
 			JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id
 			LEFT JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id AND cc.user_id = rp.user_id
@@ -655,7 +657,6 @@ func (r *VolumeRepository) CountByParentID(db database.Queryer, parentID string)
 	}
 	return count, nil
 }
-
 
 // GetDistinctExtensions 시리즈 내 모든 볼륨의 고유한 확장자 목록 조회
 func (r *VolumeRepository) GetDistinctExtensions(db database.Queryer, seriesID string) ([]string, error) {
@@ -857,35 +858,37 @@ func (r *VolumeRepository) GetProgressPercentBatch(db database.Queryer, userID s
 			UNION ALL
 			SELECT dv.root_id, v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
 		),
-		chapter_units AS (
-			SELECT
-				dv.root_id,
-				c.id AS chapter_id,
-				CASE
-					WHEN c.has_audio = 1 AND c.duration > 0 THEN CAST(c.duration AS INTEGER)
-					WHEN c.total_positions > 0 THEN c.total_positions
-					WHEN c.page_count > 0 THEN c.page_count
-					ELSE 0
-				END AS unit_total,
-				c.has_audio
-			FROM chapters c
+			chapter_units AS (
+				SELECT
+					dv.root_id,
+					c.id AS chapter_id,
+					CASE
+						WHEN c.has_audio = 1 AND c.duration > 0 THEN CAST(c.duration AS INTEGER)
+						WHEN c.page_count > 0 THEN c.page_count
+						WHEN c.total_positions > 0 THEN c.total_positions
+						ELSE 0
+					END AS unit_total,
+					c.has_audio
+				FROM chapters c
 			JOIN descendant_volumes dv ON c.volume_id = dv.id
 		),
 		volume_stats AS (
-			SELECT
-				cu.root_id,
-				SUM(cu.unit_total) AS total_units,
-				SUM(CASE WHEN cc.chapter_id IS NOT NULL THEN cu.unit_total ELSE 0 END) AS completed_units,
+				SELECT
+					cu.root_id,
+					SUM(cu.unit_total) AS total_units,
+					SUM(CASE WHEN cc.chapter_id IS NOT NULL THEN cu.unit_total ELSE 0 END) AS completed_units,
 					SUM(CASE WHEN rp.chapter_id IS NOT NULL AND cc.chapter_id IS NULL THEN
 						CASE
 							WHEN cu.has_audio = 1 AND COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)) > 0 THEN
 								MIN(1.0, MAX(0.0, COALESCE(rp.current_time, 0.0) / COALESCE(NULLIF(rp.duration, 0), CAST(cu.unit_total AS REAL)))) * cu.unit_total
-						WHEN rp.total_pages > 0 THEN
-							MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL))) * cu.unit_total
-						ELSE
-							MIN(1.0, MAX(0.0, rp.progress_percent / 100.0)) * cu.unit_total
-					END
-					ELSE 0 END) AS inprogress_units
+							WHEN rp.current_cfi IS NOT NULL AND rp.current_cfi <> '' THEN
+								MIN(1.0, MAX(0.0, rp.progress_percent / 100.0)) * cu.unit_total
+							WHEN rp.total_pages > 0 THEN
+								MIN(1.0, MAX(0.0, CAST(rp.current_page AS REAL) / CAST(rp.total_pages AS REAL))) * cu.unit_total
+							ELSE
+								MIN(1.0, MAX(0.0, rp.progress_percent / 100.0)) * cu.unit_total
+						END
+						ELSE 0 END) AS inprogress_units
 			FROM chapter_units cu
 			LEFT JOIN chapter_completions cc ON cc.chapter_id = cu.chapter_id AND cc.user_id = ?
 			LEFT JOIN reading_progress rp ON rp.chapter_id = cu.chapter_id AND rp.user_id = ?

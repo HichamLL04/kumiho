@@ -497,6 +497,81 @@ describe("EpubViewerRoute", () => {
     });
   });
 
+  it("TXT 변환 EPUB은 visible page 기준으로 진행률을 저장한다", async () => {
+    apiGetMock.mockResolvedValueOnce({
+      data: new Blob(["epub"]),
+      headers: {
+        get: (name: string) => (name.toLowerCase() === "x-kumiho-source-format" ? "txt" : null),
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "TXT 변환 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("epub-viewer")).toBeInTheDocument();
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    act(() => {
+      screen.getByTestId("epub-init-complete").click();
+    });
+
+    act(() => {
+      latestViewerProps?.onLocationChange({
+        cfi: "epubcfi(/6/2[chapter]!/4/8/2)",
+        chapterPage: 4,
+        chapterTotal: 8,
+        globalRatio: 0,
+        currentPosition: 0,
+        totalPositions: 8,
+        chapterHref: "chapter.xhtml",
+        spineIndex: 0,
+        spineLength: 1,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockSetGlobalProgress).toHaveBeenCalledWith(expect.closeTo(42.8571428571, 5));
+      expect(epubProgressUpdateMock).toHaveBeenCalledWith("chapter-1", {
+        current_page: 43,
+        total_pages: 100,
+        progress_percent: expect.closeTo(42.8571428571, 5),
+        current_position: 42,
+        total_positions: 100,
+        current_cfi: "epubcfi(/6/2[chapter]!/4/8/2)",
+      });
+    });
+  });
+
   it("마지막 위치 도달 시 progress_percent: 100으로 저장한다", async () => {
     render(
       <MemoryRouter initialEntries={["/viewer/chapter-1"]}>

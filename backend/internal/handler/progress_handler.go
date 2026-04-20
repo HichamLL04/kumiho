@@ -584,7 +584,7 @@ func (h *ProgressHandler) UpdateEpubProgress(c *fiber.Ctx) error {
 	}
 
 	progressPercent := req.ProgressPercent
-	if totalPages > 0 {
+	if math.IsNaN(progressPercent) || math.IsInf(progressPercent, 0) || progressPercent < 0 || progressPercent > 100 {
 		progressPercent = (float64(currentPage) / float64(totalPages)) * 100
 	}
 	progressPercent = math.Max(0, math.Min(100, progressPercent))
