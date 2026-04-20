@@ -252,6 +252,8 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       }
     }, 20000);
 
+    let cancelled = false;
+
     const fetchProgress = async () => {
       if (chapterId) {
         if (shouldOpenLastPage) {
@@ -261,6 +263,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         } else {
           try {
             const chapterRes = await epubProgressAPI.get(chapterId);
+            if (cancelled) return;
             const chapterProgress = chapterRes.data.progress;
             const hasSavedCFI =
               typeof chapterProgress?.current_cfi === "string" && chapterProgress.current_cfi.trim().length > 0;
@@ -291,6 +294,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
 
         try {
           const response = await api.get(`/chapters/${chapterId}/epub`, { responseType: "blob" });
+          if (cancelled) return;
           const sourceFormat = getHeaderValue(response.headers, "x-kumiho-source-format");
           setIsGeneratedFromText(sourceFormat?.toLowerCase() === "txt");
           const objectUrl = URL.createObjectURL(response.data);
@@ -331,6 +335,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     fetchProgress();
 
     return () => {
+      cancelled = true;
       if (objectUrlRevokeTimerRef.current) {
         window.clearTimeout(objectUrlRevokeTimerRef.current);
         objectUrlRevokeTimerRef.current = null;
