@@ -468,9 +468,15 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
       const viewportRect = getViewportRectForAnchor(container, mode, pagedViewportRef.current);
       const inset = getAnchorInsetForMode(mode);
       const pointX = viewportRect.left + inset;
-      const pointY = viewportRect.top + inset;
 
-      const caret = getCaretPoint(pointX, pointY);
+      let caret: { node: Node; offset: number } | null = null;
+      // Scan downwards to find the first valid text node instead of failing on margins/gaps
+      for (let yOffset = inset; yOffset < viewportRect.height; yOffset += 20) {
+        const pointY = viewportRect.top + yOffset;
+        caret = getCaretPoint(pointX, pointY);
+        if (caret) break;
+      }
+
       const paragraphElement = caret
         ? (getClosestParagraphElement(caret.node) ?? findFirstVisibleParagraph(container, mode))
         : findFirstVisibleParagraph(container, mode);
@@ -567,7 +573,8 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
             const articleRect = textBodyRef.current?.getBoundingClientRect();
             if (articleRect) {
               const screenIndex = clamp(
-                Math.floor((resolvedAnchor.rect.left - articleRect.left) / metrics.viewportWidth),
+                // Add 1px epsilon to prevent floating point regression rounding bugs
+                Math.floor((resolvedAnchor.rect.left - articleRect.left + 1) / metrics.viewportWidth),
                 0,
                 Math.max(0, Math.ceil(metrics.totalPages / (settings.readingMode === "double" ? 2 : 1)) - 1),
               );
@@ -1188,7 +1195,11 @@ function TextViewerRouteInner({ loaderData }: TextViewerRouteProps) {
           if (textBodyRef.current) {
             const maxOffset = Math.max(0, textBodyRef.current.scrollWidth - nextViewportWidth);
             const articleRect = textBodyRef.current.getBoundingClientRect();
-            const screenIndex = Math.max(0, Math.floor((resolved.rect.left - articleRect.left) / nextViewportWidth));
+            // Add 1px epsilon to prevent subpixel floating-point flooring bugs returning the previous screen
+            const screenIndex = Math.max(
+              0,
+              Math.floor((resolved.rect.left - articleRect.left + 1) / nextViewportWidth),
+            );
             let restoredPage = settings.readingMode === "double" ? screenIndex * 2 + 1 : screenIndex + 1;
             if (transitionMeta?.fromMode === "vertical" && restoredPage === 1) {
               restoredPage = estimatedPageFromOffset;
