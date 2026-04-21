@@ -40,8 +40,11 @@
 
 .scrolled .viewer :global(.epub-view),
 .scrolled .viewer iframe {
-  max-width: 100% !important;
-  width: 100% !important;
+  display: block;
+  max-width: min(100%, 960px) !important;
+  width: min(100%, 960px) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
   overflow-x: hidden !important;
 }
 
