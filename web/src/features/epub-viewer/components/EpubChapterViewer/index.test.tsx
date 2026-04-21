@@ -1,13 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildEpubInjectedStyle } from "./styleBuilder";
+import { getSafeLocationFromCfi, isLikelyEpubCfi } from "./cfiGuards";
 import { applyOldIOSSafariPointerEventFallback } from "./iosTouchFallback";
 import { applyEpubLineHeightScale } from "./lineHeightScale";
+import { buildEpubInjectedStyle } from "./styleBuilder";
 
 const isOldIOSSafariMock = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock("../../../../utils/browserDetect", () => ({
   isOldIOSSafari: isOldIOSSafariMock,
 }));
+
+describe("EPUB CFI guards", () => {
+  it("rejects href-like values before calling locationFromCfi", () => {
+    const locationFromCfi = vi.fn();
+
+    expect(isLikelyEpubCfi("chapter.xhtml#anchor")).toBe(false);
+    expect(getSafeLocationFromCfi({ locationFromCfi }, "chapter.xhtml#anchor")).toBeNull();
+    expect(locationFromCfi).not.toHaveBeenCalled();
+  });
+
+  it("passes trimmed EPUB CFI strings to locationFromCfi", () => {
+    const locationFromCfi = vi.fn(() => 3);
+
+    expect(isLikelyEpubCfi(" epubcfi(/6/2!/4/2) ")).toBe(true);
+    expect(getSafeLocationFromCfi({ locationFromCfi }, " epubcfi(/6/2!/4/2) ")).toBe(3);
+    expect(locationFromCfi).toHaveBeenCalledWith("epubcfi(/6/2!/4/2)");
+  });
+});
 
 describe("applyOldIOSSafariPointerEventFallback", () => {
   afterEach(() => {
@@ -121,6 +140,34 @@ describe("buildEpubInjectedStyle", () => {
     expect(style).toContain("font-family: Georgia, 'Times New Roman', serif !important;");
     expect(style).toContain("font-size: 112% !important;");
     expect(style).not.toContain("line-height:");
+  });
+
+  it("모바일 페이지 모드에서는 세로 스크롤 모드와 같은 좌우 여백을 적용한다", () => {
+    const style = buildEpubInjectedStyle(
+      {
+        fontSize: 100,
+        fontFamily: "original",
+        lineHeight: 1.6,
+        theme: "light",
+        renderMode: "auto",
+        flow: "paginated",
+        spread: "none",
+        wheelDirection: "down",
+        keyboardDirection: "right",
+        clickDirection: "right",
+      },
+      "book",
+    );
+
+    expect(style).toContain("@media (max-width: 640px)");
+    expect(style).toContain("width: 100% !important;");
+    expect(style).toContain("max-width: 960px !important;");
+    expect(style).toContain("margin-left: auto !important;");
+    expect(style).toContain("margin-right: auto !important;");
+    expect(style).toContain("padding-left: 32px !important;");
+    expect(style).toContain("padding-right: 32px !important;");
+    expect(style).toContain("box-sizing: border-box !important;");
+    expect(style).toContain("overflow-x: hidden !important;");
   });
 });
 

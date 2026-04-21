@@ -1,6 +1,12 @@
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
-import type { EpubFontFamily, EpubRenderMode, EpubViewerSettings, EpubTheme } from "../../../../stores/epubViewerStore";
+import type {
+  EpubFlow,
+  EpubFontFamily,
+  EpubRenderMode,
+  EpubViewerSettings,
+  EpubTheme,
+} from "../../../../stores/epubViewerStore";
 import { EPUB_LINE_HEIGHT_SCALE_DEFAULT, EPUB_LINE_HEIGHT_SCALE_MAX, EPUB_LINE_HEIGHT_SCALE_MIN } from "../../../../stores/epubViewerStore";
 import styles from "./EpubSettingsPanel.module.css";
 
@@ -11,6 +17,7 @@ interface EpubSettingsPanelProps {
   onLineHeightChange: (height: number) => void;
   onThemeChange: (theme: EpubTheme) => void;
   onRenderModeChange: (mode: EpubRenderMode) => void;
+  onFlowChange: (flow: EpubFlow) => void;
   onSpreadChange: (spread: "auto" | "none") => void;
   onWheelDirectionChange: (direction: "down" | "up") => void;
   onKeyboardDirectionChange: (direction: "right" | "left") => void;
@@ -26,6 +33,7 @@ export function EpubSettingsPanel({
   onLineHeightChange,
   onThemeChange,
   onRenderModeChange,
+  onFlowChange,
   onSpreadChange,
   onWheelDirectionChange,
   onKeyboardDirectionChange,
@@ -40,6 +48,19 @@ export function EpubSettingsPanel({
   const lineHeightValueLabel = isOriginalLineHeight
     ? t("epub_viewer.settings.line_height.original", { defaultValue: "원본" })
     : `${settings.lineHeight.toFixed(2)}x`;
+  const currentPageMode = settings.flow === "scrolled" ? "scrolled" : settings.spread;
+
+  const handlePageModeChange = (mode: "none" | "auto" | "scrolled") => {
+    if (mode === "scrolled") {
+      onFlowChange("scrolled");
+      return;
+    }
+
+    if (settings.flow !== "paginated") {
+      onFlowChange("paginated");
+    }
+    onSpreadChange(mode);
+  };
 
   return (
     <div className={styles.panel}>
@@ -84,19 +105,19 @@ export function EpubSettingsPanel({
         <div className={styles.section}>
           <label
             className={styles.label}
-            id="spread-label"
+            id="page-mode-label"
           >
             {t("epub_viewer.settings.spread.label", { defaultValue: "페이지 모드" })}
           </label>
           <div
             className={styles.buttonGroup}
-            aria-labelledby="spread-label"
+            aria-labelledby="page-mode-label"
           >
             <button
               type="button"
-              aria-pressed={settings.spread === "none"}
-              className={`${styles.optionBtn} ${settings.spread === "none" ? styles.active : ""}`}
-              onClick={() => onSpreadChange("none")}
+              aria-pressed={currentPageMode === "none"}
+              className={`${styles.optionBtn} ${currentPageMode === "none" ? styles.active : ""}`}
+              onClick={() => handlePageModeChange("none")}
               disabled={isTypographyControlLimited || settings.renderMode === "comic"}
               title={t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
               aria-label={t("epub_viewer.footer.pages_1", { defaultValue: "1페이지" })}
@@ -105,17 +126,27 @@ export function EpubSettingsPanel({
             </button>
             <button
               type="button"
-              aria-pressed={settings.spread === "auto"}
-              className={`${styles.optionBtn} ${settings.spread === "auto" ? styles.active : ""}`}
-              onClick={() => onSpreadChange("auto")}
+              aria-pressed={currentPageMode === "auto"}
+              className={`${styles.optionBtn} ${currentPageMode === "auto" ? styles.active : ""}`}
+              onClick={() => handlePageModeChange("auto")}
               disabled={isTypographyControlLimited || settings.renderMode === "comic"}
               title={t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
               aria-label={t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
             >
               {t("epub_viewer.footer.pages_2", { defaultValue: "2페이지" })}
             </button>
+            <button
+              type="button"
+              aria-pressed={currentPageMode === "scrolled"}
+              className={`${styles.optionBtn} ${currentPageMode === "scrolled" ? styles.active : ""}`}
+              onClick={() => handlePageModeChange("scrolled")}
+              title={t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
+              aria-label={t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
+            >
+              {t("epub_viewer.settings.flow.scrolled", { defaultValue: "세로 스크롤" })}
+            </button>
           </div>
-          {(isTypographyControlLimited || settings.renderMode === "comic") && (
+          {settings.flow !== "scrolled" && (isTypographyControlLimited || settings.renderMode === "comic") && (
             <p className={styles.helperText}>{t("epub_viewer.settings.render_mode.typography_limited")}</p>
           )}
         </div>

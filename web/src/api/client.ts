@@ -195,9 +195,12 @@ export const libraryAPI = {
   cancelScan: (id: string) => api.post(`/libraries/${id}/scan/cancel`),
   resetMetadata: (id: string) =>
     api
-      .post<{ library_id: string; library_name: string; reset_count: number; reset_at: string }>(
-        `/libraries/${id}/metadata/reset`,
-      )
+      .post<{
+        library_id: string;
+        library_name: string;
+        reset_count: number;
+        reset_at: string;
+      }>(`/libraries/${id}/metadata/reset`)
       .then((res) => res.data),
   delete: (id: string) => api.delete(`/libraries/${id}`),
   updateOrder: (ids: string[]) => api.put("/libraries/order", ids),
@@ -214,15 +217,14 @@ export const seriesAPI = {
     api.get<{ progress_list: ReadingProgress[] }>(`/series/${seriesId}/progress-list`),
   update: (seriesId: string, data: UpdateSeriesRequest) => api.patch(`/series/${seriesId}`, data),
   resetMetadata: (seriesId: string) =>
-    api
-      .post<{ series: Series; warnings?: string[] }>(`/series/${seriesId}/reset-metadata`)
-      .then((res) => res.data),
+    api.post<{ series: Series; warnings?: string[] }>(`/series/${seriesId}/reset-metadata`).then((res) => res.data),
   translateDescription: (seriesId: string, targetLang?: string) =>
     api
-      .post<{ series: Series; target_lang: string; translated_text: string }>(
-        `/series/${seriesId}/translate-description`,
-        targetLang ? { target_lang: targetLang } : {},
-      )
+      .post<{
+        series: Series;
+        target_lang: string;
+        translated_text: string;
+      }>(`/series/${seriesId}/translate-description`, targetLang ? { target_lang: targetLang } : {})
       .then((res) => res.data),
   updateProgress: (
     seriesId: string,
@@ -412,8 +414,6 @@ export const chapterAPI = {
   get: (id: string) => api.get(`/chapters/${id}`),
   getPages: (chapterId: string) => api.get(`/chapters/${chapterId}/pages`),
   getProgress: (chapterId: string) => api.get(`/chapters/${chapterId}/progress`),
-  getText: (chapterId: string) =>
-    api.get<{ content: string; total_bytes: number; total_positions: number }>(`/chapters/${chapterId}/text`),
   analyze: (chapterId: string) =>
     api.post<{ analyzed_count: number; total_pages: number; success: boolean }>(`/chapters/${chapterId}/analyze`),
   markComplete: (chapterId: string) => api.post(`/chapters/${chapterId}/complete`),

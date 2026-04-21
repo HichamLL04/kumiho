@@ -19,6 +19,32 @@
   border: none;
 }
 
+.scrolled {
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.scrolled .viewer {
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+.scrolled .viewer :global(.epub-container) {
+  max-width: 100% !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.scrolled .viewer :global(.epub-view),
+.scrolled .viewer iframe {
+  max-width: 100% !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+
 .chapterPageInfo {
   position: absolute;
   left: 50%;
