@@ -572,6 +572,7 @@ export function EpubViewer({
         onViewerClick();
         return;
       }
+      if (settings.flow === "scrolled") return;
 
       // 좌/우 클릭 → 페이지 이동
       const isRTL = settings.clickDirection === "left";
@@ -583,7 +584,7 @@ export function EpubViewer({
         else handleNext();
       }
     },
-    [getZoneRatio, handleNext, handlePrev, onViewerClick, settings.clickDirection],
+    [getZoneRatio, handleNext, handlePrev, onViewerClick, settings.clickDirection, settings.flow],
   );
 
   useEffect(() => {
