@@ -37,6 +37,7 @@ import type { EpubChapterViewerHandles } from "../features/epub-viewer/component
 import { EpubSettingsPanel } from "../features/epub-viewer/components/EpubSettingsPanel";
 import { EpubTOC } from "../features/epub-viewer/components/EpubTOC";
 import { ChapterNavHint } from "../features/viewer/components/ChapterNavHint";
+import { PullIndicator } from "../features/viewer/components/PullIndicator";
 import styles from "./EpubViewer.module.css";
 
 interface EpubViewerProps {
@@ -118,6 +119,7 @@ const THEME_BG: Record<string, string> = {
   sepia: "#f4ecd8",
 };
 const CHAPTER_NAV_HINT_DURATION_MS = 3000;
+const EPUB_SCROLLED_PULL_THRESHOLD = 80;
 
 export function EpubViewer({
   chapterTitle,
@@ -189,6 +191,13 @@ export function EpubViewer({
   const [pendingProgressRatio, setPendingProgressRatio] = useState<number | null>(null);
   const [chapterPageDisplay, setChapterPageDisplay] = useState(visiblePage);
   const [chapterTotalDisplay, setChapterTotalDisplay] = useState(visibleTotalPages);
+  const [scrolledPullState, setScrolledPullState] = useState({ pullOffset: 0, isTouching: false });
+  const [spinePosition, setSpinePosition] = useState({
+    spineIndex: 0,
+    spineLength: 0,
+    atStart: true,
+    atEnd: false,
+  });
   const [nextHintTriggeredChapterId, setNextHintTriggeredChapterId] = useState<string | null>(null);
   const [prevHintTriggeredChapterId, setPrevHintTriggeredChapterId] = useState<string | null>(null);
   const hintTimeoutRef = useRef<number | null>(null);
@@ -289,6 +298,12 @@ export function EpubViewer({
       if (location.chapterTotal > 0) {
         setChapterTotalDisplay(location.chapterTotal);
       }
+      setSpinePosition({
+        spineIndex: location.spineIndex,
+        spineLength: location.spineLength,
+        atStart: location.atStart === true,
+        atEnd: location.atEnd === true,
+      });
       onLocationChange(location);
     },
     [onLocationChange],
@@ -351,6 +366,19 @@ export function EpubViewer({
 
   const isVisibleAtStart = chapterPageDisplay <= 1;
   const isVisibleAtEnd = chapterTotalDisplay > 0 && chapterPageDisplay >= chapterTotalDisplay;
+  const hasInternalPrevPart = spinePosition.spineIndex > 0 || !spinePosition.atStart;
+  const hasInternalNextPart =
+    (spinePosition.spineLength > 0 && spinePosition.spineIndex < spinePosition.spineLength - 1) ||
+    !spinePosition.atEnd;
+  const canScrolledPullPrev = hasInternalPrevPart || Boolean(onReachedStartPrev && prevChapterTitle);
+  const canScrolledPullNext = hasInternalNextPart || Boolean(onReachedEndNext && nextChapterTitle);
+  const prevPullTitle = hasInternalPrevPart
+    ? t("epub_viewer.scroll_pull.prev_part", { defaultValue: "이전 part" })
+    : (prevChapterTitle ?? null);
+  const nextPullTitle = hasInternalNextPart
+    ? t("epub_viewer.scroll_pull.next_part", { defaultValue: "다음 part" })
+    : (nextChapterTitle ?? null);
+  const noopSaveProgress = useCallback(() => Promise.resolve(), []);
 
   const handlePrev = useCallback(() => {
     const attemptPrev = async () => {
@@ -565,6 +593,7 @@ export function EpubViewer({
       const isEditable =
         tagName === "input" || tagName === "textarea" || tagName === "select" || Boolean(target?.isContentEditable);
       if (isEditable) return;
+      if (settings.flow === "scrolled") return;
 
       const nextArrowKey = settings.keyboardDirection === "right" ? "ArrowRight" : "ArrowLeft";
       const prevArrowKey = settings.keyboardDirection === "right" ? "ArrowLeft" : "ArrowRight";
@@ -580,7 +609,7 @@ export function EpubViewer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.keyboardDirection, handleNext, handlePrev]);
+  }, [settings.flow, settings.keyboardDirection, handleNext, handlePrev]);
 
   // === 구형 iOS Safari: <main>에 터치 이벤트 핸들러 등록 ===
   // iframe pointer-events:none으로 터치가 관통하므로 부모에서 처리한다.
@@ -618,6 +647,11 @@ export function EpubViewer({
       lastTouchTimeRef.current = Date.now();
 
       if (dragging) {
+        if (settings.flow === "scrolled") {
+          startPos = null;
+          dragging = false;
+          return;
+        }
         // 스와이프 감지
         const touch = e.changedTouches[0];
         if (touch) {
@@ -647,6 +681,8 @@ export function EpubViewer({
 
       if (ratio >= 0.3 && ratio <= 0.7) {
         onViewerClick();
+      } else if (settings.flow === "scrolled") {
+        return;
       } else {
         const isRTL = settings.clickDirection === "left";
         if (ratio < 0.3) {
@@ -668,7 +704,7 @@ export function EpubViewer({
       mainEl.removeEventListener("touchmove", onTouchMove);
       mainEl.removeEventListener("touchend", onTouchEnd);
     };
-  }, [getZoneRatio, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
+  }, [getZoneRatio, settings.clickDirection, settings.flow, handleNext, handlePrev, onViewerClick]);
 
   return (
     <div
@@ -858,8 +894,35 @@ export function EpubViewer({
           onPagePrev={handlePrev}
           onRenderLayoutChange={setEffectiveLayout}
           hideChapterPageInfo={hideChapterPageInfo}
+          canScrolledPullPrev={canScrolledPullPrev}
+          canScrolledPullNext={canScrolledPullNext}
+          onScrolledPullStateChange={setScrolledPullState}
         />
       </main>
+
+      {/* 세로 스크롤 모드 당김 인디케이터 */}
+      {settings.flow === "scrolled" && (
+        <>
+          <PullIndicator
+            type="prev"
+            pullOffset={scrolledPullState.pullOffset}
+            pullThreshold={EPUB_SCROLLED_PULL_THRESHOLD}
+            chapterId={canScrolledPullPrev ? "epub-prev-part" : null}
+            chapterTitle={prevPullTitle}
+            saveProgress={noopSaveProgress}
+            onActivate={handlePrev}
+          />
+          <PullIndicator
+            type="next"
+            pullOffset={scrolledPullState.pullOffset}
+            pullThreshold={EPUB_SCROLLED_PULL_THRESHOLD}
+            chapterId={canScrolledPullNext ? "epub-next-part" : null}
+            chapterTitle={nextPullTitle}
+            saveProgress={noopSaveProgress}
+            onActivate={handleNext}
+          />
+        </>
+      )}
 
       {/* 챕터 이동 힌트 */}
       <ChapterNavHint

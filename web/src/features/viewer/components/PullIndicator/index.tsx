@@ -14,6 +14,7 @@ interface PullIndicatorProps {
   chapterId: string | null;
   chapterTitle: string | null;
   saveProgress: () => Promise<void>;
+  onActivate?: (type: "prev" | "next") => Promise<void> | void;
 }
 
 export function PullIndicator({
@@ -23,6 +24,7 @@ export function PullIndicator({
   chapterId,
   chapterTitle,
   saveProgress,
+  onActivate,
 }: PullIndicatorProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,6 +42,11 @@ export function PullIndicator({
   const handleClick = async () => {
     // visible 상태일 때만 클릭 허용 (pointer-events로 제어하지만 안전장치)
     if (!isVisible) return;
+
+    if (onActivate) {
+      await onActivate(type);
+      return;
+    }
 
     await saveProgress().catch((err) => console.warn("Failed to save progress", err));
     startChapterSwitching(isDocumentFullscreen());

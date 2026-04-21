@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useState } from "react";
 import Epub from "epubjs";
 import type { Book, Contents, Rendition } from "epubjs";
 import type { EpubViewerSettings } from "../../../../stores/epubViewerStore";
@@ -43,6 +43,11 @@ export interface EpubChapterViewerHandles {
   goToCFI: (cfi: string) => void;
   goToProgress: (ratio: number) => void;
   goToPage: (page: number) => void;
+}
+
+interface ScrolledPullState {
+  pullOffset: number;
+  isTouching: boolean;
 }
 
 export type EpubInitialOpenMode = "default" | "last";
@@ -90,9 +95,16 @@ interface EpubChapterViewerProps {
   onPagePrev?: () => void;
   onRenderLayoutChange?: (layout: EpubRenderLayout) => void;
   hideChapterPageInfo?: boolean;
+  canScrolledPullPrev?: boolean;
+  canScrolledPullNext?: boolean;
+  onScrolledPullStateChange?: (state: ScrolledPullState) => void;
 }
 
 const EPUB_VIEWER_STYLE_ID = "kumiho-epub-viewer-settings";
+const SCROLLED_PULL_THRESHOLD = 80;
+const SCROLLED_PULL_SENSITIVITY = 1.0;
+const SCROLLED_PULL_MAX = 180;
+const SCROLLED_PULL_WHEEL_COOLDOWN_MS = 150;
 
 interface NavigationSnapshot {
   cfi: string | null;
@@ -125,6 +137,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       onPagePrev,
       onRenderLayoutChange,
       hideChapterPageInfo = false,
+      canScrolledPullPrev = false,
+      canScrolledPullNext = false,
+      onScrolledPullStateChange,
     },
     ref,
   ) => {
@@ -134,6 +149,8 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const locationsReadyRef = useRef(false);
     const invalidPreciseHrefSetRef = useRef<Set<string>>(new Set());
     const generatedTotalRef = useRef(0);
+    const [scrolledPullOffset, setScrolledPullOffsetState] = useState(0);
+    const [isScrolledPullTouching, setIsScrolledPullTouchingState] = useState(false);
 
     // 최신 콜백을 ref로 유지 (stale closure 방지)
     const onViewerClickRef = useRef(onViewerClick);
@@ -144,8 +161,17 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const onPageNextRef = useRef(onPageNext);
     const onPagePrevRef = useRef(onPagePrev);
     const onRenderLayoutChangeRef = useRef(onRenderLayoutChange);
+    const onScrolledPullStateChangeRef = useRef(onScrolledPullStateChange);
+    const canScrolledPullPrevRef = useRef(canScrolledPullPrev);
+    const canScrolledPullNextRef = useRef(canScrolledPullNext);
     const settingsRef = useRef(settings);
     const lastWheelNavigationAtRef = useRef(0);
+    const lastScrolledPullWheelAtRef = useRef(0);
+    const scrolledPullOffsetRef = useRef(0);
+    const isScrolledPullTouchingRef = useRef(false);
+    const scrolledPullFrameRef = useRef<number | null>(null);
+    const scrolledPullStartYRef = useRef<number | null>(null);
+    const scrolledPullLastYRef = useRef<number | null>(null);
     const detectedLayoutRef = useRef<EpubRenderLayout>("book");
     const effectiveLayoutRef = useRef<EpubRenderLayout>("book");
     const allowContentHeuristicRef = useRef(true);
@@ -200,8 +226,101 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       onRenderLayoutChangeRef.current = onRenderLayoutChange;
     }, [onRenderLayoutChange]);
     useEffect(() => {
+      onScrolledPullStateChangeRef.current = onScrolledPullStateChange;
+    }, [onScrolledPullStateChange]);
+    useEffect(() => {
+      canScrolledPullPrevRef.current = canScrolledPullPrev;
+    }, [canScrolledPullPrev]);
+    useEffect(() => {
+      canScrolledPullNextRef.current = canScrolledPullNext;
+    }, [canScrolledPullNext]);
+    useEffect(() => {
       settingsRef.current = settings;
     }, [settings]);
+
+    const publishScrolledPullState = useCallback((pullOffset: number, isTouching: boolean) => {
+      onScrolledPullStateChangeRef.current?.({ pullOffset, isTouching });
+    }, []);
+
+    const setScrolledPullOffset = useCallback(
+      (nextOffset: number) => {
+        scrolledPullOffsetRef.current = nextOffset;
+        setScrolledPullOffsetState(nextOffset);
+        publishScrolledPullState(nextOffset, isScrolledPullTouchingRef.current);
+      },
+      [publishScrolledPullState],
+    );
+
+    const setScrolledPullTouching = useCallback(
+      (nextTouching: boolean) => {
+        isScrolledPullTouchingRef.current = nextTouching;
+        setIsScrolledPullTouchingState(nextTouching);
+        publishScrolledPullState(scrolledPullOffsetRef.current, nextTouching);
+      },
+      [publishScrolledPullState],
+    );
+
+    const resetScrolledPullOffset = useCallback(() => {
+      if (scrolledPullFrameRef.current !== null) {
+        cancelAnimationFrame(scrolledPullFrameRef.current);
+        scrolledPullFrameRef.current = null;
+      }
+      setScrolledPullOffset(0);
+    }, [setScrolledPullOffset]);
+
+    const decayScrolledPullOffset = useCallback(() => {
+      if (scrolledPullFrameRef.current !== null) {
+        cancelAnimationFrame(scrolledPullFrameRef.current);
+        scrolledPullFrameRef.current = null;
+      }
+
+      const decay = () => {
+        const current = scrolledPullOffsetRef.current;
+        if (current === 0) {
+          scrolledPullFrameRef.current = null;
+          return;
+        }
+
+        const next = current * 0.82;
+        if (Math.abs(next) < 1) {
+          setScrolledPullOffset(0);
+          scrolledPullFrameRef.current = null;
+          return;
+        }
+
+        setScrolledPullOffset(next);
+        scrolledPullFrameRef.current = requestAnimationFrame(decay);
+      };
+
+      scrolledPullFrameRef.current = requestAnimationFrame(decay);
+    }, [setScrolledPullOffset]);
+
+    const completeScrolledPull = useCallback(() => {
+      const currentOffset = scrolledPullOffsetRef.current;
+      scrolledPullStartYRef.current = null;
+      scrolledPullLastYRef.current = null;
+      setScrolledPullTouching(false);
+
+      if (Math.abs(currentOffset) >= SCROLLED_PULL_THRESHOLD) {
+        resetScrolledPullOffset();
+        if (currentOffset > 0 && canScrolledPullPrevRef.current) {
+          onPagePrevRef.current?.();
+        } else if (currentOffset < 0 && canScrolledPullNextRef.current) {
+          onPageNextRef.current?.();
+        }
+        return;
+      }
+
+      if (currentOffset !== 0) {
+        decayScrolledPullOffset();
+      }
+    }, [decayScrolledPullOffset, resetScrolledPullOffset, setScrolledPullTouching]);
+
+    useEffect(() => {
+      if (settings.flow === "scrolled") return;
+      resetScrolledPullOffset();
+      setScrolledPullTouching(false);
+    }, [resetScrolledPullOffset, setScrolledPullTouching, settings.flow]);
 
     const showAnchorHighlight = useCallback((cfi: string) => {
       const rendition = renditionRef.current;
@@ -573,10 +692,78 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       applySettings(rendition, settings, effectiveLayoutRef.current);
       const wheelContainers = new Set<HTMLElement>();
 
+      const handleScrolledPullWheel = (event: WheelEvent, container: HTMLElement): boolean => {
+        const isAtTop = container.scrollTop <= 0;
+        const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+        const currentPull = scrolledPullOffsetRef.current;
+        const isReverseRelease = (currentPull > 0 && event.deltaY > 0) || (currentPull < 0 && event.deltaY < 0);
+        const isSnappedPull = Math.abs(currentPull) >= SCROLLED_PULL_THRESHOLD;
+        const now = Date.now();
+
+        if (now - lastScrolledPullWheelAtRef.current < SCROLLED_PULL_WHEEL_COOLDOWN_MS && !isReverseRelease && !isSnappedPull) {
+          if (isAtTop && event.deltaY < 0 && canScrolledPullPrevRef.current) {
+            event.preventDefault();
+            return true;
+          }
+          if (isAtBottom && event.deltaY > 0 && canScrolledPullNextRef.current) {
+            event.preventDefault();
+            return true;
+          }
+          return false;
+        }
+
+        if (isSnappedPull) {
+          event.preventDefault();
+          if (currentPull > 0) {
+            if (event.deltaY < 0 && canScrolledPullPrevRef.current) {
+              resetScrolledPullOffset();
+              onPagePrevRef.current?.();
+            } else if (event.deltaY > 0) {
+              lastScrolledPullWheelAtRef.current = now;
+              resetScrolledPullOffset();
+            }
+          } else if (currentPull < 0) {
+            if (event.deltaY > 0 && canScrolledPullNextRef.current) {
+              resetScrolledPullOffset();
+              onPageNextRef.current?.();
+            } else if (event.deltaY < 0) {
+              lastScrolledPullWheelAtRef.current = now;
+              resetScrolledPullOffset();
+            }
+          }
+          return true;
+        }
+
+        const nextStep = SCROLLED_PULL_THRESHOLD / 2;
+        if (isAtTop && event.deltaY < 0 && canScrolledPullPrevRef.current) {
+          event.preventDefault();
+          lastScrolledPullWheelAtRef.current = now;
+          setScrolledPullOffset(Math.min(SCROLLED_PULL_THRESHOLD, currentPull + nextStep));
+          return true;
+        }
+        if (isAtBottom && event.deltaY > 0 && canScrolledPullNextRef.current) {
+          event.preventDefault();
+          lastScrolledPullWheelAtRef.current = now;
+          setScrolledPullOffset(Math.max(-SCROLLED_PULL_THRESHOLD, currentPull - nextStep));
+          return true;
+        }
+        if (currentPull !== 0 && isReverseRelease) {
+          event.preventDefault();
+          lastScrolledPullWheelAtRef.current = now;
+          resetScrolledPullOffset();
+          return true;
+        }
+
+        return false;
+      };
+
       const wheelHandler = (event: WheelEvent) => {
         const currentSettings = settingsRef.current;
         const currentRendition = renditionRef.current;
         const manager = currentRendition ? asEpubRenditionSnapshot(currentRendition).manager : undefined;
+        if (currentSettings.flow === "scrolled" && manager?.isPaginated === false && manager.container) {
+          if (handleScrolledPullWheel(event, manager.container)) return;
+        }
         const action = getWheelNavigationAction({
           deltaY: event.deltaY,
           flow: currentSettings.flow,
@@ -658,9 +845,16 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       const touchStartHandler = (event: TouchEvent) => {
         const touch = event.touches[0];
         if (!touch) return;
+        if (scrolledPullFrameRef.current !== null) {
+          cancelAnimationFrame(scrolledPullFrameRef.current);
+          scrolledPullFrameRef.current = null;
+        }
         pointerDownPosRef.current = { x: touch.clientX, y: touch.clientY };
+        scrolledPullStartYRef.current = touch.clientY;
+        scrolledPullLastYRef.current = touch.clientY;
         isDraggingRef.current = false;
         touchHandledRef.current = false;
+        if (settingsRef.current.flow === "scrolled") setScrolledPullTouching(true);
       };
 
       const touchMoveHandler = (event: TouchEvent) => {
@@ -670,6 +864,32 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         const dx = touch.clientX - pointerDownPosRef.current.x;
         const dy = touch.clientY - pointerDownPosRef.current.y;
         if (Math.sqrt(dx * dx + dy * dy) > 8) isDraggingRef.current = true;
+
+        if (settingsRef.current.flow !== "scrolled" || Math.abs(dx) > Math.abs(dy)) return;
+        const currentRendition = renditionRef.current;
+        const manager = currentRendition ? asEpubRenditionSnapshot(currentRendition).manager : undefined;
+        const container = manager?.container;
+        if (!container || manager?.isPaginated === true || scrolledPullLastYRef.current === null) return;
+
+        const diff = touch.clientY - scrolledPullLastYRef.current;
+        scrolledPullLastYRef.current = touch.clientY;
+        const isAtTop = container.scrollTop <= 0;
+        const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+        const currentPull = scrolledPullOffsetRef.current;
+
+        if ((isAtTop && diff > 0 && canScrolledPullPrevRef.current) || currentPull > 0) {
+          const resistance = SCROLLED_PULL_SENSITIVITY * (1 - Math.abs(currentPull) / (SCROLLED_PULL_MAX * 2));
+          const nextOffset = Math.max(0, Math.min(currentPull + diff * resistance, SCROLLED_PULL_MAX));
+          setScrolledPullOffset(nextOffset);
+          if (event.cancelable && container.scrollTop <= 0 && nextOffset > 0) event.preventDefault();
+        } else if ((isAtBottom && diff < 0 && canScrolledPullNextRef.current) || currentPull < 0) {
+          const resistance = SCROLLED_PULL_SENSITIVITY * (1 - Math.abs(currentPull) / (SCROLLED_PULL_MAX * 2));
+          const nextOffset = Math.min(0, Math.max(currentPull + diff * resistance, -SCROLLED_PULL_MAX));
+          setScrolledPullOffset(nextOffset);
+          if (event.cancelable && isAtBottom && nextOffset < 0) event.preventDefault();
+        } else if (currentPull !== 0) {
+          setScrolledPullOffset(0);
+        }
       };
 
       const handleContentInput = (content: Contents) => {
@@ -736,13 +956,16 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
             isDraggingRef.current = false;
             const startPos = pointerDownPosRef.current;
             pointerDownPosRef.current = null;
+            if (settingsRef.current.flow === "scrolled") {
+              completeScrolledPull();
+              return;
+            }
             if (startPos) {
               const touch = event.changedTouches[0];
               if (touch) {
                 const dx = touch.clientX - startPos.x;
                 const dy = touch.clientY - startPos.y;
                 if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-                  if (settingsRef.current.flow === "scrolled") return;
                   const isRTL = settingsRef.current.clickDirection === "left";
                   if (dx < 0) {
                     if (isRTL) onPagePrevRef.current?.();
@@ -761,6 +984,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           const iframe = doc.defaultView?.frameElement as HTMLIFrameElement | null;
           const iframeRect = iframe?.getBoundingClientRect();
           pointerDownPosRef.current = null;
+          if (settingsRef.current.flow === "scrolled") completeScrolledPull();
           executeZoneAction(resolveZone((iframeRect?.left ?? 0) + clientX));
         };
 
@@ -770,7 +994,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         doc.addEventListener("mousemove", mouseMoveHandler);
         doc.addEventListener("click", clickHandler);
         doc.addEventListener("touchstart", touchStartHandler, { passive: true });
-        doc.addEventListener("touchmove", touchMoveHandler, { passive: true });
+        doc.addEventListener("touchmove", touchMoveHandler, { passive: false });
         doc.addEventListener("touchend", touchEndHandler);
 
         contentDisposersRef.current.set(doc, () => {
@@ -1222,6 +1446,13 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           cancelAnimationFrame(resizeFrameRef.current);
           resizeFrameRef.current = null;
         }
+        if (scrolledPullFrameRef.current !== null) {
+          cancelAnimationFrame(scrolledPullFrameRef.current);
+          scrolledPullFrameRef.current = null;
+        }
+        scrolledPullOffsetRef.current = 0;
+        isScrolledPullTouchingRef.current = false;
+        onScrolledPullStateChangeRef.current?.({ pullOffset: 0, isTouching: false });
         rendition.off("relocated", handleRelocated as unknown as (...args: unknown[]) => void);
         rendition.off("render", renderHandler);
         rendition.off("displayed", displayedHandler);
@@ -1643,7 +1874,14 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         <div
           ref={containerRef}
           className={styles.viewer}
-          style={{ transition: "opacity 0.15s ease-out" }}
+          style={{
+            transform: settings.flow === "scrolled" ? `translateY(${scrolledPullOffset * 0.3}px)` : "none",
+            transition:
+              settings.flow === "scrolled" && !isScrolledPullTouching && scrolledPullOffset === 0
+                ? "opacity 0.15s ease-out, transform 0.4s cubic-bezier(0.2, 0, 0.2, 1)"
+                : "opacity 0.15s ease-out",
+            willChange: settings.flow === "scrolled" ? "transform, opacity" : "opacity",
+          }}
         />
         {!hideChapterPageInfo && (
           <div className={`${styles.chapterPageInfo} ${isUIVisible ? styles.hidden : ""}`}>
