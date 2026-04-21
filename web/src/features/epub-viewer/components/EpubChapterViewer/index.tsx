@@ -600,6 +600,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         const tagName = target?.tagName?.toLowerCase();
         if (tagName === "input" || tagName === "textarea" || tagName === "select" || Boolean(target?.isContentEditable))
           return;
+        if (currentSettings.flow === "scrolled") return;
 
         const nextArrowKey = currentSettings.keyboardDirection === "right" ? "ArrowRight" : "ArrowLeft";
         const prevArrowKey = currentSettings.keyboardDirection === "right" ? "ArrowLeft" : "ArrowRight";
@@ -631,6 +632,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           onViewerClickRef.current?.();
           return;
         }
+        if (currentSettings.flow === "scrolled") return;
         const isRTL = currentSettings.clickDirection === "left";
         if (zone === "left") {
           if (isRTL) onPageNextRef.current?.();
@@ -740,6 +742,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
                 const dx = touch.clientX - startPos.x;
                 const dy = touch.clientY - startPos.y;
                 if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+                  if (settingsRef.current.flow === "scrolled") return;
                   const isRTL = settingsRef.current.clickDirection === "left";
                   if (dx < 0) {
                     if (isRTL) onPagePrevRef.current?.();
