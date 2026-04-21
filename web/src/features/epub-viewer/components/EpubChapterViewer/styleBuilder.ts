@@ -51,29 +51,29 @@ export function buildEpubInjectedStyle(settings: EpubViewerSettings, layout: Epu
     }
 
     body {
-      width: 100% !important;
-      max-width: 960px !important;
-      min-height: 100vh !important;
-      margin-left: auto !important;
-      margin-right: auto !important;
-      padding-top: 72px !important;
-      padding-bottom: 96px !important;
-      padding-left: 32px !important;
-      padding-right: 32px !important;
-      box-sizing: border-box !important;
-      overflow-x: hidden !important;
+      width: 100%;
+      max-width: 960px;
+      min-height: 100vh;
+      margin-left: auto;
+      margin-right: auto;
+      padding-top: 72px;
+      padding-bottom: 96px;
+      padding-left: 32px;
+      padding-right: 32px;
+      box-sizing: border-box;
+      overflow-x: hidden;
     }
 
     *, *::before, *::after {
-      box-sizing: border-box !important;
+      box-sizing: border-box;
     }
 
     img, svg, video, canvas, table {
-      max-width: 100% !important;
+      max-width: 100%;
     }
 
     img, svg, video, canvas {
-      height: auto !important;
+      height: auto;
     }
   `
     : "";
@@ -104,23 +104,23 @@ export function buildEpubInjectedStyle(settings: EpubViewerSettings, layout: Epu
 
     body {
       ${bodyTypographyRule}
-      column-fill: auto !important;
-      padding-top: 0 !important;
-      padding-bottom: 0 !important;
-      padding-left: 8px !important;
-      padding-right: 8px !important;
+      column-fill: auto;
+      padding-top: 0;
+      padding-bottom: 0;
+      padding-left: 8px;
+      padding-right: 8px;
     }
 
     @media (max-width: 640px) {
       body {
-        width: 100% !important;
-        max-width: 960px !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-        padding-left: 32px !important;
-        padding-right: 32px !important;
-        box-sizing: border-box !important;
-        overflow-x: hidden !important;
+        width: 100%;
+        max-width: 960px;
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 32px;
+        padding-right: 32px;
+        box-sizing: border-box;
+        overflow-x: hidden;
       }
     }
 
@@ -160,25 +160,29 @@ export function buildEpubInjectedStyle(settings: EpubViewerSettings, layout: Epu
     }
 
     section, .epub-type-contains-word-section {
-      display: block !important;
-      break-inside: auto !important;
-      page-break-inside: auto !important;
-      overflow: visible !important;
-      height: auto !important;
+      display: block;
+      break-inside: auto;
+      page-break-inside: auto;
+      overflow: visible;
+      height: auto;
     }
 
     .box_brown, .box_white, .box_grey {
-      break-inside: avoid !important;
-      -webkit-break-inside: avoid !important;
-      page-break-inside: avoid !important;
-      min-height: 100% !important;
+      break-inside: avoid;
+      -webkit-break-inside: avoid;
+      page-break-inside: avoid;
+      min-height: 100%;
     }
 
-    ${settings.theme !== "dark" ? `
+    ${
+      settings.theme !== "dark"
+        ? `
     img[epub\\:type~='se:image.color-depth.black-on-transparent'],
     img.epub-type-contains-word-se-image-color-depth-black-on-transparent {
       filter: none !important;
       background: transparent !important;
-    }` : ""}
+    }`
+        : ""
+    }
   `;
 }

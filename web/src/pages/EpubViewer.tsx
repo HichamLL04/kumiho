@@ -317,7 +317,6 @@ export function EpubViewer({
 
       if (!isEndNavigationReady) return;
       if (showNextHint && onReachedEndNext) {
-        // 두 번째 클릭: 실제 이동
         clearHintTimeout();
         setNextHintTriggeredChapterId(null);
         onReachedEndNext();
@@ -340,8 +339,14 @@ export function EpubViewer({
 
     void attemptNext();
   }, [
-    onReachedEndNext, isEndNavigationReady,
-    showNextHint, showPrevHint, nextChapterTitle, chapterId, clearPendingProgress, clearHintTimeout,
+    onReachedEndNext,
+    isEndNavigationReady,
+    showNextHint,
+    showPrevHint,
+    nextChapterTitle,
+    chapterId,
+    clearPendingProgress,
+    clearHintTimeout,
   ]);
 
   const isVisibleAtStart = chapterPageDisplay <= 1;
@@ -386,8 +391,14 @@ export function EpubViewer({
 
     void attemptPrev();
   }, [
-    isStartNavigationReady, onReachedStartPrev,
-    showPrevHint, showNextHint, prevChapterTitle, chapterId, clearPendingProgress, clearHintTimeout,
+    isStartNavigationReady,
+    onReachedStartPrev,
+    showPrevHint,
+    showNextHint,
+    prevChapterTitle,
+    chapterId,
+    clearPendingProgress,
+    clearHintTimeout,
   ]);
 
   const handleTOCJump = useCallback(
@@ -880,164 +891,162 @@ export function EpubViewer({
         onMouseEnter={onInteractionStart}
         onMouseLeave={onInteractionEnd}
       >
-          <div className={styles.footerControls}>
-            <button
-              className={styles.navBtn}
-              onClick={() => viewerRef.current?.goToProgress?.(0)}
-              disabled={isVisibleAtStart}
-              aria-label={t("epub_viewer.footer.first_page")}
-            >
-              <ChevronsLeft size={20} />
-            </button>
-            <button
-              className={styles.navBtn}
-              onClick={handlePrev}
-              disabled={isVisibleAtStart && (!onReachedStartPrev || !isStartNavigationReady)}
-              aria-label={t("epub_viewer.footer.prev_page")}
-            >
-              <ChevronLeft size={20} />
-            </button>
+        <div className={styles.footerControls}>
+          <button
+            className={styles.navBtn}
+            onClick={() => viewerRef.current?.goToProgress?.(0)}
+            disabled={isVisibleAtStart}
+            aria-label={t("epub_viewer.footer.first_page")}
+          >
+            <ChevronsLeft size={20} />
+          </button>
+          <button
+            className={styles.navBtn}
+            onClick={handlePrev}
+            disabled={isVisibleAtStart && (!onReachedStartPrev || !isStartNavigationReady)}
+            aria-label={t("epub_viewer.footer.prev_page")}
+          >
+            <ChevronLeft size={20} />
+          </button>
 
-            <div className={styles.pageSliderContainer}>
-              <div className={styles.progressBarWrap}>
-                <div
-                  className={styles.progressBarInteractive}
-                  onMouseMove={handleProgressHover}
-                  onMouseLeave={handleProgressLeave}
-                  onClick={(event) => handleProgressSeek(getRatioFromEvent(event))}
-                  role="slider"
-                  tabIndex={0}
-                  aria-label={t("epub_viewer.footer.progress")}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={
-                    currentProgressPercent >= 0 ? currentProgressPercent : Math.round(currentProgressRatio * 100)
+          <div className={styles.pageSliderContainer}>
+            <div className={styles.progressBarWrap}>
+              <div
+                className={styles.progressBarInteractive}
+                onMouseMove={handleProgressHover}
+                onMouseLeave={handleProgressLeave}
+                onClick={(event) => handleProgressSeek(getRatioFromEvent(event))}
+                role="slider"
+                tabIndex={0}
+                aria-label={t("epub_viewer.footer.progress")}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={
+                  currentProgressPercent >= 0 ? currentProgressPercent : Math.round(currentProgressRatio * 100)
+                }
+                onKeyDown={(event) => {
+                  let nextRatio = currentProgressRatio;
+                  const step = 0.05;
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    nextRatio = Math.min(1, currentProgressRatio + step);
+                  } else if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    nextRatio = Math.max(0, currentProgressRatio - step);
+                  } else if (event.key === "Home") {
+                    event.preventDefault();
+                    nextRatio = 0;
+                  } else if (event.key === "End") {
+                    event.preventDefault();
+                    nextRatio = 1;
+                  } else {
+                    return;
                   }
-                  onKeyDown={(event) => {
-                    let nextRatio = currentProgressRatio;
-                    const step = 0.05;
-                    if (event.key === "ArrowRight") {
-                      event.preventDefault();
-                      nextRatio = Math.min(1, currentProgressRatio + step);
-                    } else if (event.key === "ArrowLeft") {
-                      event.preventDefault();
-                      nextRatio = Math.max(0, currentProgressRatio - step);
-                    } else if (event.key === "Home") {
-                      event.preventDefault();
-                      nextRatio = 0;
-                    } else if (event.key === "End") {
-                      event.preventDefault();
-                      nextRatio = 1;
-                    } else {
-                      return;
-                    }
-                    handleProgressSeek(nextRatio);
-                  }}
-                >
-                  <div className={styles.progressBarTrack}>
-                    <div
-                      className={styles.progressBarFill}
-                      style={{ width: `${currentProgressRatio * 100}%` }}
+                  handleProgressSeek(nextRatio);
+                }}
+              >
+                <div className={styles.progressBarTrack}>
+                  <div
+                    className={styles.progressBarFill}
+                    style={{ width: `${currentProgressRatio * 100}%` }}
+                  />
+                  <div
+                    className={styles.progressBarThumb}
+                    style={{ left: `${currentProgressRatio * 100}%` }}
+                  />
+                  {chapterMarkers.map((marker) => (
+                    <button
+                      key={`${marker.id}-${marker.href}-${marker.ratio}`}
+                      type="button"
+                      className={styles.progressMarker}
+                      style={{ left: `${marker.ratio * 100}%` }}
+                      title={marker.label || marker.href}
+                      aria-label={t("epub_viewer.progress_marker.navigate", {
+                        label: marker.label || marker.href,
+                      })}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPendingProgressRatio(marker.ratio);
+                        viewerRef.current?.goToCFI(marker.target);
+                        (event.currentTarget as HTMLButtonElement).blur();
+                      }}
+                      onMouseEnter={() => setHoveredMarker({ ratio: marker.ratio, label: marker.label })}
+                      onMouseLeave={() => setHoveredMarker(null)}
                     />
-                    <div
-                      className={styles.progressBarThumb}
-                      style={{ left: `${currentProgressRatio * 100}%` }}
-                    />
-                    {chapterMarkers.map((marker) => (
-                      <button
-                        key={`${marker.id}-${marker.href}-${marker.ratio}`}
-                        type="button"
-                        className={styles.progressMarker}
-                        style={{ left: `${marker.ratio * 100}%` }}
-                        title={marker.label || marker.href}
-                        aria-label={t("epub_viewer.progress_marker.navigate", {
-                          label: marker.label || marker.href,
-                        })}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setPendingProgressRatio(marker.ratio);
-                          viewerRef.current?.goToCFI(marker.target);
-                          (event.currentTarget as HTMLButtonElement).blur();
-                        }}
-                        onMouseEnter={() => setHoveredMarker({ ratio: marker.ratio, label: marker.label })}
-                        onMouseLeave={() => setHoveredMarker(null)}
-                      />
-                    ))}
-                  </div>
-                  {hoveredTooltipRatio !== null && hoveredPage !== null && (
-                    <div
-                      className={styles.progressTooltip}
-                      style={{ left: `${hoveredTooltipRatio * 100}%` }}
-                    >
-                      {hoveredChapterLabel && (
-                        <span className={styles.progressTooltipLabel}>{hoveredChapterLabel}</span>
-                      )}
-                      <span>{hoveredPage} P</span>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              </div>
-              <div className={styles.pageInfo}>
-                {currentPage >= 0 && (
-                  <span className={styles.pageInfoClickable}>
-                    {chapterPageDisplay > 0 && chapterTotalDisplay > 0 ? (
-                      <>
-                        {chapterPageDisplay} / {chapterTotalDisplay} P
-                        {currentProgressPercent >= 0 && (
-                          <span style={{ fontSize: "0.85em", opacity: 0.8, marginLeft: "8px" }}>
-                            | {currentProgressPercent}%
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <>{currentProgressPercent >= 0 ? `${currentProgressPercent}%` : ""}</>
-                    )}
-                  </span>
+                {hoveredTooltipRatio !== null && hoveredPage !== null && (
+                  <div
+                    className={styles.progressTooltip}
+                    style={{ left: `${hoveredTooltipRatio * 100}%` }}
+                  >
+                    {hoveredChapterLabel && <span className={styles.progressTooltipLabel}>{hoveredChapterLabel}</span>}
+                    <span>{hoveredPage} P</span>
+                  </div>
                 )}
               </div>
             </div>
-
-            <button
-              className={styles.navBtn}
-              onClick={handleNext}
-              disabled={isVisibleAtEnd && (!onReachedEndNext || !isEndNavigationReady)}
-              aria-label={t("epub_viewer.footer.next_page")}
-            >
-              <ChevronRight size={20} />
-            </button>
-            <button
-              className={styles.navBtn}
-              onClick={() => viewerRef.current?.goToProgress?.(1)}
-              disabled={isVisibleAtEnd}
-              aria-label={t("epub_viewer.footer.last_page")}
-            >
-              <ChevronsRight size={20} />
-            </button>
-
-            {/* 토글 버튼 (태블릿/데스크탑) */}
-            {settings.flow === "paginated" && (
-              <div className={styles.footerToggles}>
-                <button
-                  className={`${styles.toggleBtn} ${settings.spread === "auto" ? styles.active : ""}`}
-                  onClick={handleSpreadToggle}
-                >
-                  {settings.spread === "auto" ? t("epub_viewer.footer.pages_2") : t("epub_viewer.footer.pages_1")}
-                </button>
-              </div>
-            )}
-
-            {/* 시리즈 목록 */}
-            {seriesId && onOpenChapterList && (
-              <button
-                className={styles.navBtn}
-                onClick={onOpenChapterList}
-                title={t("viewer.footer.chapter_list")}
-                aria-label={t("viewer.footer.chapter_list")}
-              >
-                <LayoutGrid size={20} />
-              </button>
-            )}
+            <div className={styles.pageInfo}>
+              {currentPage >= 0 && (
+                <span className={styles.pageInfoClickable}>
+                  {chapterPageDisplay > 0 && chapterTotalDisplay > 0 ? (
+                    <>
+                      {chapterPageDisplay} / {chapterTotalDisplay} P
+                      {currentProgressPercent >= 0 && (
+                        <span style={{ fontSize: "0.85em", opacity: 0.8, marginLeft: "8px" }}>
+                          | {currentProgressPercent}%
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>{currentProgressPercent >= 0 ? `${currentProgressPercent}%` : ""}</>
+                  )}
+                </span>
+              )}
+            </div>
           </div>
+
+          <button
+            className={styles.navBtn}
+            onClick={handleNext}
+            disabled={isVisibleAtEnd && (!onReachedEndNext || !isEndNavigationReady)}
+            aria-label={t("epub_viewer.footer.next_page")}
+          >
+            <ChevronRight size={20} />
+          </button>
+          <button
+            className={styles.navBtn}
+            onClick={() => viewerRef.current?.goToProgress?.(1)}
+            disabled={isVisibleAtEnd}
+            aria-label={t("epub_viewer.footer.last_page")}
+          >
+            <ChevronsRight size={20} />
+          </button>
+
+          {/* 토글 버튼 (태블릿/데스크탑) */}
+          {settings.flow === "paginated" && (
+            <div className={styles.footerToggles}>
+              <button
+                className={`${styles.toggleBtn} ${settings.spread === "auto" ? styles.active : ""}`}
+                onClick={handleSpreadToggle}
+              >
+                {settings.spread === "auto" ? t("epub_viewer.footer.pages_2") : t("epub_viewer.footer.pages_1")}
+              </button>
+            </div>
+          )}
+
+          {/* 시리즈 목록 */}
+          {seriesId && onOpenChapterList && (
+            <button
+              className={styles.navBtn}
+              onClick={onOpenChapterList}
+              title={t("viewer.footer.chapter_list")}
+              aria-label={t("viewer.footer.chapter_list")}
+            >
+              <LayoutGrid size={20} />
+            </button>
+          )}
+        </div>
       </footer>
     </div>
   );
