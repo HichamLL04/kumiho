@@ -1003,3 +1003,31 @@ func TestRemoveLibraryWatchKeepsNestedLibraryWatches(t *testing.T) {
 		t.Fatalf("watch list still contains removed root %q: %v", rootPath, watchList)
 	}
 }
+
+func TestScannerIsScanning(t *testing.T) {
+	t.Parallel()
+
+	s := NewScanner(
+		repository.NewLibraryRepository(),
+		repository.NewSeriesRepository(),
+		repository.NewVolumeRepository(),
+		repository.NewChapterRepository(),
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{},
+	)
+
+	if s.IsScanning("lib-1") {
+		t.Fatal("IsScanning() = true before marking scan active")
+	}
+
+	s.scanningCurrent.Store("lib-1", true)
+	if !s.IsScanning("lib-1") {
+		t.Fatal("IsScanning() = false while scan is active")
+	}
+
+	s.scanningCurrent.Delete("lib-1")
+	if s.IsScanning("lib-1") {
+		t.Fatal("IsScanning() = true after scan is cleared")
+	}
+}

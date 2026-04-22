@@ -911,6 +911,12 @@ func (s *Scanner) CancelScan(libraryID string) bool {
 	return false
 }
 
+// IsScanning 라이브러리 스캔이 현재 진행 중인지 확인한다.
+func (s *Scanner) IsScanning(libraryID string) bool {
+	_, ok := s.scanningCurrent.Load(libraryID)
+	return ok
+}
+
 // StartScheduler 스캔 스케줄러 시작
 func (s *Scanner) StartScheduler(intervalMinutes int) {
 	s.mu.Lock()

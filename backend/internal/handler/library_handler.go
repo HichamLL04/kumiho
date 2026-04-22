@@ -17,6 +17,12 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 )
 
+const (
+	libraryDeleteActiveScanErrorCode = "library_delete_active_scan"
+	libraryDeleteBusyErrorCode       = "library_delete_busy"
+	libraryDeleteFailedErrorCode     = "library_delete_failed"
+)
+
 type LibraryHandler struct {
 	libraryRepo *repository.LibraryRepository
 	authService *service.AuthService
@@ -591,22 +597,51 @@ func (h *LibraryHandler) Delete(c *fiber.Ctx) error {
 
 	if library.Type == "SYSTEM" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "system libraries cannot be deleted",
+			"error":      "system libraries cannot be deleted",
+			"error_code": libraryDeleteFailedErrorCode,
+		})
+	}
+
+	if h.scanner != nil && h.scanner.IsScanning(id) {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"error":      "library scan is in progress",
+			"error_code": libraryDeleteActiveScanErrorCode,
 		})
 	}
 
 	if err := h.libraryRepo.Delete(nil, id); err != nil {
+		log.Printf("Failed to delete library %s: %v", id, err)
+		if isDatabaseBusyError(err) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error":      "database is busy",
+				"error_code": libraryDeleteBusyErrorCode,
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to delete library",
+			"error":      "failed to delete library",
+			"error_code": libraryDeleteFailedErrorCode,
 		})
 	}
 
 	// 실시간 감시 제거
-	h.scanner.RemoveLibraryWatch(id)
+	if h.scanner != nil {
+		h.scanner.RemoveLibraryWatch(id)
+	}
 
 	return c.JSON(fiber.Map{
 		"message": "library deleted",
 	})
+}
+
+func isDatabaseBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "database is locked") ||
+		strings.Contains(message, "database table is locked") ||
+		strings.Contains(message, "database is busy") ||
+		strings.Contains(message, "sqlite_busy")
 }
 
 // UpdateLibraryRequest 라이브러리 수정 요청

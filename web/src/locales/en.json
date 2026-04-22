@@ -564,7 +564,7 @@
       },
       "delete_modal": {
         "title": "Delete Library",
-        "message": "Are you sure you want to delete library '{name}'? Only metadata will be deleted, actual files remain."
+        "message": "Are you sure you want to delete library '{{name}}'? Only metadata will be deleted, actual files remain."
       },
       "toast": {
         "saved": "Settings saved.",
@@ -575,6 +575,8 @@
         "update_failed": "Failed to update library.",
         "deleted": "Library deleted.",
         "delete_failed": "Failed to delete library.",
+        "delete_failed_active_scan": "Cannot delete a library while its scan is running. Cancel the scan or try again after it finishes.",
+        "delete_failed_busy": "Cannot delete the library while database work is still running. Please try again shortly.",
         "scan_started": "Scan started.",
         "scan_completed": "Scan completed.",
         "scan_failed": "Scan failed.",

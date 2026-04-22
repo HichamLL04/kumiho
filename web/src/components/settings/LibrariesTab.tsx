@@ -722,9 +722,17 @@ export function LibrariesTab() {
       setIsDeleteModalOpen(false);
       setLibraryToDelete(null);
       fetchLibraries();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to delete library:", error);
-      setStatus({ type: "error", message: t("settings.libraries.toast.delete_failed") });
+      const err = error as { response?: { data?: { error?: string; error_code?: string } } };
+      const errorCode = err.response?.data?.error_code;
+      let message = err.response?.data?.error || t("settings.libraries.toast.delete_failed");
+      if (errorCode === "library_delete_active_scan") {
+        message = t("settings.libraries.toast.delete_failed_active_scan");
+      } else if (errorCode === "library_delete_busy") {
+        message = t("settings.libraries.toast.delete_failed_busy");
+      }
+      setStatus({ type: "error", message });
       setIsDeleteModalOpen(false);
     }
   };

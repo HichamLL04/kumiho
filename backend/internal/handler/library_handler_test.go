@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -115,5 +116,29 @@ func TestValidateLibraryPathsRejectsRelativePath(t *testing.T) {
 	}
 	if fiberErr.Code != fiber.StatusBadRequest {
 		t.Fatalf("error code = %d, want %d", fiberErr.Code, fiber.StatusBadRequest)
+	}
+}
+
+func TestIsDatabaseBusyError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil", err: nil, want: false},
+		{name: "database locked", err: errors.New("database is locked"), want: true},
+		{name: "table locked", err: errors.New("database table is locked: series"), want: true},
+		{name: "busy code", err: errors.New("SQLITE_BUSY: database is busy"), want: true},
+		{name: "other", err: errors.New("constraint failed"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isDatabaseBusyError(tt.err); got != tt.want {
+				t.Fatalf("isDatabaseBusyError() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
