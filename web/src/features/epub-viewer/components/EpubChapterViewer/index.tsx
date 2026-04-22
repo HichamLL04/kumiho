@@ -1012,7 +1012,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         doc.addEventListener("mousemove", mouseMoveHandler);
         doc.addEventListener("click", clickHandler);
         doc.addEventListener("touchstart", touchStartHandler, { passive: true });
-        doc.addEventListener("touchmove", touchMoveHandler, { passive: false });
+        doc.addEventListener("touchmove", touchMoveHandler, { passive: settings.flow !== "scrolled" });
         doc.addEventListener("touchend", touchEndHandler);
 
         contentDisposersRef.current.set(doc, () => {
@@ -1040,7 +1040,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           manager.container.removeEventListener("touchmove", touchMoveHandler);
           manager.container.removeEventListener("touchend", containerTouchEndHandler);
           manager.container.addEventListener("touchstart", touchStartHandler, { passive: true });
-          manager.container.addEventListener("touchmove", touchMoveHandler, { passive: false });
+          manager.container.addEventListener("touchmove", touchMoveHandler, { passive: settings.flow !== "scrolled" });
           manager.container.addEventListener("touchend", containerTouchEndHandler);
           touchContainers.add(manager.container);
         }

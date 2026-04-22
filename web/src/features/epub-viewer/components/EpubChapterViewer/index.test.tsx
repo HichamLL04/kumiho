@@ -263,6 +263,24 @@ describe("getWheelNavigationAction", () => {
 
     expect(action).toBeNull();
   });
+
+  it("세로 스크롤 모드에서 isPaginated가 undefined이면 초기화 중으로 보고 이동을 막는다", () => {
+    const action = getWheelNavigationAction({
+      deltaY: 32,
+      flow: "scrolled",
+      wheelDirection: "down",
+      manager: {
+        isPaginated: undefined,
+        container: createScrollContainer({
+          scrollHeight: 600,
+          clientHeight: 600,
+          scrollTop: 0,
+        }),
+      },
+    });
+
+    expect(action).toBeNull();
+  });
 });
 
 describe("applyEpubLineHeightScale", () => {

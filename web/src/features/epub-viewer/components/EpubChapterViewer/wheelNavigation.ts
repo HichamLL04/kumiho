@@ -22,7 +22,7 @@ export function getWheelNavigationAction({
 
   const isNextDirection = wheelDirection === "down" ? deltaY > 0 : deltaY < 0;
   if (flow !== "paginated") {
-    if (!manager || manager.isPaginated === true || !manager.container) return null;
+    if (!manager || manager.isPaginated !== false || !manager.container) return null;
 
     const { scrollHeight, clientHeight, scrollTop } = manager.container;
     if (scrollHeight > clientHeight + 5) {
