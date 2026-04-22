@@ -50,7 +50,11 @@ export function PullIndicator({
     if (!isVisible) return;
 
     if (onActivate) {
-      await onActivate(type);
+      try {
+        await onActivate(type);
+      } catch (err) {
+        console.warn("Failed to activate pull indicator", err);
+      }
       return;
     }
 

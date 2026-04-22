@@ -1106,7 +1106,10 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           rendition
             .display(undefined)
             .then(() => finalizeInit())
-            .catch(() => finalizeInit());
+            .catch((err: unknown) => {
+              console.warn("[EpubChapterViewer] Initial display fallback failed:", err);
+              return finalizeInit();
+            });
         const displayRatioFallback = () =>
           !fallbackCFI || fallbackCFI === targetCFI
             ? displayBeginning()
