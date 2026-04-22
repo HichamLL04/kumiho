@@ -421,6 +421,7 @@ func Migrate() error {
 		reading_mode TEXT,
 		epub_render_mode TEXT,
 		epub_theme TEXT,
+		epub_flow TEXT,
 		epub_spread TEXT,
 		epub_wheel_direction TEXT,
 		epub_keyboard_direction TEXT,
