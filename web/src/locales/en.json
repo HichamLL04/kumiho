@@ -1017,15 +1017,15 @@
         "label": "PDF Top Zoom Controls",
         "show": "Show",
         "hide": "Hide"
-      },
-      "footer": {
-        "pages_1": "1 Page",
-        "pages_2": "2 Pages",
-        "offset": "Offset",
-        "progress": "Page navigation",
-        "marker_jump": "Jump to: {{label}}",
-        "chapter_list": "Chapter list"
       }
+    },
+    "footer": {
+      "pages_1": "1 Page",
+      "pages_2": "2 Pages",
+      "offset": "Offset",
+      "progress": "Page navigation",
+      "marker_jump": "Jump to: {{label}}",
+      "chapter_list": "Chapter list"
     },
     "sync": {
       "title": "Sync Progress",

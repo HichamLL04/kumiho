@@ -35,6 +35,7 @@ import {
 } from "./locationUtils";
 import { getWheelNavigationAction } from "./wheelNavigation";
 import { EPUB_SCROLLED_PULL_THRESHOLD } from "./constants";
+import { getScrolledPullCompletionAction } from "./scrolledPull";
 
 export type { EpubRenderLayout } from "../../utils/layoutMode";
 
@@ -318,17 +319,16 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       scrolledPullLastYRef.current = null;
       setScrolledPullTouching(false);
 
-      if (Math.abs(currentOffset) >= EPUB_SCROLLED_PULL_THRESHOLD) {
-        resetScrolledPullOffset();
-        if (currentOffset > 0 && canScrolledPullPrevRef.current) {
-          triggerScrolledPullNavigation("prev");
-        } else if (currentOffset < 0 && canScrolledPullNextRef.current) {
-          triggerScrolledPullNavigation("next");
-        }
-        return;
-      }
+      const action = getScrolledPullCompletionAction(
+        currentOffset,
+        canScrolledPullPrevRef.current,
+        canScrolledPullNextRef.current,
+      );
 
-      if (currentOffset !== 0) {
+      if (action === "nav-prev" || action === "nav-next") {
+        resetScrolledPullOffset();
+        triggerScrolledPullNavigation(action === "nav-prev" ? "prev" : "next");
+      } else if (action === "decay") {
         decayScrolledPullOffset();
       }
     }, [decayScrolledPullOffset, resetScrolledPullOffset, setScrolledPullTouching, triggerScrolledPullNavigation]);

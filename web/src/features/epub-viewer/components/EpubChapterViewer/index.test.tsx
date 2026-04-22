@@ -4,6 +4,8 @@ import { applyOldIOSSafariPointerEventFallback } from "./iosTouchFallback";
 import { applyEpubLineHeightScale } from "./lineHeightScale";
 import { buildEpubInjectedStyle } from "./styleBuilder";
 import { getWheelNavigationAction } from "./wheelNavigation";
+import { getScrolledPullCompletionAction } from "./scrolledPull";
+import { EPUB_SCROLLED_PULL_THRESHOLD } from "./constants";
 
 const isOldIOSSafariMock = vi.hoisted(() => vi.fn(() => false));
 
@@ -290,5 +292,42 @@ describe("applyEpubLineHeightScale", () => {
     applyEpubLineHeightScale(document, 1);
 
     expect(paragraph.style.getPropertyValue("line-height")).toBe("20px");
+  });
+});
+
+describe("getScrolledPullCompletionAction (스크롤 당김 완료 액션)", () => {
+  const T = EPUB_SCROLLED_PULL_THRESHOLD;
+
+  it("임계값 초과 + canPrev=true → nav-prev 반환", () => {
+    expect(getScrolledPullCompletionAction(T, true, false)).toBe("nav-prev");
+    expect(getScrolledPullCompletionAction(T + 10, true, true)).toBe("nav-prev");
+  });
+
+  it("임계값 초과 + canNext=true → nav-next 반환", () => {
+    expect(getScrolledPullCompletionAction(-T, false, true)).toBe("nav-next");
+    expect(getScrolledPullCompletionAction(-T - 10, false, true)).toBe("nav-next");
+  });
+
+  it("임계값 초과해도 canPrev/canNext=false 면 none 반환 (네비게이션 미발생)", () => {
+    expect(getScrolledPullCompletionAction(T, false, false)).toBe("none");
+    expect(getScrolledPullCompletionAction(-T, false, false)).toBe("none");
+    expect(getScrolledPullCompletionAction(T + 20, false, true)).toBe("none");
+    expect(getScrolledPullCompletionAction(-T - 20, true, false)).toBe("none");
+  });
+
+  it("임계값 미만 + offset != 0 → decay 반환", () => {
+    expect(getScrolledPullCompletionAction(T - 1, true, true)).toBe("decay");
+    expect(getScrolledPullCompletionAction(-(T - 1), true, true)).toBe("decay");
+    expect(getScrolledPullCompletionAction(1, false, false)).toBe("decay");
+  });
+
+  it("offset = 0 → none 반환", () => {
+    expect(getScrolledPullCompletionAction(0, true, true)).toBe("none");
+    expect(getScrolledPullCompletionAction(0, false, false)).toBe("none");
+  });
+
+  it("커스텀 임계값으로 동작한다", () => {
+    expect(getScrolledPullCompletionAction(50, true, false, 50)).toBe("nav-prev");
+    expect(getScrolledPullCompletionAction(49, true, false, 50)).toBe("decay");
   });
 });
