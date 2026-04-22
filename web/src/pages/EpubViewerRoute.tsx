@@ -14,6 +14,7 @@ import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapter
 import { EpubViewer } from "./EpubViewer";
 import { api, epubProgressAPI, libraryAPI, seriesAPI, settingAPI } from "../api/client";
 import type { EpubTOCItem } from "../features/epub-viewer/components/EpubChapterViewer";
+import type { UserSeriesSetting } from "../types/series";
 import { AlertModal } from "../components/modals/AlertModal";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import {
@@ -382,7 +383,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
           default_epub_keyboard_direction?: string;
           default_epub_click_direction?: string;
         } = {};
-        let seriesSettings: Record<string, unknown> = {};
+        let seriesSettings: Partial<UserSeriesSetting> = {};
 
         if (Number.isFinite(fontSize) && fontSize >= 50 && fontSize <= 150) {
           setFontSize(fontSize);
@@ -419,7 +420,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         const effectiveRenderMode =
-          (seriesSettings?.epub_render_mode as string | undefined) ||
+          seriesSettings.epub_render_mode ||
           libraryDefaults.default_epub_render_mode ||
           globalRenderMode ||
           "auto";
@@ -428,17 +429,19 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         const effectiveTheme =
-          (seriesSettings?.epub_theme as string | undefined) || libraryDefaults.default_epub_theme || theme || "light";
+          seriesSettings.epub_theme || libraryDefaults.default_epub_theme || theme || "light";
         if (effectiveTheme === "light" || effectiveTheme === "dark" || effectiveTheme === "sepia") {
           setTheme(effectiveTheme);
         }
 
-        if (flow === "paginated" || flow === "scrolled") {
-          setFlow(flow);
+        const effectiveFlow =
+          seriesSettings.epub_flow || flow || "paginated";
+        if (effectiveFlow === "paginated" || effectiveFlow === "scrolled") {
+          setFlow(effectiveFlow);
         }
 
         const effectiveSpread =
-          (seriesSettings?.epub_spread as string | undefined) ||
+          seriesSettings.epub_spread ||
           libraryDefaults.default_epub_spread ||
           spread ||
           "auto";
@@ -447,7 +450,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         const effectiveWheelDirection =
-          (seriesSettings?.epub_wheel_direction as string | undefined) ||
+          seriesSettings.epub_wheel_direction ||
           libraryDefaults.default_epub_wheel_direction ||
           wheelDirection ||
           "down";
@@ -456,7 +459,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         const effectiveKeyboardDirection =
-          (seriesSettings?.epub_keyboard_direction as string | undefined) ||
+          seriesSettings.epub_keyboard_direction ||
           libraryDefaults.default_epub_keyboard_direction ||
           keyboardDirection ||
           "right";
@@ -465,7 +468,7 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         const effectiveClickDirection =
-          (seriesSettings?.epub_click_direction as string | undefined) ||
+          seriesSettings.epub_click_direction ||
           libraryDefaults.default_epub_click_direction ||
           clickDirection ||
           (globalClickDirection === "ltr" ? "right" : globalClickDirection === "rtl" ? "left" : "right");
@@ -899,11 +902,17 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const handleFlowChange = useCallback(
     (flow: EpubFlow) => {
       setFlow(flow);
-      void settingAPI.update("epub_flow", { value: flow }).catch((error) => {
-        console.warn("[EpubViewerRoute] Failed to save global epub_flow:", error);
+      if (!seriesId) {
+        void settingAPI.update("epub_flow", { value: flow }).catch((error) => {
+          console.warn("[EpubViewerRoute] Failed to save global epub_flow:", error);
+        });
+        return;
+      }
+      void seriesAPI.updateViewerSettings(seriesId, { epub_flow: flow }).catch((error) => {
+        console.warn("[EpubViewerRoute] Failed to save series epub_flow:", error);
       });
     },
-    [setFlow],
+    [seriesId, setFlow],
   );
 
   const handleWheelDirectionChange = useCallback(

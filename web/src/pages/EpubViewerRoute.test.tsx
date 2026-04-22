@@ -10,9 +10,16 @@ const mockSetGlobalProgress = vi.fn();
 const mockSetIsAtLastPage = vi.fn();
 const mockSetIncognito = vi.fn();
 const mockReset = vi.fn();
+const mockSetFlow = vi.fn();
 const epubProgressUpdateMock = vi.fn();
 const useViewerSyncMock = vi.fn();
 const useAdjacentChaptersMock = vi.fn();
+const libraryGetMock = vi.fn();
+const seriesGetMock = vi.fn();
+const seriesGetViewerSettingsMock = vi.fn();
+const seriesUpdateViewerSettingsMock = vi.fn();
+const settingListMock = vi.fn();
+const settingUpdateMock = vi.fn();
 let latestViewerProps: {
   onInitializationComplete: () => void;
   initialProgressRatio?: number | null;
@@ -34,6 +41,7 @@ let latestViewerProps: {
   onReady: (total: number) => void;
   onBack?: () => void;
   onReachedStartPrev?: () => void;
+  onFlowChange: (flow: "paginated" | "scrolled") => void;
 } | null = null;
 
 vi.mock("react-i18next", () => ({
@@ -83,7 +91,7 @@ vi.mock("../stores/epubViewerStore", () => ({
     setLineHeight: vi.fn(),
     setTheme: vi.fn(),
     setRenderMode: vi.fn(),
-    setFlow: vi.fn(),
+    setFlow: mockSetFlow,
     setSpread: vi.fn(),
     setWheelDirection: vi.fn(),
     setKeyboardDirection: vi.fn(),
@@ -118,6 +126,7 @@ vi.mock("./EpubViewer", () => ({
     onReady,
     onBack,
     onReachedStartPrev,
+    onFlowChange,
   }: {
     onInitializationComplete: () => void;
     initialProgressRatio?: number | null;
@@ -139,6 +148,7 @@ vi.mock("./EpubViewer", () => ({
     onReady: (total: number) => void;
     onBack?: () => void;
     onReachedStartPrev?: () => void;
+    onFlowChange: (flow: "paginated" | "scrolled") => void;
   }) => {
     latestViewerProps = {
       onInitializationComplete,
@@ -149,6 +159,7 @@ vi.mock("./EpubViewer", () => ({
       onReady,
       onBack,
       onReachedStartPrev,
+      onFlowChange,
     };
     return (
       <div>
@@ -198,15 +209,16 @@ vi.mock("../api/client", () => ({
     update: (...args: unknown[]) => epubProgressUpdateMock(...args),
   },
   libraryAPI: {
-    get: vi.fn(),
+    get: (...args: unknown[]) => libraryGetMock(...args),
   },
   seriesAPI: {
-    get: vi.fn(),
-    getViewerSettings: vi.fn().mockResolvedValue({}),
+    get: (...args: unknown[]) => seriesGetMock(...args),
+    getViewerSettings: (...args: unknown[]) => seriesGetViewerSettingsMock(...args),
+    updateViewerSettings: (...args: unknown[]) => seriesUpdateViewerSettingsMock(...args),
   },
   settingAPI: {
-    list: vi.fn().mockResolvedValue({}),
-    update: vi.fn(),
+    list: (...args: unknown[]) => settingListMock(...args),
+    update: (...args: unknown[]) => settingUpdateMock(...args),
   },
 }));
 
@@ -242,10 +254,23 @@ describe("EpubViewerRoute", () => {
     mockSetIsAtLastPage.mockReset();
     mockSetIncognito.mockReset();
     mockReset.mockReset();
+    mockSetFlow.mockReset();
     epubProgressUpdateMock.mockReset();
     useViewerSyncMock.mockReset();
     useAdjacentChaptersMock.mockReset();
+    libraryGetMock.mockReset();
+    seriesGetMock.mockReset();
+    seriesGetViewerSettingsMock.mockReset();
+    seriesUpdateViewerSettingsMock.mockReset();
+    settingListMock.mockReset();
+    settingUpdateMock.mockReset();
     latestViewerProps = null;
+    libraryGetMock.mockResolvedValue({ data: {} });
+    seriesGetMock.mockResolvedValue({ data: {} });
+    seriesGetViewerSettingsMock.mockResolvedValue({});
+    seriesUpdateViewerSettingsMock.mockResolvedValue({});
+    settingListMock.mockResolvedValue({});
+    settingUpdateMock.mockResolvedValue({});
     useViewerSyncMock.mockReturnValue({
       terminatedInfo: {
         isOpen: false,
@@ -365,6 +390,92 @@ describe("EpubViewerRoute", () => {
       expect(viewerContainer).toHaveStyle({ pointerEvents: "auto" });
       expect(setViewStatus).toHaveBeenCalledWith("ready");
     });
+  });
+
+  it("시리즈별 epub_flow 설정이 전역 설정보다 우선 적용된다", async () => {
+    settingListMock.mockResolvedValueOnce({ epub_flow: "paginated" });
+    seriesGetViewerSettingsMock.mockResolvedValueOnce({ epub_flow: "scrolled" });
+
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(seriesGetViewerSettingsMock).toHaveBeenCalledWith("series-1");
+      expect(mockSetFlow).toHaveBeenCalledWith("scrolled");
+    });
+  });
+
+  it("시리즈가 있는 EPUB flow 변경은 전역 설정이 아니라 시리즈별 설정으로 저장한다", async () => {
+    render(
+      <MemoryRouter initialEntries={["/viewer/chapter-1"]}>
+        <Routes>
+          <Route
+            path="/viewer/:chapterId"
+            element={
+              <EpubViewerRoute
+                loaderData={{
+                  chapter: {
+                    id: "chapter-1",
+                    volume_id: "volume-1",
+                    title: "EPUB 챕터",
+                    chapter_number: 1,
+                    page_count: 1,
+                  },
+                  isLoading: false,
+                  error: null,
+                  seriesId: "series-1",
+                  volumeId: "volume-1",
+                  pageMeta: [],
+                  pageMetaMap: new Map(),
+                  isInitialScrollingRef: { current: false },
+                  setViewStatus: vi.fn(),
+                }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(latestViewerProps).not.toBeNull();
+    });
+
+    act(() => {
+      latestViewerProps?.onFlowChange("scrolled");
+    });
+
+    expect(mockSetFlow).toHaveBeenCalledWith("scrolled");
+    expect(seriesUpdateViewerSettingsMock).toHaveBeenCalledWith("series-1", { epub_flow: "scrolled" });
+    expect(settingUpdateMock).not.toHaveBeenCalledWith("epub_flow", { value: "scrolled" });
   });
 
   it("저장된 current_cfi가 있으면 progress_percent가 100이어도 ratio 복원을 사용하지 않는다", async () => {

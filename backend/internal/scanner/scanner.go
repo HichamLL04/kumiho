@@ -37,6 +37,7 @@ import (
 // 에러 정의
 var (
 	ErrAlreadyScanning = errors.New("already scanning")
+	ErrLibraryDeleting = errors.New("library is being deleted")
 )
 
 // 지원하는 이미지 확장자
@@ -114,6 +115,7 @@ type Scanner struct {
 	maxConcurrentScans int
 	semaphore          chan struct{}
 	scanningCurrent    sync.Map // map[string]bool (libraryID)
+	deletingLibraries  sync.Map // map[string]bool (libraryID)
 	mu                 sync.Mutex
 
 	// 스케줄러 및 감시자
@@ -498,8 +500,15 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 
 	result = &ScanResult{}
 	// 0. 중복 스캔 및 세마포어 체크
+	if _, deleting := s.deletingLibraries.Load(library.ID); deleting {
+		return nil, ErrLibraryDeleting
+	}
 	if _, loaded := s.scanningCurrent.LoadOrStore(library.ID, true); loaded {
 		return nil, ErrAlreadyScanning // 이미 스캔 중
+	}
+	if _, deleting := s.deletingLibraries.Load(library.ID); deleting {
+		s.scanningCurrent.Delete(library.ID)
+		return nil, ErrLibraryDeleting
 	}
 	defer s.scanningCurrent.Delete(library.ID)
 
@@ -909,6 +918,25 @@ func (s *Scanner) CancelScan(libraryID string) bool {
 		}
 	}
 	return false
+}
+
+// IsScanning 라이브러리 스캔이 현재 진행 중인지 확인한다.
+func (s *Scanner) IsScanning(libraryID string) bool {
+	_, ok := s.scanningCurrent.Load(libraryID)
+	return ok
+}
+
+// BeginLibraryDelete 라이브러리 삭제 중에는 새 스캔이 시작되지 않도록 예약한다.
+func (s *Scanner) BeginLibraryDelete(libraryID string) bool {
+	if _, loaded := s.deletingLibraries.LoadOrStore(libraryID, true); loaded {
+		return false
+	}
+	return true
+}
+
+// EndLibraryDelete 라이브러리 삭제 예약 상태를 해제한다.
+func (s *Scanner) EndLibraryDelete(libraryID string) {
+	s.deletingLibraries.Delete(libraryID)
 }
 
 // StartScheduler 스캔 스케줄러 시작
