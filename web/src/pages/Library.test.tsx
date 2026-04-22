@@ -326,6 +326,39 @@ describe("LibraryPage series index", () => {
     });
   });
 
+  it("scrollTo를 지원하지 않으면 scrollTop으로 활성 목차 위치를 맞춘다", async () => {
+    renderLibraryPage();
+
+    const targetButton = await screen.findByRole("button", { name: "jump C" });
+    const nav = screen.getByRole("navigation", { name: "series index" });
+    const scrollArea = nav.firstElementChild as HTMLElement;
+
+    setElementScrollMetrics(scrollArea, { clientHeight: 100, scrollHeight: 300 });
+    Object.defineProperty(scrollArea, "getBoundingClientRect", {
+      configurable: true,
+      value: vi.fn(() => createRect({ top: 100, bottom: 200, height: 100 })),
+    });
+    Object.defineProperty(targetButton, "getBoundingClientRect", {
+      configurable: true,
+      value: vi.fn(() => createRect({ top: 180, bottom: 200, height: 20 })),
+    });
+    Object.defineProperty(scrollArea, "scrollTo", {
+      configurable: true,
+      value: undefined,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "jump A" })).toHaveAttribute("aria-current", "location");
+    });
+    scrollArea.scrollTop = 0;
+
+    fireEvent.click(targetButton);
+
+    await waitFor(() => {
+      expect(scrollArea.scrollTop).toBe(40);
+    });
+  });
+
   it("목차 스크롤바는 사용자 조작에서만 표시된다", async () => {
     renderLibraryPage();
 
