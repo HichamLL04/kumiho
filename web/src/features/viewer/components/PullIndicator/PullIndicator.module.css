@@ -49,7 +49,7 @@
 
 .pullIndicator.prev {
   top: 0;
-  padding-top: 56px; /* 헤더 공간 확보 */
+  padding-top: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   /* 끝부분 흐릿하게 처리 (마스크) */
   -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);

@@ -653,7 +653,6 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       atEnd = false,
     ) => {
       if (isInitializingRef.current || effectiveIncognito) {
-        if (isInitializingRef.current) console.log("[EpubViewerRoute] saveProgress skipped: isInitializing is true");
         return;
       }
 
@@ -813,7 +812,6 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   );
 
   const handleInitializationComplete = useCallback(() => {
-    console.log("[EpubViewerRoute] Viewer reported initialization complete");
     if (initFallbackTimerRef.current) {
       window.clearTimeout(initFallbackTimerRef.current);
       initFallbackTimerRef.current = null;
