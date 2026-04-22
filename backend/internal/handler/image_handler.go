@@ -18,7 +18,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	_ "image/gif" // GIF 디코딩 지원
 	_ "image/png" // PNG 디코딩 지원
@@ -950,7 +949,8 @@ func (h *ImageHandler) ServeChapterEpub(c *fiber.Ctx) error {
 		}
 	}
 
-	if !strings.HasSuffix(strings.ToLower(chapter.Path), ".epub") {
+	chapterPathLower := strings.ToLower(chapter.Path)
+	if !strings.HasSuffix(chapterPathLower, ".epub") && !strings.HasSuffix(chapterPathLower, ".txt") {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "not an epub chapter"})
 	}
 
@@ -971,89 +971,40 @@ func (h *ImageHandler) ServeChapterEpub(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/epub+zip")
+	if strings.HasSuffix(chapterPathLower, ".txt") {
+		raw, err := os.ReadFile(realFullPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "file not found"})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to read txt file"})
+		}
+
+		epubData, encoding, err := buildTextEpub(textEpubSource{
+			ChapterID: chapter.ID,
+			Title:     chapter.Title,
+			FileName:  chapter.Path,
+			Raw:       raw,
+		})
+		if err != nil {
+			if errors.Is(err, util.ErrUnsupportedTextEncoding) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "unsupported text encoding"})
+			}
+			if errors.Is(err, util.ErrNoReadableTextContent) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "txt has no readable content"})
+			}
+			log.Printf("[IMAGE_HANDLER] failed to convert txt chapter %s to epub: %v", chapter.ID, err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to convert txt to epub"})
+		}
+
+		// TXT 변환 응답은 메모리 Buffer이므로 Range 요청을 지원하지 않음 (Accept-Ranges 제외)
+		c.Set("X-Kumiho-Source-Format", "txt")
+		c.Set("X-Kumiho-Text-Encoding", encoding)
+		return c.Send(epubData)
+	}
+
 	c.Set("Accept-Ranges", "bytes")
 	return c.SendFile(realFullPath)
-}
-
-// ServeChapterText TXT 파일 서빙
-// GET /api/v1/chapters/:chapterId/text
-func (h *ImageHandler) ServeChapterText(c *fiber.Ctx) error {
-	chapterID := c.Params("chapterId")
-
-	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
-	if err != nil || chapter == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "chapter not found"})
-	}
-
-	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
-	if err != nil || volume == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "volume not found"})
-	}
-
-	role := middleware.GetUserRole(c)
-	userID := middleware.GetUserID(c)
-
-	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
-	if err != nil || series == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "series not found"})
-	}
-
-	if role != model.RoleMaster {
-		allowedIDs, checkErr := h.authService.GetAllowedLibraryIDs(userID)
-		if checkErr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to check permissions"})
-		}
-
-		allowed := false
-		for _, aid := range allowedIDs {
-			if aid == series.LibraryID {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
-		}
-	}
-
-	if !strings.HasSuffix(strings.ToLower(chapter.Path), ".txt") {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "not a txt chapter"})
-	}
-
-	realFullPath, err := h.resolveSecurePath(chapter.Path)
-	if err != nil {
-		if errors.Is(err, ErrInvalidPath) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid file path"})
-		}
-		if os.IsNotExist(err) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "file not found"})
-		}
-		log.Printf("[IMAGE_HANDLER] failed to resolve secure path for txt: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
-	}
-
-	raw, err := os.ReadFile(realFullPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "file not found"})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to read txt file"})
-	}
-
-	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
-	if !utf8.Valid(raw) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "unsupported text encoding: utf-8 only"})
-	}
-
-	content := string(raw)
-	normalized := strings.ReplaceAll(content, "\r\n", "\n")
-	normalized = strings.ReplaceAll(normalized, "\r", "\n")
-
-	return c.JSON(fiber.Map{
-		"content":         normalized,
-		"total_bytes":     len(raw),
-		"total_positions": utf8.RuneCountInString(normalized),
-	})
 }
 
 // isArchiveFile 아카이브 파일 여부 확인

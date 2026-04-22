@@ -317,7 +317,6 @@ func main() {
 	chapters.Get("/:chapterId/pages/:pageNumber/image", imageHandler.PageImageByNumber)
 	chapters.Get("/:chapterId/pdf", imageHandler.ServeChapterPDF)
 	chapters.Get("/:chapterId/epub", imageHandler.ServeChapterEpub)
-	chapters.Get("/:chapterId/text", imageHandler.ServeChapterText)
 	chapters.Post("/:chapterId/analyze", imageHandler.AnalyzeChapterPages)
 	chapters.Get("/:chapterId/progress", progressHandler.GetChapterProgress)
 	chapters.Get("/:chapterId/epub-progress", progressHandler.GetEpubProgress)

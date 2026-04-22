@@ -85,6 +85,7 @@ function createDefaultProps() {
     onLineHeightChange: vi.fn(),
     onThemeChange: vi.fn(),
     onRenderModeChange: vi.fn(),
+    onFlowChange: vi.fn(),
     onWheelDirectionChange: vi.fn(),
     onKeyboardDirectionChange: vi.fn(),
     onClickDirectionChange: vi.fn(),
@@ -352,6 +353,57 @@ describe("EpubViewer UI", () => {
 
     expect(viewerPrevSpy).toHaveBeenCalledTimes(1);
     expect(viewerNextSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("should keep center click UI toggle in scrolled mode", () => {
+    const baseProps = createDefaultProps();
+    const props = {
+      ...baseProps,
+      settings: {
+        ...baseProps.settings,
+        flow: "scrolled" as const,
+      },
+    };
+
+    const { container } = render(
+      <MemoryRouter>
+        <EpubViewer {...props} />
+      </MemoryRouter>,
+    );
+
+    const main = getMain(container);
+
+    fireEvent.click(main, { clientX: 500 });
+
+    expect(props.onViewerClick).toHaveBeenCalledTimes(1);
+    expect(viewerPrevSpy).not.toHaveBeenCalled();
+    expect(viewerNextSpy).not.toHaveBeenCalled();
+  });
+
+  it("should ignore left and right click zones in scrolled mode", () => {
+    const baseProps = createDefaultProps();
+    const props = {
+      ...baseProps,
+      settings: {
+        ...baseProps.settings,
+        flow: "scrolled" as const,
+      },
+    };
+
+    const { container } = render(
+      <MemoryRouter>
+        <EpubViewer {...props} />
+      </MemoryRouter>,
+    );
+
+    const main = getMain(container);
+
+    fireEvent.click(main, { clientX: 100 });
+    fireEvent.click(main, { clientX: 900 });
+
+    expect(viewerPrevSpy).not.toHaveBeenCalled();
+    expect(viewerNextSpy).not.toHaveBeenCalled();
+    expect(props.onViewerClick).not.toHaveBeenCalled();
   });
 
   it("should invert left and right tap navigation when clickDirection is left", () => {

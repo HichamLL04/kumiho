@@ -16,7 +16,13 @@ import {
   Sparkles,
   LayoutGrid,
 } from "lucide-react";
-import type { EpubFontFamily, EpubRenderMode, EpubViewerSettings, EpubTheme } from "../stores/epubViewerStore";
+import type {
+  EpubFlow,
+  EpubFontFamily,
+  EpubRenderMode,
+  EpubViewerSettings,
+  EpubTheme,
+} from "../stores/epubViewerStore";
 import type { BGMInfo } from "../features/viewer/types";
 import { useAtmosphereStore } from "../stores/atmosphereStore";
 import { AtmospherePopover } from "../features/viewer/components/AtmospherePopover";
@@ -24,12 +30,15 @@ import { ChapterListModal } from "../features/viewer/components";
 import {
   EpubChapterViewer,
   type EpubTOCItem,
+  type EpubInitialOpenMode,
   type EpubRenderLayout,
 } from "../features/epub-viewer/components/EpubChapterViewer";
+import { EPUB_SCROLLED_PULL_THRESHOLD } from "../features/epub-viewer/components/EpubChapterViewer/constants";
 import type { EpubChapterViewerHandles } from "../features/epub-viewer/components/EpubChapterViewer";
 import { EpubSettingsPanel } from "../features/epub-viewer/components/EpubSettingsPanel";
 import { EpubTOC } from "../features/epub-viewer/components/EpubTOC";
 import { ChapterNavHint } from "../features/viewer/components/ChapterNavHint";
+import { PullIndicator } from "../features/viewer/components/PullIndicator";
 import styles from "./EpubViewer.module.css";
 
 interface EpubViewerProps {
@@ -38,6 +47,7 @@ interface EpubViewerProps {
   epubUrl: string;
   initialCFI?: string | null;
   initialProgressRatio?: number | null;
+  initialOpenMode?: EpubInitialOpenMode;
   currentPage: number;
   totalPages: number;
   visiblePage: number;
@@ -79,6 +89,8 @@ interface EpubViewerProps {
   onLineHeightChange: (height: number) => void;
   onThemeChange: (theme: EpubTheme) => void;
   onRenderModeChange: (mode: EpubRenderMode) => void;
+  onFlowChange: (flow: EpubFlow) => void;
+  hideChapterPageInfo?: boolean;
   onWheelDirectionChange: (direction: "down" | "up") => void;
   onKeyboardDirectionChange: (direction: "right" | "left") => void;
   onClickDirectionChange: (direction: "right" | "left") => void;
@@ -115,6 +127,7 @@ export function EpubViewer({
   epubUrl,
   initialCFI,
   initialProgressRatio,
+  initialOpenMode = "default",
   currentPage,
   totalPages,
   visiblePage,
@@ -142,6 +155,8 @@ export function EpubViewer({
   onLineHeightChange,
   onThemeChange,
   onRenderModeChange,
+  onFlowChange,
+  hideChapterPageInfo = false,
   onWheelDirectionChange,
   onKeyboardDirectionChange,
   onClickDirectionChange,
@@ -176,6 +191,13 @@ export function EpubViewer({
   const [pendingProgressRatio, setPendingProgressRatio] = useState<number | null>(null);
   const [chapterPageDisplay, setChapterPageDisplay] = useState(visiblePage);
   const [chapterTotalDisplay, setChapterTotalDisplay] = useState(visibleTotalPages);
+  const [scrolledPullOffset, setScrolledPullOffset] = useState(0);
+  const [spinePosition, setSpinePosition] = useState({
+    spineIndex: 0,
+    spineLength: 0,
+    atStart: undefined as boolean | undefined,
+    atEnd: undefined as boolean | undefined,
+  });
   const [nextHintTriggeredChapterId, setNextHintTriggeredChapterId] = useState<string | null>(null);
   const [prevHintTriggeredChapterId, setPrevHintTriggeredChapterId] = useState<string | null>(null);
   const hintTimeoutRef = useRef<number | null>(null);
@@ -276,6 +298,12 @@ export function EpubViewer({
       if (location.chapterTotal > 0) {
         setChapterTotalDisplay(location.chapterTotal);
       }
+      setSpinePosition({
+        spineIndex: location.spineIndex,
+        spineLength: location.spineLength,
+        atStart: location.atStart,
+        atEnd: location.atEnd,
+      });
       onLocationChange(location);
     },
     [onLocationChange],
@@ -304,7 +332,6 @@ export function EpubViewer({
 
       if (!isEndNavigationReady) return;
       if (showNextHint && onReachedEndNext) {
-        // 두 번째 클릭: 실제 이동
         clearHintTimeout();
         setNextHintTriggeredChapterId(null);
         onReachedEndNext();
@@ -327,12 +354,49 @@ export function EpubViewer({
 
     void attemptNext();
   }, [
-    onReachedEndNext, isEndNavigationReady,
-    showNextHint, showPrevHint, nextChapterTitle, chapterId, clearPendingProgress, clearHintTimeout,
+    onReachedEndNext,
+    isEndNavigationReady,
+    showNextHint,
+    showPrevHint,
+    nextChapterTitle,
+    chapterId,
+    clearPendingProgress,
+    clearHintTimeout,
   ]);
 
   const isVisibleAtStart = chapterPageDisplay <= 1;
   const isVisibleAtEnd = chapterTotalDisplay > 0 && chapterPageDisplay >= chapterTotalDisplay;
+  const hasInternalPrevPart = spinePosition.spineIndex > 0 || spinePosition.atStart === false;
+  const hasInternalNextPart =
+    (spinePosition.spineLength > 0 && spinePosition.spineIndex < spinePosition.spineLength - 1) ||
+    spinePosition.atEnd === false;
+  const canScrolledPullPrev = hasInternalPrevPart || Boolean(onReachedStartPrev);
+  const canScrolledPullNext = hasInternalNextPart || Boolean(onReachedEndNext);
+  const prevPullTitle = hasInternalPrevPart
+    ? t("epub_viewer.scroll_pull.prev_part", { defaultValue: "이전 part" })
+    : (prevChapterTitle ?? null);
+  const nextPullTitle = hasInternalNextPart
+    ? t("epub_viewer.scroll_pull.next_part", { defaultValue: "다음 part" })
+    : (nextChapterTitle ?? null);
+  const prevPullLabel = hasInternalPrevPart
+    ? t("epub_viewer.scroll_pull.prev_part_label", { defaultValue: "▲ 이전 part" })
+    : undefined;
+  const nextPullLabel = hasInternalNextPart
+    ? t("epub_viewer.scroll_pull.next_part_label", { defaultValue: "▼ 다음 part" })
+    : undefined;
+  const prevPullHint = hasInternalPrevPart
+    ? t("epub_viewer.scroll_pull.prev_part_hint", { defaultValue: "계속 위로 스크롤하면 이전 part로 이동" })
+    : undefined;
+  const nextPullHint = hasInternalNextPart
+    ? t("epub_viewer.scroll_pull.next_part_hint", { defaultValue: "계속 아래로 스크롤하면 다음 part로 이동" })
+    : undefined;
+  const prevPullAria = hasInternalPrevPart
+    ? t("epub_viewer.scroll_pull.aria_prev_part", { defaultValue: "이전 part로 이동" })
+    : undefined;
+  const nextPullAria = hasInternalNextPart
+    ? t("epub_viewer.scroll_pull.aria_next_part", { defaultValue: "다음 part로 이동" })
+    : undefined;
+  const noopSaveProgress = useCallback(() => Promise.resolve(), []);
 
   const handlePrev = useCallback(() => {
     const attemptPrev = async () => {
@@ -373,8 +437,14 @@ export function EpubViewer({
 
     void attemptPrev();
   }, [
-    isStartNavigationReady, onReachedStartPrev,
-    showPrevHint, showNextHint, prevChapterTitle, chapterId, clearPendingProgress, clearHintTimeout,
+    isStartNavigationReady,
+    onReachedStartPrev,
+    showPrevHint,
+    showNextHint,
+    prevChapterTitle,
+    chapterId,
+    clearPendingProgress,
+    clearHintTimeout,
   ]);
 
   const handleTOCJump = useCallback(
@@ -520,8 +590,7 @@ export function EpubViewer({
         onViewerClick();
         return;
       }
-
-      if (settings.flow !== "paginated") return;
+      if (settings.flow === "scrolled") return;
 
       // 좌/우 클릭 → 페이지 이동
       const isRTL = settings.clickDirection === "left";
@@ -533,18 +602,17 @@ export function EpubViewer({
         else handleNext();
       }
     },
-    [getZoneRatio, handleNext, handlePrev, onViewerClick, settings.flow, settings.clickDirection],
+    [getZoneRatio, handleNext, handlePrev, onViewerClick, settings.clickDirection, settings.flow],
   );
 
   useEffect(() => {
-    if (settings.flow !== "paginated") return;
-
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName?.toLowerCase();
       const isEditable =
         tagName === "input" || tagName === "textarea" || tagName === "select" || Boolean(target?.isContentEditable);
       if (isEditable) return;
+      if (settings.flow === "scrolled") return;
 
       const nextArrowKey = settings.keyboardDirection === "right" ? "ArrowRight" : "ArrowLeft";
       const prevArrowKey = settings.keyboardDirection === "right" ? "ArrowLeft" : "ArrowRight";
@@ -560,7 +628,7 @@ export function EpubViewer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.keyboardDirection, settings.flow, handleNext, handlePrev]);
+  }, [settings.flow, settings.keyboardDirection, handleNext, handlePrev]);
 
   // === 구형 iOS Safari: <main>에 터치 이벤트 핸들러 등록 ===
   // iframe pointer-events:none으로 터치가 관통하므로 부모에서 처리한다.
@@ -598,9 +666,14 @@ export function EpubViewer({
       lastTouchTimeRef.current = Date.now();
 
       if (dragging) {
+        if (settings.flow === "scrolled") {
+          startPos = null;
+          dragging = false;
+          return;
+        }
         // 스와이프 감지
         const touch = e.changedTouches[0];
-        if (touch && settings.flow === "paginated") {
+        if (touch) {
           const dx = touch.clientX - startPos.x;
           const dy = touch.clientY - startPos.y;
           const SWIPE_THRESHOLD = 50;
@@ -627,7 +700,9 @@ export function EpubViewer({
 
       if (ratio >= 0.3 && ratio <= 0.7) {
         onViewerClick();
-      } else if (settings.flow === "paginated") {
+      } else if (settings.flow === "scrolled") {
+        return;
+      } else {
         const isRTL = settings.clickDirection === "left";
         if (ratio < 0.3) {
           if (isRTL) handleNext();
@@ -648,7 +723,7 @@ export function EpubViewer({
       mainEl.removeEventListener("touchmove", onTouchMove);
       mainEl.removeEventListener("touchend", onTouchEnd);
     };
-  }, [getZoneRatio, settings.flow, settings.clickDirection, handleNext, handlePrev, onViewerClick]);
+  }, [getZoneRatio, settings.clickDirection, settings.flow, handleNext, handlePrev, onViewerClick]);
 
   return (
     <div
@@ -772,6 +847,7 @@ export function EpubViewer({
               onLineHeightChange={onLineHeightChange}
               onThemeChange={onThemeChange}
               onRenderModeChange={onRenderModeChange}
+              onFlowChange={onFlowChange}
               onSpreadChange={onSpreadChange}
               onWheelDirectionChange={onWheelDirectionChange}
               onKeyboardDirectionChange={onKeyboardDirectionChange}
@@ -811,7 +887,7 @@ export function EpubViewer({
       {/* EPUB 뷰어 영역 */}
       <main
         ref={mainRef}
-        className={styles.main}
+        className={`${styles.main} ${settings.flow === "scrolled" ? styles.mainScrolled : ""}`}
         onClick={handleMainClick}
       >
         <EpubChapterViewer
@@ -826,6 +902,7 @@ export function EpubViewer({
           isUIVisible={isUIVisible}
           initialCFI={initialCFI}
           initialProgressRatio={initialProgressRatio}
+          initialOpenMode={initialOpenMode}
           settings={settings}
           onReady={onReady}
           onTOCLoad={onTOCLoad}
@@ -835,8 +912,42 @@ export function EpubViewer({
           onPageNext={handleNext}
           onPagePrev={handlePrev}
           onRenderLayoutChange={setEffectiveLayout}
+          hideChapterPageInfo={hideChapterPageInfo}
+          canScrolledPullPrev={canScrolledPullPrev}
+          canScrolledPullNext={canScrolledPullNext}
+          onScrolledPullStateChange={(s) => setScrolledPullOffset(s.pullOffset)}
         />
       </main>
+
+      {/* 세로 스크롤 모드 당김 인디케이터 */}
+      {settings.flow === "scrolled" && (
+        <>
+          <PullIndicator
+            type="prev"
+            pullOffset={scrolledPullOffset}
+            pullThreshold={EPUB_SCROLLED_PULL_THRESHOLD}
+            chapterId={null}
+            chapterTitle={prevPullTitle}
+            saveProgress={noopSaveProgress}
+            onActivate={canScrolledPullPrev ? handlePrev : undefined}
+            labelText={prevPullLabel}
+            hintText={prevPullHint}
+            ariaActionLabel={prevPullAria}
+          />
+          <PullIndicator
+            type="next"
+            pullOffset={scrolledPullOffset}
+            pullThreshold={EPUB_SCROLLED_PULL_THRESHOLD}
+            chapterId={null}
+            chapterTitle={nextPullTitle}
+            saveProgress={noopSaveProgress}
+            onActivate={canScrolledPullNext ? handleNext : undefined}
+            labelText={nextPullLabel}
+            hintText={nextPullHint}
+            ariaActionLabel={nextPullAria}
+          />
+        </>
+      )}
 
       {/* 챕터 이동 힌트 */}
       <ChapterNavHint
@@ -862,148 +973,146 @@ export function EpubViewer({
       )}
 
       {/* 푸터 */}
-      {settings.flow === "paginated" && (
-        <footer
-          className={`${styles.footer} ${!isUIVisible ? styles.hidden : ""}`}
-          onClick={(e) => e.stopPropagation()}
-          onMouseEnter={onInteractionStart}
-          onMouseLeave={onInteractionEnd}
-        >
-          <div className={styles.footerControls}>
-            <button
-              className={styles.navBtn}
-              onClick={() => viewerRef.current?.goToProgress?.(0)}
-              disabled={isVisibleAtStart}
-              aria-label={t("epub_viewer.footer.first_page")}
-            >
-              <ChevronsLeft size={20} />
-            </button>
-            <button
-              className={styles.navBtn}
-              onClick={handlePrev}
-              disabled={isVisibleAtStart && (!onReachedStartPrev || !isStartNavigationReady)}
-              aria-label={t("epub_viewer.footer.prev_page")}
-            >
-              <ChevronLeft size={20} />
-            </button>
+      <footer
+        className={`${styles.footer} ${!isUIVisible ? styles.hidden : ""}`}
+        onClick={(e) => e.stopPropagation()}
+        onMouseEnter={onInteractionStart}
+        onMouseLeave={onInteractionEnd}
+      >
+        <div className={styles.footerControls}>
+          <button
+            className={styles.navBtn}
+            onClick={() => viewerRef.current?.goToProgress?.(0)}
+            disabled={isVisibleAtStart}
+            aria-label={t("epub_viewer.footer.first_page")}
+          >
+            <ChevronsLeft size={20} />
+          </button>
+          <button
+            className={styles.navBtn}
+            onClick={handlePrev}
+            disabled={isVisibleAtStart && (!onReachedStartPrev || !isStartNavigationReady)}
+            aria-label={t("epub_viewer.footer.prev_page")}
+          >
+            <ChevronLeft size={20} />
+          </button>
 
-            <div className={styles.pageSliderContainer}>
-              <div className={styles.progressBarWrap}>
-                <div
-                  className={styles.progressBarInteractive}
-                  onMouseMove={handleProgressHover}
-                  onMouseLeave={handleProgressLeave}
-                  onClick={(event) => handleProgressSeek(getRatioFromEvent(event))}
-                  role="slider"
-                  tabIndex={0}
-                  aria-label={t("epub_viewer.footer.progress")}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={
-                    currentProgressPercent >= 0 ? currentProgressPercent : Math.round(currentProgressRatio * 100)
+          <div className={styles.pageSliderContainer}>
+            <div className={styles.progressBarWrap}>
+              <div
+                className={styles.progressBarInteractive}
+                onMouseMove={handleProgressHover}
+                onMouseLeave={handleProgressLeave}
+                onClick={(event) => handleProgressSeek(getRatioFromEvent(event))}
+                role="slider"
+                tabIndex={0}
+                aria-label={t("epub_viewer.footer.progress")}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={
+                  currentProgressPercent >= 0 ? currentProgressPercent : Math.round(currentProgressRatio * 100)
+                }
+                onKeyDown={(event) => {
+                  let nextRatio = currentProgressRatio;
+                  const step = 0.05;
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    nextRatio = Math.min(1, currentProgressRatio + step);
+                  } else if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    nextRatio = Math.max(0, currentProgressRatio - step);
+                  } else if (event.key === "Home") {
+                    event.preventDefault();
+                    nextRatio = 0;
+                  } else if (event.key === "End") {
+                    event.preventDefault();
+                    nextRatio = 1;
+                  } else {
+                    return;
                   }
-                  onKeyDown={(event) => {
-                    let nextRatio = currentProgressRatio;
-                    const step = 0.05;
-                    if (event.key === "ArrowRight") {
-                      event.preventDefault();
-                      nextRatio = Math.min(1, currentProgressRatio + step);
-                    } else if (event.key === "ArrowLeft") {
-                      event.preventDefault();
-                      nextRatio = Math.max(0, currentProgressRatio - step);
-                    } else if (event.key === "Home") {
-                      event.preventDefault();
-                      nextRatio = 0;
-                    } else if (event.key === "End") {
-                      event.preventDefault();
-                      nextRatio = 1;
-                    } else {
-                      return;
-                    }
-                    handleProgressSeek(nextRatio);
-                  }}
-                >
-                  <div className={styles.progressBarTrack}>
-                    <div
-                      className={styles.progressBarFill}
-                      style={{ width: `${currentProgressRatio * 100}%` }}
+                  handleProgressSeek(nextRatio);
+                }}
+              >
+                <div className={styles.progressBarTrack}>
+                  <div
+                    className={styles.progressBarFill}
+                    style={{ width: `${currentProgressRatio * 100}%` }}
+                  />
+                  <div
+                    className={styles.progressBarThumb}
+                    style={{ left: `${currentProgressRatio * 100}%` }}
+                  />
+                  {chapterMarkers.map((marker) => (
+                    <button
+                      key={`${marker.id}-${marker.href}-${marker.ratio}`}
+                      type="button"
+                      className={styles.progressMarker}
+                      style={{ left: `${marker.ratio * 100}%` }}
+                      title={marker.label || marker.href}
+                      aria-label={t("epub_viewer.progress_marker.navigate", {
+                        label: marker.label || marker.href,
+                      })}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPendingProgressRatio(marker.ratio);
+                        viewerRef.current?.goToCFI(marker.target);
+                        (event.currentTarget as HTMLButtonElement).blur();
+                      }}
+                      onMouseEnter={() => setHoveredMarker({ ratio: marker.ratio, label: marker.label })}
+                      onMouseLeave={() => setHoveredMarker(null)}
                     />
-                    <div
-                      className={styles.progressBarThumb}
-                      style={{ left: `${currentProgressRatio * 100}%` }}
-                    />
-                    {chapterMarkers.map((marker) => (
-                      <button
-                        key={`${marker.id}-${marker.href}-${marker.ratio}`}
-                        type="button"
-                        className={styles.progressMarker}
-                        style={{ left: `${marker.ratio * 100}%` }}
-                        title={marker.label || marker.href}
-                        aria-label={t("epub_viewer.progress_marker.navigate", {
-                          label: marker.label || marker.href,
-                        })}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setPendingProgressRatio(marker.ratio);
-                          viewerRef.current?.goToCFI(marker.target);
-                          (event.currentTarget as HTMLButtonElement).blur();
-                        }}
-                        onMouseEnter={() => setHoveredMarker({ ratio: marker.ratio, label: marker.label })}
-                        onMouseLeave={() => setHoveredMarker(null)}
-                      />
-                    ))}
-                  </div>
-                  {hoveredTooltipRatio !== null && hoveredPage !== null && (
-                    <div
-                      className={styles.progressTooltip}
-                      style={{ left: `${hoveredTooltipRatio * 100}%` }}
-                    >
-                      {hoveredChapterLabel && (
-                        <span className={styles.progressTooltipLabel}>{hoveredChapterLabel}</span>
-                      )}
-                      <span>{hoveredPage} P</span>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              </div>
-              <div className={styles.pageInfo}>
-                {currentPage >= 0 && (
-                  <span className={styles.pageInfoClickable}>
-                    {chapterPageDisplay > 0 && chapterTotalDisplay > 0 ? (
-                      <>
-                        {chapterPageDisplay} / {chapterTotalDisplay} P
-                        {currentProgressPercent >= 0 && (
-                          <span style={{ fontSize: "0.85em", opacity: 0.8, marginLeft: "8px" }}>
-                            | {currentProgressPercent}%
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <>{currentProgressPercent >= 0 ? `${currentProgressPercent}%` : ""}</>
-                    )}
-                  </span>
+                {hoveredTooltipRatio !== null && hoveredPage !== null && (
+                  <div
+                    className={styles.progressTooltip}
+                    style={{ left: `${hoveredTooltipRatio * 100}%` }}
+                  >
+                    {hoveredChapterLabel && <span className={styles.progressTooltipLabel}>{hoveredChapterLabel}</span>}
+                    <span>{hoveredPage} P</span>
+                  </div>
                 )}
               </div>
             </div>
+            <div className={styles.pageInfo}>
+              {currentPage >= 0 && (
+                <span className={styles.pageInfoClickable}>
+                  {chapterPageDisplay > 0 && chapterTotalDisplay > 0 ? (
+                    <>
+                      {chapterPageDisplay} / {chapterTotalDisplay} P
+                      {currentProgressPercent >= 0 && (
+                        <span style={{ fontSize: "0.85em", opacity: 0.8, marginLeft: "8px" }}>
+                          | {currentProgressPercent}%
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>{currentProgressPercent >= 0 ? `${currentProgressPercent}%` : ""}</>
+                  )}
+                </span>
+              )}
+            </div>
+          </div>
 
-            <button
-              className={styles.navBtn}
-              onClick={handleNext}
-              disabled={isVisibleAtEnd && (!onReachedEndNext || !isEndNavigationReady)}
-              aria-label={t("epub_viewer.footer.next_page")}
-            >
-              <ChevronRight size={20} />
-            </button>
-            <button
-              className={styles.navBtn}
-              onClick={() => viewerRef.current?.goToProgress?.(1)}
-              disabled={isVisibleAtEnd}
-              aria-label={t("epub_viewer.footer.last_page")}
-            >
-              <ChevronsRight size={20} />
-            </button>
+          <button
+            className={styles.navBtn}
+            onClick={handleNext}
+            disabled={isVisibleAtEnd && (!onReachedEndNext || !isEndNavigationReady)}
+            aria-label={t("epub_viewer.footer.next_page")}
+          >
+            <ChevronRight size={20} />
+          </button>
+          <button
+            className={styles.navBtn}
+            onClick={() => viewerRef.current?.goToProgress?.(1)}
+            disabled={isVisibleAtEnd}
+            aria-label={t("epub_viewer.footer.last_page")}
+          >
+            <ChevronsRight size={20} />
+          </button>
 
-            {/* 토글 버튼 (태블릿/데스크탑) */}
+          {/* 토글 버튼 (태블릿/데스크탑) */}
+          {settings.flow === "paginated" && (
             <div className={styles.footerToggles}>
               <button
                 className={`${styles.toggleBtn} ${settings.spread === "auto" ? styles.active : ""}`}
@@ -1012,21 +1121,21 @@ export function EpubViewer({
                 {settings.spread === "auto" ? t("epub_viewer.footer.pages_2") : t("epub_viewer.footer.pages_1")}
               </button>
             </div>
+          )}
 
-            {/* 시리즈 목록 */}
-            {seriesId && onOpenChapterList && (
-              <button
-                className={styles.navBtn}
-                onClick={onOpenChapterList}
-                title={t("viewer.footer.chapter_list")}
-                aria-label={t("viewer.footer.chapter_list")}
-              >
-                <LayoutGrid size={20} />
-              </button>
-            )}
-          </div>
-        </footer>
-      )}
+          {/* 시리즈 목록 */}
+          {seriesId && onOpenChapterList && (
+            <button
+              className={styles.navBtn}
+              onClick={onOpenChapterList}
+              title={t("viewer.footer.chapter_list")}
+              aria-label={t("viewer.footer.chapter_list")}
+            >
+              <LayoutGrid size={20} />
+            </button>
+          )}
+        </div>
+      </footer>
     </div>
   );
 }

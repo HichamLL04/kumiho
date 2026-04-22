@@ -14,6 +14,10 @@ interface PullIndicatorProps {
   chapterId: string | null;
   chapterTitle: string | null;
   saveProgress: () => Promise<void>;
+  onActivate?: (type: "prev" | "next") => Promise<void> | void;
+  labelText?: string;
+  hintText?: string;
+  ariaActionLabel?: string;
 }
 
 export function PullIndicator({
@@ -23,6 +27,10 @@ export function PullIndicator({
   chapterId,
   chapterTitle,
   saveProgress,
+  onActivate,
+  labelText,
+  hintText,
+  ariaActionLabel,
 }: PullIndicatorProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,8 +38,8 @@ export function PullIndicator({
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
   const routeIsIncognito = location.state?.isIncognito === true;
 
-  // 챕터 ID가 없으면 아예 렌더링하지 않음
-  if (!chapterId) return null;
+  // 라우팅 기반 챕터 이동은 chapterId가 필요하지만, 커스텀 활성화 콜백은 chapterId 없이도 동작한다.
+  if (!chapterId && !onActivate) return null;
 
   // 오프셋이 있으면 visible 클래스 적용
   // 작은 오프셋이라도 감지되면 일단 보여주고(opacity 1), 0이 되면 CSS transition(1s)을 통해 사라짐
@@ -40,6 +48,15 @@ export function PullIndicator({
   const handleClick = async () => {
     // visible 상태일 때만 클릭 허용 (pointer-events로 제어하지만 안전장치)
     if (!isVisible) return;
+
+    if (onActivate) {
+      try {
+        await onActivate(type);
+      } catch (err) {
+        console.warn("Failed to activate pull indicator", err);
+      }
+      return;
+    }
 
     await saveProgress().catch((err) => console.warn("Failed to save progress", err));
     startChapterSwitching(isDocumentFullscreen());
@@ -55,6 +72,10 @@ export function PullIndicator({
   };
 
   const progress = Math.min(100, Math.round((Math.abs(pullOffset) / pullThreshold) * 100));
+  const defaultLabelText = type === "prev" ? t("viewer.guide.scroll_prev_label") : t("viewer.guide.scroll_next_label");
+  const defaultHintText = type === "prev" ? t("viewer.guide.scroll_prev_hint") : t("viewer.guide.scroll_next_hint");
+  const defaultAriaActionLabel =
+    type === "prev" ? t("viewer.guide.aria_prev_chapter") : t("viewer.guide.aria_next_chapter");
 
   return (
     <button
@@ -67,16 +88,14 @@ export function PullIndicator({
             : `translateY(${Math.max(0, 15 - Math.abs(pullOffset) / 4)}px)`,
       }}
       onClick={handleClick}
-      aria-label={`${type === "prev" ? t("viewer.guide.aria_prev_chapter") : t("viewer.guide.aria_next_chapter")}: ${chapterTitle || t("viewer.guide.no_title")}`}
+      aria-label={`${ariaActionLabel ?? defaultAriaActionLabel}: ${chapterTitle || t("viewer.guide.no_title")}`}
     >
       <div className={styles.content}>
         <span className={styles.label}>
-          {type === "prev" ? t("viewer.guide.scroll_prev_label") : t("viewer.guide.scroll_next_label")} ({progress}%)
+          {labelText ?? defaultLabelText} ({progress}%)
         </span>
         <span className={styles.title}>{chapterTitle || t("viewer.guide.no_title")}</span>
-        <span className={styles.hint}>
-          {type === "prev" ? t("viewer.guide.scroll_prev_hint") : t("viewer.guide.scroll_next_hint")}
-        </span>
+        <span className={styles.hint}>{hintText ?? defaultHintText}</span>
       </div>
     </button>
   );

@@ -1017,14 +1017,15 @@
         "label": "PDF Top Zoom Controls",
         "show": "Show",
         "hide": "Hide"
-      },
-      "footer": {
-        "pages_1": "1 Page",
-        "pages_2": "2 Pages",
-        "offset": "Offset",
-        "progress": "Page navigation",
-        "marker_jump": "Jump to: {{label}}"
       }
+    },
+    "footer": {
+      "pages_1": "1 Page",
+      "pages_2": "2 Pages",
+      "offset": "Offset",
+      "progress": "Page navigation",
+      "marker_jump": "Jump to: {{label}}",
+      "chapter_list": "Chapter list"
     },
     "sync": {
       "title": "Sync Progress",
@@ -1119,6 +1120,16 @@
       "progress": "Progress bar",
       "pages_1": "1-page",
       "pages_2": "2-page"
+    },
+    "scroll_pull": {
+      "prev_part": "Previous part",
+      "next_part": "Next part",
+      "prev_part_label": "▲ Previous part",
+      "next_part_label": "▼ Next part",
+      "prev_part_hint": "Keep scrolling up to move to the previous part",
+      "next_part_hint": "Keep scrolling down to move to the next part",
+      "aria_prev_part": "Go to previous part",
+      "aria_next_part": "Go to next part"
     },
     "progress_marker": {
       "navigate": "Navigate TOC: {{label}}"

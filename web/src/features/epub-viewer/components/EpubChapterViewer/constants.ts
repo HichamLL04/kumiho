@@ -1,0 +1,1 @@
+export const EPUB_SCROLLED_PULL_THRESHOLD = 80;

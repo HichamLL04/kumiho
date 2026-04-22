@@ -21,6 +21,7 @@ var (
 	validEpubThemes        = map[string]bool{"light": true, "dark": true, "sepia": true}
 	validEpubFontFamilies  = map[string]bool{"original": true, "serif": true, "sans-serif": true}
 	validEpubRenderModes   = map[string]bool{"auto": true, "book": true, "comic": true}
+	validEpubFlows         = map[string]bool{"paginated": true, "scrolled": true}
 	validEpubSpreads       = map[string]bool{"auto": true, "none": true}
 	validEpubWheelDirs     = map[string]bool{"down": true, "up": true}
 	validEpubKeyboardDirs  = map[string]bool{"right": true, "left": true}
@@ -47,6 +48,7 @@ var (
 		"epub_line_height":          true,
 		"epub_theme":                true,
 		"epub_render_mode":          true,
+		"epub_flow":                 true,
 		"epub_spread":               true,
 		"epub_wheel_direction":      true,
 		"epub_keyboard_direction":   true,
@@ -383,6 +385,10 @@ func (h *SettingHandler) validateSettingValue(key, value string) error {
 	case "epub_render_mode":
 		if !validEpubRenderModes[value] {
 			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_render_mode value")
+		}
+	case "epub_flow":
+		if !validEpubFlows[value] {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid epub_flow value")
 		}
 	case "epub_spread":
 		if !validEpubSpreads[value] {

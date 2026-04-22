@@ -8,7 +8,6 @@ import { useEpubViewerStore } from "../stores/epubViewerStore";
 import { ImageViewerRoute } from "./ImageViewerRoute";
 import { PdfViewerRoute } from "./PdfViewerRoute";
 import { EpubViewerRoute } from "./EpubViewerRoute";
-import { TextViewerRoute } from "./TextViewerRoute";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 import type { Chapter } from "../types/series";
 import styles from "./Viewer.module.css";
@@ -42,7 +41,7 @@ export function ViewerPage() {
     }
 
     const chapterPath = loaderData.chapter.path?.toLowerCase() ?? "";
-    if (chapterPath.endsWith(".epub")) {
+    if (chapterPath.endsWith(".epub") || chapterPath.endsWith(".txt")) {
       setViewerIncognito(false);
       setEpubIncognito(true);
       return;
@@ -142,12 +141,10 @@ export function ViewerPage() {
   const isText = chapterPath.endsWith(".txt");
   const shouldUseImageRouteForPdf = isPdf && loaderData.chapter.render_mode === "image";
 
-  const route = isEpub ? (
+  const route = isEpub || isText ? (
     <EpubViewerRoute loaderData={loaderData} />
   ) : isPdf && !shouldUseImageRouteForPdf ? (
     <PdfViewerRoute loaderData={loaderData} />
-  ) : isText ? (
-    <TextViewerRoute loaderData={loaderData} />
   ) : (
     <ImageViewerRoute loaderData={loaderData} />
   );

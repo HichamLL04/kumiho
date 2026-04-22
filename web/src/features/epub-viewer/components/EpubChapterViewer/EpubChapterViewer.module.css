@@ -19,6 +19,39 @@
   border: none;
 }
 
+.scrolled {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.scrolled .viewer {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+.scrolled .viewer :global(.epub-container) {
+  max-width: 100% !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.scrolled .viewer :global(.epub-view),
+.scrolled .viewer iframe {
+  display: block;
+  max-width: min(100%, 960px) !important;
+  width: min(100%, 960px) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  overflow-x: hidden !important;
+}
+
 .chapterPageInfo {
   position: absolute;
   left: 50%;
@@ -39,4 +72,12 @@
 
 .chapterPageInfo.hidden {
   opacity: 0;
+}
+
+.scrolled .chapterPageInfo {
+  position: static;
+  flex: 0 0 auto;
+  align-self: center;
+  transform: none;
+  margin: 6px auto 6px;
 }
