@@ -15,6 +15,9 @@ interface PullIndicatorProps {
   chapterTitle: string | null;
   saveProgress: () => Promise<void>;
   onActivate?: (type: "prev" | "next") => Promise<void> | void;
+  labelText?: string;
+  hintText?: string;
+  ariaActionLabel?: string;
 }
 
 export function PullIndicator({
@@ -25,6 +28,9 @@ export function PullIndicator({
   chapterTitle,
   saveProgress,
   onActivate,
+  labelText,
+  hintText,
+  ariaActionLabel,
 }: PullIndicatorProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,6 +68,10 @@ export function PullIndicator({
   };
 
   const progress = Math.min(100, Math.round((Math.abs(pullOffset) / pullThreshold) * 100));
+  const defaultLabelText = type === "prev" ? t("viewer.guide.scroll_prev_label") : t("viewer.guide.scroll_next_label");
+  const defaultHintText = type === "prev" ? t("viewer.guide.scroll_prev_hint") : t("viewer.guide.scroll_next_hint");
+  const defaultAriaActionLabel =
+    type === "prev" ? t("viewer.guide.aria_prev_chapter") : t("viewer.guide.aria_next_chapter");
 
   return (
     <button
@@ -74,16 +84,14 @@ export function PullIndicator({
             : `translateY(${Math.max(0, 15 - Math.abs(pullOffset) / 4)}px)`,
       }}
       onClick={handleClick}
-      aria-label={`${type === "prev" ? t("viewer.guide.aria_prev_chapter") : t("viewer.guide.aria_next_chapter")}: ${chapterTitle || t("viewer.guide.no_title")}`}
+      aria-label={`${ariaActionLabel ?? defaultAriaActionLabel}: ${chapterTitle || t("viewer.guide.no_title")}`}
     >
       <div className={styles.content}>
         <span className={styles.label}>
-          {type === "prev" ? t("viewer.guide.scroll_prev_label") : t("viewer.guide.scroll_next_label")} ({progress}%)
+          {labelText ?? defaultLabelText} ({progress}%)
         </span>
         <span className={styles.title}>{chapterTitle || t("viewer.guide.no_title")}</span>
-        <span className={styles.hint}>
-          {type === "prev" ? t("viewer.guide.scroll_prev_hint") : t("viewer.guide.scroll_next_hint")}
-        </span>
+        <span className={styles.hint}>{hintText ?? defaultHintText}</span>
       </div>
     </button>
   );

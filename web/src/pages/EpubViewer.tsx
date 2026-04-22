@@ -33,6 +33,7 @@ import {
   type EpubInitialOpenMode,
   type EpubRenderLayout,
 } from "../features/epub-viewer/components/EpubChapterViewer";
+import { EPUB_SCROLLED_PULL_THRESHOLD } from "../features/epub-viewer/components/EpubChapterViewer/constants";
 import type { EpubChapterViewerHandles } from "../features/epub-viewer/components/EpubChapterViewer";
 import { EpubSettingsPanel } from "../features/epub-viewer/components/EpubSettingsPanel";
 import { EpubTOC } from "../features/epub-viewer/components/EpubTOC";
@@ -119,7 +120,6 @@ const THEME_BG: Record<string, string> = {
   sepia: "#f4ecd8",
 };
 const CHAPTER_NAV_HINT_DURATION_MS = 3000;
-const EPUB_SCROLLED_PULL_THRESHOLD = 80;
 
 export function EpubViewer({
   chapterTitle,
@@ -370,14 +370,32 @@ export function EpubViewer({
   const hasInternalNextPart =
     (spinePosition.spineLength > 0 && spinePosition.spineIndex < spinePosition.spineLength - 1) ||
     spinePosition.atEnd === false;
-  const canScrolledPullPrev = hasInternalPrevPart || Boolean(onReachedStartPrev && prevChapterTitle);
-  const canScrolledPullNext = hasInternalNextPart || Boolean(onReachedEndNext && nextChapterTitle);
+  const canScrolledPullPrev = hasInternalPrevPart || Boolean(onReachedStartPrev);
+  const canScrolledPullNext = hasInternalNextPart || Boolean(onReachedEndNext);
   const prevPullTitle = hasInternalPrevPart
     ? t("epub_viewer.scroll_pull.prev_part", { defaultValue: "이전 part" })
     : (prevChapterTitle ?? null);
   const nextPullTitle = hasInternalNextPart
     ? t("epub_viewer.scroll_pull.next_part", { defaultValue: "다음 part" })
     : (nextChapterTitle ?? null);
+  const prevPullLabel = hasInternalPrevPart
+    ? t("epub_viewer.scroll_pull.prev_part_label", { defaultValue: "▲ 이전 part" })
+    : undefined;
+  const nextPullLabel = hasInternalNextPart
+    ? t("epub_viewer.scroll_pull.next_part_label", { defaultValue: "▼ 다음 part" })
+    : undefined;
+  const prevPullHint = hasInternalPrevPart
+    ? t("epub_viewer.scroll_pull.prev_part_hint", { defaultValue: "계속 위로 스크롤하면 이전 part로 이동" })
+    : undefined;
+  const nextPullHint = hasInternalNextPart
+    ? t("epub_viewer.scroll_pull.next_part_hint", { defaultValue: "계속 아래로 스크롤하면 다음 part로 이동" })
+    : undefined;
+  const prevPullAria = hasInternalPrevPart
+    ? t("epub_viewer.scroll_pull.aria_prev_part", { defaultValue: "이전 part로 이동" })
+    : undefined;
+  const nextPullAria = hasInternalNextPart
+    ? t("epub_viewer.scroll_pull.aria_next_part", { defaultValue: "다음 part로 이동" })
+    : undefined;
   const noopSaveProgress = useCallback(() => Promise.resolve(), []);
 
   const handlePrev = useCallback(() => {
@@ -912,6 +930,9 @@ export function EpubViewer({
             chapterTitle={prevPullTitle}
             saveProgress={noopSaveProgress}
             onActivate={canScrolledPullPrev ? handlePrev : undefined}
+            labelText={prevPullLabel}
+            hintText={prevPullHint}
+            ariaActionLabel={prevPullAria}
           />
           <PullIndicator
             type="next"
@@ -921,6 +942,9 @@ export function EpubViewer({
             chapterTitle={nextPullTitle}
             saveProgress={noopSaveProgress}
             onActivate={canScrolledPullNext ? handleNext : undefined}
+            labelText={nextPullLabel}
+            hintText={nextPullHint}
+            ariaActionLabel={nextPullAria}
           />
         </>
       )}

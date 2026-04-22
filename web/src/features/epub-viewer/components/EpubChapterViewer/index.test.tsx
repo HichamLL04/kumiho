@@ -188,6 +188,31 @@ describe("buildEpubInjectedStyle", () => {
     expect(style).toContain("box-sizing: border-box;");
     expect(style).toContain("overflow-x: hidden;");
   });
+
+  it("세로 스크롤 모드에서는 본문 잘림 방지용 레이아웃 속성을 우선 적용한다", () => {
+    const style = buildEpubInjectedStyle(
+      {
+        fontSize: 100,
+        fontFamily: "original",
+        lineHeight: 1.6,
+        theme: "light",
+        renderMode: "auto",
+        flow: "scrolled",
+        spread: "none",
+        wheelDirection: "down",
+        keyboardDirection: "right",
+        clickDirection: "right",
+      },
+      "book",
+    );
+
+    expect(style).toContain("width: 100% !important;");
+    expect(style).toContain("max-width: 960px !important;");
+    expect(style).toContain("padding-left: 32px !important;");
+    expect(style).toContain("padding-right: 32px !important;");
+    expect(style).toContain("overflow-x: hidden !important;");
+    expect(style).toContain("max-width: 100% !important;");
+  });
 });
 
 describe("getWheelNavigationAction", () => {

@@ -1123,7 +1123,13 @@
     },
     "scroll_pull": {
       "prev_part": "이전 part",
-      "next_part": "다음 part"
+      "next_part": "다음 part",
+      "prev_part_label": "▲ 이전 part",
+      "next_part_label": "▼ 다음 part",
+      "prev_part_hint": "계속 위로 스크롤하면 이전 part로 이동",
+      "next_part_hint": "계속 아래로 스크롤하면 다음 part로 이동",
+      "aria_prev_part": "이전 part로 이동",
+      "aria_next_part": "다음 part로 이동"
     },
     "progress_marker": {
       "navigate": "목차 이동: {{label}}"

@@ -1122,7 +1122,13 @@
     },
     "scroll_pull": {
       "prev_part": "前のpart",
-      "next_part": "次のpart"
+      "next_part": "次のpart",
+      "prev_part_label": "▲ 前のpart",
+      "next_part_label": "▼ 次のpart",
+      "prev_part_hint": "上にスクロールし続けると前のpartへ移動",
+      "next_part_hint": "下にスクロールし続けると次のpartへ移動",
+      "aria_prev_part": "前のpartへ移動",
+      "aria_next_part": "次のpartへ移動"
     },
     "progress_marker": {
       "navigate": "目次移動: {{label}}"

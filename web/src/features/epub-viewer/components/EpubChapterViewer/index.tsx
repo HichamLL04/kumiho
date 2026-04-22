@@ -34,6 +34,7 @@ import {
   toLocationRatio,
 } from "./locationUtils";
 import { getWheelNavigationAction } from "./wheelNavigation";
+import { EPUB_SCROLLED_PULL_THRESHOLD } from "./constants";
 
 export type { EpubRenderLayout } from "../../utils/layoutMode";
 
@@ -101,7 +102,6 @@ interface EpubChapterViewerProps {
 }
 
 const EPUB_VIEWER_STYLE_ID = "kumiho-epub-viewer-settings";
-const SCROLLED_PULL_THRESHOLD = 80;
 const SCROLLED_PULL_SENSITIVITY = 1.0;
 const SCROLLED_PULL_MAX = 180;
 const SCROLLED_PULL_WHEEL_COOLDOWN_MS = 150;
@@ -318,7 +318,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       scrolledPullLastYRef.current = null;
       setScrolledPullTouching(false);
 
-      if (Math.abs(currentOffset) >= SCROLLED_PULL_THRESHOLD) {
+      if (Math.abs(currentOffset) >= EPUB_SCROLLED_PULL_THRESHOLD) {
         resetScrolledPullOffset();
         if (currentOffset > 0 && canScrolledPullPrevRef.current) {
           triggerScrolledPullNavigation("prev");
@@ -704,13 +704,14 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
       applySettings(rendition, settings, effectiveLayoutRef.current);
       const wheelContainers = new Set<HTMLElement>();
+      const touchContainers = new Set<HTMLElement>();
 
       const handleScrolledPullWheel = (event: WheelEvent, container: HTMLElement): boolean => {
         const isAtTop = container.scrollTop <= 0;
         const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
         const currentPull = scrolledPullOffsetRef.current;
         const isReverseRelease = (currentPull > 0 && event.deltaY > 0) || (currentPull < 0 && event.deltaY < 0);
-        const isSnappedPull = Math.abs(currentPull) >= SCROLLED_PULL_THRESHOLD;
+        const isSnappedPull = Math.abs(currentPull) >= EPUB_SCROLLED_PULL_THRESHOLD;
         const now = Date.now();
 
         if (now - lastScrolledPullWheelAtRef.current < SCROLLED_PULL_WHEEL_COOLDOWN_MS && !isReverseRelease && !isSnappedPull) {
@@ -747,17 +748,17 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           return true;
         }
 
-        const nextStep = SCROLLED_PULL_THRESHOLD / 2;
+        const nextStep = EPUB_SCROLLED_PULL_THRESHOLD / 2;
         if (isAtTop && event.deltaY < 0 && canScrolledPullPrevRef.current) {
           event.preventDefault();
           lastScrolledPullWheelAtRef.current = now;
-          setScrolledPullOffset(Math.min(SCROLLED_PULL_THRESHOLD, currentPull + nextStep));
+          setScrolledPullOffset(Math.min(EPUB_SCROLLED_PULL_THRESHOLD, currentPull + nextStep));
           return true;
         }
         if (isAtBottom && event.deltaY > 0 && canScrolledPullNextRef.current) {
           event.preventDefault();
           lastScrolledPullWheelAtRef.current = now;
-          setScrolledPullOffset(Math.max(-SCROLLED_PULL_THRESHOLD, currentPull - nextStep));
+          setScrolledPullOffset(Math.max(-EPUB_SCROLLED_PULL_THRESHOLD, currentPull - nextStep));
           return true;
         }
         if (currentPull !== 0 && isReverseRelease) {
@@ -904,6 +905,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         }
       };
 
+      const containerTouchEndHandler = () => {
+        pointerDownPosRef.current = null;
+        if (settingsRef.current.flow === "scrolled") completeScrolledPull();
+      };
+
       const handleContentInput = (content: Contents) => {
         const contentWithDocument = content as unknown as { document?: Document };
         const doc = contentWithDocument.document;
@@ -1021,7 +1027,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
         });
       };
 
-      const enforceWheelListener = () => {
+      const enforceContainerListeners = () => {
         const currentRendition = renditionRef.current;
         if (!currentRendition) return;
         const manager = asEpubRenditionSnapshot(currentRendition).manager;
@@ -1029,6 +1035,14 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           manager.container.removeEventListener("wheel", wheelHandler);
           manager.container.addEventListener("wheel", wheelHandler, { passive: false });
           wheelContainers.add(manager.container);
+
+          manager.container.removeEventListener("touchstart", touchStartHandler);
+          manager.container.removeEventListener("touchmove", touchMoveHandler);
+          manager.container.removeEventListener("touchend", containerTouchEndHandler);
+          manager.container.addEventListener("touchstart", touchStartHandler, { passive: true });
+          manager.container.addEventListener("touchmove", touchMoveHandler, { passive: false });
+          manager.container.addEventListener("touchend", containerTouchEndHandler);
+          touchContainers.add(manager.container);
         }
         asEpubRenditionSnapshot(currentRendition)
           .getContents?.()
@@ -1042,15 +1056,15 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
       const contentHookHandler = (content: EpubContentSnapshot) => {
         handleContentInput(content as Contents);
-        enforceWheelListener();
+        enforceContainerListeners();
       };
 
       const renderHandler = () => {
-        enforceWheelListener();
+        enforceContainerListeners();
       };
 
       const displayedHandler = () => {
-        enforceWheelListener();
+        enforceContainerListeners();
       };
 
       rendition.on("relocated", handleRelocated as unknown as (...args: unknown[]) => void);
@@ -1058,7 +1072,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       rendition.on("displayed", displayedHandler);
       rendition.hooks.content.register(contentHookHandler as unknown as (...args: unknown[]) => void);
 
-      enforceWheelListener();
+      enforceContainerListeners();
 
       const waitForLayoutFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
@@ -1464,6 +1478,12 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           container.removeEventListener("wheel", wheelHandler);
         });
         wheelContainers.clear();
+        touchContainers.forEach((container) => {
+          container.removeEventListener("touchstart", touchStartHandler);
+          container.removeEventListener("touchmove", touchMoveHandler);
+          container.removeEventListener("touchend", containerTouchEndHandler);
+        });
+        touchContainers.clear();
         contentDisposers.forEach((dispose) => {
           try {
             dispose();

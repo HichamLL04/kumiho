@@ -1123,7 +1123,13 @@
     },
     "scroll_pull": {
       "prev_part": "Previous part",
-      "next_part": "Next part"
+      "next_part": "Next part",
+      "prev_part_label": "▲ Previous part",
+      "next_part_label": "▼ Next part",
+      "prev_part_hint": "Keep scrolling up to move to the previous part",
+      "next_part_hint": "Keep scrolling down to move to the next part",
+      "aria_prev_part": "Go to previous part",
+      "aria_next_part": "Go to next part"
     },
     "progress_marker": {
       "navigate": "Navigate TOC: {{label}}"
