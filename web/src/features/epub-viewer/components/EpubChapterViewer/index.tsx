@@ -105,6 +105,7 @@ const SCROLLED_PULL_THRESHOLD = 80;
 const SCROLLED_PULL_SENSITIVITY = 1.0;
 const SCROLLED_PULL_MAX = 180;
 const SCROLLED_PULL_WHEEL_COOLDOWN_MS = 150;
+const SCROLLED_PULL_NAVIGATION_LOCK_MS = 450;
 
 interface NavigationSnapshot {
   cfi: string | null;
@@ -170,8 +171,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     const scrolledPullOffsetRef = useRef(0);
     const isScrolledPullTouchingRef = useRef(false);
     const scrolledPullFrameRef = useRef<number | null>(null);
-    const scrolledPullStartYRef = useRef<number | null>(null);
     const scrolledPullLastYRef = useRef<number | null>(null);
+    const scrolledPullNavigationLockRef = useRef(false);
+    const scrolledPullNavigationLockTimerRef = useRef<number | null>(null);
     const detectedLayoutRef = useRef<EpubRenderLayout>("book");
     const effectiveLayoutRef = useRef<EpubRenderLayout>("book");
     const allowContentHeuristicRef = useRef(true);
@@ -295,18 +297,33 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       scrolledPullFrameRef.current = requestAnimationFrame(decay);
     }, [setScrolledPullOffset]);
 
+    const triggerScrolledPullNavigation = useCallback((type: "prev" | "next") => {
+      if (scrolledPullNavigationLockRef.current) return;
+
+      scrolledPullNavigationLockRef.current = true;
+      if (scrolledPullNavigationLockTimerRef.current !== null) {
+        window.clearTimeout(scrolledPullNavigationLockTimerRef.current);
+      }
+      scrolledPullNavigationLockTimerRef.current = window.setTimeout(() => {
+        scrolledPullNavigationLockRef.current = false;
+        scrolledPullNavigationLockTimerRef.current = null;
+      }, SCROLLED_PULL_NAVIGATION_LOCK_MS);
+
+      if (type === "prev") onPagePrevRef.current?.();
+      else onPageNextRef.current?.();
+    }, []);
+
     const completeScrolledPull = useCallback(() => {
       const currentOffset = scrolledPullOffsetRef.current;
-      scrolledPullStartYRef.current = null;
       scrolledPullLastYRef.current = null;
       setScrolledPullTouching(false);
 
       if (Math.abs(currentOffset) >= SCROLLED_PULL_THRESHOLD) {
         resetScrolledPullOffset();
         if (currentOffset > 0 && canScrolledPullPrevRef.current) {
-          onPagePrevRef.current?.();
+          triggerScrolledPullNavigation("prev");
         } else if (currentOffset < 0 && canScrolledPullNextRef.current) {
-          onPageNextRef.current?.();
+          triggerScrolledPullNavigation("next");
         }
         return;
       }
@@ -314,7 +331,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       if (currentOffset !== 0) {
         decayScrolledPullOffset();
       }
-    }, [decayScrolledPullOffset, resetScrolledPullOffset, setScrolledPullTouching]);
+    }, [decayScrolledPullOffset, resetScrolledPullOffset, setScrolledPullTouching, triggerScrolledPullNavigation]);
 
     useEffect(() => {
       if (settings.flow === "scrolled") return;
@@ -717,7 +734,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           if (currentPull > 0) {
             if (event.deltaY < 0 && canScrolledPullPrevRef.current) {
               resetScrolledPullOffset();
-              onPagePrevRef.current?.();
+              triggerScrolledPullNavigation("prev");
             } else if (event.deltaY > 0) {
               lastScrolledPullWheelAtRef.current = now;
               resetScrolledPullOffset();
@@ -725,7 +742,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           } else if (currentPull < 0) {
             if (event.deltaY > 0 && canScrolledPullNextRef.current) {
               resetScrolledPullOffset();
-              onPageNextRef.current?.();
+              triggerScrolledPullNavigation("next");
             } else if (event.deltaY < 0) {
               lastScrolledPullWheelAtRef.current = now;
               resetScrolledPullOffset();
@@ -850,7 +867,6 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           scrolledPullFrameRef.current = null;
         }
         pointerDownPosRef.current = { x: touch.clientX, y: touch.clientY };
-        scrolledPullStartYRef.current = touch.clientY;
         scrolledPullLastYRef.current = touch.clientY;
         isDraggingRef.current = false;
         touchHandledRef.current = false;
@@ -1450,6 +1466,11 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
           cancelAnimationFrame(scrolledPullFrameRef.current);
           scrolledPullFrameRef.current = null;
         }
+        if (scrolledPullNavigationLockTimerRef.current !== null) {
+          window.clearTimeout(scrolledPullNavigationLockTimerRef.current);
+          scrolledPullNavigationLockTimerRef.current = null;
+        }
+        scrolledPullNavigationLockRef.current = false;
         scrolledPullOffsetRef.current = 0;
         isScrolledPullTouchingRef.current = false;
         onScrolledPullStateChangeRef.current?.({ pullOffset: 0, isTouching: false });

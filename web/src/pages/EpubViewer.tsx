@@ -195,8 +195,8 @@ export function EpubViewer({
   const [spinePosition, setSpinePosition] = useState({
     spineIndex: 0,
     spineLength: 0,
-    atStart: true,
-    atEnd: false,
+    atStart: undefined as boolean | undefined,
+    atEnd: undefined as boolean | undefined,
   });
   const [nextHintTriggeredChapterId, setNextHintTriggeredChapterId] = useState<string | null>(null);
   const [prevHintTriggeredChapterId, setPrevHintTriggeredChapterId] = useState<string | null>(null);
@@ -301,8 +301,8 @@ export function EpubViewer({
       setSpinePosition({
         spineIndex: location.spineIndex,
         spineLength: location.spineLength,
-        atStart: location.atStart === true,
-        atEnd: location.atEnd === true,
+        atStart: location.atStart,
+        atEnd: location.atEnd,
       });
       onLocationChange(location);
     },
@@ -366,10 +366,10 @@ export function EpubViewer({
 
   const isVisibleAtStart = chapterPageDisplay <= 1;
   const isVisibleAtEnd = chapterTotalDisplay > 0 && chapterPageDisplay >= chapterTotalDisplay;
-  const hasInternalPrevPart = spinePosition.spineIndex > 0 || !spinePosition.atStart;
+  const hasInternalPrevPart = spinePosition.spineIndex > 0 || spinePosition.atStart === false;
   const hasInternalNextPart =
     (spinePosition.spineLength > 0 && spinePosition.spineIndex < spinePosition.spineLength - 1) ||
-    !spinePosition.atEnd;
+    spinePosition.atEnd === false;
   const canScrolledPullPrev = hasInternalPrevPart || Boolean(onReachedStartPrev && prevChapterTitle);
   const canScrolledPullNext = hasInternalNextPart || Boolean(onReachedEndNext && nextChapterTitle);
   const prevPullTitle = hasInternalPrevPart
