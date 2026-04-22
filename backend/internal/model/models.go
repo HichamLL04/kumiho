@@ -265,6 +265,7 @@ type UserSeriesSetting struct {
 	ReadingMode           *string   `json:"reading_mode,omitempty"`
 	EpubRenderMode        *string   `json:"epub_render_mode,omitempty"`        // "auto" | "book" | "comic"
 	EpubTheme             *string   `json:"epub_theme,omitempty"`              // "light" | "dark" | "sepia"
+	EpubFlow              *string   `json:"epub_flow,omitempty"`               // "paginated" | "scrolled"
 	EpubSpread            *string   `json:"epub_spread,omitempty"`             // "auto" | "none"
 	EpubWheelDirection    *string   `json:"epub_wheel_direction,omitempty"`    // "down" | "up"
 	EpubKeyboardDirection *string   `json:"epub_keyboard_direction,omitempty"` // "right" | "left"

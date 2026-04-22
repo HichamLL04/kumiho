@@ -168,6 +168,7 @@ export interface UserSeriesSetting {
   reading_mode?: string;
   epub_render_mode?: string;
   epub_theme?: string;
+  epub_flow?: "paginated" | "scrolled";
   epub_spread?: string;
   epub_wheel_direction?: string;
   epub_keyboard_direction?: string;

@@ -1701,6 +1701,9 @@ func (h *SeriesHandler) UpdateViewerSettings(c *fiber.Ctx) error {
 	if req.EpubTheme != nil && *req.EpubTheme != "" && !h.isValidSetting("viewer_epub_theme", *req.EpubTheme) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_theme"})
 	}
+	if req.EpubFlow != nil && *req.EpubFlow != "" && !h.isValidSetting("viewer_epub_flow", *req.EpubFlow) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_flow"})
+	}
 	if req.EpubSpread != nil && *req.EpubSpread != "" && !h.isValidSetting("viewer_epub_spread", *req.EpubSpread) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_spread"})
 	}
@@ -1855,6 +1858,8 @@ func (h *SeriesHandler) isValidSetting(key, value string) bool {
 		return value == "auto" || value == "book" || value == "comic"
 	case "viewer_epub_theme":
 		return value == "light" || value == "dark" || value == "sepia"
+	case "viewer_epub_flow":
+		return value == "paginated" || value == "scrolled"
 	case "viewer_epub_spread":
 		return value == "auto" || value == "none"
 	case "viewer_epub_wheel_direction":

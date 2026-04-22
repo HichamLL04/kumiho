@@ -276,8 +276,9 @@ export const seriesAPI = {
   getExtensionsBatch: (seriesIds: string[]) =>
     api.post<{ extensions: Record<string, string> }>("/series/extensions/batch", { series_ids: seriesIds }),
   // 뷰어 설정
-  getViewerSettings: (seriesId: string) => api.get(`/series/${seriesId}/viewer-settings`).then((res) => res.data),
-  updateViewerSettings: (seriesId: string, data: Record<string, unknown>) =>
+  getViewerSettings: (seriesId: string) =>
+    api.get<Partial<UserSeriesSetting>>(`/series/${seriesId}/viewer-settings`).then((res) => res.data),
+  updateViewerSettings: (seriesId: string, data: Partial<UserSeriesSetting>) =>
     api.patch(`/series/${seriesId}/viewer-settings`, data).then((res) => res.data),
   metadataSearch: (seriesId: string, data?: MetadataSearchRequest) =>
     api.post<MetadataSearchResult>(`/series/${seriesId}/metadata/search`, data ?? {}).then((res) => res.data),

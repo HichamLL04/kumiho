@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 41
+const latestMigrationVersion = 42
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -421,6 +421,7 @@ func Migrate() error {
 		reading_mode TEXT,
 		epub_render_mode TEXT,
 		epub_theme TEXT,
+		epub_flow TEXT,
 		epub_spread TEXT,
 		epub_wheel_direction TEXT,
 		epub_keyboard_direction TEXT,
@@ -623,6 +624,7 @@ func Migrate() error {
 		{39, "시리즈 등장인물 테이블 추가", migrateSeriesCharacters},
 		{40, "원제 오버라이드 라이브러리별 설정 이전", migrateOriginalTitleOverridePerLibrary},
 		{41, "시리즈 메타데이터 번역된 줄거리 컬럼 추가", migrateSeriesMetadataDescriptionTranslated},
+		{42, "EPUB 페이지 모드(flow) 시리즈별 설정 컬럼 추가", migrateEpubFlowSeriesSetting},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -1215,6 +1217,11 @@ func migrateOriginalTitleOverridePerLibrary() error {
 // #41 migrateSeriesMetadataDescriptionTranslated series_metadata 테이블에 번역된 줄거리 컬럼 추가
 func migrateSeriesMetadataDescriptionTranslated() error {
 	return addColumn("series_metadata", "description_translated", "TEXT DEFAULT ''")
+}
+
+// #42 migrateEpubFlowSeriesSetting user_series_settings 테이블에 epub_flow 컬럼 추가
+func migrateEpubFlowSeriesSetting() error {
+	return addColumn("user_series_settings", "epub_flow", "TEXT")
 }
 
 // #14 migrateChapterCompletions chapter_completions 테이블 추가
