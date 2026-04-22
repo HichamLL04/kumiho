@@ -193,6 +193,9 @@ describe("SeriesCard audiobook bootstrap guard", () => {
     expect(screen.queryByText("series.unit.chapter_count")).toBeNull();
   });
 
+});
+
+describe("SeriesCard navigateTo", () => {
   it("navigateTo가 있으면 카드 클릭 시 기본 볼륨 경로 대신 지정 경로로 이동한다", () => {
     render(
       <SeriesCard
