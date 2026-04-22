@@ -1024,7 +1024,8 @@
       "pages_2": "2페이지",
       "offset": "오프셋",
       "progress": "페이지 탐색",
-      "marker_jump": "목차로 이동: {{label}}"
+      "marker_jump": "목차로 이동: {{label}}",
+      "chapter_list": "챕터 목록"
     },
     "sync": {
       "title": "진행도 동기화",
@@ -1119,6 +1120,10 @@
       "progress": "진행 바",
       "pages_1": "1페이지",
       "pages_2": "2페이지"
+    },
+    "scroll_pull": {
+      "prev_part": "이전 part",
+      "next_part": "다음 part"
     },
     "progress_marker": {
       "navigate": "목차 이동: {{label}}"

@@ -1024,7 +1024,8 @@
       "pages_2": "2ページ",
       "offset": "オフセット",
       "progress": "ページナビゲーション",
-      "marker_jump": "目次へ移動: {{label}}"
+      "marker_jump": "目次へ移動: {{label}}",
+      "chapter_list": "チャプター一覧"
     },
     "sync": {
       "title": "進捗同期",
@@ -1118,6 +1119,10 @@
       "progress": "進行バー",
       "pages_1": "1ページ",
       "pages_2": "2ページ"
+    },
+    "scroll_pull": {
+      "prev_part": "前のpart",
+      "next_part": "次のpart"
     },
     "progress_marker": {
       "navigate": "目次移動: {{label}}"

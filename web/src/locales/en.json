@@ -1023,7 +1023,8 @@
         "pages_2": "2 Pages",
         "offset": "Offset",
         "progress": "Page navigation",
-        "marker_jump": "Jump to: {{label}}"
+        "marker_jump": "Jump to: {{label}}",
+        "chapter_list": "Chapter list"
       }
     },
     "sync": {
@@ -1119,6 +1120,10 @@
       "progress": "Progress bar",
       "pages_1": "1-page",
       "pages_2": "2-page"
+    },
+    "scroll_pull": {
+      "prev_part": "Previous part",
+      "next_part": "Next part"
     },
     "progress_marker": {
       "navigate": "Navigate TOC: {{label}}"
