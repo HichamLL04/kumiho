@@ -48,6 +48,7 @@ import commonStyles from "./SettingsComponents.module.css";
 import styles from "./LibrariesTab.module.css";
 import { settingAPI } from "../../api/client";
 import { useAuthStore } from "../../stores/authStore";
+import { getLibraryDeleteErrorMessage } from "./libraryDeleteErrors";
 
 interface SortableItemProps {
   lib: Library;
@@ -724,15 +725,7 @@ export function LibrariesTab() {
       fetchLibraries();
     } catch (error: unknown) {
       console.error("Failed to delete library:", error);
-      const err = error as { response?: { data?: { error?: string; error_code?: string } } };
-      const errorCode = err.response?.data?.error_code;
-      let message = err.response?.data?.error || t("settings.libraries.toast.delete_failed");
-      if (errorCode === "library_delete_active_scan") {
-        message = t("settings.libraries.toast.delete_failed_active_scan");
-      } else if (errorCode === "library_delete_busy") {
-        message = t("settings.libraries.toast.delete_failed_busy");
-      }
-      setStatus({ type: "error", message });
+      setStatus({ type: "error", message: getLibraryDeleteErrorMessage(error, t) });
       setIsDeleteModalOpen(false);
     }
   };

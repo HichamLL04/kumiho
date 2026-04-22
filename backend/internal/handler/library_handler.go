@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/mattn/go-sqlite3"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
@@ -21,6 +23,7 @@ const (
 	libraryDeleteActiveScanErrorCode = "library_delete_active_scan"
 	libraryDeleteBusyErrorCode       = "library_delete_busy"
 	libraryDeleteFailedErrorCode     = "library_delete_failed"
+	libraryDeleteSystemErrorCode     = "library_delete_system_library"
 )
 
 type LibraryHandler struct {
@@ -598,15 +601,25 @@ func (h *LibraryHandler) Delete(c *fiber.Ctx) error {
 	if library.Type == "SYSTEM" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":      "system libraries cannot be deleted",
-			"error_code": libraryDeleteFailedErrorCode,
+			"error_code": libraryDeleteSystemErrorCode,
 		})
 	}
 
-	if h.scanner != nil && h.scanner.IsScanning(id) {
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"error":      "library scan is in progress",
-			"error_code": libraryDeleteActiveScanErrorCode,
-		})
+	if h.scanner != nil {
+		if !h.scanner.BeginLibraryDelete(id) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error":      "library delete is already in progress",
+				"error_code": libraryDeleteBusyErrorCode,
+			})
+		}
+		defer h.scanner.EndLibraryDelete(id)
+
+		if h.scanner.IsScanning(id) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error":      "library scan is in progress",
+				"error_code": libraryDeleteActiveScanErrorCode,
+			})
+		}
 	}
 
 	if err := h.libraryRepo.Delete(nil, id); err != nil {
@@ -636,6 +649,10 @@ func (h *LibraryHandler) Delete(c *fiber.Ctx) error {
 func isDatabaseBusyError(err error) bool {
 	if err == nil {
 		return false
+	}
+	var sqliteErr sqlite3.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code == sqlite3.ErrBusy || sqliteErr.Code == sqlite3.ErrLocked
 	}
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "database is locked") ||

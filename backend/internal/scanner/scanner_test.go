@@ -3,6 +3,7 @@ package scanner
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1029,5 +1030,56 @@ func TestScannerIsScanning(t *testing.T) {
 	s.scanningCurrent.Delete("lib-1")
 	if s.IsScanning("lib-1") {
 		t.Fatal("IsScanning() = true after scan is cleared")
+	}
+}
+
+func TestScannerLibraryDeleteGuard(t *testing.T) {
+	t.Parallel()
+
+	s := NewScanner(
+		repository.NewLibraryRepository(),
+		repository.NewSeriesRepository(),
+		repository.NewVolumeRepository(),
+		repository.NewChapterRepository(),
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{},
+	)
+
+	if !s.BeginLibraryDelete("lib-1") {
+		t.Fatal("BeginLibraryDelete() = false, want first caller to acquire guard")
+	}
+	if s.BeginLibraryDelete("lib-1") {
+		t.Fatal("BeginLibraryDelete() = true, want second caller to be rejected")
+	}
+
+	s.EndLibraryDelete("lib-1")
+	if !s.BeginLibraryDelete("lib-1") {
+		t.Fatal("BeginLibraryDelete() = false after release")
+	}
+}
+
+func TestScannerRejectsScanWhileLibraryDeleting(t *testing.T) {
+	t.Parallel()
+
+	s := NewScanner(
+		repository.NewLibraryRepository(),
+		repository.NewSeriesRepository(),
+		repository.NewVolumeRepository(),
+		repository.NewChapterRepository(),
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{},
+	)
+	s.BeginLibraryDelete("lib-1")
+
+	_, err := s.ScanLibrary(context.Background(), &model.Library{
+		ID:          "lib-1",
+		Type:        "LOCAL",
+		LibraryType: "book",
+		Paths:       []string{t.TempDir()},
+	})
+	if !errors.Is(err, ErrLibraryDeleting) {
+		t.Fatalf("ScanLibrary() error = %v, want ErrLibraryDeleting", err)
 	}
 }
