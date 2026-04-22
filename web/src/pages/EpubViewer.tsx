@@ -908,19 +908,19 @@ export function EpubViewer({
             type="prev"
             pullOffset={scrolledPullState.pullOffset}
             pullThreshold={EPUB_SCROLLED_PULL_THRESHOLD}
-            chapterId={canScrolledPullPrev ? "epub-prev-part" : null}
+            chapterId={null}
             chapterTitle={prevPullTitle}
             saveProgress={noopSaveProgress}
-            onActivate={handlePrev}
+            onActivate={canScrolledPullPrev ? handlePrev : undefined}
           />
           <PullIndicator
             type="next"
             pullOffset={scrolledPullState.pullOffset}
             pullThreshold={EPUB_SCROLLED_PULL_THRESHOLD}
-            chapterId={canScrolledPullNext ? "epub-next-part" : null}
+            chapterId={null}
             chapterTitle={nextPullTitle}
             saveProgress={noopSaveProgress}
-            onActivate={handleNext}
+            onActivate={canScrolledPullNext ? handleNext : undefined}
           />
         </>
       )}

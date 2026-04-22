@@ -32,8 +32,8 @@ export function PullIndicator({
   const viewerFrom = typeof location.state?.from === "string" ? location.state.from : undefined;
   const routeIsIncognito = location.state?.isIncognito === true;
 
-  // 챕터 ID가 없으면 아예 렌더링하지 않음
-  if (!chapterId) return null;
+  // 라우팅 기반 챕터 이동은 chapterId가 필요하지만, 커스텀 활성화 콜백은 chapterId 없이도 동작한다.
+  if (!chapterId && !onActivate) return null;
 
   // 오프셋이 있으면 visible 클래스 적용
   // 작은 오프셋이라도 감지되면 일단 보여주고(opacity 1), 0이 되면 CSS transition(1s)을 통해 사라짐

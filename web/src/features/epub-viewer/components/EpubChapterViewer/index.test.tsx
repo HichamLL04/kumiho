@@ -191,6 +191,16 @@ describe("buildEpubInjectedStyle", () => {
 });
 
 describe("getWheelNavigationAction", () => {
+  it("작은 wheel delta는 트랙패드 미세 입력으로 보고 무시한다", () => {
+    const action = getWheelNavigationAction({
+      deltaY: 4,
+      flow: "paginated",
+      wheelDirection: "down",
+    });
+
+    expect(action).toBeNull();
+  });
+
   it("세로 스크롤 모드에서 내부 스크롤이 없는 작은 페이지는 다음 페이지 이동을 허용한다", () => {
     const action = getWheelNavigationAction({
       deltaY: 32,

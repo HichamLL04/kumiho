@@ -3,6 +3,8 @@ import type { EpubManagerSnapshot } from "./epubjsSnapshots";
 
 export type WheelNavigationAction = "next" | "prev" | null;
 
+const WHEEL_NAVIGATION_DELTA_THRESHOLD = 8;
+
 interface WheelNavigationInput {
   deltaY: number;
   flow: EpubViewerSettings["flow"];
@@ -16,7 +18,7 @@ export function getWheelNavigationAction({
   wheelDirection,
   manager,
 }: WheelNavigationInput): WheelNavigationAction {
-  if (Math.abs(deltaY) < 1) return null;
+  if (Math.abs(deltaY) < WHEEL_NAVIGATION_DELTA_THRESHOLD) return null;
 
   const isNextDirection = wheelDirection === "down" ? deltaY > 0 : deltaY < 0;
   if (flow !== "paginated") {
