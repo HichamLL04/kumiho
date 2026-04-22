@@ -191,7 +191,7 @@ export function EpubViewer({
   const [pendingProgressRatio, setPendingProgressRatio] = useState<number | null>(null);
   const [chapterPageDisplay, setChapterPageDisplay] = useState(visiblePage);
   const [chapterTotalDisplay, setChapterTotalDisplay] = useState(visibleTotalPages);
-  const [scrolledPullState, setScrolledPullState] = useState({ pullOffset: 0, isTouching: false });
+  const [scrolledPullOffset, setScrolledPullOffset] = useState(0);
   const [spinePosition, setSpinePosition] = useState({
     spineIndex: 0,
     spineLength: 0,
@@ -915,7 +915,7 @@ export function EpubViewer({
           hideChapterPageInfo={hideChapterPageInfo}
           canScrolledPullPrev={canScrolledPullPrev}
           canScrolledPullNext={canScrolledPullNext}
-          onScrolledPullStateChange={setScrolledPullState}
+          onScrolledPullStateChange={(s) => setScrolledPullOffset(s.pullOffset)}
         />
       </main>
 
@@ -924,7 +924,7 @@ export function EpubViewer({
         <>
           <PullIndicator
             type="prev"
-            pullOffset={scrolledPullState.pullOffset}
+            pullOffset={scrolledPullOffset}
             pullThreshold={EPUB_SCROLLED_PULL_THRESHOLD}
             chapterId={null}
             chapterTitle={prevPullTitle}
@@ -936,7 +936,7 @@ export function EpubViewer({
           />
           <PullIndicator
             type="next"
-            pullOffset={scrolledPullState.pullOffset}
+            pullOffset={scrolledPullOffset}
             pullThreshold={EPUB_SCROLLED_PULL_THRESHOLD}
             chapterId={null}
             chapterTitle={nextPullTitle}
