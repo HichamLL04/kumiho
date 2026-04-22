@@ -19,6 +19,15 @@ describe("getLibraryDeleteErrorMessage", () => {
     ).toBe("settings.libraries.toast.delete_failed_busy");
   });
 
+  it("삭제 진행 중 메시지를 반환한다", () => {
+    expect(
+      getLibraryDeleteErrorMessage(
+        { response: { data: { error_code: LIBRARY_DELETE_ERROR_CODES.inProgress } } },
+        t,
+      ),
+    ).toBe("settings.libraries.toast.delete_failed_in_progress");
+  });
+
   it("알 수 없는 코드에서는 서버 메시지 또는 기본 메시지를 반환한다", () => {
     expect(getLibraryDeleteErrorMessage({ response: { data: { error: "server error" } } }, t)).toBe("server error");
     expect(getLibraryDeleteErrorMessage({}, t)).toBe("settings.libraries.toast.delete_failed");

@@ -8,6 +8,7 @@ import (
 
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	"github.com/gofiber/fiber/v2"
+	"github.com/mattn/go-sqlite3"
 )
 
 func TestValidateNoNestedLibraryPaths(t *testing.T) {
@@ -128,6 +129,10 @@ func TestIsDatabaseBusyError(t *testing.T) {
 		want bool
 	}{
 		{name: "nil", err: nil, want: false},
+		{name: "sqlite busy", err: sqlite3.Error{Code: sqlite3.ErrBusy}, want: true},
+		{name: "sqlite locked", err: sqlite3.Error{Code: sqlite3.ErrLocked}, want: true},
+		{name: "wrapped sqlite busy", err: errors.Join(errors.New("wrapped"), sqlite3.Error{Code: sqlite3.ErrBusy}), want: true},
+		{name: "sqlite constraint", err: sqlite3.Error{Code: sqlite3.ErrConstraint}, want: false},
 		{name: "database locked", err: errors.New("database is locked"), want: true},
 		{name: "table locked", err: errors.New("database table is locked: series"), want: true},
 		{name: "busy code", err: errors.New("SQLITE_BUSY: database is busy"), want: true},

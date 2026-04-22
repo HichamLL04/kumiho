@@ -22,6 +22,7 @@ import (
 const (
 	libraryDeleteActiveScanErrorCode = "library_delete_active_scan"
 	libraryDeleteBusyErrorCode       = "library_delete_busy"
+	libraryDeleteInProgressErrorCode = "library_delete_in_progress"
 	libraryDeleteFailedErrorCode     = "library_delete_failed"
 	libraryDeleteSystemErrorCode     = "library_delete_system_library"
 )
@@ -496,6 +497,12 @@ func (h *LibraryHandler) Scan(c *fiber.Ctx) error {
 				"error": "scan already in progress",
 			})
 		}
+		if errors.Is(err, scanner.ErrLibraryDeleting) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error":      "library delete is in progress",
+				"error_code": libraryDeleteInProgressErrorCode,
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "failed to scan library",
 			"details": err.Error(),
@@ -609,7 +616,7 @@ func (h *LibraryHandler) Delete(c *fiber.Ctx) error {
 		if !h.scanner.BeginLibraryDelete(id) {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 				"error":      "library delete is already in progress",
-				"error_code": libraryDeleteBusyErrorCode,
+				"error_code": libraryDeleteInProgressErrorCode,
 			})
 		}
 		defer h.scanner.EndLibraryDelete(id)

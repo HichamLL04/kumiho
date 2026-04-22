@@ -1,6 +1,7 @@
 export const LIBRARY_DELETE_ERROR_CODES = {
   activeScan: "library_delete_active_scan",
   busy: "library_delete_busy",
+  inProgress: "library_delete_in_progress",
 } as const;
 
 type Translate = (key: string) => string;
@@ -22,6 +23,9 @@ export function getLibraryDeleteErrorMessage(error: unknown, t: Translate): stri
   }
   if (errorCode === LIBRARY_DELETE_ERROR_CODES.busy) {
     return t("settings.libraries.toast.delete_failed_busy");
+  }
+  if (errorCode === LIBRARY_DELETE_ERROR_CODES.inProgress) {
+    return t("settings.libraries.toast.delete_failed_in_progress");
   }
   return err.response?.data?.error || t("settings.libraries.toast.delete_failed");
 }
