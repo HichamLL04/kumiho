@@ -319,7 +319,7 @@ export function HomePage() {
                 progress={progress.progress_percent}
                 chapterId={progress.chapter_id}
                 volumeId={progress.volume_id}
-                navigateTo={progress.series_id ? `/series/${progress.series_id}` : undefined}
+                navigateTo={`/series/${progress.series_id}`}
                 onStatusChange={loadData}
                 showExtensionBadge
                 extensionBadgeText={recentProgressExtensionMap[progress.id]}
