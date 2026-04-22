@@ -71,6 +71,9 @@ vi.mock("react-i18next", () => ({
       if (key === "home.library.series_index_jump") {
         return `jump ${String(options?.key ?? "")}`;
       }
+      if (key === "series.unit.total_volume" || key === "series.unit.total_chapter") {
+        return `${key} ${String(options?.count ?? "")}`;
+      }
       return key;
     },
   }),
@@ -118,9 +121,10 @@ vi.mock("../components/Sidebar", () => ({
 }));
 
 vi.mock("../components/SeriesCard", () => ({
-  SeriesCard: ({ item }: { item: Series }) => (
+  SeriesCard: ({ item, customSubtitle }: { item: Series; customSubtitle?: string }) => (
     <article data-testid="series-card">
       {item.title}
+      {customSubtitle && <span data-testid={`series-subtitle-${item.id}`}>{customSubtitle}</span>}
     </article>
   ),
 }));
@@ -139,6 +143,7 @@ const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
   "scrollIntoView",
 );
 const originalScrollToDescriptor = Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, "scrollTo");
+const originalElementScrollToDescriptor = Object.getOwnPropertyDescriptor(window.Element.prototype, "scrollTo");
 
 const createRect = (overrides: Partial<DOMRect> = {}): DOMRect => ({
   x: overrides.x ?? 0,
@@ -227,6 +232,12 @@ describe("LibraryPage series index", () => {
     });
     Object.defineProperty(window.HTMLElement.prototype, "scrollTo", {
       configurable: true,
+      writable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(window.Element.prototype, "scrollTo", {
+      configurable: true,
+      writable: true,
       value: vi.fn(),
     });
 
@@ -270,6 +281,11 @@ describe("LibraryPage series index", () => {
       Object.defineProperty(window.HTMLElement.prototype, "scrollTo", originalScrollToDescriptor);
     } else {
       Reflect.deleteProperty(window.HTMLElement.prototype, "scrollTo");
+    }
+    if (originalElementScrollToDescriptor) {
+      Object.defineProperty(window.Element.prototype, "scrollTo", originalElementScrollToDescriptor);
+    } else {
+      Reflect.deleteProperty(window.Element.prototype, "scrollTo");
     }
   });
 
@@ -332,5 +348,30 @@ describe("LibraryPage series index", () => {
     await waitFor(() => {
       expect(nav.querySelector('[aria-hidden="true"]')).toHaveClass(styles.seriesIndexScrollbarVisible);
     });
+  });
+
+  it("중첩 경로가 있어도 시리즈 카드에는 권/화 수를 우선 표시한다", async () => {
+    mocks.libraryGetSeriesMock.mockResolvedValueOnce({
+      data: {
+        series: [
+          {
+            id: "nested-series",
+            library_id: "library-1",
+            title: "가면라이더",
+            path: "/library/1.단편/[ ㄱ ]/가면라이더",
+            display_unit: "volume",
+            volume_count: 3,
+            chapter_count: 12,
+            created_at: "2026-04-10T00:00:00Z",
+            updated_at: "2026-04-10T00:00:00Z",
+          },
+        ],
+      },
+    });
+
+    renderLibraryPage();
+
+    expect(await screen.findByTestId("series-subtitle-nested-series")).toHaveTextContent("series.unit.total_volume 3");
+    expect(screen.getByTestId("series-subtitle-nested-series")).not.toHaveTextContent("1.단편 / [ ㄱ ]");
   });
 });

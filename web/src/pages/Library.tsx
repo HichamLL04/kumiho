@@ -352,10 +352,15 @@ export function LibraryPage() {
       activeButtonRect.top - scrollAreaRect.top + scrollArea.scrollTop + activeButtonRect.height / 2;
     const targetScrollTop =
       buttonCenterInScrollArea - scrollArea.clientHeight / 2;
-    scrollArea.scrollTo({
-      top: Math.max(0, targetScrollTop),
-      behavior: "auto",
-    });
+    const nextScrollTop = Math.max(0, targetScrollTop);
+    if (typeof scrollArea.scrollTo === "function") {
+      scrollArea.scrollTo({
+        top: nextScrollTop,
+        behavior: "auto",
+      });
+    } else {
+      scrollArea.scrollTop = nextScrollTop;
+    }
     if (syncingIndexScrollFrameRef.current !== null) {
       window.cancelAnimationFrame(syncingIndexScrollFrameRef.current);
     }
@@ -656,7 +661,9 @@ export function LibraryPage() {
                     {group.items.map((series, index) => {
                       const displayContext = getSeriesDisplayContext(series.path, library.paths);
                       const countLabel = getLibrarySeriesCountLabelKey(series);
-                      const customSubtitle = displayContext || (countLabel ? t(countLabel.key, { count: countLabel.count }) : undefined);
+                      const customSubtitle = countLabel
+                        ? t(countLabel.key, { count: countLabel.count })
+                        : displayContext || undefined;
                       return (
                         <div
                           key={series.id}
