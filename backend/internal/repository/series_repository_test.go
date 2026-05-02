@@ -50,6 +50,47 @@ func TestSeriesRepositoryUpdatePreservingUpdatedAtKeepsDatabaseTimestamp(t *test
 	}
 }
 
+func TestVolumeCreateUsesDetectionTimeForLastContentUpdatedAt(t *testing.T) {
+	connectSeriesRepositoryTestDB(t)
+
+	seriesRepo := NewSeriesRepository()
+	series := seedSeriesRepositoryTestSeries(t, seriesRepo)
+
+	oldContentTime := time.Now().Add(-48 * time.Hour).UTC().Truncate(time.Second)
+	if err := seriesRepo.UpdateUpdatedAt(nil, series.ID, oldContentTime); err != nil {
+		t.Fatalf("UpdateUpdatedAt() error = %v", err)
+	}
+
+	volumeRepo := NewVolumeRepository()
+	oldFileTime := time.Now().Add(-30 * 24 * time.Hour).UTC().Truncate(time.Second)
+	volume := &model.Volume{
+		SeriesID:     series.ID,
+		Title:        "Volume 1",
+		VolumeNumber: 1,
+		Path:         "/tmp/volume-1.cbz",
+		CreatedAt:    oldFileTime,
+		UpdatedAt:    oldFileTime,
+	}
+	beforeCreate := time.Now().Add(-1 * time.Minute)
+	if err := volumeRepo.Create(nil, volume); err != nil {
+		t.Fatalf("VolumeRepository.Create() error = %v", err)
+	}
+
+	refreshed, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if refreshed == nil {
+		t.Fatal("refreshed series = nil")
+	}
+	if refreshed.LastContentUpdatedAt.Before(beforeCreate) {
+		t.Fatalf("LastContentUpdatedAt = %v, expected detection time after %v", refreshed.LastContentUpdatedAt, beforeCreate)
+	}
+	if refreshed.LastContentUpdatedAt.Equal(oldFileTime) {
+		t.Fatalf("LastContentUpdatedAt should not reuse old file time %v", oldFileTime)
+	}
+}
+
 func TestProgressAggregationUsesFixedPageTotalForNormalText(t *testing.T) {
 	connectSeriesRepositoryTestDB(t)
 	seedProgressAggregationFixture(t, "txt-normal", "txt-volume-normal", "txt-chapter-normal", 100, 100000, 25, 100, 99, "")

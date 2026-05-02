@@ -41,7 +41,7 @@ func (r *VolumeRepository) Create(db database.Queryer, volume *model.Volume) err
 	if err != nil {
 		return err
 	}
-	if _, err := db.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = ?`, volume.UpdatedAt, volume.SeriesID); err != nil {
+	if _, err := db.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = ?`, now, volume.SeriesID); err != nil {
 		return err
 	}
 	return nil

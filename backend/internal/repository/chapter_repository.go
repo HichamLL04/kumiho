@@ -34,11 +34,7 @@ func (r *ChapterRepository) Create(db database.Queryer, chapter *model.Chapter) 
 	if err != nil {
 		return err
 	}
-	var seriesID string
-	if err := db.QueryRow(`SELECT series_id FROM volumes WHERE id = ?`, chapter.VolumeID).Scan(&seriesID); err != nil {
-		return err
-	}
-	if _, err := db.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = ?`, chapter.UpdatedAt, seriesID); err != nil {
+	if _, err := db.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = (SELECT series_id FROM volumes WHERE id = ?)`, chapter.UpdatedAt, chapter.VolumeID); err != nil {
 		return err
 	}
 	return nil
