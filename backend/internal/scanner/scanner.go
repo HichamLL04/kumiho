@@ -3403,7 +3403,7 @@ func (s *Scanner) ensureVolumePdfThumbnailIfMissing(
 	volume.ThumbnailPath = &newThumbPath
 	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
 	volume.ThumbnailURL = &url
-	if uErr := s.volumeRepo.Update(tx, volume); uErr != nil {
+	if uErr := s.volumeRepo.UpdatePreservingContentUpdatedAt(tx, volume); uErr != nil {
 		log.Printf("[SCANNER] Failed to update volume thumbnail: %v", uErr)
 		return
 	}

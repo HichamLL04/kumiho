@@ -47,11 +47,21 @@ func (r *VolumeRepository) Create(db database.Queryer, volume *model.Volume) err
 	return nil
 }
 
-// Update 볼륨 정보 수정
+// Update 볼륨 정보 수정 (콘텐츠 변경으로 간주)
 func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) error {
 	db = database.GetQueryer(db)
 	volume.UpdatedAt = time.Now()
+	return r.update(db, volume, true)
+}
 
+// UpdatePreservingContentUpdatedAt 볼륨 메타데이터만 수정하고 시리즈 콘텐츠 갱신 시간은 보존
+func (r *VolumeRepository) UpdatePreservingContentUpdatedAt(db database.Queryer, volume *model.Volume) error {
+	db = database.GetQueryer(db)
+	volume.UpdatedAt = time.Now()
+	return r.update(db, volume, false)
+}
+
+func (r *VolumeRepository) update(db database.Queryer, volume *model.Volume, updateContentTimestamp bool) error {
 	_, err := db.Exec(
 		`UPDATE volumes 
 		 SET title = ?, volume_number = ?, path = ?, thumbnail_path = ?, has_audio = ?, unit = ?, chapter_count = ?, parent_id = ?, description = ?, authors = ?, publication_year = ?, extension = ?, updated_at = ?
@@ -60,6 +70,9 @@ func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) err
 	)
 	if err != nil {
 		return err
+	}
+	if !updateContentTimestamp {
+		return nil
 	}
 	if _, err := db.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = ?`, volume.UpdatedAt, volume.SeriesID); err != nil {
 		return err

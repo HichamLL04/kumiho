@@ -1227,7 +1227,7 @@ func migrateEpubFlowSeriesSetting() error {
 }
 
 func migrateSeriesLastContentUpdatedAt() error {
-	if err := addColumn("series", "last_content_updated_at", "DATETIME"); err != nil {
+	if err := addColumn("series", "last_content_updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"); err != nil {
 		return err
 	}
 

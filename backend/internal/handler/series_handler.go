@@ -492,7 +492,7 @@ func (h *SeriesHandler) UpdateVolume(c *fiber.Ctx) error {
 	}
 
 	// DB 업데이트
-	if err := h.volumeRepo.Update(nil, volume); err != nil {
+	if err := h.volumeRepo.UpdatePreservingContentUpdatedAt(nil, volume); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to update volume",
 		})
@@ -613,7 +613,7 @@ func (h *SeriesHandler) UploadVolumeThumbnail(c *fiber.Ctx) error {
 
 	// DB 업데이트
 	volume.ThumbnailPath = &path
-	if err := h.volumeRepo.Update(nil, volume); err != nil {
+	if err := h.volumeRepo.UpdatePreservingContentUpdatedAt(nil, volume); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to update volume thumbnail path",
 		})
@@ -737,7 +737,7 @@ func (h *SeriesHandler) UploadVolumeThumbnailFromURL(c *fiber.Ctx) error {
 	}
 
 	volume.ThumbnailPath = &path
-	if err := h.volumeRepo.Update(nil, volume); err != nil {
+	if err := h.volumeRepo.UpdatePreservingContentUpdatedAt(nil, volume); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to update volume thumbnail path",
 		})
@@ -784,7 +784,7 @@ func (h *SeriesHandler) DeleteVolumeThumbnail(c *fiber.Ctx) error {
 	volume.ThumbnailPath = nil
 	volume.ThumbnailURL = nil
 
-	if upErr := h.volumeRepo.Update(nil, volume); upErr != nil {
+	if upErr := h.volumeRepo.UpdatePreservingContentUpdatedAt(nil, volume); upErr != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to update volume",
 		})
