@@ -54,11 +54,16 @@ func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) err
 	return r.update(db, volume, true)
 }
 
-// UpdatePreservingContentUpdatedAt 볼륨 메타데이터만 수정하고 시리즈 콘텐츠 갱신 시간은 보존
+// UpdatePreservingContentUpdatedAt 볼륨 메타데이터만 수정하고 시리즈 콘텐츠 갱신 시간과 볼륨 updated_at을 보존
 func (r *VolumeRepository) UpdatePreservingContentUpdatedAt(db database.Queryer, volume *model.Volume) error {
 	db = database.GetQueryer(db)
-	volume.UpdatedAt = time.Now()
-	return r.update(db, volume, false)
+	_, err := db.Exec(
+		`UPDATE volumes 
+		 SET title = ?, volume_number = ?, path = ?, thumbnail_path = ?, has_audio = ?, unit = ?, chapter_count = ?, parent_id = ?, description = ?, authors = ?, publication_year = ?, extension = ?
+		 WHERE id = ?`,
+		volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.Extension, volume.ID,
+	)
+	return err
 }
 
 func (r *VolumeRepository) update(db database.Queryer, volume *model.Volume, updateContentTimestamp bool) error {
