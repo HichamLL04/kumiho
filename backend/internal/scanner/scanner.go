@@ -244,7 +244,7 @@ func (s *Scanner) normalizeStoredSeriesTitlesForLibraryTx(tx *sql.Tx, libraryID 
 			continue
 		}
 		series.Title = baseTitle
-		if err := s.seriesRepo.Update(tx, series); err != nil {
+		if err := s.seriesRepo.UpdatePreservingUpdatedAt(tx, series); err != nil {
 			return err
 		}
 	}
@@ -1391,7 +1391,7 @@ func (s *Scanner) processArchiveAsSeries(
 			seriesChanged = true
 		}
 		if seriesChanged {
-			if uErr := s.seriesRepo.Update(tx, series); uErr != nil {
+			if uErr := s.seriesRepo.UpdatePreservingUpdatedAt(tx, series); uErr != nil {
 				return nil, uErr
 			}
 		}
@@ -1593,7 +1593,7 @@ func (s *Scanner) processSeries(
 			seriesChanged = true
 		}
 		if seriesChanged {
-			if uErr := s.seriesRepo.Update(nil, series); uErr != nil {
+			if uErr := s.seriesRepo.UpdatePreservingUpdatedAt(nil, series); uErr != nil {
 				return nil, uErr
 			}
 		}
@@ -3340,7 +3340,7 @@ func (s *Scanner) ensureSeriesPdfThumbnailIfMissing(
 	series.ThumbnailPath = &newThumbPath
 	url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
 	series.ThumbnailURL = &url
-	if uErr := s.seriesRepo.Update(tx, series); uErr != nil {
+	if uErr := s.seriesRepo.UpdatePreservingUpdatedAt(tx, series); uErr != nil {
 		log.Printf("[SCANNER] Failed to update series thumbnail: %v", uErr)
 		return
 	}
@@ -3372,7 +3372,7 @@ func (s *Scanner) ensureSeriesEpubThumbnailIfMissing(
 	series.ThumbnailPath = &newThumbPath
 	url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
 	series.ThumbnailURL = &url
-	if uErr := s.seriesRepo.Update(tx, series); uErr != nil {
+	if uErr := s.seriesRepo.UpdatePreservingUpdatedAt(tx, series); uErr != nil {
 		log.Printf("[SCANNER] Failed to update series thumbnail: %v", uErr)
 		return
 	}

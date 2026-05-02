@@ -38,7 +38,11 @@ func (r *VolumeRepository) Create(db database.Queryer, volume *model.Volume) err
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		volume.ID, volume.SeriesID, volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.Extension, volume.CreatedAt, volume.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = db.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = ?`, now, volume.SeriesID)
+	return nil
 }
 
 // Update 볼륨 정보 수정
@@ -52,7 +56,11 @@ func (r *VolumeRepository) Update(db database.Queryer, volume *model.Volume) err
 		 WHERE id = ?`,
 		volume.Title, volume.VolumeNumber, volume.Path, volume.ThumbnailPath, volume.HasAudio, volume.Unit, volume.ChapterCount, volume.ParentID, volume.Description, volume.Authors, volume.PublicationYear, volume.Extension, volume.UpdatedAt, volume.ID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = db.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = ?`, volume.UpdatedAt, volume.SeriesID)
+	return nil
 }
 
 // UpdateHasAudio has_audio 플래그만 업데이트
