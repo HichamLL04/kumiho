@@ -57,8 +57,8 @@ func TestVolumeCreateUsesDetectionTimeForLastContentUpdatedAt(t *testing.T) {
 	series := seedSeriesRepositoryTestSeries(t, seriesRepo)
 
 	oldContentTime := time.Now().Add(-48 * time.Hour).UTC().Truncate(time.Second)
-	if err := seriesRepo.UpdateUpdatedAt(nil, series.ID, oldContentTime); err != nil {
-		t.Fatalf("UpdateUpdatedAt() error = %v", err)
+	if _, err := database.DB.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = ?`, oldContentTime, series.ID); err != nil {
+		t.Fatalf("set old last_content_updated_at error = %v", err)
 	}
 
 	volumeRepo := NewVolumeRepository()
