@@ -1226,18 +1226,50 @@ func migrateEpubFlowSeriesSetting() error {
 	return addColumn("user_series_settings", "epub_flow", "TEXT")
 }
 
+func seriesLastContentUpdatedAtInitExpr() string {
+	if columnExists("series", "updated_at") {
+		return "COALESCE(updated_at, CURRENT_TIMESTAMP)"
+	}
+	return "CURRENT_TIMESTAMP"
+}
+
+func ensureSeriesLastContentUpdatedAtInsertTrigger() error {
+	insertExpr := "CURRENT_TIMESTAMP"
+	if columnExists("series", "updated_at") {
+		insertExpr = "COALESCE(NEW.updated_at, CURRENT_TIMESTAMP)"
+	}
+
+	if _, err := DB.Exec(fmt.Sprintf(`
+		CREATE TRIGGER IF NOT EXISTS trg_series_last_content_updated_at_insert
+		AFTER INSERT ON series
+		FOR EACH ROW
+		WHEN NEW.last_content_updated_at IS NULL
+		BEGIN
+			UPDATE series
+			SET last_content_updated_at = %s
+			WHERE id = NEW.id;
+		END;
+	`, insertExpr)); err != nil {
+		return fmt.Errorf("create trigger series.last_content_updated_at insert: %w", err)
+	}
+
+	return nil
+}
+
 func migrateSeriesLastContentUpdatedAt() error {
-	if err := addColumn("series", "last_content_updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"); err != nil {
+	if err := addColumn("series", "last_content_updated_at", "DATETIME"); err != nil {
 		return err
 	}
 
-	initExpr := "CURRENT_TIMESTAMP"
-	if columnExists("series", "updated_at") {
-		initExpr = "updated_at"
-	}
-	if _, err := DB.Exec(fmt.Sprintf(`UPDATE series SET last_content_updated_at = %s`, initExpr)); err != nil {
+	initExpr := seriesLastContentUpdatedAtInitExpr()
+	if _, err := DB.Exec(fmt.Sprintf(`UPDATE series SET last_content_updated_at = %s WHERE last_content_updated_at IS NULL`, initExpr)); err != nil {
 		return fmt.Errorf("initialize last_content_updated_at: %w", err)
 	}
+
+	if err := ensureSeriesLastContentUpdatedAtInsertTrigger(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
