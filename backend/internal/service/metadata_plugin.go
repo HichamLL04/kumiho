@@ -735,7 +735,7 @@ func (s *MetadataService) applySeriesThumbnail(ctx context.Context, series *mode
 	}
 
 	series.ThumbnailPath = &path
-	url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
+	url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
 	series.ThumbnailURL = &url
 	return true, nil
 }
@@ -771,7 +771,7 @@ func (s *MetadataService) enrichSeriesThumbnail(series *model.Series) {
 		return
 	}
 	if series.ThumbnailPath != nil && strings.TrimSpace(*series.ThumbnailPath) != "" {
-		url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, series.UpdatedAt.Unix())
+		url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, series.UpdatedAt)
 		series.ThumbnailURL = &url
 		return
 	}
@@ -788,7 +788,7 @@ func (s *MetadataService) enrichSeriesThumbnail(series *model.Series) {
 	}
 	vol, volErr := s.volumeRepo.GetFirstVolume(nil, series.ID)
 	if volErr == nil && vol != nil && vol.ThumbnailPath != nil && strings.TrimSpace(*vol.ThumbnailPath) != "" {
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", vol.ID, vol.UpdatedAt.Unix())
+		url := util.BuildVolumeThumbnailURL(vol.ID, vol.ThumbnailPath, vol.UpdatedAt)
 		series.ThumbnailURL = &url
 	}
 }

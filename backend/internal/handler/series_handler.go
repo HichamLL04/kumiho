@@ -901,7 +901,7 @@ func (h *SeriesHandler) UploadThumbnail(c *fiber.Ctx) error {
 	}
 
 	// 썸네일 URL 업데이트 (응답용)
-	url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
+	url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
 	series.ThumbnailURL = &url
 
 	return c.JSON(series)
@@ -1033,7 +1033,7 @@ func (h *SeriesHandler) DownloadThumbnail(c *fiber.Ctx) error {
 	}
 
 	// 썸네일 URL 업데이트 (응답용)
-	url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
+	url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
 	series.ThumbnailURL = &url
 
 	return c.JSON(series)
