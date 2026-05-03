@@ -48,6 +48,7 @@ export interface Series {
   chapter_count?: number;
   created_at: string;
   updated_at: string;
+  last_content_updated_at?: string;
   extension?: ExtensionBadge | "";
   library_type?: LibraryType;
   has_audio?: boolean;

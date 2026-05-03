@@ -65,6 +65,7 @@ type Series struct {
 	IsBookmarked  bool      `json:"is_bookmarked" db:"is_bookmarked"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	LastContentUpdatedAt time.Time `json:"last_content_updated_at"`
 	Extension     string    `json:"extension" db:"extension"` // 시리즈 대표 확장자
 	LibraryType   string    `json:"library_type" db:"-"`      // "book", "audiobook" (JOIN으로 채움)
 
