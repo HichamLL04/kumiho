@@ -244,7 +244,7 @@ func (s *Scanner) normalizeStoredSeriesTitlesForLibraryTx(tx *sql.Tx, libraryID 
 			continue
 		}
 		series.Title = baseTitle
-		if err := s.seriesRepo.Update(tx, series); err != nil {
+		if err := s.seriesRepo.UpdatePreservingUpdatedAt(tx, series); err != nil {
 			return err
 		}
 	}
@@ -1391,7 +1391,7 @@ func (s *Scanner) processArchiveAsSeries(
 			seriesChanged = true
 		}
 		if seriesChanged {
-			if uErr := s.seriesRepo.Update(tx, series); uErr != nil {
+			if uErr := s.seriesRepo.UpdatePreservingUpdatedAt(tx, series); uErr != nil {
 				return nil, uErr
 			}
 		}
@@ -1497,7 +1497,7 @@ func (s *Scanner) processArchiveAsSeries(
 
 		// ThumbnailURL은 고유한 ID(Create 호출 시 생성됨)가 필요함
 		if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
-			url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
+			url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
 			series.ThumbnailURL = &url
 		}
 	}
@@ -1593,7 +1593,7 @@ func (s *Scanner) processSeries(
 			seriesChanged = true
 		}
 		if seriesChanged {
-			if uErr := s.seriesRepo.Update(nil, series); uErr != nil {
+			if uErr := s.seriesRepo.UpdatePreservingUpdatedAt(nil, series); uErr != nil {
 				return nil, uErr
 			}
 		}
@@ -1661,7 +1661,7 @@ func (s *Scanner) processSeries(
 
 		// ThumbnailURL은 고유한 ID(Create 호출 시 생성됨)가 필요함
 		if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
-			url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
+			url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
 			series.ThumbnailURL = &url
 		}
 	}
@@ -3037,18 +3037,18 @@ func (s *Scanner) saveVolumeRecursive(tx database.Queryer, seriesID string, pare
 
 	if foundThumbnailPath != "" {
 		volume.ThumbnailPath = &foundThumbnailPath
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+		url := util.BuildVolumeThumbnailURL(volume.ID, volume.ThumbnailPath, time.Now())
 		volume.ThumbnailURL = &url
 		log.Printf("[SCANNER] Linked existing thumbnail for volume %s: %s", volData.Title, foundThumbnailPath)
 	} else if volData.ThumbnailPath != nil && *volData.ThumbnailPath != "" {
 		volume.ThumbnailPath = volData.ThumbnailPath
-		url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+		url := util.BuildVolumeThumbnailURL(volume.ID, volume.ThumbnailPath, time.Now())
 		volume.ThumbnailURL = &url
 		log.Printf("[SCANNER] Linked folder cover for volume %s: %s", volData.Title, *volData.ThumbnailPath)
 	} else if strings.ToLower(filepath.Ext(volData.Path)) == ".pdf" {
 		if newThumbPath, err := s.ensurePdfThumbnail(volData.Path, thumbnailsDir); err == nil {
 			volume.ThumbnailPath = &newThumbPath
-			url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+			url := util.BuildVolumeThumbnailURL(volume.ID, volume.ThumbnailPath, time.Now())
 			volume.ThumbnailURL = &url
 			log.Printf("[SCANNER] Extracted PDF thumbnail for volume %s: %s", volData.Title, newThumbPath)
 		} else {
@@ -3338,9 +3338,9 @@ func (s *Scanner) ensureSeriesPdfThumbnailIfMissing(
 	}
 
 	series.ThumbnailPath = &newThumbPath
-	url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
+	url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
 	series.ThumbnailURL = &url
-	if uErr := s.seriesRepo.Update(tx, series); uErr != nil {
+	if uErr := s.seriesRepo.UpdatePreservingUpdatedAt(tx, series); uErr != nil {
 		log.Printf("[SCANNER] Failed to update series thumbnail: %v", uErr)
 		return
 	}
@@ -3370,9 +3370,9 @@ func (s *Scanner) ensureSeriesEpubThumbnailIfMissing(
 	}
 
 	series.ThumbnailPath = &newThumbPath
-	url := fmt.Sprintf("/api/v1/series/%s/thumbnail?t=%d", series.ID, time.Now().Unix())
+	url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
 	series.ThumbnailURL = &url
-	if uErr := s.seriesRepo.Update(tx, series); uErr != nil {
+	if uErr := s.seriesRepo.UpdatePreservingUpdatedAt(tx, series); uErr != nil {
 		log.Printf("[SCANNER] Failed to update series thumbnail: %v", uErr)
 		return
 	}
@@ -3401,9 +3401,9 @@ func (s *Scanner) ensureVolumePdfThumbnailIfMissing(
 	}
 
 	volume.ThumbnailPath = &newThumbPath
-	url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, time.Now().Unix())
+	url := util.BuildVolumeThumbnailURL(volume.ID, volume.ThumbnailPath, time.Now())
 	volume.ThumbnailURL = &url
-	if uErr := s.volumeRepo.Update(tx, volume); uErr != nil {
+	if uErr := s.volumeRepo.UpdatePreservingContentUpdatedAt(tx, volume); uErr != nil {
 		log.Printf("[SCANNER] Failed to update volume thumbnail: %v", uErr)
 		return
 	}

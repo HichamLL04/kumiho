@@ -17,6 +17,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/repository"
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	"github.com/aha-hyeong/kumiho/backend/internal/sse"
+	"github.com/aha-hyeong/kumiho/backend/internal/util"
 )
 
 type ProgressHandler struct {
@@ -1077,7 +1078,7 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 					}
 
 					if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
-						url := fmt.Sprintf("/api/v1/volumes/%s/thumbnail?t=%d", volume.ID, volume.UpdatedAt.Unix())
+						url := util.BuildVolumeThumbnailURL(volume.ID, volume.ThumbnailPath, volume.UpdatedAt)
 						result[i].ThumbnailURL = &url
 					} else {
 						pageID, err := h.volumeRepo.GetFirstPageID(nil, volume.ID)

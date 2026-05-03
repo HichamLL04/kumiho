@@ -31,7 +31,13 @@ func (r *ChapterRepository) Create(db database.Queryer, chapter *model.Chapter) 
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		chapter.ID, chapter.VolumeID, chapter.Title, chapter.ChapterNumber, chapter.Path, chapter.PageCount, chapter.TotalBytes, chapter.TotalPositions, chapter.HasAudio, chapter.Duration, chapter.CreatedAt, chapter.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = (SELECT series_id FROM volumes WHERE id = ?)`, chapter.UpdatedAt, chapter.VolumeID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // FindByVolumeID 볼륨 ID로 챕터 목록 조회

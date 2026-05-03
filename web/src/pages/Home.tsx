@@ -134,12 +134,16 @@ export function HomePage() {
           const cutoffDate = new Date();
           cutoffDate.setDate(cutoffDate.getDate() - periodDays);
 
-          // updated_at 기준 최신순 정렬
-          allSeries.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+          // last_content_updated_at 기준 최신순 정렬 (없으면 updated_at fallback)
+          allSeries.sort((a, b) => {
+            const aDate = new Date(a.last_content_updated_at || a.updated_at);
+            const bDate = new Date(b.last_content_updated_at || b.updated_at);
+            return bDate.getTime() - aDate.getTime();
+          });
 
           // 기간 필터링 적용
           const filteredSeries = allSeries.filter((series) => {
-            const updatedDate = new Date(series.updated_at);
+            const updatedDate = new Date(series.last_content_updated_at || series.updated_at);
             return updatedDate >= cutoffDate;
           });
 

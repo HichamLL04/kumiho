@@ -768,7 +768,7 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 
 				if err := util.ExtractPdfThumbnail(volume.Path, newThumbPath); err == nil {
 					volume.ThumbnailPath = &newThumbPath
-					if uErr := h.volumeRepo.Update(nil, volume); uErr != nil {
+					if uErr := h.volumeRepo.UpdatePreservingContentUpdatedAt(nil, volume); uErr != nil {
 						log.Printf("[IMAGE_HANDLER] Failed to update volume thumbnail path in DB: %v", uErr)
 					}
 					customThumbnailPath = newThumbPath

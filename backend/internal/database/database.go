@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 42
+const latestMigrationVersion = 43
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -281,7 +281,8 @@ func Migrate() error {
 		thumbnail_path TEXT,
 		extension TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		last_content_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
 	-- 시리즈 메타데이터 (부가 정보)
@@ -625,6 +626,7 @@ func Migrate() error {
 		{40, "원제 오버라이드 라이브러리별 설정 이전", migrateOriginalTitleOverridePerLibrary},
 		{41, "시리즈 메타데이터 번역된 줄거리 컬럼 추가", migrateSeriesMetadataDescriptionTranslated},
 		{42, "EPUB 페이지 모드(flow) 시리즈별 설정 컬럼 추가", migrateEpubFlowSeriesSetting},
+		{43, "시리즈 콘텐츠 업데이트 시간 컬럼 추가", migrateSeriesLastContentUpdatedAt},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -1222,6 +1224,21 @@ func migrateSeriesMetadataDescriptionTranslated() error {
 // #42 migrateEpubFlowSeriesSetting user_series_settings 테이블에 epub_flow 컬럼 추가
 func migrateEpubFlowSeriesSetting() error {
 	return addColumn("user_series_settings", "epub_flow", "TEXT")
+}
+
+func migrateSeriesLastContentUpdatedAt() error {
+	if err := addColumn("series", "last_content_updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"); err != nil {
+		return err
+	}
+
+	initExpr := "CURRENT_TIMESTAMP"
+	if columnExists("series", "updated_at") {
+		initExpr = "updated_at"
+	}
+	if _, err := DB.Exec(fmt.Sprintf(`UPDATE series SET last_content_updated_at = %s`, initExpr)); err != nil {
+		return fmt.Errorf("initialize last_content_updated_at: %w", err)
+	}
+	return nil
 }
 
 // #14 migrateChapterCompletions chapter_completions 테이블 추가
