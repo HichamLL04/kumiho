@@ -17,7 +17,18 @@ var (
 	thumbnailStatCacheMu sync.RWMutex
 )
 
-const thumbnailStatCacheTTL = time.Second
+const (
+	thumbnailStatCacheTTL     = time.Second
+	thumbnailStatCacheMaxSize = 1024
+)
+
+func purgeExpiredThumbnailStatCacheEntries(now time.Time) {
+	for key, entry := range thumbnailStatCache {
+		if now.Sub(entry.cachedAt) >= thumbnailStatCacheTTL {
+			delete(thumbnailStatCache, key)
+		}
+	}
+}
 
 func thumbnailCacheBuster(path *string, fallback time.Time) int64 {
 	if path != nil && *path != "" {
@@ -26,14 +37,30 @@ func thumbnailCacheBuster(path *string, fallback time.Time) int64 {
 		entry, ok := thumbnailStatCache[*path]
 		thumbnailStatCacheMu.RUnlock()
 		if ok && now.Sub(entry.cachedAt) < thumbnailStatCacheTTL {
-			return entry.value
+			if entry.value >= 0 {
+				return entry.value
+			}
+			return fallback.Unix()
 		}
 
+		value := int64(-1)
 		if info, err := os.Stat(*path); err == nil {
-			value := info.ModTime().Unix()
-			thumbnailStatCacheMu.Lock()
-			thumbnailStatCache[*path] = thumbnailStatCacheEntry{value: value, cachedAt: now}
-			thumbnailStatCacheMu.Unlock()
+			value = info.ModTime().Unix()
+		}
+
+		thumbnailStatCacheMu.Lock()
+		if len(thumbnailStatCache) >= thumbnailStatCacheMaxSize {
+			purgeExpiredThumbnailStatCacheEntries(now)
+			if len(thumbnailStatCache) >= thumbnailStatCacheMaxSize {
+				for key := range thumbnailStatCache {
+					delete(thumbnailStatCache, key)
+					break
+				}
+			}
+		}
+		thumbnailStatCache[*path] = thumbnailStatCacheEntry{value: value, cachedAt: now}
+		thumbnailStatCacheMu.Unlock()
+		if value >= 0 {
 			return value
 		}
 	}

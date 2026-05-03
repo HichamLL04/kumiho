@@ -91,6 +91,57 @@ func TestVolumeCreateUsesDetectionTimeForLastContentUpdatedAt(t *testing.T) {
 	}
 }
 
+func TestChapterCreateUpdatesSeriesLastContentUpdatedAt(t *testing.T) {
+	connectSeriesRepositoryTestDB(t)
+
+	seriesRepo := NewSeriesRepository()
+	series := seedSeriesRepositoryTestSeries(t, seriesRepo)
+	volumeRepo := NewVolumeRepository()
+	volume := &model.Volume{
+		SeriesID:     series.ID,
+		Title:        "Volume 1",
+		VolumeNumber: 1,
+		Path:         "/tmp/chapter-volume.cbz",
+	}
+	if err := volumeRepo.Create(nil, volume); err != nil {
+		t.Fatalf("VolumeRepository.Create() error = %v", err)
+	}
+
+	oldContentTime := time.Now().Add(-48 * time.Hour).UTC().Truncate(time.Second)
+	if _, err := database.DB.Exec(`UPDATE series SET last_content_updated_at = ? WHERE id = ?`, oldContentTime, series.ID); err != nil {
+		t.Fatalf("set old last_content_updated_at error = %v", err)
+	}
+
+	chapterRepo := NewChapterRepository()
+	beforeCreate := time.Now().Add(-1 * time.Minute)
+	chapter := &model.Chapter{
+		VolumeID:       volume.ID,
+		Title:          "Chapter 1",
+		ChapterNumber:  1,
+		Path:           "/tmp/chapter-1.cbz",
+		PageCount:      10,
+		TotalBytes:     100,
+		TotalPositions: 10,
+	}
+	if err := chapterRepo.Create(nil, chapter); err != nil {
+		t.Fatalf("ChapterRepository.Create() error = %v", err)
+	}
+
+	refreshed, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if refreshed == nil {
+		t.Fatal("refreshed series = nil")
+	}
+	if refreshed.LastContentUpdatedAt.Before(beforeCreate) {
+		t.Fatalf("LastContentUpdatedAt = %v, expected chapter create time after %v", refreshed.LastContentUpdatedAt, beforeCreate)
+	}
+	if refreshed.LastContentUpdatedAt.Equal(oldContentTime) {
+		t.Fatalf("LastContentUpdatedAt should not remain old value %v", oldContentTime)
+	}
+}
+
 func TestProgressAggregationUsesFixedPageTotalForNormalText(t *testing.T) {
 	connectSeriesRepositoryTestDB(t)
 	seedProgressAggregationFixture(t, "txt-normal", "txt-volume-normal", "txt-chapter-normal", 100, 100000, 25, 100, 99, "")
