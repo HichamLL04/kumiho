@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 func TestMigrateSeriesLastContentUpdatedAt(t *testing.T) {
@@ -38,6 +36,12 @@ func TestMigrateSeriesLastContentUpdatedAt(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("seed series error = %v", err)
 	}
+	if _, err := DB.Exec(`
+		INSERT INTO series (id, title, updated_at)
+		VALUES ('series-null-updated-at', 'Series Null UpdatedAt', NULL)
+	`); err != nil {
+		t.Fatalf("seed series with null updated_at error = %v", err)
+	}
 
 	if err := migrateSeriesLastContentUpdatedAt(); err != nil {
 		t.Fatalf("migrateSeriesLastContentUpdatedAt() error = %v", err)
@@ -53,6 +57,14 @@ func TestMigrateSeriesLastContentUpdatedAt(t *testing.T) {
 	}
 	if migratedValue != "2026-05-03 09:30:00" {
 		t.Fatalf("migrated last_content_updated_at = %s, want 2026-05-03 09:30:00", migratedValue)
+	}
+
+	var nullBackfilledValue sql.NullString
+	if err := DB.QueryRow(`SELECT datetime(last_content_updated_at) FROM series WHERE id = 'series-null-updated-at'`).Scan(&nullBackfilledValue); err != nil {
+		t.Fatalf("select null-updated_at backfill error = %v", err)
+	}
+	if !nullBackfilledValue.Valid {
+		t.Fatal("last_content_updated_at should be backfilled when updated_at is NULL")
 	}
 
 	if _, err := DB.Exec(`

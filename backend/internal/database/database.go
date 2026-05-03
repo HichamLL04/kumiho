@@ -1251,7 +1251,7 @@ func migrateSeriesLastContentUpdatedAt() error {
 
 	initExpr := "CURRENT_TIMESTAMP"
 	if columnExists("series", "updated_at") {
-		initExpr = "updated_at"
+		initExpr = "COALESCE(updated_at, CURRENT_TIMESTAMP)"
 	}
 	if _, err := DB.Exec(fmt.Sprintf(`UPDATE series SET last_content_updated_at = %s`, initExpr)); err != nil {
 		return fmt.Errorf("initialize last_content_updated_at: %w", err)
