@@ -1226,8 +1226,26 @@ func migrateEpubFlowSeriesSetting() error {
 	return addColumn("user_series_settings", "epub_flow", "TEXT")
 }
 
+func ensureSeriesLastContentUpdatedAtInsertTrigger() error {
+	if _, err := DB.Exec(`
+		CREATE TRIGGER IF NOT EXISTS trg_series_last_content_updated_at_insert
+		AFTER INSERT ON series
+		FOR EACH ROW
+		WHEN NEW.last_content_updated_at IS NULL
+		BEGIN
+			UPDATE series
+			SET last_content_updated_at = COALESCE(NEW.updated_at, CURRENT_TIMESTAMP)
+			WHERE id = NEW.id;
+		END;
+	`); err != nil {
+		return fmt.Errorf("create trigger series.last_content_updated_at insert: %w", err)
+	}
+
+	return nil
+}
+
 func migrateSeriesLastContentUpdatedAt() error {
-	if err := addColumn("series", "last_content_updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"); err != nil {
+	if err := addColumn("series", "last_content_updated_at", "DATETIME"); err != nil {
 		return err
 	}
 
@@ -1238,6 +1256,11 @@ func migrateSeriesLastContentUpdatedAt() error {
 	if _, err := DB.Exec(fmt.Sprintf(`UPDATE series SET last_content_updated_at = %s`, initExpr)); err != nil {
 		return fmt.Errorf("initialize last_content_updated_at: %w", err)
 	}
+
+	if err := ensureSeriesLastContentUpdatedAtInsertTrigger(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
