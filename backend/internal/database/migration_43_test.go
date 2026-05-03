@@ -42,7 +42,6 @@ func TestMigrateSeriesLastContentUpdatedAt(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("seed series with null updated_at error = %v", err)
 	}
-
 	if err := migrateSeriesLastContentUpdatedAt(); err != nil {
 		t.Fatalf("migrateSeriesLastContentUpdatedAt() error = %v", err)
 	}
@@ -65,6 +64,25 @@ func TestMigrateSeriesLastContentUpdatedAt(t *testing.T) {
 	}
 	if !nullBackfilledValue.Valid {
 		t.Fatal("last_content_updated_at should be backfilled when updated_at is NULL")
+	}
+
+	if _, err := DB.Exec(`
+		INSERT INTO series (id, title, updated_at, last_content_updated_at)
+		VALUES ('series-existing-last-content', 'Series Existing Last Content', '2026-05-03 10:10:00', '2026-05-01 08:00:00')
+	`); err != nil {
+		t.Fatalf("insert series with existing last_content_updated_at error = %v", err)
+	}
+
+	if err := migrateSeriesLastContentUpdatedAt(); err != nil {
+		t.Fatalf("re-run migrateSeriesLastContentUpdatedAt() error = %v", err)
+	}
+
+	var preservedValue string
+	if err := DB.QueryRow(`SELECT datetime(last_content_updated_at) FROM series WHERE id = 'series-existing-last-content'`).Scan(&preservedValue); err != nil {
+		t.Fatalf("select preserved last_content_updated_at error = %v", err)
+	}
+	if preservedValue != "2026-05-01 08:00:00" {
+		t.Fatalf("preserved last_content_updated_at = %s, want 2026-05-01 08:00:00", preservedValue)
 	}
 
 	if _, err := DB.Exec(`
