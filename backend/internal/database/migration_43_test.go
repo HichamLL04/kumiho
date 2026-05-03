@@ -7,6 +7,15 @@ import (
 )
 
 func TestMigrateSeriesLastContentUpdatedAt(t *testing.T) {
+	t.Run("updated_at column exists", func(t *testing.T) {
+		testMigrateSeriesLastContentUpdatedAtWithUpdatedAt(t)
+	})
+	t.Run("updated_at column missing", func(t *testing.T) {
+		testMigrateSeriesLastContentUpdatedAtWithoutUpdatedAt(t)
+	})
+}
+
+func testMigrateSeriesLastContentUpdatedAtWithUpdatedAt(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-43.db")
 
 	db, err := sql.Open("sqlite3", dbPath)
@@ -98,5 +107,67 @@ func TestMigrateSeriesLastContentUpdatedAt(t *testing.T) {
 	}
 	if insertedValue != "2026-05-03 10:45:00" {
 		t.Fatalf("inserted last_content_updated_at = %s, want 2026-05-03 10:45:00", insertedValue)
+	}
+}
+
+func testMigrateSeriesLastContentUpdatedAtWithoutUpdatedAt(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "migration-43-no-updated-at.db")
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	defer func() {
+		_ = db.Close()
+		DB = nil
+	}()
+
+	DB = db
+
+	if _, err := DB.Exec(`
+		CREATE TABLE series (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL
+		)
+	`); err != nil {
+		t.Fatalf("create legacy series table error = %v", err)
+	}
+
+	if _, err := DB.Exec(`
+		INSERT INTO series (id, title)
+		VALUES ('legacy-series-1', 'Legacy Series 1')
+	`); err != nil {
+		t.Fatalf("seed legacy series error = %v", err)
+	}
+
+	if err := migrateSeriesLastContentUpdatedAt(); err != nil {
+		t.Fatalf("migrateSeriesLastContentUpdatedAt() on legacy schema error = %v", err)
+	}
+
+	if !columnExists("series", "last_content_updated_at") {
+		t.Fatal("last_content_updated_at column was not added on legacy schema")
+	}
+
+	var migratedValue sql.NullString
+	if err := DB.QueryRow(`SELECT datetime(last_content_updated_at) FROM series WHERE id = 'legacy-series-1'`).Scan(&migratedValue); err != nil {
+		t.Fatalf("select legacy migrated last_content_updated_at error = %v", err)
+	}
+	if !migratedValue.Valid {
+		t.Fatal("legacy series last_content_updated_at should be backfilled")
+	}
+
+	if _, err := DB.Exec(`
+		INSERT INTO series (id, title)
+		VALUES ('legacy-series-2', 'Legacy Series 2')
+	`); err != nil {
+		t.Fatalf("insert legacy series after migration error = %v", err)
+	}
+
+	var insertedValue sql.NullString
+	if err := DB.QueryRow(`SELECT datetime(last_content_updated_at) FROM series WHERE id = 'legacy-series-2'`).Scan(&insertedValue); err != nil {
+		t.Fatalf("select legacy inserted last_content_updated_at error = %v", err)
+	}
+	if !insertedValue.Valid {
+		t.Fatal("legacy inserted series last_content_updated_at should be initialized by trigger")
 	}
 }
