@@ -7,13 +7,14 @@ on:
       - "README.md"
       - "0.plan/**"
       - ".gitignore"
+  workflow_dispatch:
 
 env:
   DOCKER_IMAGE: ghcr.io/hichamll04/kumiho
 
 jobs:
   docker:
-    name: Build and Push Docker Image
+    name: Build and Push to GHCR
     runs-on: ubuntu-latest
     permissions:
       contents: read
