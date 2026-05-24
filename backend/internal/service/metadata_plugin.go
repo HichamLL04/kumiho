@@ -1,13 +1,16 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -125,6 +128,429 @@ func NewMetadataService(
 	}
 }
 
+func parseExternalID(str string) (anilistID, malID string) {
+	str = strings.TrimSpace(str)
+	if str == "" {
+		return "", ""
+	}
+
+	// Check for URL
+	if strings.Contains(str, "anilist.co/manga/") {
+		re := regexp.MustCompile(`anilist\.co/manga/(\d+)`)
+		if m := re.FindStringSubmatch(str); len(m) > 1 {
+			return m[1], ""
+		}
+	}
+	if strings.Contains(str, "myanimelist.net/manga/") {
+		re := regexp.MustCompile(`myanimelist\.net/manga/(\d+)`)
+		if m := re.FindStringSubmatch(str); len(m) > 1 {
+			return "", m[1]
+		}
+	}
+
+	// Check for prefixes
+	if strings.HasPrefix(strings.ToLower(str), "anilist:") {
+		return strings.TrimPrefix(strings.ToLower(str), "anilist:"), ""
+	}
+	if strings.HasPrefix(strings.ToLower(str), "mal:") {
+		return "", strings.TrimPrefix(strings.ToLower(str), "mal:")
+	}
+
+	// Check if pure integer
+	if _, err := strconv.Atoi(str); err == nil {
+		return str, str
+	}
+
+	return "", ""
+}
+
+func (s *MetadataService) fetchAniListCandidate(ctx context.Context, id string) (*sdktypes.MetadataResult, error) {
+	var query = `
+	query ($id: Int) {
+		Media (id: $id, type: MANGA) {
+			id
+			title {
+				romaji
+				english
+				native
+			}
+			description
+			status
+			startDate {
+				year
+				month
+				day
+			}
+			genres
+			staff {
+				edges {
+					role
+					node {
+						name {
+							full
+						}
+					}
+				}
+			}
+			coverImage {
+				extraLarge
+			}
+			characters {
+				edges {
+					role
+					node {
+						id
+						name {
+							full
+						}
+						image {
+							large
+						}
+					}
+				}
+			}
+		}
+	}
+	`
+
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, err
+	}
+
+	reqBody, err := json.Marshal(map[string]interface{}{
+		"query": query,
+		"variables": map[string]interface{}{
+			"id": idInt,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://graphql.anilist.co", bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("anilist api error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var data struct {
+		Data struct {
+			Media struct {
+				ID    int `json:"id"`
+				Title struct {
+					Romaji  string `json:"romaji"`
+					English string `json:"english"`
+					Native  string `json:"native"`
+				} `json:"title"`
+				Description string `json:"description"`
+				Status      string `json:"status"`
+				StartDate   struct {
+					Year  int `json:"year"`
+					Month int `json:"month"`
+					Day   int `json:"day"`
+				} `json:"startDate"`
+				Genres []string `json:"genres"`
+				Staff  struct {
+					Edges []struct {
+						Role string `json:"role"`
+						Node struct {
+							Name struct {
+								Full string `json:"full"`
+							} `json:"name"`
+						} `json:"node"`
+					} `json:"edges"`
+				} `json:"staff"`
+				CoverImage struct {
+					ExtraLarge string `json:"extraLarge"`
+				} `json:"coverImage"`
+				Characters struct {
+					Edges []struct {
+						Role string `json:"role"`
+						Node struct {
+							ID   int `json:"id"`
+							Name struct {
+								Full string `json:"full"`
+							} `json:"name"`
+							Image struct {
+								Large string `json:"large"`
+							} `json:"image"`
+						} `json:"node"`
+					} `json:"edges"`
+				} `json:"characters"`
+			} `json:"Media"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+
+	media := data.Data.Media
+	if media.ID == 0 {
+		return nil, fmt.Errorf("media not found")
+	}
+
+	var authors []string
+	for _, edge := range media.Staff.Edges {
+		if strings.Contains(strings.ToLower(edge.Role), "story") || strings.Contains(strings.ToLower(edge.Role), "art") || strings.Contains(strings.ToLower(edge.Role), "original") {
+			authors = append(authors, edge.Node.Name.Full)
+		}
+	}
+	if len(authors) == 0 {
+		for _, edge := range media.Staff.Edges {
+			authors = append(authors, edge.Node.Name.Full)
+		}
+	}
+
+	originalTitles := map[string]string{
+		"en": media.Title.English,
+		"ja": media.Title.Native,
+		"ko": media.Title.Romaji,
+	}
+
+	var characters []sdktypes.MetadataCharacter
+	for _, edge := range media.Characters.Edges {
+		role := "supporting"
+		if strings.EqualFold(edge.Role, "MAIN") {
+			role = "main"
+		}
+		charImage := &sdktypes.CoverInfo{URL: edge.Node.Image.Large}
+		characters = append(characters, sdktypes.MetadataCharacter{
+			ID:    strconv.Itoa(edge.Node.ID),
+			Name:  edge.Node.Name.Full,
+			Role:  role,
+			Image: charImage,
+		})
+	}
+
+	pubDate := ""
+	if media.StartDate.Year > 0 {
+		pubDate = fmt.Sprintf("%d", media.StartDate.Year)
+		if media.StartDate.Month > 0 {
+			pubDate = fmt.Sprintf("%d-%02d", media.StartDate.Year, media.StartDate.Month)
+			if media.StartDate.Day > 0 {
+				pubDate = fmt.Sprintf("%d-%02d-%02d", media.StartDate.Year, media.StartDate.Month, media.StartDate.Day)
+			}
+		}
+	}
+
+	res := &sdktypes.MetadataResult{
+		Source: sdktypes.SourceRef{
+			ID:   strconv.Itoa(media.ID),
+			Name: "AniList",
+		},
+		Title:          media.Title.English,
+		OriginalTitle:  media.Title.Native,
+		OriginalTitles: originalTitles,
+		Authors:        authors,
+		Description:    media.Description,
+		Tags:           media.Genres,
+		PublicationDate: pubDate,
+		Identifiers: map[string]string{
+			"anilist_id": strconv.Itoa(media.ID),
+		},
+		Cover: &sdktypes.CoverInfo{
+			URL: media.CoverImage.ExtraLarge,
+		},
+		Characters: characters,
+	}
+	if res.Title == "" {
+		res.Title = media.Title.Romaji
+	}
+
+	return res, nil
+}
+
+func (s *MetadataService) fetchMALCandidate(ctx context.Context, id string, clientID string) (*sdktypes.MetadataResult, error) {
+	if clientID == "" {
+		return nil, fmt.Errorf("mal_client_id is not configured in user settings")
+	}
+
+	urlStr := fmt.Sprintf("https://api.myanimelist.net/v2/manga/%s?fields=id,title,main_picture,alternative_titles,synopsis,start_date,end_date,status,genres,authors{first_name,last_name}", id)
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-MAL-CLIENT-ID", clientID)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("mal api error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var media struct {
+		ID          int    `json:"id"`
+		Title       string `json:"title"`
+		MainPicture struct {
+			Medium string `json:"medium"`
+			Large  string `json:"large"`
+		} `json:"main_picture"`
+		AlternativeTitles struct {
+			Synonyms []string `json:"synonyms"`
+			English  string   `json:"english"`
+			Japanese string   `json:"japanese"`
+		} `json:"alternative_titles"`
+		Synopsis  string `json:"synopsis"`
+		StartDate string `json:"start_date"`
+		Status    string `json:"status"`
+		Genres    []struct {
+			ID   int    `json:"id"`
+			Name string `json:"name"`
+		} `json:"genres"`
+		Authors []struct {
+			Author struct {
+				ID        int    `json:"id"`
+				FirstName string `json:"first_name"`
+				LastName  string `json:"last_name"`
+			} `json:"author"`
+			Role string `json:"role"`
+		} `json:"authors"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&media); err != nil {
+		return nil, err
+	}
+
+	if media.ID == 0 {
+		return nil, fmt.Errorf("manga not found")
+	}
+
+
+	var authors []string
+	for _, a := range media.Authors {
+		name := strings.TrimSpace(a.Author.FirstName + " " + a.Author.LastName)
+		if name == "" {
+			name = strings.TrimSpace(a.Author.LastName + " " + a.Author.FirstName)
+		}
+		if name != "" {
+			authors = append(authors, name)
+		}
+	}
+
+	var tags []string
+	for _, g := range media.Genres {
+		tags = append(tags, g.Name)
+	}
+
+	originalTitles := map[string]string{
+		"en": media.AlternativeTitles.English,
+		"ja": media.AlternativeTitles.Japanese,
+	}
+
+	coverURL := media.MainPicture.Large
+	if coverURL == "" {
+		coverURL = media.MainPicture.Medium
+	}
+
+	// Fetch characters for MAL
+	characters, charErr := s.fetchMALCharacters(ctx, id, clientID)
+	if charErr != nil {
+		log.Printf("[fetchMALCandidate] Warn: failed to fetch MAL characters: %v", charErr)
+	}
+
+	res := &sdktypes.MetadataResult{
+		Source: sdktypes.SourceRef{
+			ID:   strconv.Itoa(media.ID),
+			Name: "MyAnimeList",
+		},
+		Title:          media.Title,
+		OriginalTitle:  media.AlternativeTitles.Japanese,
+		OriginalTitles: originalTitles,
+		Authors:        authors,
+		Description:    media.Synopsis,
+		Tags:           tags,
+		PublicationDate: media.StartDate,
+		Identifiers: map[string]string{
+			"mal_id": strconv.Itoa(media.ID),
+		},
+		Cover: &sdktypes.CoverInfo{
+			URL: coverURL,
+		},
+		Characters: characters,
+	}
+	if res.OriginalTitle == "" {
+		res.OriginalTitle = media.Title
+	}
+
+	return res, nil
+}
+
+func (s *MetadataService) fetchMALCharacters(ctx context.Context, id string, clientID string) ([]sdktypes.MetadataCharacter, error) {
+	urlStr := fmt.Sprintf("https://api.myanimelist.net/v2/manga/%s/characters", id)
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-MAL-CLIENT-ID", clientID)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("mal characters api error status %d", resp.StatusCode)
+	}
+
+	var data struct {
+		Data []struct {
+			Node struct {
+				ID          int    `json:"id"`
+				Name        string `json:"name"`
+				MainPicture struct {
+					Medium string `json:"medium"`
+					Large  string `json:"large"`
+				} `json:"main_picture"`
+			} `json:"node"`
+			Role string `json:"role"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+
+	var characters []sdktypes.MetadataCharacter
+	for _, item := range data.Data {
+		role := "supporting"
+		if strings.EqualFold(item.Role, "Main") {
+			role = "main"
+		}
+		coverURL := item.Node.MainPicture.Large
+		if coverURL == "" {
+			coverURL = item.Node.MainPicture.Medium
+		}
+		charImage := &sdktypes.CoverInfo{URL: coverURL}
+		characters = append(characters, sdktypes.MetadataCharacter{
+			ID:    strconv.Itoa(item.Node.ID),
+			Name:  item.Node.Name,
+			Role:  role,
+			Image: charImage,
+		})
+	}
+	return characters, nil
+}
+
 func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, userID string, opts MetadataSearchOptions) (*MetadataSearchResult, error) {
 	series, err := s.seriesRepo.FindByID(nil, seriesID, userID)
 	if err != nil {
@@ -194,7 +620,80 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 		}
 	}
 
-	if activeCount == 0 {
+	// ─── Direct ID matching ───
+	var directCandidates []MetadataCandidate
+
+	var dbAnilistID, dbMalID string
+	if series.Metadata != nil {
+		dbAnilistID = strings.Trim(strings.TrimSpace(series.Metadata.AnilistID), `'"`)
+		dbMalID = strings.Trim(strings.TrimSpace(series.Metadata.MalID), `'"`)
+	}
+
+	queryAnilistID, queryMalID := parseExternalID(searchTitle)
+
+	targetAnilistID := dbAnilistID
+	if targetAnilistID == "" {
+		targetAnilistID = queryAnilistID
+	}
+	if targetAnilistID != "" {
+		res, err := s.fetchAniListCandidate(ctx, targetAnilistID)
+		if err == nil && res != nil {
+			directCandidates = append(directCandidates, MetadataCandidate{
+				PluginID:   "anilist-direct",
+				PluginName: "AniList (Direct)",
+				Candidate: sdktypes.SearchCandidate{
+					Source:        res.Source,
+					Title:         res.Title,
+					OriginalTitle: res.OriginalTitle,
+					Authors:       res.Authors,
+					Description:   res.Description,
+					CoverURL:      res.Cover.URL,
+					Score:         1.0,
+					Confidence:    1.0,
+					Reason:        "ID de AniList coincidente",
+				},
+			})
+		} else if err != nil {
+			log.Printf("[SearchSeries] AniList direct fetch error for ID %s: %v", targetAnilistID, err)
+		}
+	}
+
+	targetMalID := dbMalID
+	if targetMalID == "" {
+		targetMalID = queryMalID
+	}
+	if targetMalID != "" {
+		var malClientID string
+		_ = database.DB.QueryRow("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mal_client_id'", userID).Scan(&malClientID)
+		if malClientID != "" {
+			res, err := s.fetchMALCandidate(ctx, targetMalID, malClientID)
+			if err == nil && res != nil {
+				directCandidates = append(directCandidates, MetadataCandidate{
+					PluginID:   "mal-direct",
+					PluginName: "MyAnimeList (Direct)",
+					Candidate: sdktypes.SearchCandidate{
+						Source:        res.Source,
+						Title:         res.Title,
+						OriginalTitle: res.OriginalTitle,
+						Authors:       res.Authors,
+						Description:   res.Description,
+						CoverURL:      res.Cover.URL,
+						Score:         1.0,
+						Confidence:    1.0,
+						Reason:        "ID de MyAnimeList coincidente",
+					},
+				})
+			} else if err != nil {
+				log.Printf("[SearchSeries] MAL direct fetch error for ID %s: %v", targetMalID, err)
+			}
+		}
+	}
+
+	if len(directCandidates) > 0 {
+		result.Candidates = append(directCandidates, result.Candidates...)
+	}
+
+	if activeCount == 0 && len(directCandidates) == 0 {
 		return nil, ErrNoActiveMetadataPlugin
 	}
 
@@ -239,6 +738,31 @@ func (s *MetadataService) FetchSeriesMetadata(ctx context.Context, seriesID stri
 	}
 	if strings.TrimSpace(selection.Source.ID) == "" || strings.TrimSpace(selection.Source.Name) == "" {
 		return nil, errors.New("source.id and source.name are required")
+	}
+
+	// ─── Direct ID fetch handlers ───
+	if selection.PluginID == "anilist-direct" {
+		res, err := s.fetchAniListCandidate(ctx, selection.Source.ID)
+		if err != nil {
+			return nil, err
+		}
+		return &MetadataFetchResult{
+			PluginID: selection.PluginID,
+			Result:   res,
+		}, nil
+	}
+
+	if selection.PluginID == "mal-direct" {
+		var malClientID string
+		_ = database.DB.QueryRow("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mal_client_id'", userID).Scan(&malClientID)
+		res, err := s.fetchMALCandidate(ctx, selection.Source.ID, malClientID)
+		if err != nil {
+			return nil, err
+		}
+		return &MetadataFetchResult{
+			PluginID: selection.PluginID,
+			Result:   res,
+		}, nil
 	}
 
 	record, ok, err := s.manager.Get(selection.PluginID)
@@ -348,6 +872,12 @@ func (s *MetadataService) ApplySeriesMetadata(ctx context.Context, seriesID stri
 	isbn := firstIdentifier(result.Identifiers, "isbn13", "isbn", "isbn10")
 	if isbn != "" {
 		applyString(&series.Metadata.ISBN, isbn, "isbn", &updatedFields)
+	}
+	if anilistID := result.Identifiers["anilist_id"]; anilistID != "" {
+		applyString(&series.Metadata.AnilistID, anilistID, "anilist_id", &updatedFields)
+	}
+	if malID := result.Identifiers["mal_id"]; malID != "" {
+		applyString(&series.Metadata.MalID, malID, "mal_id", &updatedFields)
 	}
 
 	coverURL := coverURL(result)

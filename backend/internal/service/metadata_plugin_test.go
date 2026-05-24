@@ -1,11 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1022,4 +1024,147 @@ func (r *failingReadCloser) Read(p []byte) (int, error) {
 
 func (r *failingReadCloser) Close() error {
 	return nil
+}
+
+func TestMetadataServiceDirectImportAniList(t *testing.T) {
+	connectMetadataTestDB(t)
+	seriesRepo := repository.NewSeriesRepository()
+	series := seedMetadataSeries(t, seriesRepo)
+	series.Metadata = &model.SeriesMetadata{
+		SeriesID:  series.ID,
+		AnilistID: "191727",
+	}
+	if err := seriesRepo.Update(nil, series); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	mockResponseJSON := `{
+		"data": {
+			"Media": {
+				"id": 191727,
+				"title": {
+					"romaji": "Romaji Title",
+					"english": "English Title",
+					"native": "Native Title"
+				},
+				"description": "This is a test description",
+				"status": "FINISHED",
+				"startDate": {
+					"year": 2024,
+					"month": 5,
+					"day": 24
+				},
+				"genres": ["Action", "Adventure"],
+				"staff": {
+					"edges": [
+						{
+							"role": "Story & Art",
+							"node": {
+								"name": {
+									"full": "Test Author"
+								}
+							}
+						}
+					]
+				},
+				"coverImage": {
+					"extraLarge": "https://example.com/cover.png"
+				},
+				"characters": {
+					"edges": [
+						{
+							"role": "MAIN",
+							"node": {
+								"id": 9999,
+								"name": {
+									"full": "Protagonist"
+								},
+								"image": {
+									"large": "https://example.com/character.png"
+								}
+							}
+						}
+					]
+				}
+			}
+		}
+	}`
+
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Host == "graphql.anilist.co" {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(bytes.NewBufferString(mockResponseJSON)),
+				}, nil
+			}
+			if req.URL.String() == "https://example.com/cover.png" {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"image/png"}},
+					Body:       io.NopCloser(bytes.NewBuffer([]byte{0x89, 0x50, 0x4e, 0x47})),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Body:       io.NopCloser(bytes.NewBufferString("")),
+			}, nil
+		}),
+	}
+
+	cfg := (&configForMetadataTests{DataDir: t.TempDir()}).Config()
+	svc := newMetadataServiceForTests(t, cfg, client, seriesRepo, pluginengine.NewManager(pluginengine.NewMemoryStore()))
+
+	// Test SearchSeries
+	result, err := svc.SearchSeries(context.Background(), series.ID, "", MetadataSearchOptions{})
+	if err != nil {
+		t.Fatalf("SearchSeries() error = %v", err)
+	}
+
+	if len(result.Candidates) == 0 {
+		t.Fatal("expected at least one candidate")
+	}
+
+	candidate := result.Candidates[0]
+	if candidate.PluginID != "anilist-direct" {
+		t.Fatalf("expected plugin_id anilist-direct, got %s", candidate.PluginID)
+	}
+	if candidate.Candidate.Title != "English Title" {
+		t.Fatalf("expected title English Title, got %s", candidate.Candidate.Title)
+	}
+
+	// Test FetchSeriesMetadata
+	fetched, err := svc.FetchSeriesMetadata(context.Background(), series.ID, "", MetadataFetchSelection{
+		PluginID: "anilist-direct",
+		Source:   candidate.Candidate.Source,
+	})
+	if err != nil {
+		t.Fatalf("FetchSeriesMetadata() error = %v", err)
+	}
+
+	if fetched.Result.Title != "English Title" {
+		t.Fatalf("expected English Title, got %s", fetched.Result.Title)
+	}
+	if len(fetched.Result.Characters) != 1 {
+		t.Fatalf("expected 1 character, got %d", len(fetched.Result.Characters))
+	}
+	if fetched.Result.Characters[0].Name != "Protagonist" {
+		t.Fatalf("expected Protagonist, got %s", fetched.Result.Characters[0].Name)
+	}
+
+	// Test ApplySeriesMetadata preserves identifiers
+	applied, err := svc.ApplySeriesMetadata(context.Background(), series.ID, "", fetched.Result)
+	if err != nil {
+		t.Fatalf("ApplySeriesMetadata() error = %v", err)
+	}
+
+	refreshed, err := seriesRepo.FindByID(nil, series.ID, "")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if refreshed.Metadata.AnilistID != "191727" {
+		t.Fatalf("expected AnilistID 191727, got %s", refreshed.Metadata.AnilistID)
+	}
+	_ = applied
 }
