@@ -39,9 +39,17 @@ import { useReadingTime } from "../hooks/useReadingTime";
 import { AlertModal } from "../components/modals/AlertModal";
 import type { ViewerAnimationHandles } from "../features/viewer/types";
 
+const sendDebugLog = (msg: string) => {
+  fetch("/api/v1/debug-log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: msg })
+  }).catch(() => {});
+};
+
 const getStoredZoomScale = (): number => {
   const stored = sessionStorage.getItem("kumiho_zoom_scale");
-  console.log("[ZoomDebug] getStoredZoomScale read:", stored);
+  sendDebugLog(`[ZoomDebug] getStoredZoomScale read: ${stored}`);
   if (stored) {
     const parsed = parseFloat(stored);
     if (!isNaN(parsed) && parsed >= 0.3 && parsed <= 3) {
@@ -52,7 +60,7 @@ const getStoredZoomScale = (): number => {
 };
 
 const setStoredZoomScale = (scale: number) => {
-  console.log("[ZoomDebug] setStoredZoomScale write:", scale, new Error().stack);
+  sendDebugLog(`[ZoomDebug] setStoredZoomScale write: ${scale}\nStack:\n${new Error().stack}`);
   sessionStorage.setItem("kumiho_zoom_scale", scale.toString());
 };
 import { useTranslation } from "react-i18next";
@@ -357,6 +365,11 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       });
     } else if (animationRef.current?.zoomIn) {
       animationRef.current.zoomIn();
+      setZoomScale((prev) => {
+        const next = Math.min(3, prev + 0.2);
+        setStoredZoomScale(next);
+        return next;
+      });
     }
   }, [settings.readingMode]);
 
@@ -369,6 +382,11 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       });
     } else if (animationRef.current?.zoomOut) {
       animationRef.current.zoomOut();
+      setZoomScale((prev) => {
+        const next = Math.max(0.3, prev - 0.2);
+        setStoredZoomScale(next);
+        return next;
+      });
     }
   }, [settings.readingMode]);
 
@@ -378,6 +396,8 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
       setStoredZoomScale(1);
     } else if (animationRef.current?.resetZoom) {
       animationRef.current.resetZoom();
+      setZoomScale(1);
+      setStoredZoomScale(1);
     }
   }, [settings.readingMode]);
 

@@ -102,6 +102,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         onPrev: handleAnimatedPrev,
         doubleTapZoomZone: "center",
         deferSingleTapForDoubleTap: false,
+        onZoomChange,
       });
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -316,6 +317,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         {/* Current Pages (With Zoom) */}
         <div style={{ width: "100%", height: "100%", flexShrink: 0 }}>
           <TransformWrapper
+            key={chapterId}
             ref={transformComponentRef}
             initialScale={zoomScale}
             minScale={0.3}
@@ -325,6 +327,14 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
             panning={{ disabled: !isZoomed }}
             onTransformed={(r) => {
               setIsZoomed(r.state.scale > 1.01);
+            }}
+            onZoomStop={(r) => {
+              if (onZoomChange) onZoomChange(r.state.scale);
+            }}
+            onPinchingStop={(r) => {
+              if (onZoomChange) onZoomChange(r.state.scale);
+            }}
+            onWheelStop={(r) => {
               if (onZoomChange) onZoomChange(r.state.scale);
             }}
           >

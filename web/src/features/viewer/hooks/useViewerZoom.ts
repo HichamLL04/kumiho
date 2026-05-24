@@ -13,6 +13,7 @@ interface UseViewerZoomParams {
   ) => void;
   deferSingleTapForDoubleTap?: boolean;
   doubleTapZoomZone?: "any" | "center";
+  onZoomChange?: (scale: number) => void;
 }
 
 const DOUBLE_TAP_DELAY = 450;
@@ -29,6 +30,7 @@ export function useViewerZoom({
   onVerticalZoomToggle,
   deferSingleTapForDoubleTap = true,
   doubleTapZoomZone = "any",
+  onZoomChange,
 }: UseViewerZoomParams) {
   const transformComponentRef = useRef<ReactZoomPanPinchContentRef>(null);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -190,9 +192,11 @@ export function useViewerZoom({
 
           if (currentScale > 1.05) {
             resetTransform(200);
+            if (onZoomChange) onZoomChange(1.0);
           } else {
             const exactStepTo200 = Math.log(2.0);
             zoomIn(exactStepTo200, 200);
+            if (onZoomChange) onZoomChange(2.0);
           }
         }
         return;
