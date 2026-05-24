@@ -332,22 +332,28 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   const [zoomScale, setZoomScale] = useState(1);
 
   const handleZoomIn = useCallback(() => {
-    if (animationRef.current?.zoomIn) {
+    if (settings.readingMode === "vertical") {
+      setZoomScale((prev) => Math.min(3, prev + 0.2));
+    } else if (animationRef.current?.zoomIn) {
       animationRef.current.zoomIn();
     }
-  }, []);
+  }, [settings.readingMode]);
 
   const handleZoomOut = useCallback(() => {
-    if (animationRef.current?.zoomOut) {
+    if (settings.readingMode === "vertical") {
+      setZoomScale((prev) => Math.max(0.3, prev - 0.2));
+    } else if (animationRef.current?.zoomOut) {
       animationRef.current.zoomOut();
     }
-  }, []);
+  }, [settings.readingMode]);
 
   const handleZoomReset = useCallback(() => {
-    if (animationRef.current?.resetZoom) {
+    if (settings.readingMode === "vertical") {
+      setZoomScale(1);
+    } else if (animationRef.current?.resetZoom) {
       animationRef.current.resetZoom();
     }
-  }, []);
+  }, [settings.readingMode]);
 
   const handleZoomChange = useCallback((scale: number) => {
     setZoomScale(scale);
@@ -617,21 +623,14 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
             }}
             onInteractionStart={handleInteractionStart}
             onInteractionEnd={handleInteractionEnd}
-            zoomOptions={
-              settings.readingMode !== "vertical"
-                ? {
-                    showZoomControls: true,
-                    hasTOC: false,
-                    zoomPercent: Math.round(zoomScale * 100),
-                    onZoomIn: handleZoomIn,
-                    onZoomOut: handleZoomOut,
-                    onZoomReset: handleZoomReset,
-                  }
-                : {
-                    showZoomControls: false,
-                    hasTOC: false,
-                  }
-            }
+            zoomOptions={{
+              showZoomControls: true,
+              hasTOC: false,
+              zoomPercent: Math.round(zoomScale * 100),
+              onZoomIn: handleZoomIn,
+              onZoomOut: handleZoomOut,
+              onZoomReset: handleZoomReset,
+            }}
           />
 
           {/* 세로 모드 당김 인디케이터 */}
@@ -696,6 +695,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
               estimatedPageHeights={estimatedHeights}
               viewStatus={viewStatus}
               onZoomChange={handleZoomChange}
+              zoomScale={zoomScale}
             />
           </div>
 

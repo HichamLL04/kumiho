@@ -44,6 +44,7 @@ interface ViewerContentProps {
   estimatedPageHeights?: Map<number, number>;
   viewStatus?: ViewStatus;
   onZoomChange?: (scale: number) => void;
+  zoomScale?: number;
 }
 
 export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentProps>(
@@ -75,6 +76,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       estimatedPageHeights,
       viewStatus = "ready",
       onZoomChange,
+      zoomScale = 1,
     },
     ref,
   ) => {
@@ -259,13 +261,14 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         <div
           style={{
             width: "100%",
-            maxWidth: `${VERTICAL_MAX_WIDTH}px`,
+            maxWidth: `${VERTICAL_MAX_WIDTH * zoomScale}px`,
             margin: "0 auto",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "flex-start",
             gap: 0,
+            transition: "max-width 0.2s ease-out",
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
