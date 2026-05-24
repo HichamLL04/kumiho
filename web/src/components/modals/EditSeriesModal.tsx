@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-import { ChevronDown, Link, RotateCcw, Save, Search, Upload, Users, X } from "lucide-react";
+import { ChevronDown, Link, RotateCcw, RefreshCw, Save, Search, Upload, Users, X } from "lucide-react";
 import type { Series } from "../../types/series";
 import { seriesAPI, settingAPI } from "../../api/client";
 import type { MetadataApplyResponse } from "../../types/plugin";
@@ -296,6 +296,64 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     } catch (error) {
       console.error("Failed to upload thumbnail:", error);
       showAlert("error", t("series.edit.alert.upload_failed"));
+    }
+  };
+
+  const [isSyncingID, setIsSyncingID] = useState(false);
+
+  const handleSyncDirectID = async (platform: "anilist" | "mal", idValue: string) => {
+    const trimmed = (idValue || "").trim();
+    if (!trimmed) {
+      showAlert("error", "Por favor ingresa un ID válido antes de sincronizar.");
+      return;
+    }
+    setIsSyncingID(true);
+    try {
+      const searchTitle = platform === "anilist" ? `anilist:${trimmed}` : `mal:${trimmed}`;
+      const searchRes = await seriesAPI.metadataSearch(series.id, { title: searchTitle });
+      
+      if (!searchRes.candidates || searchRes.candidates.length === 0) {
+        showAlert("error", "No se encontraron resultados para ese ID.");
+        return;
+      }
+
+      const candidate = searchRes.candidates[0];
+      const fetchRes = await seriesAPI.metadataFetch(series.id, {
+        plugin_id: candidate.plugin_id,
+        source: candidate.candidate.source,
+      });
+
+      if (!fetchRes.result) {
+        showAlert("error", "No se pudo recuperar la información detallada.");
+        return;
+      }
+
+      await seriesAPI.metadataApply(series.id, fetchRes.result);
+      const refreshed = await seriesAPI.get(series.id);
+      
+      // Update form fields with newly fetched metadata
+      setFormData({
+        title: refreshed.data.title || "",
+        authors: refreshed.data.metadata?.authors || "",
+        status: refreshed.data.status || "ONGOING",
+        tags: refreshed.data.metadata?.tags || "",
+        description: refreshed.data.metadata?.description || "",
+        publication_year: refreshed.data.metadata?.publication_year || "",
+        original_title: refreshed.data.metadata?.original_title || "",
+        publisher: refreshed.data.metadata?.publisher || "",
+        published_at: refreshed.data.metadata?.published_at || "",
+        isbn: refreshed.data.metadata?.isbn || "",
+        anilist_id: refreshed.data.metadata?.anilist_id || trimmed,
+        mal_id: refreshed.data.metadata?.mal_id || (platform === "mal" ? trimmed : ""),
+      });
+      
+      onUpdate(refreshed.data);
+      showAlert("success", "¡Metadatos importados y aplicados con éxito!");
+    } catch (error) {
+      console.error("Sync direct ID failed:", error);
+      showAlert("error", "Error al intentar importar metadatos desde el ID.");
+    } finally {
+      setIsSyncingID(false);
     }
   };
 
@@ -822,6 +880,31 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                         onChange={handleChange}
                         placeholder="ej. 87216"
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleSyncDirectID("anilist", formData.anilist_id)}
+                        disabled={isSyncingID}
+                        style={{
+                          marginTop: "8px",
+                          padding: "8px 12px",
+                          backgroundColor: "rgba(59, 130, 246, 0.1)",
+                          color: "#3b82f6",
+                          border: "1px solid rgba(59, 130, 246, 0.3)",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          fontWeight: "500",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "6px",
+                          width: "100%",
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        <RefreshCw size={13} className={isSyncingID ? styles.spinning : ""} />
+                        {isSyncingID ? "Importando..." : "Importar desde AniList"}
+                      </button>
                     </div>
                     <div className={styles.formGroup}>
                       <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -835,6 +918,31 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                         onChange={handleChange}
                         placeholder="ej. 113138"
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleSyncDirectID("mal", formData.mal_id)}
+                        disabled={isSyncingID}
+                        style={{
+                          marginTop: "8px",
+                          padding: "8px 12px",
+                          backgroundColor: "rgba(59, 130, 246, 0.1)",
+                          color: "#3b82f6",
+                          border: "1px solid rgba(59, 130, 246, 0.3)",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          fontWeight: "500",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "6px",
+                          width: "100%",
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        <RefreshCw size={13} className={isSyncingID ? styles.spinning : ""} />
+                        {isSyncingID ? "Importando..." : "Importar desde MyAnimeList"}
+                      </button>
                     </div>
                   </div>
 
