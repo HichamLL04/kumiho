@@ -197,6 +197,18 @@ func main() {
 	// === SSE 스트림 라우트 ===
 	v1.Get("/sse", authMiddleware.Protected(), sseHandler.Handle)
 
+	// === Browser Debug Route ===
+	v1.Post("/debug-log", func(c *fiber.Ctx) error {
+		var req struct {
+			Message string `json:"message"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		log.Printf("[BROWSER-DEBUG] %s", req.Message)
+		return c.SendStatus(fiber.StatusOK)
+	})
+
 	// === 인증 필요 라우트 ===
 	protected := v1.Group("", authMiddleware.Protected())
 
