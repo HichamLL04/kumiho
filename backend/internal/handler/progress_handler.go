@@ -31,6 +31,7 @@ type ProgressHandler struct {
 	chapterCompletionRepo *repository.ChapterCompletionRepository
 	sseHub                *sse.Hub
 	seriesEnrichSvc       *service.SeriesEnrichService
+	syncHandler           *SyncHandler
 }
 
 const completionThresholdPercent = 100.0
@@ -47,6 +48,7 @@ func NewProgressHandler(
 	chapterCompletionRepo *repository.ChapterCompletionRepository,
 	sseHub *sse.Hub,
 	seriesEnrichSvc *service.SeriesEnrichService,
+	syncHandler *SyncHandler,
 ) *ProgressHandler {
 	return &ProgressHandler{
 		progressRepo:          progressRepo,
@@ -59,6 +61,7 @@ func NewProgressHandler(
 		chapterCompletionRepo: chapterCompletionRepo,
 		sseHub:                sseHub,
 		seriesEnrichSvc:       seriesEnrichSvc,
+		syncHandler:           syncHandler,
 	}
 }
 
@@ -508,6 +511,9 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 		if err := h.chapterCompletionRepo.MarkComplete(nil, userID, *req.ChapterID); err != nil {
 			log.Printf("Failed to mark chapter %s as complete: %v", *req.ChapterID, err)
 		}
+		if h.syncHandler != nil {
+			go h.syncHandler.SyncSeriesProgress(userID, seriesID)
+		}
 	}
 
 	// 자동 완독 처리
@@ -620,6 +626,9 @@ func (h *ProgressHandler) UpdateEpubProgress(c *fiber.Ctx) error {
 		if err := h.chapterCompletionRepo.MarkComplete(nil, userID, chapterID); err != nil {
 			log.Printf("Failed to mark chapter %s as complete: %v", chapterID, err)
 		}
+		if h.syncHandler != nil {
+			go h.syncHandler.SyncSeriesProgress(userID, volume.SeriesID)
+		}
 	}
 
 	h.markCompleteIfLastPage(userID, &volumeID, &chapterID, currentPage, totalPages, nil, nil)
@@ -730,6 +739,9 @@ func (h *ProgressHandler) UpdateProgressWSReplacement(c *fiber.Ctx) error {
 	if req.CurrentPage >= totalPages && totalPages > 0 {
 		if err := h.chapterCompletionRepo.MarkComplete(nil, userID, req.ChapterID); err != nil {
 			log.Printf("Failed to mark chapter %s as complete: %v", req.ChapterID, err)
+		}
+		if h.syncHandler != nil {
+			go h.syncHandler.SyncSeriesProgress(userID, req.SeriesID)
 		}
 	}
 
@@ -1411,6 +1423,10 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 		})
 	}
 
+	if h.syncHandler != nil {
+		go h.syncHandler.SyncSeriesProgress(userID, volume.SeriesID)
+	}
+
 	return c.JSON(fiber.Map{
 		"message": "volume and descendants marked as complete",
 	})
@@ -1684,6 +1700,10 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 		})
 	}
 
+	if h.syncHandler != nil {
+		go h.syncHandler.SyncSeriesProgress(userID, seriesID)
+	}
+
 	return c.JSON(fiber.Map{
 		"message": "previous volumes marked as complete",
 	})
@@ -1860,6 +1880,10 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 		})
 	}
 
+	if h.syncHandler != nil {
+		go h.syncHandler.SyncSeriesProgress(userID, seriesID)
+	}
+
 	return c.JSON(fiber.Map{
 		"message": "previous chapters marked as complete",
 	})
@@ -1993,6 +2017,10 @@ func (h *ProgressHandler) MarkSeriesComplete(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to commit transaction",
 		})
+	}
+
+	if h.syncHandler != nil {
+		go h.syncHandler.SyncSeriesProgress(userID, seriesID)
 	}
 
 	return c.JSON(fiber.Map{
@@ -2136,6 +2164,10 @@ func (h *ProgressHandler) MarkChapterComplete(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to commit transaction",
 		})
+	}
+
+	if h.syncHandler != nil {
+		go h.syncHandler.SyncSeriesProgress(userID, seriesID)
 	}
 
 	return c.JSON(fiber.Map{

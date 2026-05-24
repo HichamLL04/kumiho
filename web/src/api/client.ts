@@ -589,3 +589,21 @@ export const getPageImageUrl = (chapterId: string, pageNumber: number, width?: n
   if (width) url += `?width=${width}`;
   return url;
 };
+
+// Sync API (AniList / MyAnimeList)
+export interface SyncStatus {
+  anilist: { connected: boolean; username: string; avatar: string; client_id: string; client_secret: string };
+  mal: { connected: boolean; username: string; avatar: string; client_id: string; client_secret: string };
+}
+
+export const syncAPI = {
+  getStatus: () => api.get<SyncStatus>("/sync/status").then((res) => res.data),
+  saveAniListCredentials: (client_id: string, client_secret: string) =>
+    api.post("/sync/anilist/save", { client_id, client_secret }).then((res) => res.data),
+  getAniListAuthorizeUrl: () => `${API_BASE_URL}/sync/anilist/authorize`,
+  disconnectAniList: () => api.post("/sync/anilist/disconnect").then((res) => res.data),
+  saveMALCredentials: (client_id: string, client_secret: string) =>
+    api.post("/sync/mal/credentials", { client_id, client_secret }).then((res) => res.data),
+  getMALAuthorizeUrl: () => `${API_BASE_URL}/sync/mal/authorize`,
+  disconnectMAL: () => api.post("/sync/mal/disconnect").then((res) => res.data),
+};

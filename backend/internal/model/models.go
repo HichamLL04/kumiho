@@ -94,6 +94,8 @@ type SeriesMetadata struct {
 	Publisher             string `json:"publisher" db:"publisher"`
 	PublishedAt           string `json:"published_at" db:"published_at"`
 	ISBN                  string `json:"isbn" db:"isbn"`
+	AnilistID             string `json:"anilist_id" db:"anilist_id"`
+	MalID                 string `json:"mal_id" db:"mal_id"`
 }
 
 // SeriesCharacter 시리즈 등장인물 모델

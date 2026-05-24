@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 43
+const latestMigrationVersion = 44
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -627,6 +627,7 @@ func Migrate() error {
 		{41, "시리즈 메타데이터 번역된 줄거리 컬럼 추가", migrateSeriesMetadataDescriptionTranslated},
 		{42, "EPUB 페이지 모드(flow) 시리즈별 설정 컬럼 추가", migrateEpubFlowSeriesSetting},
 		{43, "시리즈 콘텐츠 업데이트 시간 컬럼 추가", migrateSeriesLastContentUpdatedAt},
+		{44, "시리즈 메타데이터 AniList 및 MAL ID 컬럼 추가", migrateSeriesMetadataExternalIDs},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -2009,4 +2010,12 @@ func parseLegacyTimeToSeconds(value interface{}) (float64, bool) {
 		return 0, false
 	}
 	return float64(hours*3600+minutes*60) + secondsPart, true
+}
+
+// #44 migrateSeriesMetadataExternalIDs 시리즈 메타데이터 AniList 및 MAL ID 컬럼 추가
+func migrateSeriesMetadataExternalIDs() error {
+	if err := addColumn("series_metadata", "anilist_id", "TEXT DEFAULT ''"); err != nil {
+		return err
+	}
+	return addColumn("series_metadata", "mal_id", "TEXT DEFAULT ''")
 }

@@ -13,6 +13,7 @@ type UserSettingRepository interface {
 	GetByUser(q database.Queryer, userID string) ([]model.UserSetting, error)
 	Update(q database.Queryer, userID, key, value string) error
 	GetByKey(q database.Queryer, userID, key string) (*model.UserSetting, error)
+	Delete(q database.Queryer, userID, key string) error
 }
 
 type userSettingRepository struct{}
@@ -67,6 +68,15 @@ func (r *userSettingRepository) Update(q database.Queryer, userID, key, value st
 	_, err := q.Exec(query, userID, key, value, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to update user setting: %w", err)
+	}
+	return nil
+}
+
+func (r *userSettingRepository) Delete(q database.Queryer, userID, key string) error {
+	q = database.GetQueryer(q)
+	_, err := q.Exec(`DELETE FROM user_settings WHERE user_id = ? AND key = ?`, userID, key)
+	if err != nil {
+		return fmt.Errorf("failed to delete user setting: %w", err)
 	}
 	return nil
 }

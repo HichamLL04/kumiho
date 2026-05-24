@@ -1,0 +1,288 @@
+/* SyncTab.module.css */
+
+.syncContainer {
+  color: #fff;
+  animation: syncFadeIn 0.3s ease-out;
+}
+
+@keyframes syncFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Integration Card ─────────────────────────────────────────────── */
+
+.integrationCard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(102, 126, 234, 0.1), transparent 40%),
+    rgba(255, 255, 255, 0.03);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.connected {
+  border-color: rgba(102, 234, 152, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(102, 234, 152, 0.1),
+    0 0 28px rgba(102, 234, 152, 0.08);
+}
+
+/* ── Card Header ──────────────────────────────────────────────────── */
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.serviceInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.serviceName {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.serviceStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+}
+
+.statusConnected {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.statusDisconnected {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+}
+
+.userBadge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.75rem 0.35rem 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(102, 234, 152, 0.4);
+}
+
+.username {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+/* ── Card Body ────────────────────────────────────────────────────── */
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-bottom: 0.4rem;
+}
+
+.optional {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.tokenRow {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.credentialsRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+
+.connectButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #667eea, #8b5cf6);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+  flex-shrink: 0;
+}
+
+.connectButton:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(102, 126, 234, 0.4);
+}
+
+.connectButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.connectButtonFull {
+  width: 100%;
+}
+
+.anilistButton {
+  background: linear-gradient(135deg, #02a9ff, #0277bd);
+  box-shadow: 0 8px 20px rgba(2, 169, 255, 0.3);
+}
+
+.anilistButton:hover:not(:disabled) {
+  box-shadow: 0 12px 28px rgba(2, 169, 255, 0.4);
+}
+
+.disconnectButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+  color: #fca5a5;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.disconnectButton:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.4);
+  transform: translateY(-1px);
+}
+
+.disconnectButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Card Footer ──────────────────────────────────────────────────── */
+
+.cardFooter {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── Callback box ─────────────────────────────────────────────────── */
+
+.callbackBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.callbackCode {
+  display: block;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.82rem;
+  color: #a5b4fc;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+  word-break: break-all;
+  border: 1px solid rgba(165, 180, 252, 0.15);
+}
+
+/* ── Help text / links ────────────────────────────────────────────── */
+
+.helpText {
+  font-size: 0.83rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.helpLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #818cf8;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.helpLink:hover {
+  color: #a5b4fc;
+  text-decoration: underline;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .credentialsRow {
+    grid-template-columns: 1fr;
+  }
+
+  .tokenRow {
+    flex-direction: column;
+  }
+
+  .connectButton {
+    flex-shrink: unset;
+    width: 100%;
+  }
+
+  .cardHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

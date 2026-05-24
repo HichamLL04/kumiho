@@ -99,6 +99,8 @@ type UpdateSeriesRequest struct {
 	Publisher             *string `json:"publisher"`
 	PublishedAt           *string `json:"published_at"`
 	ISBN                  *string `json:"isbn"`
+	AnilistID             *string `json:"anilist_id"`
+	MalID                 *string `json:"mal_id"`
 }
 
 type UpdateVolumeRequest struct {
@@ -257,7 +259,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	// 단독 북마크 업데이트인 경우, updated_at을 변경하지 않고 북마크 상태만 변경
 	if req.IsBookmarked != nil && req.Title == nil && req.Description == nil &&
 		req.DescriptionTranslated == nil && req.Status == nil && req.Authors == nil && req.Tags == nil && req.PublicationYear == nil &&
-		req.OriginalTitle == nil && req.Publisher == nil && req.PublishedAt == nil && req.ISBN == nil {
+		req.OriginalTitle == nil && req.Publisher == nil && req.PublishedAt == nil && req.ISBN == nil && req.AnilistID == nil && req.MalID == nil {
 
 		if err := h.seriesRepo.UpdateBookmark(nil, userID, series.ID, *req.IsBookmarked); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -316,6 +318,12 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	}
 	if req.ISBN != nil {
 		series.Metadata.ISBN = *req.ISBN
+	}
+	if req.AnilistID != nil {
+		series.Metadata.AnilistID = strings.Trim(strings.TrimSpace(*req.AnilistID), `'"`)
+	}
+	if req.MalID != nil {
+		series.Metadata.MalID = strings.Trim(strings.TrimSpace(*req.MalID), `'"`)
 	}
 	// DB 업데이트
 	if err := h.seriesRepo.UpdatePreservingUpdatedAt(nil, series); err != nil {

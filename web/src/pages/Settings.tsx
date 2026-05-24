@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle, Database } from "lucide-react";
+import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle, Database, RefreshCw } from "lucide-react";
 import { pluginAPI, systemAPI } from "../api/client";
 import { UpdateBadge } from "../components/common/UpdateBadge";
 import { Header } from "../components/headers/Header";
@@ -17,6 +17,7 @@ import { AccountTab } from "../components/settings/AccountTab";
 import { StatisticsTab } from "../components/settings/StatisticsTab";
 import { PluginsTab } from "../components/settings/PluginsTab";
 import { MetadataTab } from "../components/settings/MetadataTab";
+import { SyncTab } from "../components/settings/SyncTab";
 import styles from "./Settings.module.css";
 
 // 설정 탭 타입
@@ -29,6 +30,7 @@ type SettingsTab =
   | "users"
   | "plugins"
   | "system"
+  | "sync"
   | "account";
 
 // 탭 정보
@@ -41,6 +43,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: 
   { id: "users", label: "settings.tabs.users", icon: Users, adminOnly: true },
   { id: "plugins", label: "settings.tabs.plugins", icon: Puzzle, adminOnly: true },
   { id: "system", label: "settings.tabs.system", icon: Server, adminOnly: true },
+  { id: "sync", label: "Sincronización", icon: RefreshCw },
   { id: "account", label: "settings.tabs.account", icon: User },
 ];
 
@@ -111,6 +114,8 @@ export function SettingsPage() {
         return <PluginsTab onUpdateStateChange={setHasPluginUpdate} />;
       case "system":
         return <SystemTab />;
+      case "sync":
+        return <SyncTab />;
       case "account":
         return <AccountTab />;
       default:

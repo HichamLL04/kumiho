@@ -13,6 +13,8 @@ export interface EbookMetadata {
   publisher: string;
   published_at: string;
   isbn: string;
+  anilist_id?: string;
+  mal_id?: string;
   description_translated?: string;
 }
 
@@ -67,6 +69,8 @@ export interface UpdateSeriesRequest {
   publisher?: string;
   published_at?: string;
   isbn?: string;
+  anilist_id?: string;
+  mal_id?: string;
 }
 
 export interface Volume {

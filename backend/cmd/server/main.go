@@ -123,7 +123,8 @@ func main() {
 	userHandler := handler.NewUserHandler(authService)
 	libraryHandler := handler.NewLibraryHandler(ctx, libraryRepo, authService, fileScanner)
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
-	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc)
+	syncHandler := handler.NewSyncHandler(userSettingRepo)
+	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc, syncHandler)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, seriesCharacterRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
@@ -378,6 +379,18 @@ func main() {
 	stats := protected.Group("/stats")
 	stats.Get("/personal", statsHandler.GetPersonalStats)
 	stats.Post("/heartbeat", statsHandler.UpdateReadingTime)
+
+	// Sincronización con servicios externos (AniList, MAL)
+	sync := protected.Group("/sync")
+	sync.Get("/status", syncHandler.GetStatus)
+	sync.Post("/anilist/save", syncHandler.SaveAniList)
+	sync.Get("/anilist/authorize", syncHandler.AuthorizeAniList)
+	v1.Get("/sync/anilist/callback", syncHandler.AniListCallback)
+	sync.Post("/anilist/disconnect", syncHandler.DisconnectAniList)
+	sync.Post("/mal/credentials", syncHandler.SaveMALCredentials)
+	sync.Get("/mal/authorize", syncHandler.AuthorizeMAL)
+	v1.Get("/sync/mal/callback", syncHandler.MALCallback)
+	sync.Post("/mal/disconnect", syncHandler.DisconnectMAL)
 
 	// === Frontend Serving (SPA Support) ===
 	// API 라우트가 매칭되지 않은 모든 요청을 처리합니다.

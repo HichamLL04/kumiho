@@ -35,6 +35,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     publisher: "",
     published_at: "",
     isbn: "",
+    anilist_id: "",
+    mal_id: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isResettingMetadata, setIsResettingMetadata] = useState(false);
@@ -132,6 +134,8 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
         publisher: series.metadata?.publisher || "",
         published_at: series.metadata?.published_at || "",
         isbn: series.metadata?.isbn || "",
+        anilist_id: series.metadata?.anilist_id || "",
+        mal_id: series.metadata?.mal_id || "",
       });
       setThumbnailUrl("");
       setTranslatedDescription(series.metadata?.description_translated || "");
@@ -801,6 +805,35 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                         value={formData.isbn}
                         onChange={handleChange}
                         placeholder={t("series.edit.form.isbn_placeholder")}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.formRow}>
+                    <div className={styles.formGroup}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <img src="https://anilist.co/img/icons/favicon-32x32.png" width={14} height={14} alt="AniList" style={{ borderRadius: "3px" }} />
+                        AniList ID
+                      </label>
+                      <input
+                        type="text"
+                        name="anilist_id"
+                        value={formData.anilist_id}
+                        onChange={handleChange}
+                        placeholder="ej. 87216"
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <img src="https://myanimelist.net/img/common/pwa/launcher-icon-0-75x.png" width={14} height={14} alt="MAL" style={{ borderRadius: "3px" }} />
+                        MyAnimeList ID
+                      </label>
+                      <input
+                        type="text"
+                        name="mal_id"
+                        value={formData.mal_id}
+                        onChange={handleChange}
+                        placeholder="ej. 113138"
                       />
                     </div>
                   </div>
