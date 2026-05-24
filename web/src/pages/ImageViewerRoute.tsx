@@ -41,6 +41,7 @@ import type { ViewerAnimationHandles } from "../features/viewer/types";
 
 const getStoredZoomScale = (): number => {
   const stored = sessionStorage.getItem("kumiho_zoom_scale");
+  console.log("[ZoomDebug] getStoredZoomScale read:", stored);
   if (stored) {
     const parsed = parseFloat(stored);
     if (!isNaN(parsed) && parsed >= 0.3 && parsed <= 3) {
@@ -51,6 +52,7 @@ const getStoredZoomScale = (): number => {
 };
 
 const setStoredZoomScale = (scale: number) => {
+  console.log("[ZoomDebug] setStoredZoomScale write:", scale, new Error().stack);
   sessionStorage.setItem("kumiho_zoom_scale", scale.toString());
 };
 import { useTranslation } from "react-i18next";
