@@ -315,7 +315,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
           <TransformWrapper
             ref={transformComponentRef}
             initialScale={1}
-            minScale={1}
+            minScale={0.3}
             maxScale={3}
             wheel={{ disabled: false, activationKeys: ["Control"] }}
             doubleClick={{ disabled: true }}
