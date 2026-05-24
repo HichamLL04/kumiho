@@ -405,6 +405,7 @@ func main() {
 		}
 
 		// 그 외(웹 페이지) 요청은 임베딩된 프론트엔드 파일 서빙
+		c.Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		return filesystem.New(filesystem.Config{
 			Root:         frontend.GetFileSystem(),
 			Index:        "index.html",

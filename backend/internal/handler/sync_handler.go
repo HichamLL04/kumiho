@@ -486,8 +486,23 @@ func (h *SyncHandler) SyncSeriesProgress(userID, seriesID string) {
 		return // Sin IDs de servicios externos configurados
 	}
 
-	// 2. Obtener progreso de lectura de Kumiho (capítulos leídos y total de capítulos)
+	// 2. Obtener progreso de lectura de Kumiho (capítulos leídos, capítulo máximo leíado y total de capítulos)
 	var completedCount, totalChapters int
+	var maxChapterNumber sql.NullInt64
+	
+	_ = database.DB.QueryRow(
+		`SELECT MAX(c.chapter_number) FROM chapter_completions cc
+		 JOIN chapters c ON cc.chapter_id = c.id
+		 JOIN volumes v ON c.volume_id = v.id
+		 WHERE cc.user_id = ? AND v.series_id = ?`,
+		userID, seriesID,
+	).Scan(&maxChapterNumber)
+
+	progress := 0
+	if maxChapterNumber.Valid {
+		progress = int(maxChapterNumber.Int64)
+	}
+
 	_ = database.DB.QueryRow(
 		`SELECT COUNT(*) FROM chapter_completions cc
 		 JOIN chapters c ON cc.chapter_id = c.id
@@ -503,7 +518,7 @@ func (h *SyncHandler) SyncSeriesProgress(userID, seriesID string) {
 		seriesID,
 	).Scan(&totalChapters)
 
-	log.Printf("[SyncSeriesProgress] completedCount=%d, totalChapters=%d", completedCount, totalChapters)
+	log.Printf("[SyncSeriesProgress] progress=%d (max chapter number), completedCount=%d, totalChapters=%d", progress, completedCount, totalChapters)
 	if totalChapters == 0 {
 		return
 	}
@@ -548,8 +563,8 @@ func (h *SyncHandler) SyncSeriesProgress(userID, seriesID string) {
 	if anilistID != "" {
 		token := h.getSetting(userID, anilistTokenKey())
 		if token != "" {
-			log.Printf("[SyncSeriesProgress] Syncing to AniList: mediaID=%s, progress=%d, status=%s", anilistID, completedCount, status)
-			h.syncToAniList(token, anilistID, completedCount, status, minCompletedAt, maxCompletedAt)
+			log.Printf("[SyncSeriesProgress] Syncing to AniList: mediaID=%s, progress=%d, status=%s", anilistID, progress, status)
+			h.syncToAniList(token, anilistID, progress, status, minCompletedAt, maxCompletedAt)
 		} else {
 			log.Printf("[SyncSeriesProgress] AniList token not found for user %s", userID)
 		}
@@ -580,8 +595,8 @@ func (h *SyncHandler) SyncSeriesProgress(userID, seriesID string) {
 			}
 
 			if accessToken != "" {
-				log.Printf("[SyncSeriesProgress] Syncing to MAL: malID=%s, progress=%d, status=%s", malID, completedCount, malStatus)
-				h.syncToMAL(accessToken, malID, completedCount, malStatus, minCompletedAt, maxCompletedAt)
+				log.Printf("[SyncSeriesProgress] Syncing to MAL: malID=%s, progress=%d, status=%s", malID, progress, malStatus)
+				h.syncToMAL(accessToken, malID, progress, malStatus, minCompletedAt, maxCompletedAt)
 			}
 		} else {
 			log.Printf("[SyncSeriesProgress] MAL accessToken not found for user %s", userID)
