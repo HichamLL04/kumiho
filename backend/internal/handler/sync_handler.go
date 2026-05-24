@@ -11,6 +11,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -467,6 +469,33 @@ func parseSQLiteTime(str string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("failed to parse time: %s", str)
 }
 
+var (
+	chOnlyPattern     = regexp.MustCompile(`(?i)(?:chapter|ch|ep|episode|#)\.?\s*(\d+(?:\.\d+)?)`)
+	volOnlyPattern    = regexp.MustCompile(`(?i)(?:volume|vol|v)\.?\s*(\d+(?:\.\d+)?)`)
+	allNumbersPattern = regexp.MustCompile(`\d+(?:\.\d+)?`)
+)
+
+func parseNumberFromString(s string) (float64, bool) {
+	if matches := chOnlyPattern.FindStringSubmatch(s); len(matches) > 1 {
+		if val, err := strconv.ParseFloat(matches[1], 64); err == nil {
+			return val, true
+		}
+	}
+	if matches := volOnlyPattern.FindStringSubmatch(s); len(matches) > 1 {
+		if val, err := strconv.ParseFloat(matches[1], 64); err == nil {
+			return val, true
+		}
+	}
+	matches := allNumbersPattern.FindAllString(s, -1)
+	if len(matches) > 0 {
+		lastMatch := matches[len(matches)-1]
+		if val, err := strconv.ParseFloat(lastMatch, 64); err == nil {
+			return val, true
+		}
+	}
+	return 0, false
+}
+
 // SyncSeriesProgress se ejecuta en segundo plano para sincronizar el progreso de lectura del usuario en AniList y/o MAL
 func (h *SyncHandler) SyncSeriesProgress(userID, seriesID string) {
 	log.Printf("[SyncSeriesProgress] Starting sync for user %s and series %s", userID, seriesID)
@@ -486,21 +515,42 @@ func (h *SyncHandler) SyncSeriesProgress(userID, seriesID string) {
 		return // Sin IDs de servicios externos configurados
 	}
 
-	// 2. Obtener progreso de lectura de Kumiho (capítulos leídos, capítulo máximo leíado y total de capítulos)
+	// 2. Obtener progreso de lectura de Kumiho (capítulos leídos, capítulo máximo leído y total de capítulos)
 	var completedCount, totalChapters int
-	var maxChapterNumber sql.NullInt64
-	
-	_ = database.DB.QueryRow(
-		`SELECT MAX(c.chapter_number) FROM chapter_completions cc
+	progress := 0
+
+	rows, err := database.DB.Query(
+		`SELECT c.chapter_number, v.volume_number, c.title, v.title FROM chapter_completions cc
 		 JOIN chapters c ON cc.chapter_id = c.id
 		 JOIN volumes v ON c.volume_id = v.id
 		 WHERE cc.user_id = ? AND v.series_id = ?`,
 		userID, seriesID,
-	).Scan(&maxChapterNumber)
-
-	progress := 0
-	if maxChapterNumber.Valid {
-		progress = int(maxChapterNumber.Int64)
+	)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var chNum, volNum int
+			var chTitle, volTitle string
+			if err := rows.Scan(&chNum, &volNum, &chTitle, &volTitle); err == nil {
+				candidate := float64(chNum)
+				if num, ok := parseNumberFromString(chTitle); ok {
+					if num > candidate {
+						candidate = num
+					}
+				}
+				if num, ok := parseNumberFromString(volTitle); ok {
+					if num > candidate {
+						candidate = num
+					}
+				}
+				if float64(volNum) > candidate {
+					candidate = float64(volNum)
+				}
+				if int(candidate) > progress {
+					progress = int(candidate)
+				}
+			}
+		}
 	}
 
 	_ = database.DB.QueryRow(
