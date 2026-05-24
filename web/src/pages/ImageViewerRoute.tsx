@@ -39,7 +39,20 @@ import { useReadingTime } from "../hooks/useReadingTime";
 import { AlertModal } from "../components/modals/AlertModal";
 import type { ViewerAnimationHandles } from "../features/viewer/types";
 
-let persistedZoomScale = 1;
+const getStoredZoomScale = (): number => {
+  const stored = sessionStorage.getItem("kumiho_zoom_scale");
+  if (stored) {
+    const parsed = parseFloat(stored);
+    if (!isNaN(parsed) && parsed >= 0.3 && parsed <= 3) {
+      return parsed;
+    }
+  }
+  return 1;
+};
+
+const setStoredZoomScale = (scale: number) => {
+  sessionStorage.setItem("kumiho_zoom_scale", scale.toString());
+};
 import { useTranslation } from "react-i18next";
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 
@@ -331,13 +344,13 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   );
 
   // Zoom state for Image Viewer
-  const [zoomScale, setZoomScale] = useState(() => persistedZoomScale);
+  const [zoomScale, setZoomScale] = useState(() => getStoredZoomScale());
 
   const handleZoomIn = useCallback(() => {
     if (settings.readingMode === "vertical") {
       setZoomScale((prev) => {
         const next = Math.min(3, prev + 0.2);
-        persistedZoomScale = next;
+        setStoredZoomScale(next);
         return next;
       });
     } else if (animationRef.current?.zoomIn) {
@@ -349,7 +362,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     if (settings.readingMode === "vertical") {
       setZoomScale((prev) => {
         const next = Math.max(0.3, prev - 0.2);
-        persistedZoomScale = next;
+        setStoredZoomScale(next);
         return next;
       });
     } else if (animationRef.current?.zoomOut) {
@@ -360,16 +373,18 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
   const handleZoomReset = useCallback(() => {
     if (settings.readingMode === "vertical") {
       setZoomScale(1);
-      persistedZoomScale = 1;
+      setStoredZoomScale(1);
     } else if (animationRef.current?.resetZoom) {
       animationRef.current.resetZoom();
     }
   }, [settings.readingMode]);
 
   const handleZoomChange = useCallback((scale: number) => {
-    setZoomScale(scale);
-    persistedZoomScale = scale;
-  }, []);
+    if (viewStatus === "ready") {
+      setZoomScale(scale);
+      setStoredZoomScale(scale);
+    }
+  }, [viewStatus]);
 
   // 전체화면 토글 핸들러
   const handleToggleFullscreen = useCallback(() => {
