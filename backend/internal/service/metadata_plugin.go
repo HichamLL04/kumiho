@@ -742,26 +742,26 @@ func (s *MetadataService) FetchSeriesMetadata(ctx context.Context, seriesID stri
 
 	// ─── Direct ID fetch handlers ───
 	if selection.PluginID == "anilist-direct" {
-		res, err := s.fetchAniListCandidate(ctx, selection.Source.ID)
-		if err != nil {
-			return nil, err
+		aniRes, aniErr := s.fetchAniListCandidate(ctx, selection.Source.ID)
+		if aniErr != nil {
+			return nil, aniErr
 		}
 		return &MetadataFetchResult{
 			PluginID: selection.PluginID,
-			Result:   res,
+			Result:   aniRes,
 		}, nil
 	}
 
 	if selection.PluginID == "mal-direct" {
 		var malClientID string
 		_ = database.DB.QueryRow("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mal_client_id'", userID).Scan(&malClientID)
-		res, err := s.fetchMALCandidate(ctx, selection.Source.ID, malClientID)
-		if err != nil {
-			return nil, err
+		malRes, malErr := s.fetchMALCandidate(ctx, selection.Source.ID, malClientID)
+		if malErr != nil {
+			return nil, malErr
 		}
 		return &MetadataFetchResult{
 			PluginID: selection.PluginID,
-			Result:   res,
+			Result:   malRes,
 		}, nil
 	}
 

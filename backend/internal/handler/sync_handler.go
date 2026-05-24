@@ -196,7 +196,7 @@ func (h *SyncHandler) AniListCallback(c *fiber.Ctx) error {
 		AccessToken string `json:"access_token"`
 		TokenType   string `json:"token_type"`
 	}
-	if err := json.Unmarshal(rawBody, &tokenData); err != nil || tokenData.AccessToken == "" {
+	if unmarshalErr := json.Unmarshal(rawBody, &tokenData); unmarshalErr != nil || tokenData.AccessToken == "" {
 		return c.Status(fiber.StatusUnauthorized).SendString(fmt.Sprintf("<h1>Error</h1><p>Respuesta de AniList inválida: %s</p>", string(rawBody)))
 	}
 
@@ -376,7 +376,7 @@ func (h *SyncHandler) MALCallback(c *fiber.Ctx) error {
 		RefreshToken string `json:"refresh_token"`
 		ExpiresIn    int    `json:"expires_in"`
 	}
-	if err := json.Unmarshal(rawBody, &tokenData); err != nil || tokenData.AccessToken == "" {
+	if unmarshalErr := json.Unmarshal(rawBody, &tokenData); unmarshalErr != nil || tokenData.AccessToken == "" {
 		return c.Status(fiber.StatusUnauthorized).SendString(fmt.Sprintf("<h1>Error</h1><p>Respuesta de MAL inválida: %s</p>", string(rawBody)))
 	}
 

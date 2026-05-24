@@ -288,6 +288,7 @@ export function useViewerZoom({
       onPrev,
       isVerticalMode,
       onVerticalZoomToggle,
+      onZoomChange,
       deferSingleTapForDoubleTap,
       doubleTapZoomZone,
       clearDragState,
