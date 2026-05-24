@@ -2643,8 +2643,8 @@ func (s *Scanner) analyzeArchiveAsVolume(archivePath, title string, volumeNum in
 		Extension:    strings.ToUpper(strings.TrimPrefix(filepath.Ext(archivePath), ".")),
 	}
 
-	// 아카이브를 챕터로 분석하여 추가 (Chapter 1)
-	chapter, err := s.analyzeArchiveAsChapter(archivePath, title, 1)
+	// 아카이브를 챕터로 분석하여 추가
+	chapter, err := s.analyzeArchiveAsChapter(archivePath, title, volumeNum)
 	if err != nil {
 		return nil, err
 	}

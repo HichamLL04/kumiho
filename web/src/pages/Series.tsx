@@ -90,6 +90,10 @@ export function SeriesPage() {
 
   // 볼륨 상세 페이지로 이동
   const openVolume = (volume: Volume) => {
+    if (volume.chapter_count === 1 && volume.first_chapter_id) {
+      navigate(`/viewer/${volume.first_chapter_id}`, { state: buildViewerRouteState({ from: viewerFrom }) });
+      return;
+    }
     navigate(`/volumes/${volume.id}`);
   };
   const handleDownloadSeries = () => {

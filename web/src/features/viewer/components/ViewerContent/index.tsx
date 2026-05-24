@@ -105,6 +105,14 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         onZoomChange,
       });
 
+    const isUnmountingRef = useRef(false);
+    useEffect(() => {
+      isUnmountingRef.current = false;
+      return () => {
+        isUnmountingRef.current = true;
+      };
+    }, []);
+
     const containerRef = useRef<HTMLDivElement>(null);
     const lastWheelNavAtRef = useRef(0);
     const [verticalPageHeightCache] = useState<Map<number, number>>(() => new Map<number, number>());
@@ -329,13 +337,13 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
               setIsZoomed(r.state.scale > 1.01);
             }}
             onZoomStop={(r) => {
-              if (onZoomChange) onZoomChange(r.state.scale);
+              if (!isUnmountingRef.current && onZoomChange) onZoomChange(r.state.scale);
             }}
             onPinchingStop={(r) => {
-              if (onZoomChange) onZoomChange(r.state.scale);
+              if (!isUnmountingRef.current && onZoomChange) onZoomChange(r.state.scale);
             }}
             onWheelStop={(r) => {
-              if (onZoomChange) onZoomChange(r.state.scale);
+              if (!isUnmountingRef.current && onZoomChange) onZoomChange(r.state.scale);
             }}
           >
             <TransformComponent

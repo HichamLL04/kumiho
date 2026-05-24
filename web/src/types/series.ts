@@ -98,6 +98,7 @@ export interface Volume {
   created_at: string;
   updated_at?: string;
   library_type?: LibraryType;
+  first_chapter_id?: string;
 }
 
 export interface Chapter {

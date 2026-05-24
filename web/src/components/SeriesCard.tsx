@@ -156,6 +156,11 @@ export function SeriesCard({
     }
 
     if (type === "volume") {
+      const vol = item as Volume;
+      if (vol.chapter_count === 1 && vol.first_chapter_id) {
+        navigate(`/viewer/${vol.first_chapter_id}`, { state: buildViewerRouteState({ from: viewerFrom }) });
+        return;
+      }
       navigate(`/volumes/${item.id}`);
     } else {
       navigate(`/series/${item.id}`);

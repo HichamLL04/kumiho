@@ -115,7 +115,8 @@ type UpdateVolumeRequest struct {
 
 type VolumeResponse struct {
 	model.Volume
-	IsCompleted bool `json:"is_completed"`
+	IsCompleted    bool    `json:"is_completed"`
+	FirstChapterID *string `json:"first_chapter_id,omitempty"`
 }
 
 type ViewerInitResponse struct {
@@ -1225,10 +1226,18 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 			readPages = totalPages
 		}
 		isCompleted := completedByFlag && (totalPages <= 0 || readPages >= totalPages)
+		
+		var firstChapterID *string
+		if volumes[i].ChapterCount == 1 {
+			if chapters, err := h.chapterRepo.FindByVolumeID(nil, vID); err == nil && len(chapters) == 1 {
+				firstChapterID = &chapters[0].ID
+			}
+		}
 
 		result[i] = VolumeResponse{
-			Volume:      volumes[i],
-			IsCompleted: isCompleted,
+			Volume:         volumes[i],
+			IsCompleted:    isCompleted,
+			FirstChapterID: firstChapterID,
 		}
 	}
 
