@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"html"
 	"container/list"
 	"crypto/md5"
 	"encoding/hex"
@@ -828,37 +829,55 @@ func (h *ImageHandler) GetThumbnail(c *fiber.Ctx) error {
 			})
 		}
 
-		// EPUB 챕터는 pages 테이블 레코드가 없을 수 있으므로 커버 추출 fallback 처리
-		if strings.ToLower(filepath.Ext(chapter.Path)) == ".epub" {
-			thumbnailsDir := filepath.Join(h.config.DataDir, "thumbnails", "chapters")
-			if mkErr := os.MkdirAll(thumbnailsDir, 0755); mkErr == nil {
-				hashBytes := md5.Sum([]byte(chapter.Path))
-				hashString := hex.EncodeToString(hashBytes[:])
-				customThumbnailPath = findExistingThumbnailByHash(thumbnailsDir, hashString)
-				if customThumbnailPath != "" {
-					break
-				}
+		// Check if series metadata requests generated covers
+		var series *model.Series
+		volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+		if err == nil && volume != nil {
+			series, _ = h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
+		}
+		if series != nil && series.Metadata != nil && series.Metadata.GenerateChapterCovers {
+			svgContent := generateSVG(series.Title, chapter.ChapterNumber, chapter.Title, series.ID)
+			c.Set("Content-Type", "image/svg+xml")
+			c.Set("Cache-Control", "public, max-age=86400")
+			return c.Send([]byte(svgContent))
+		}
 
-				if coverData, coverMT, coverErr := util.ExtractEpubCover(chapter.Path); coverErr == nil {
-					ext := thumbnailExtFromMediaType(coverMT)
-					newThumbPath := filepath.Join(thumbnailsDir, hashString+ext)
-					if writeErr := ensureThumbnailFileAtomic(newThumbPath, coverData); writeErr == nil {
-						customThumbnailPath = newThumbPath
-						break
+		// Check if there is a custom/manually generated thumbnail on disk for this chapter
+		thumbnailsDir := filepath.Join(h.config.DataDir, "thumbnails", "chapters")
+		if mkErr := os.MkdirAll(thumbnailsDir, 0755); mkErr == nil {
+			hashBytes := md5.Sum([]byte(chapter.Path))
+			hashString := hex.EncodeToString(hashBytes[:])
+			customThumbnailPath = findExistingThumbnailByHash(thumbnailsDir, hashString)
+		}
+
+		if customThumbnailPath == "" {
+			if strings.ToLower(filepath.Ext(chapter.Path)) == ".epub" {
+				if mkErr := os.MkdirAll(thumbnailsDir, 0755); mkErr == nil {
+					hashBytes := md5.Sum([]byte(chapter.Path))
+					hashString := hex.EncodeToString(hashBytes[:])
+					if coverData, coverMT, coverErr := util.ExtractEpubCover(chapter.Path); coverErr == nil {
+						ext := thumbnailExtFromMediaType(coverMT)
+						newThumbPath := filepath.Join(thumbnailsDir, hashString+ext)
+						if writeErr := ensureThumbnailFileAtomic(newThumbPath, coverData); writeErr == nil {
+							customThumbnailPath = newThumbPath
+						}
 					}
 				}
 			}
 		}
 
-		pages, err := h.pageRepo.FindByChapterID(nil, resourceID)
-		if err != nil || len(pages) == 0 {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "no pages found",
-			})
-		}
-		firstPagePath = pages[0].Path
-		if isArchiveFile(chapter.Path) {
-			archivePath = chapter.Path
+		if customThumbnailPath == "" {
+			pages, err := h.pageRepo.FindByChapterID(nil, resourceID)
+			if err != nil || len(pages) == 0 {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "no pages found",
+				})
+			}
+			pageIndex := len(pages) / 2
+			firstPagePath = pages[pageIndex].Path
+			if isArchiveFile(chapter.Path) {
+				archivePath = chapter.Path
+			}
 		}
 
 	default:
@@ -1420,7 +1439,8 @@ func (h *ImageHandler) findFirstAvailableChapterRecursively(volumeID string) (*m
 				if isArchiveFile(ch.Path) {
 					archivePath = ch.Path
 				}
-				return &ch, &pages[0], archivePath, true
+				pageIndex := len(pages) / 2
+				return &ch, &pages[pageIndex], archivePath, true
 			}
 
 			// 오디오북 챕터는 페이지가 없을 수 있으므로 마지막 fallback으로 반환
@@ -1442,4 +1462,98 @@ func (h *ImageHandler) findFirstAvailableChapterRecursively(volumeID string) (*m
 	}
 
 	return nil, nil, "", false
+}
+
+func generateGradientColors(seed string) (string, string) {
+	var hash uint32 = 5381
+	for _, c := range seed {
+		hash = ((hash << 5) + hash) + uint32(c)
+	}
+	hue1 := hash % 360
+	hue2 := (hue1 + 60) % 360
+	color1 := fmt.Sprintf("hsl(%d, 70%%, 30%%)", hue1)
+	color2 := fmt.Sprintf("hsl(%d, 70%%, 18%%)", hue2)
+	return color1, color2
+}
+
+func wrapText(text string, maxLen int) []string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	var lines []string
+	currentLine := words[0]
+	for _, word := range words[1:] {
+		if len(currentLine)+1+len(word) > maxLen {
+			lines = append(lines, currentLine)
+			currentLine = word
+		} else {
+			currentLine += " " + word
+		}
+	}
+	lines = append(lines, currentLine)
+	return lines
+}
+
+func generateSVG(seriesTitle string, chapterNum int, chapterTitle string, seriesID string) string {
+	color1, color2 := generateGradientColors(seriesID)
+
+	seriesLines := wrapText(seriesTitle, 18)
+	if len(seriesLines) > 3 {
+		seriesLines = seriesLines[:3]
+	}
+
+	chapTitleLines := wrapText(chapterTitle, 24)
+	if len(chapTitleLines) > 3 {
+		chapTitleLines = chapTitleLines[:3]
+	}
+
+	chapterLabel := fmt.Sprintf("Ch. %d", chapterNum)
+	if chapterNum <= 0 {
+		chapterLabel = "Chapter"
+	}
+
+	var seriesTextBuilder strings.Builder
+	for i, line := range seriesLines {
+		y := 130 + i*28
+		seriesTextBuilder.WriteString(fmt.Sprintf(
+			`<text x="50%%" y="%d" dominant-baseline="middle" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="800" fill="#ffffff" opacity="0.9" style="text-transform: uppercase; letter-spacing: 2px;">%s</text>`,
+			y, html.EscapeString(line),
+		))
+	}
+
+	var chapTextBuilder strings.Builder
+	for i, line := range chapTitleLines {
+		y := 340 + i*22
+		chapTextBuilder.WriteString(fmt.Sprintf(
+			`<text x="50%%" y="%d" dominant-baseline="middle" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#ffffff" opacity="0.75">%s</text>`,
+			y, html.EscapeString(line),
+		))
+	}
+
+	svg := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 450" width="300" height="450">
+  <defs>
+    <linearGradient id="grad" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
+      <stop offset="0%%" style="stop-color:%s;stop-opacity:1" />
+      <stop offset="100%%" style="stop-color:%s;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%%" cy="50%%" r="50%%" fx="50%%" fy="50%%">
+      <stop offset="0%%" style="stop-color:#ffffff;stop-opacity:0.15" />
+      <stop offset="100%%" style="stop-color:#ffffff;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  <rect width="100%%" height="100%%" fill="url(#grad)" />
+  <circle cx="150" cy="225" r="200" fill="url(#glow)" />
+  <rect x="15" y="15" width="270" height="420" rx="8" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.1" />
+  <line x1="30" y1="225" x2="270" y2="225" stroke="#ffffff" stroke-width="1" opacity="0.15" />
+  <g>%s</g>
+  <circle cx="150" cy="225" r="4" fill="#ffffff" opacity="0.4" />
+  <g>
+    <text x="50%%" y="290" dominant-baseline="middle" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="32" font-weight="900" fill="#ffffff" style="letter-spacing: 1px;">%s</text>
+    %s
+  </g>
+</svg>`, color1, color2, seriesTextBuilder.String(), html.EscapeString(chapterLabel), chapTextBuilder.String())
+
+	return svg
 }

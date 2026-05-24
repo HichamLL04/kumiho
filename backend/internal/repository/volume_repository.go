@@ -949,3 +949,10 @@ func (r *VolumeRepository) GetProgressPercentBatch(db database.Queryer, userID s
 	}
 	return result, nil
 }
+
+// TouchVolumesBySeriesID updates the updated_at timestamp of all volumes in a series
+func (r *VolumeRepository) TouchVolumesBySeriesID(db database.Queryer, seriesID string) error {
+	db = database.GetQueryer(db)
+	_, err := db.Exec(`UPDATE volumes SET updated_at = ? WHERE series_id = ?`, time.Now(), seriesID)
+	return err
+}

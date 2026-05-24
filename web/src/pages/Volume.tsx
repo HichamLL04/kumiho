@@ -37,6 +37,7 @@ export function VolumePage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [activeMenuChapterId, setActiveMenuChapterId] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const [cacheBuster, setCacheBuster] = useState(() => Date.now());
   const loadRequestIdRef = useRef(0);
 
   // 사이드바 상태
@@ -359,10 +360,13 @@ export function VolumePage() {
   };
 
   const handleUpdate = (updated: Volume | Series) => {
-    // Volume 타입인 경우만 처리
     if ("volume_number" in updated) {
       setVolume(updated as Volume);
+    } else {
+      setSeries(updated as Series);
     }
+    setCacheBuster(Date.now());
+    void loadData();
   };
 
   return (
@@ -477,7 +481,7 @@ export function VolumePage() {
                         <img
                           src={`${chapter.thumbnail_url}${
                             chapter.thumbnail_url.includes("?") ? "&" : "?"
-                          }token=${localStorage.getItem("access_token")}`}
+                          }token=${localStorage.getItem("access_token")}&_cb=${cacheBuster}`}
                           alt={chapter.title}
                           className={styles.chapterThumbnail}
                           onError={() => setImageErrors((prev) => ({ ...prev, [chapter.id]: true }))}
