@@ -328,6 +328,31 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
     [seriesId, setReadingMode],
   );
 
+  // Zoom state for Image Viewer
+  const [zoomScale, setZoomScale] = useState(1);
+
+  const handleZoomIn = useCallback(() => {
+    if (animationRef.current?.zoomIn) {
+      animationRef.current.zoomIn();
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (animationRef.current?.zoomOut) {
+      animationRef.current.zoomOut();
+    }
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    if (animationRef.current?.resetZoom) {
+      animationRef.current.resetZoom();
+    }
+  }, []);
+
+  const handleZoomChange = useCallback((scale: number) => {
+    setZoomScale(scale);
+  }, []);
+
   // 전체화면 토글 핸들러
   const handleToggleFullscreen = useCallback(() => {
     try {
@@ -592,6 +617,21 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
             }}
             onInteractionStart={handleInteractionStart}
             onInteractionEnd={handleInteractionEnd}
+            zoomOptions={
+              settings.readingMode !== "vertical"
+                ? {
+                    showZoomControls: true,
+                    hasTOC: false,
+                    zoomPercent: Math.round(zoomScale * 100),
+                    onZoomIn: handleZoomIn,
+                    onZoomOut: handleZoomOut,
+                    onZoomReset: handleZoomReset,
+                  }
+                : {
+                    showZoomControls: false,
+                    hasTOC: false,
+                  }
+            }
           />
 
           {/* 세로 모드 당김 인디케이터 */}
@@ -655,6 +695,7 @@ export function ImageViewerRoute({ loaderData }: { loaderData: UseChapterLoaderR
               isInitialScrolling={viewStatus !== "ready"}
               estimatedPageHeights={estimatedHeights}
               viewStatus={viewStatus}
+              onZoomChange={handleZoomChange}
             />
           </div>
 

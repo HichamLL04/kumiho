@@ -43,6 +43,7 @@ interface ViewerContentProps {
   isInitialScrolling?: boolean; // Boolean으로 회복
   estimatedPageHeights?: Map<number, number>;
   viewStatus?: ViewStatus;
+  onZoomChange?: (scale: number) => void;
 }
 
 export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentProps>(
@@ -73,6 +74,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
       isInitialScrolling = false,
       estimatedPageHeights,
       viewStatus = "ready",
+      onZoomChange,
     },
     ref,
   ) => {
@@ -142,6 +144,27 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
     useImperativeHandle(ref, () => ({
       animateNext,
       animatePrev,
+      zoomIn: () => {
+        if (transformComponentRef.current) {
+          transformComponentRef.current.zoomIn(0.2, 200);
+        }
+      },
+      zoomOut: () => {
+        if (transformComponentRef.current) {
+          transformComponentRef.current.zoomOut(0.2, 200);
+        }
+      },
+      resetZoom: () => {
+        if (transformComponentRef.current) {
+          transformComponentRef.current.resetTransform(200);
+        }
+      },
+      getZoomScale: () => {
+        if (transformComponentRef.current) {
+          return transformComponentRef.current.instance.transformState.scale;
+        }
+        return 1;
+      },
     }));
 
     const handleWheelNavigation = useCallback(
@@ -297,7 +320,10 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
             wheel={{ disabled: false, activationKeys: ["Control"] }}
             doubleClick={{ disabled: true }}
             panning={{ disabled: !isZoomed }}
-            onTransformed={(r) => setIsZoomed(r.state.scale > 1.01)}
+            onTransformed={(r) => {
+              setIsZoomed(r.state.scale > 1.01);
+              if (onZoomChange) onZoomChange(r.state.scale);
+            }}
           >
             <TransformComponent
               wrapperStyle={{ width: "100%", height: "100%", overflow: "hidden" }}

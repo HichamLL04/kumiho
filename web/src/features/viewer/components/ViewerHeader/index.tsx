@@ -23,7 +23,7 @@ interface ViewerHeaderProps {
     onToggleSettings: () => void;
     onToggleBgm: () => void;
   };
-  pdfOptions?:
+  zoomOptions?:
     | {
         showZoomControls?: false;
         hasTOC?: boolean;
@@ -42,7 +42,7 @@ interface ViewerHeaderProps {
   onInteractionEnd?: () => void;
 }
 
-export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, onInteractionEnd }: ViewerHeaderProps) {
+export function ViewerHeader({ state, actions, zoomOptions, onInteractionStart, onInteractionEnd }: ViewerHeaderProps) {
   const { t } = useTranslation();
   const {
     isEnabled: isAtmosphereEnabled,
@@ -76,19 +76,19 @@ export function ViewerHeader({ state, actions, pdfOptions, onInteractionStart, o
 
   const { onBack, onToggleFullscreen, onToggleSettings, onToggleBgm } = actions;
 
-  const isZoomEnabledPdfOptions = (
-    options: ViewerHeaderProps["pdfOptions"],
-  ): options is Extract<NonNullable<ViewerHeaderProps["pdfOptions"]>, { showZoomControls: true }> =>
+  const isZoomEnabledOptions = (
+    options: ViewerHeaderProps["zoomOptions"],
+  ): options is Extract<NonNullable<ViewerHeaderProps["zoomOptions"]>, { showZoomControls: true }> =>
     options?.showZoomControls === true;
 
-  const zoomPdfOptions = isZoomEnabledPdfOptions(pdfOptions) ? pdfOptions : null;
-  const showZoomControls = zoomPdfOptions !== null;
-  const hasTOC = pdfOptions?.hasTOC === true;
-  const onToggleTOC = hasTOC ? pdfOptions.onToggleTOC : undefined;
-  const zoomPercent = zoomPdfOptions?.zoomPercent ?? 100;
-  const onZoomIn = zoomPdfOptions?.onZoomIn;
-  const onZoomOut = zoomPdfOptions?.onZoomOut;
-  const onZoomReset = zoomPdfOptions?.onZoomReset;
+  const activeZoomOptions = isZoomEnabledOptions(zoomOptions) ? zoomOptions : null;
+  const showZoomControls = activeZoomOptions !== null;
+  const hasTOC = zoomOptions?.hasTOC === true;
+  const onToggleTOC = hasTOC ? zoomOptions.onToggleTOC : undefined;
+  const zoomPercent = activeZoomOptions?.zoomPercent ?? 100;
+  const onZoomIn = activeZoomOptions?.onZoomIn;
+  const onZoomOut = activeZoomOptions?.onZoomOut;
+  const onZoomReset = activeZoomOptions?.onZoomReset;
   const showsAtmosphereDialogState = isAtmospherePopoverOpen || !isAtmosphereEnabled;
   const atmosphereButtonLabel = isAtmosphereEnabled
     ? t("viewer.header.atmosphere_off")

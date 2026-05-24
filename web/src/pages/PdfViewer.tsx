@@ -193,7 +193,7 @@ export function PdfViewer({
         }}
         onInteractionStart={onInteractionStart}
         onInteractionEnd={onInteractionEnd}
-        pdfOptions={
+        zoomOptions={
           showZoomControls
             ? {
                 showZoomControls: true,
