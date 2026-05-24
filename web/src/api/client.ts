@@ -218,6 +218,8 @@ export const seriesAPI = {
   update: (seriesId: string, data: UpdateSeriesRequest) => api.patch(`/series/${seriesId}`, data),
   resetMetadata: (seriesId: string) =>
     api.post<{ series: Series; warnings?: string[] }>(`/series/${seriesId}/reset-metadata`).then((res) => res.data),
+  generateChapterCovers: (seriesId: string) =>
+    api.post<{ message: string; count: number }>(`/series/${seriesId}/generate-chapter-covers`).then((res) => res.data),
   translateDescription: (seriesId: string, targetLang?: string) =>
     api
       .post<{

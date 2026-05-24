@@ -861,6 +861,11 @@
         "description_view_original": "원본",
         "translation_target": "번역 언어: {{language}}",
         "sync_file": "파일 동기화 (ComicInfo.xml) - 준비 중",
+        "generate_chapter_covers": "챕터 표지 자동 생성",
+        "generate_chapter_covers_manual": "지금 챕터 표지 생성하기",
+        "generate_chapter_covers_manual_loading": "생성 중...",
+        "generate_chapter_covers_manual_success": "챕터 표지 {{count}}개가 성공적으로 생성되었습니다!",
+        "generate_chapter_covers_manual_error": "챕터 표지 생성에 실패했습니다",
         "status_options": {
           "completed": "완결",
           "ongoing": "연재 중",

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
@@ -101,6 +102,7 @@ type UpdateSeriesRequest struct {
 	ISBN                  *string `json:"isbn"`
 	AnilistID             *string `json:"anilist_id"`
 	MalID                 *string `json:"mal_id"`
+	GenerateChapterCovers *bool   `json:"generate_chapter_covers"`
 }
 
 type UpdateVolumeRequest struct {
@@ -259,7 +261,7 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	// 단독 북마크 업데이트인 경우, updated_at을 변경하지 않고 북마크 상태만 변경
 	if req.IsBookmarked != nil && req.Title == nil && req.Description == nil &&
 		req.DescriptionTranslated == nil && req.Status == nil && req.Authors == nil && req.Tags == nil && req.PublicationYear == nil &&
-		req.OriginalTitle == nil && req.Publisher == nil && req.PublishedAt == nil && req.ISBN == nil && req.AnilistID == nil && req.MalID == nil {
+		req.OriginalTitle == nil && req.Publisher == nil && req.PublishedAt == nil && req.ISBN == nil && req.AnilistID == nil && req.MalID == nil && req.GenerateChapterCovers == nil {
 
 		if err := h.seriesRepo.UpdateBookmark(nil, userID, series.ID, *req.IsBookmarked); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -324,6 +326,9 @@ func (h *SeriesHandler) UpdateSeries(c *fiber.Ctx) error {
 	}
 	if req.MalID != nil {
 		series.Metadata.MalID = strings.Trim(strings.TrimSpace(*req.MalID), `'"`)
+	}
+	if req.GenerateChapterCovers != nil {
+		series.Metadata.GenerateChapterCovers = *req.GenerateChapterCovers
 	}
 	// DB 업데이트
 	if err := h.seriesRepo.UpdatePreservingUpdatedAt(nil, series); err != nil {
@@ -1983,4 +1988,113 @@ func (h *SeriesHandler) ListChaptersBySeries(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"chapters": chapters,
 	})
+}
+
+// GenerateChapterCovers generates chapter covers manually and saves them as files
+// POST /api/v1/series/:id/generate-chapter-covers
+func (h *SeriesHandler) GenerateChapterCovers(c *fiber.Ctx) error {
+	id := c.Params("id")
+	userID := middleware.GetUserID(c)
+
+	series, err := h.seriesRepo.FindByID(nil, id, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch series",
+		})
+	}
+	if series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	chapters, err := h.chapterRepo.FindBySeriesID(nil, series.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch chapters",
+		})
+	}
+
+	thumbnailsDir := filepath.Join(h.config.DataDir, "thumbnails", "chapters")
+	if err := os.MkdirAll(thumbnailsDir, 0755); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to create thumbnails directory",
+		})
+	}
+
+	var generatedCount int
+	for _, chapter := range chapters {
+		pages, err := h.pageRepo.FindByChapterID(nil, chapter.ID)
+		if err != nil || len(pages) == 0 {
+			continue
+		}
+
+		// Select a page in the middle of the chapter to avoid credits/blank pages
+		pageIndex := len(pages) / 2
+		targetPage := pages[pageIndex]
+
+		var data []byte
+		var readErr error
+		if isArchiveFile(chapter.Path) {
+			data, readErr = readImageFromArchive(chapter.Path, targetPage.Path)
+		} else {
+			data, readErr = os.ReadFile(targetPage.Path)
+		}
+
+		if readErr != nil {
+			log.Printf("[SERIES_HANDLER] failed to read page image for chapter %s: %v", chapter.ID, readErr)
+			continue
+		}
+
+		// Calculate md5 hash of chapter.Path
+		hashBytes := md5.Sum([]byte(chapter.Path))
+		hashString := hex.EncodeToString(hashBytes[:])
+
+		// Save the file with the same extension as the original page
+		ext := strings.ToLower(filepath.Ext(targetPage.Path))
+		if ext == "" {
+			ext = ".jpg" // fallback
+		}
+
+		newThumbPath := filepath.Join(thumbnailsDir, hashString+ext)
+
+		// Overwrite any existing files with this hash
+		for _, e := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"} {
+			_ = os.Remove(filepath.Join(thumbnailsDir, hashString+e))
+		}
+
+		if err := ensureThumbnailFileAtomic(newThumbPath, data); err == nil {
+			generatedCount++
+		}
+	}
+
+	// Update series and all of its volumes updated_at to invalidate client/browser cache for covers
+	_ = h.seriesRepo.UpdateUpdatedAt(nil, series.ID, time.Now())
+	_ = h.volumeRepo.TouchVolumesBySeriesID(nil, series.ID)
+
+	return c.JSON(fiber.Map{
+		"message": fmt.Sprintf("Successfully generated %d chapter covers", generatedCount),
+		"count":   generatedCount,
+	})
+}
+
+func readImageFromArchive(archivePath, imagePath string) ([]byte, error) {
+	r, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = r.Close() }()
+
+	for _, f := range r.File {
+		if f.Name == imagePath {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			defer func() { _ = rc.Close() }()
+
+			return io.ReadAll(rc)
+		}
+	}
+	return nil, fmt.Errorf("image not found in archive")
 }

@@ -861,6 +861,11 @@
         "description_view_original": "原文",
         "translation_target": "翻訳言語: {{language}}",
         "sync_file": "ファイル同期 (ComicInfo.xml) - 準備中",
+        "generate_chapter_covers": "章カバーの自動生成",
+        "generate_chapter_covers_manual": "今すぐ章カバーを生成する",
+        "generate_chapter_covers_manual_loading": "生成中...",
+        "generate_chapter_covers_manual_success": "章カバー{{count}}個が正常に生成されました！",
+        "generate_chapter_covers_manual_error": "章カバーの生成に失敗しました",
         "status_options": {
           "completed": "完結",
           "ongoing": "連載中",

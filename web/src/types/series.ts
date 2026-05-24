@@ -16,6 +16,7 @@ export interface EbookMetadata {
   anilist_id?: string;
   mal_id?: string;
   description_translated?: string;
+  generate_chapter_covers?: boolean;
 }
 
 export interface SeriesCharacter {
@@ -71,6 +72,7 @@ export interface UpdateSeriesRequest {
   isbn?: string;
   anilist_id?: string;
   mal_id?: string;
+  generate_chapter_covers?: boolean;
 }
 
 export interface Volume {

@@ -96,6 +96,7 @@ type SeriesMetadata struct {
 	ISBN                  string `json:"isbn" db:"isbn"`
 	AnilistID             string `json:"anilist_id" db:"anilist_id"`
 	MalID                 string `json:"mal_id" db:"mal_id"`
+	GenerateChapterCovers bool   `json:"generate_chapter_covers" db:"generate_chapter_covers"`
 }
 
 // SeriesCharacter 시리즈 등장인물 모델

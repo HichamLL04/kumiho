@@ -861,6 +861,11 @@
         "description_view_original": "Original",
         "translation_target": "Translation language: {{language}}",
         "sync_file": "File Sync (ComicInfo.xml) - Coming Soon",
+        "generate_chapter_covers": "Generate Chapter Covers",
+        "generate_chapter_covers_manual": "Generate Chapter Covers Now",
+        "generate_chapter_covers_manual_loading": "Generating...",
+        "generate_chapter_covers_manual_success": "Successfully generated {{count}} chapter covers!",
+        "generate_chapter_covers_manual_error": "Failed to generate chapter covers",
         "status_options": {
           "completed": "Completed",
           "ongoing": "Ongoing",

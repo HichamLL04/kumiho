@@ -37,10 +37,12 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
     isbn: "",
     anilist_id: "",
     mal_id: "",
+    generate_chapter_covers: false,
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isResettingMetadata, setIsResettingMetadata] = useState(false);
   const [isTranslatingDescription, setIsTranslatingDescription] = useState(false);
+  const [isGeneratingCovers, setIsGeneratingCovers] = useState(false);
   const [thumbnailMode, setThumbnailMode] = useState<"file" | "url">("file");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -136,6 +138,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
         isbn: series.metadata?.isbn || "",
         anilist_id: series.metadata?.anilist_id || "",
         mal_id: series.metadata?.mal_id || "",
+        generate_chapter_covers: series.metadata?.generate_chapter_covers || false,
       });
       setThumbnailUrl("");
       setTranslatedDescription(series.metadata?.description_translated || "");
@@ -345,6 +348,7 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
         isbn: refreshed.data.metadata?.isbn || "",
         anilist_id: refreshed.data.metadata?.anilist_id || trimmed,
         mal_id: refreshed.data.metadata?.mal_id || (platform === "mal" ? trimmed : ""),
+        generate_chapter_covers: refreshed.data.metadata?.generate_chapter_covers || false,
       });
       
       onUpdate(refreshed.data);
@@ -354,6 +358,20 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       showAlert("error", "Error al intentar importar metadatos desde el ID.");
     } finally {
       setIsSyncingID(false);
+    }
+  };
+
+  const handleGenerateChapterCovers = async () => {
+    if (!series) return;
+    setIsGeneratingCovers(true);
+    try {
+      const res = await seriesAPI.generateChapterCovers(series.id);
+      showAlert("success", t("series.edit.form.generate_chapter_covers_manual_success", { count: res.count }));
+    } catch (error) {
+      console.error("Manual generate covers failed:", error);
+      showAlert("error", t("series.edit.form.generate_chapter_covers_manual_error"));
+    } finally {
+      setIsGeneratingCovers(false);
     }
   };
 
@@ -970,6 +988,44 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
                         placeholder={t("series.edit.form.tags_placeholder")}
                       />
                     </div>
+                  </div>
+
+                  <div className={styles.formRow} style={{ alignItems: "center", justifyContent: "space-between" }}>
+                    <div className={styles.formGroup} style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10px", padding: "10px 0" }}>
+                      <input
+                        type="checkbox"
+                        id="generate_chapter_covers"
+                        name="generate_chapter_covers"
+                        checked={formData.generate_chapter_covers}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, generate_chapter_covers: e.target.checked }))}
+                        style={{ width: "20px", height: "20px", cursor: "pointer" }}
+                      />
+                      <label htmlFor="generate_chapter_covers" style={{ cursor: "pointer", userSelect: "none", fontWeight: "500", display: "flex", alignItems: "center", gap: "6px" }}>
+                        {t("series.edit.form.generate_chapter_covers")}
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGenerateChapterCovers}
+                      disabled={isGeneratingCovers}
+                      style={{
+                        padding: "6px 12px",
+                        backgroundColor: "rgba(59, 130, 246, 0.1)",
+                        color: "#3b82f6",
+                        border: "1px solid rgba(59, 130, 246, 0.3)",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "500",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      <RefreshCw size={13} className={isGeneratingCovers ? styles.spinning : ""} />
+                      {isGeneratingCovers ? t("series.edit.form.generate_chapter_covers_manual_loading") : t("series.edit.form.generate_chapter_covers_manual")}
+                    </button>
                   </div>
 
                   <div className={`${styles.formGroup} ${styles.hFull}`}>

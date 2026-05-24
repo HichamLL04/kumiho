@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 44
+const latestMigrationVersion = 45
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -299,7 +299,10 @@ func Migrate() error {
 		original_titles TEXT DEFAULT '',
 		publisher TEXT DEFAULT '',
 		published_at TEXT DEFAULT '',
-		isbn TEXT DEFAULT ''
+		isbn TEXT DEFAULT '',
+		anilist_id TEXT DEFAULT '',
+		mal_id TEXT DEFAULT '',
+		generate_chapter_covers BOOLEAN NOT NULL DEFAULT 0
 	);
 
 	CREATE TABLE IF NOT EXISTS series_characters (
@@ -628,6 +631,7 @@ func Migrate() error {
 		{42, "EPUB 페이지 모드(flow) 시리즈별 설정 컬럼 추가", migrateEpubFlowSeriesSetting},
 		{43, "시리즈 콘텐츠 업데이트 시간 컬럼 추가", migrateSeriesLastContentUpdatedAt},
 		{44, "시리즈 메타데이터 AniList 및 MAL ID 컬럼 추가", migrateSeriesMetadataExternalIDs},
+		{45, "시리즈 메타데이터 챕터 portada 생성 설정 추가", migrateSeriesMetadataGenerateChapterCovers},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -2018,4 +2022,9 @@ func migrateSeriesMetadataExternalIDs() error {
 		return err
 	}
 	return addColumn("series_metadata", "mal_id", "TEXT DEFAULT ''")
+}
+
+// #45 migrateSeriesMetadataGenerateChapterCovers 시리즈 메타데이터 챕터 portada 생성 설정 추가
+func migrateSeriesMetadataGenerateChapterCovers() error {
+	return addColumn("series_metadata", "generate_chapter_covers", "BOOLEAN NOT NULL DEFAULT 0")
 }

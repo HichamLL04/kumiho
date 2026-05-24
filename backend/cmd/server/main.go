@@ -257,6 +257,7 @@ func main() {
 	series.Get("/:id", seriesHandler.GetSeries)
 	series.Patch("/:id", seriesHandler.UpdateSeries)
 	series.Post("/:id/reset-metadata", authMiddleware.MasterOnly(), seriesHandler.ResetSeriesMetadata)
+	series.Post("/:id/generate-chapter-covers", authMiddleware.MasterOnly(), seriesHandler.GenerateChapterCovers)
 	series.Post("/:id/translate-description", authMiddleware.MasterOnly(), translationHandler.TranslateSeriesDescription)
 	series.Post("/:id/metadata/search", metadataHandler.Search)
 	series.Post("/:id/metadata/fetch", metadataHandler.Fetch)
