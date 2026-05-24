@@ -317,7 +317,7 @@ export const ViewerContent = forwardRef<ViewerAnimationHandles, ViewerContentPro
         <div style={{ width: "100%", height: "100%", flexShrink: 0 }}>
           <TransformWrapper
             ref={transformComponentRef}
-            initialScale={1}
+            initialScale={zoomScale}
             minScale={0.3}
             maxScale={3}
             wheel={{ disabled: false, activationKeys: ["Control"] }}
