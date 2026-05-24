@@ -2,9 +2,7 @@ version: "3.8"
 
 services:
   kumiho:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/hichamll04/kumiho:latest
     container_name: kumiho
     ports:
       - "9999:9999"
