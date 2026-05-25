@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -27,12 +28,15 @@ import (
 type SyncHandler struct {
 	userSettingRepo repository.UserSettingRepository
 	httpClient      *http.Client
+	syncMu          sync.Mutex
+	pendingSyncs    map[string]*time.Timer // key: userID+":"+seriesID
 }
 
 func NewSyncHandler(userSettingRepo repository.UserSettingRepository) *SyncHandler {
 	return &SyncHandler{
 		userSettingRepo: userSettingRepo,
 		httpClient:      &http.Client{Timeout: 15 * time.Second},
+		pendingSyncs:    make(map[string]*time.Timer),
 	}
 }
 
@@ -496,8 +500,33 @@ func parseNumberFromString(s string) (float64, bool) {
 	return 0, false
 }
 
-// SyncSeriesProgress se ejecuta en segundo plano para sincronizar el progreso de lectura del usuario en AniList y/o MAL
+// SyncSeriesProgress se ejecuta en segundo plano para sincronizar el progreso de lectura del usuario en AniList y/o MAL.
+// Las llamadas múltiples en un intervalo de 5 segundos se fusionan en una sola ejecución (debounce).
 func (h *SyncHandler) SyncSeriesProgress(userID, seriesID string) {
+	key := userID + ":" + seriesID
+
+	h.syncMu.Lock()
+	if existing, ok := h.pendingSyncs[key]; ok {
+		// Ya hay una llamada pendiente: resetear el timer para postponer la ejecución
+		existing.Reset(5 * time.Second)
+		h.syncMu.Unlock()
+		log.Printf("[SyncSeriesProgress] Debounced duplicate call for user=%s series=%s", userID, seriesID)
+		return
+	}
+	// Primera llamada: programar ejecución tras 5 segundos
+	timer := time.AfterFunc(5*time.Second, func() {
+		h.syncMu.Lock()
+		delete(h.pendingSyncs, key)
+		h.syncMu.Unlock()
+		h.doSyncSeriesProgress(userID, seriesID)
+	})
+	h.pendingSyncs[key] = timer
+	h.syncMu.Unlock()
+	log.Printf("[SyncSeriesProgress] Scheduled sync in 5s for user=%s series=%s", userID, seriesID)
+}
+
+// doSyncSeriesProgress contiene la lógica real de sincronización.
+func (h *SyncHandler) doSyncSeriesProgress(userID, seriesID string) {
 	log.Printf("[SyncSeriesProgress] Starting sync for user %s and series %s", userID, seriesID)
 	// 1. Obtener IDs externos desde la base de datos
 	var anilistID, malID string
