@@ -63,8 +63,8 @@ var (
 
 	// 볼륨 파싱 정규식 (Global Compile)
 	reVolKorean  = regexp.MustCompile(`(\d+)\s*(권|회|화|부)`)
-	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume|part|season)\s*(\d+)`)
-	reVolChapter = regexp.MustCompile(`(?i)(?:c|ch\.?|chapter)\s*(\d+)`)
+	reVolPrefix  = regexp.MustCompile(`(?i)(?:v|vol\.?|volume|volumen|tomo|part|season)\s*(\d+)`)
+	reVolChapter = regexp.MustCompile(`(?i)(?:c|ch\.?|chapter|capitulo|capítulo|cap\.?)\s*(\d+)`)
 	reVolSuffix  = regexp.MustCompile(`(?:^|[\s\-_\[\(])(\d+)(?:$|[\s\-_\]\)])`)
 	rePrologue   = regexp.MustCompile(`(?i)(?:prologue|프롤로그)`)
 )

@@ -474,8 +474,8 @@ func parseSQLiteTime(str string) (time.Time, error) {
 }
 
 var (
-	chOnlyPattern     = regexp.MustCompile(`(?i)(?:chapter|ch|ep|episode|#)\.?\s*(\d+(?:\.\d+)?)`)
-	volOnlyPattern    = regexp.MustCompile(`(?i)(?:volume|vol|v)\.?\s*(\d+(?:\.\d+)?)`)
+	chOnlyPattern     = regexp.MustCompile(`(?i)(?:chapter|ch|ep|episode|capitulo|capítulo|cap|#)\.?\s*(\d+(?:\.\d+)?)`)
+	volOnlyPattern    = regexp.MustCompile(`(?i)(?:volume|vol|volumen|tomo|v)\.?\s*(\d+(?:\.\d+)?)`)
 	allNumbersPattern = regexp.MustCompile(`\d+(?:\.\d+)?`)
 )
 
@@ -529,16 +529,16 @@ func (h *SyncHandler) SyncSeriesProgress(userID, seriesID string) {
 func (h *SyncHandler) doSyncSeriesProgress(userID, seriesID string) {
 	log.Printf("[SyncSeriesProgress] Starting sync for user %s and series %s", userID, seriesID)
 	// 1. Obtener IDs externos desde la base de datos
-	var anilistID, malID string
+	var anilistID, malID, seriesStatus string
 	err := database.DB.QueryRow(
-		`SELECT COALESCE(anilist_id, ''), COALESCE(mal_id, '') FROM series_metadata WHERE series_id = ?`,
+		`SELECT COALESCE(anilist_id, ''), COALESCE(mal_id, ''), COALESCE(status, '') FROM series_metadata WHERE series_id = ?`,
 		seriesID,
-	).Scan(&anilistID, &malID)
+	).Scan(&anilistID, &malID, &seriesStatus)
 	if err != nil {
 		log.Printf("[SyncSeriesProgress] Error fetching external IDs: %v", err)
 		return
 	}
-	log.Printf("[SyncSeriesProgress] External IDs: AniList=%s, MAL=%s", anilistID, malID)
+	log.Printf("[SyncSeriesProgress] External IDs: AniList=%s, MAL=%s, Status=%s", anilistID, malID, seriesStatus)
 	if anilistID == "" && malID == "" {
 		log.Printf("[SyncSeriesProgress] No external IDs configured for series %s", seriesID)
 		return // Sin IDs de servicios externos configurados
@@ -603,6 +603,9 @@ func (h *SyncHandler) doSyncSeriesProgress(userID, seriesID string) {
 	}
 
 	isComplete := completedCount >= totalChapters
+	if isComplete && (strings.ToUpper(seriesStatus) == "ONGOING" || strings.ToUpper(seriesStatus) == "HIATUS") {
+		isComplete = false
+	}
 	status := "CURRENT"
 	malStatus := "reading"
 	if isComplete {
@@ -611,14 +614,32 @@ func (h *SyncHandler) doSyncSeriesProgress(userID, seriesID string) {
 	}
 
 	// 3. Obtener fechas de inicio y finalización
-	var minStr, maxStr sql.NullString
+	var minChapterNo float64
 	_ = database.DB.QueryRow(
-		`SELECT MIN(completed_at), MAX(completed_at) FROM chapter_completions cc
+		`SELECT COALESCE(MIN(c.chapter_number), 0) FROM chapters c
+		 JOIN volumes v ON c.volume_id = v.id
+		 WHERE v.series_id = ?`,
+		seriesID,
+	).Scan(&minChapterNo)
+
+	var minStr, maxStr sql.NullString
+	// Solo poner fecha de inicio si se empezó por el primer capítulo (c.chapter_number <= minChapterNo)
+	_ = database.DB.QueryRow(
+		`SELECT cc.completed_at FROM chapter_completions cc
+		 JOIN chapters c ON cc.chapter_id = c.id
+		 JOIN volumes v ON c.volume_id = v.id
+		 WHERE cc.user_id = ? AND v.series_id = ? AND c.chapter_number <= ?
+		 ORDER BY cc.completed_at ASC LIMIT 1`,
+		userID, seriesID, minChapterNo,
+	).Scan(&minStr)
+
+	_ = database.DB.QueryRow(
+		`SELECT MAX(cc.completed_at) FROM chapter_completions cc
 		 JOIN chapters c ON cc.chapter_id = c.id
 		 JOIN volumes v ON c.volume_id = v.id
 		 WHERE cc.user_id = ? AND v.series_id = ?`,
 		userID, seriesID,
-	).Scan(&minStr, &maxStr)
+	).Scan(&maxStr)
 
 	var minCompletedAt, maxCompletedAt sql.NullTime
 	if minStr.Valid {
