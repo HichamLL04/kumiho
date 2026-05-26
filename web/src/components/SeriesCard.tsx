@@ -13,6 +13,7 @@ import {
   Music,
   FileText,
   Edit2,
+  Heart,
 } from "lucide-react";
 import { volumeAPI, seriesAPI, chapterAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
@@ -424,6 +425,23 @@ export function SeriesCard({
     }
   };
 
+  const handleToggleLike = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(false);
+
+    if (type !== "series") return;
+
+    const newValue = !(item as Series).is_bookmarked;
+    try {
+      await seriesAPI.update(item.id, { is_bookmarked: newValue });
+      onStatusChange?.();
+    } catch (error) {
+      console.error("Failed to toggle like on series card:", error);
+      setAlertModal({ isOpen: true, type: "error", message: t("series.alert.like_failed") });
+    }
+  };
+
   const showMenu = true;
   const shouldShowExtensionBadge = showExtensionBadge ?? type === "volume";
   const extensionBadge = shouldShowExtensionBadge
@@ -659,6 +677,15 @@ export function SeriesCard({
                   <Shield size={16} />
                   <span>{t("series.action.incognito")}</span>
                 </button>
+                {type === "series" && (
+                  <button
+                    className={styles.seriesMenuItem}
+                    onClick={handleToggleLike}
+                  >
+                    <Heart size={16} fill={(item as Series).is_bookmarked ? "currentColor" : "none"} />
+                    <span>{(item as Series).is_bookmarked ? t("series.action.unlike") : t("series.action.like")}</span>
+                  </button>
+                )}
                 {onDownload && (
                   <button
                     className={styles.seriesMenuItem}
