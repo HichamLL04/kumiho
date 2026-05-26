@@ -12,12 +12,16 @@ import {
   Download,
   Music,
   FileText,
+  Edit2,
 } from "lucide-react";
 import { volumeAPI, seriesAPI, chapterAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
 import { normalizeExtensionBadge, parseSupportedExtension } from "../utils/extension";
 import type { Series, Volume } from "../types/series";
 import { useAudioPlayerStore } from "../stores/audioPlayerStore";
+import { useAuthStore } from "../stores/authStore";
+import { EditSeriesModal } from "./modals/EditSeriesModal";
+import { EditVolumeModal } from "./modals/EditVolumeModal";
 import { buildViewerRouteState } from "../utils/viewerRouteState";
 import styles from "./SeriesCard.module.css";
 import { AlertModal, type AlertType } from "./modals/AlertModal";
@@ -67,6 +71,10 @@ export function SeriesCard({
   const [imageError, setImageError] = useState(false);
   const [optimisticCompleted, setOptimisticCompleted] = useState<boolean | null>(null);
   const [optimisticProgress, setOptimisticProgress] = useState<number | null>(null);
+  const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const user = useAuthStore((state) => state.user);
+  const isAdmin = user?.role === "MASTER";
   const menuRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [alertModal, setAlertModal] = useState<{
@@ -398,6 +406,24 @@ export function SeriesCard({
     });
   };
 
+  const handleEditMetadataClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(false);
+
+    if (type === "volume") {
+      try {
+        const res = await seriesAPI.get((item as Volume).series_id);
+        setSelectedSeries(res.data);
+        setIsEditModalOpen(true);
+      } catch (error) {
+        console.error("Failed to load series for volume editing:", error);
+      }
+    } else {
+      setIsEditModalOpen(true);
+    }
+  };
+
   const showMenu = true;
   const shouldShowExtensionBadge = showExtensionBadge ?? type === "volume";
   const extensionBadge = shouldShowExtensionBadge
@@ -647,6 +673,15 @@ export function SeriesCard({
                     <span>{t("series.action.download")}</span>
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    className={styles.seriesMenuItem}
+                    onClick={handleEditMetadataClick}
+                  >
+                    <Edit2 size={16} />
+                    <span>{t("series.action.edit")}</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -705,6 +740,29 @@ export function SeriesCard({
         onCancel={alertModal.onConfirm ? closeAlert : undefined}
         showCancel={!!alertModal.onConfirm}
       />
+
+      {isEditModalOpen && type === "series" && (
+        <EditSeriesModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          series={item as Series}
+          onUpdate={() => {
+            onStatusChange?.();
+          }}
+        />
+      )}
+
+      {isEditModalOpen && type === "volume" && selectedSeries && (
+        <EditVolumeModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          volume={item as Volume}
+          series={selectedSeries}
+          onUpdate={() => {
+            onStatusChange?.();
+          }}
+        />
+      )}
     </div>
   );
 }
