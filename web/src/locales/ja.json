@@ -803,6 +803,7 @@
       "download_series_confirm": "シリーズ「{{title}}」全体をダウンロードしますか？\nファイルサイズによっては時間がかかる場合があります。",
       "download_volume_confirm": "「{{title}}」をダウンロードしますか？",
       "download_failed": "ダウンロード失敗",
+      "load_failed": "シリーズの読み込みに失敗しました。",
       "no_readable_volume": "読める巻がありません。",
       "mark_complete_title": "既読処理",
       "mark_complete_unit_msg": "この巻を既読にします。続けますか？",

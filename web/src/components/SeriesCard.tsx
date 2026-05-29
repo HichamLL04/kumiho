@@ -419,6 +419,11 @@ export function SeriesCard({
         setIsEditModalOpen(true);
       } catch (error) {
         console.error("Failed to load series for volume editing:", error);
+        setAlertModal({
+          isOpen: true,
+          type: "error",
+          message: t("series.alert.load_failed"),
+        });
       }
     } else {
       setIsEditModalOpen(true);

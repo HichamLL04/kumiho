@@ -803,6 +803,7 @@
       "download_series_confirm": "Do you want to download the entire series \"{{title}}\"?\nIt may take some time depending on the file size.",
       "download_volume_confirm": "Do you want to download \"{{title}}\"?",
       "download_failed": "Download failed",
+      "load_failed": "Failed to load series.",
       "no_readable_volume": "No readable volumes available.",
       "mark_complete_title": "Mark as Read",
       "mark_complete_unit_msg": "Mark this volume as read. Continue?",
