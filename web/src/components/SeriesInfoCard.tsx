@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen } from "lucide-react";
+import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen, Trash2 } from "lucide-react";
 import type { Series, Volume, ReadingProgress, SeriesProgressSummary, SeriesCharacter, Library } from "../types/series";
 import { EditSeriesModal } from "./modals/EditSeriesModal";
 import { EditVolumeModal } from "./modals/EditVolumeModal";
@@ -234,6 +234,36 @@ export function SeriesInfoCard({
       onConfirm: () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         executeResetProgress();
+      },
+    });
+  };
+
+  // 볼륨 챕터 정리 실행
+  const executeCleanupChapters = async () => {
+    if (isProcessing || !volume) return;
+    setIsProcessing(true);
+    try {
+      const res = await volumeAPI.cleanupChapters(volume.id);
+      onAlert?.(t("series.alert.cleanup_success", { count: res.deletedCount }), "success");
+      onRefresh?.();
+    } catch (error) {
+      console.error("Failed to clean up chapters:", error);
+      onAlert?.(t("series.alert.cleanup_failed"), "error");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 볼륨 챕터 정리 확인
+  const handleCleanupChapters = () => {
+    setConfirmModal({
+      isOpen: true,
+      type: "warning",
+      title: t("series.alert.cleanup_confirm_title"),
+      message: t("series.alert.cleanup_confirm_msg"),
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        void executeCleanupChapters();
       },
     });
   };
@@ -646,6 +676,15 @@ export function SeriesInfoCard({
           >
             <BookX size={18} /> {t("series.action.mark_unread")}
           </button>
+          {isVolumeType && isAdmin && (
+            <button
+              className={`${styles.btnAction} ${styles.btnSecondary}`}
+              onClick={handleCleanupChapters}
+              disabled={isProcessing}
+            >
+              <Trash2 size={18} /> {t("series.action.cleanup_chapters")}
+            </button>
+          )}
 
           {!isVolumeType && (
             <Tooltip content={t("series.action.like")}>

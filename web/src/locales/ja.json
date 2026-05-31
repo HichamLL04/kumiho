@@ -783,7 +783,8 @@
       "less": "閉じる",
       "edit": "メタデータ修正",
       "mark_as_read": "既読表示",
-      "reset_progress": "進捗リセット"
+      "reset_progress": "進捗リセット",
+      "cleanup_chapters": "ファイル整理"
     },
     "info": {
       "read_today": "今日読みました",
@@ -812,9 +813,13 @@
       "reset_progress_title": "読書記録をリセット",
       "reset_progress_unit_msg": "この巻の進捗をリセットします。続けますか？",
       "reset_progress_volume_msg": "この巻の読書記録をリセットしますか？",
-      "reset_progress_series_msg": "シリーズのすべての読書記録を削除します。この操作は取り消せません。続けますか？",
+      "reset_progress_series_msg": "シリーズのすべての読書記録を削除します. この操作は取り消せません。続けますか？",
       "complete_success": "既読にしました。",
       "complete_failed": "既読処理に失敗しました。",
+      "cleanup_confirm_title": "章ファイルのクリーンアップ",
+      "cleanup_confirm_msg": "この巻のファイルをクリーンアップしますか？既読の章、および最新の3つの未読の章を除くすべての章のファイルがディスクから削除されます。",
+      "cleanup_success": "章ファイル{{count}}個をクリーンアップしました。",
+      "cleanup_failed": "ファイルのクリーンアップに失敗しました。",
       "reset_success": "リセットしました。",
       "reset_failed": "リセットに失敗しました。",
       "like_failed": "いいねの更新に失敗しました。",

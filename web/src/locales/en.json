@@ -783,7 +783,8 @@
       "less": "Less",
       "edit": "Edit Metadata",
       "mark_as_read": "Mark as Read",
-      "reset_progress": "Reset Progress"
+      "reset_progress": "Reset Progress",
+      "cleanup_chapters": "Clean Up Files"
     },
     "info": {
       "read_today": "Read Today",
@@ -815,6 +816,10 @@
       "reset_progress_series_msg": "Delete all reading history for this series. This cannot be undone. Continue?",
       "complete_success": "Marked as read.",
       "complete_failed": "Failed to mark as read.",
+      "cleanup_confirm_title": "Cleanup Chapters",
+      "cleanup_confirm_msg": "Are you sure you want to clean up files for this volume? All read chapters, and unread chapters except the last 3, will have their files deleted from disk.",
+      "cleanup_success": "Successfully cleaned up {{count}} chapters.",
+      "cleanup_failed": "Failed to clean up chapter files.",
       "like_failed": "Failed to update like status.",
       "reset_success": "Progress reset.",
       "reset_failed": "Failed to reset progress.",

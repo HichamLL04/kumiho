@@ -348,6 +348,8 @@ export const volumeAPI = {
   markComplete: (volumeId: string) => api.post(`/volumes/${volumeId}/complete`),
   getCompletion: (volumeId: string) => api.get(`/volumes/${volumeId}/completion`),
   deleteCompletion: (volumeId: string) => api.delete(`/volumes/${volumeId}/completion`),
+  cleanupChapters: (volumeId: string) =>
+    api.post<{ message: string; deletedCount: number }>(`/volumes/${volumeId}/cleanup-chapters`).then((res) => res.data),
   getBGM: (volumeId: string) => api.get<{ exists: boolean; url?: string }>(`/volumes/${volumeId}/bgm`),
   /**
    * 볼륨 내의 첫 번째 읽을 수 있는 챕터를 재귀적으로 탐색 (통합 API 사용 버전)

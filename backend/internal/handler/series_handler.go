@@ -2107,3 +2107,131 @@ func readImageFromArchive(archivePath, imagePath string) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("image not found in archive")
 }
+
+// CleanupChapters deletes chapter files for a volume except for the last 3 unread chapters.
+// POST /api/v1/volumes/:volumeId/cleanup-chapters
+func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
+	volumeID := c.Params("volumeId")
+	userID := middleware.GetUserID(c)
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// 1. Fetch volume
+	volume, err := h.volumeRepo.FindByID(nil, volumeID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch volume",
+		})
+	}
+	if volume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "volume not found",
+		})
+	}
+
+	// 2. Fetch series
+	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch series",
+		})
+	}
+	if series == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "series not found",
+		})
+	}
+
+	// 3. Fetch chapters
+	chapters, err := h.chapterRepo.FindByVolumeID(nil, volume.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch chapters",
+		})
+	}
+
+	// 4. Fetch user's completed chapters
+	completedMap, err := h.chapterCompletionRepo.FindCompletedChapterIDs(nil, userID, volume.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch completed chapters info",
+		})
+	}
+
+	// 5. Identify unread chapters (since they are sorted by chapter_number ascending)
+	var unreadChapters []model.Chapter
+	for _, ch := range chapters {
+		if !completedMap[ch.ID] {
+			unreadChapters = append(unreadChapters, ch)
+		}
+	}
+
+	// Keep the last 3 unread chapters.
+	keepIDs := make(map[string]bool)
+	unreadLen := len(unreadChapters)
+	if unreadLen > 3 {
+		for i := unreadLen - 3; i < unreadLen; i++ {
+			keepIDs[unreadChapters[i].ID] = true
+		}
+	} else {
+		// Keep all unread chapters since we have 3 or fewer
+		for _, ch := range unreadChapters {
+			keepIDs[ch.ID] = true
+		}
+	}
+
+	// 6. Delete other chapters (both files and DB records)
+	tx, err := database.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to start database transaction",
+		})
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	deletedCount := 0
+	for _, ch := range chapters {
+		if keepIDs[ch.ID] {
+			continue
+		}
+
+		// Safety check to ensure we don't delete the whole volume or series folder
+		if ch.Path != "" && ch.Path != volume.Path && ch.Path != series.Path {
+			// Delete file/folder on disk
+			if removeErr := os.RemoveAll(ch.Path); removeErr != nil {
+				log.Printf("Failed to delete chapter file %s: %v", ch.Path, removeErr)
+			}
+		}
+
+		// Delete from database
+		_, dbErr := tx.Exec(`DELETE FROM chapters WHERE id = ?`, ch.ID)
+		if dbErr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": fmt.Sprintf("failed to delete chapter %s from database", ch.Title),
+			})
+		}
+		deletedCount++
+	}
+
+	// Update volume's chapter count
+	_, countErr := tx.Exec(`UPDATE volumes SET chapter_count = (SELECT COUNT(*) FROM chapters WHERE volume_id = ?) WHERE id = ?`, volume.ID, volume.ID)
+	if countErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to update volume chapter count",
+		})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to commit transaction",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":      fmt.Sprintf("Successfully deleted %d chapters", deletedCount),
+		"deletedCount": deletedCount,
+	})
+}
+

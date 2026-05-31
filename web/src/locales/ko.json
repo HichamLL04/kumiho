@@ -783,7 +783,8 @@
       "less": "접기",
       "edit": "메타데이터 수정",
       "mark_as_read": "완독 표시",
-      "reset_progress": "독서 초기화"
+      "reset_progress": "독서 초기화",
+      "cleanup_chapters": "파일 정리"
     },
     "info": {
       "read_today": "오늘 읽음",
@@ -815,6 +816,10 @@
       "reset_progress_series_msg": "시리즈의 모든 독서 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?",
       "complete_success": "완독 처리되었습니다.",
       "complete_failed": "완독 처리에 실패했습니다.",
+      "cleanup_confirm_title": "챕터 파일 정리",
+      "cleanup_confirm_msg": "이 볼륨의 파일을 정리하시겠습니까? 읽은 회차 및 최근 3개의 안 읽은 회차를 제외한 모든 회차의 파일이 디스크에서 완전히 삭제됩니다.",
+      "cleanup_success": "챕터 파일 {{count}}개를 정리했습니다.",
+      "cleanup_failed": "챕터 파일 정리에 실패했습니다.",
       "like_failed": "좋아요 변경에 실패했습니다.",
       "reset_success": "초기화되었습니다.",
       "reset_failed": "초기화에 실패했습니다.",

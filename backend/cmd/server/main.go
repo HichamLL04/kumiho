@@ -313,6 +313,7 @@ func main() {
 	volumes.Post("/:id/thumbnail/url", seriesHandler.UploadVolumeThumbnailFromURL)
 	volumes.Delete("/:id/thumbnail", seriesHandler.DeleteVolumeThumbnail)
 	volumes.Get("/:volumeId/chapters", seriesHandler.ListChapters)
+	volumes.Post("/:volumeId/cleanup-chapters", authMiddleware.MasterOnly(), seriesHandler.CleanupChapters)
 	volumes.Get("/:volumeId/progress", progressHandler.GetVolumeProgress)
 	volumes.Post("/:volumeId/complete", progressHandler.MarkVolumeComplete)
 	volumes.Get("/:volumeId/completion", progressHandler.GetVolumeCompletion)
