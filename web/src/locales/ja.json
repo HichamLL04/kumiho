@@ -678,7 +678,12 @@
       "series_index_nav": "シリーズ索引、全{{count}}シリーズ",
       "series_index_jump": "{{key}} セクションへ移動",
       "empty_series": "スキャンされたシリーズがありません",
-      "scan_now": "今すぐスキャン"
+      "scan_now": "今すぐスキャン",
+      "cleanup": "ファイル整理",
+      "cleanup_tooltip": "すべての未読チャプターと最近読んだ3つのチャプターを保持し、それ以外の既読チャプターファイルを削除",
+      "cleanup_started": "ライブラリファイルの整理を開始します...",
+      "cleanup_completed": "ライブラリファイルの整理が完了しました！",
+      "cleanup_failed": "ライブラリファイルの整理に失敗しました"
     }
   },
   "series": {
@@ -817,7 +822,7 @@
       "complete_success": "既読にしました。",
       "complete_failed": "既読処理に失敗しました。",
       "cleanup_confirm_title": "章ファイルのクリーンアップ",
-      "cleanup_confirm_msg": "この巻のファイルをクリーンアップしますか？既読の章、および最新の3つの未読の章を除くすべての章のファイルがディスクから削除されます。",
+      "cleanup_confirm_msg": "ファイルを整理しますか？すべての未読チャプターと最近読んだ3つのチャプターは保持され、それ以外の既読チャプターファイルはディスクから完全に削除されます。",
       "cleanup_success": "章ファイル{{count}}個をクリーンアップしました。",
       "cleanup_failed": "ファイルのクリーンアップに失敗しました。",
       "reset_success": "リセットしました。",

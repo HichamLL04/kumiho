@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, Link } from "react-router-dom";
-import { Folder, RefreshCw } from "lucide-react";
+import { Folder, RefreshCw, Trash2 } from "lucide-react";
 import { useLibraryStore } from "../stores/libraryStore";
 import type { Library } from "../stores/libraryStore";
 import { useAuthStore } from "../stores/authStore";
@@ -12,6 +12,7 @@ import { Sidebar } from "../components/Sidebar";
 import { SeriesCard } from "../components/SeriesCard";
 import { Toast } from "../components/common/Toast";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
+import { AlertModal, type AlertType } from "../components/modals/AlertModal";
 import type { Series } from "../types/series";
 import {
   compareSeriesGroupKey,
@@ -47,6 +48,20 @@ export function LibraryPage() {
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const [indexPosition, setIndexPosition] = useState<{ top: number; right: number; maxHeight: number } | null>(null);
@@ -193,6 +208,42 @@ export function LibraryPage() {
     } finally {
       setIsScanning(false);
     }
+  };
+
+  const executeCleanup = async () => {
+    if (!id) return;
+    setIsCleaning(true);
+    setStatus(null);
+    setTimeout(() => {
+      setStatus({ type: "info", message: t("home.library.cleanup_started") });
+    }, 0);
+    try {
+      await libraryAPI.cleanupChapters(id);
+      await loadData();
+      triggerRefresh();
+      setStatus(null);
+      setTimeout(() => {
+        setStatus({ type: "success", message: t("home.library.cleanup_completed") });
+      }, 0);
+    } catch (error) {
+      console.error("Cleanup failed:", error);
+      setStatus({ type: "error", message: t("home.library.cleanup_failed") });
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  const handleCleanup = () => {
+    setConfirmModal({
+      isOpen: true,
+      type: "warning",
+      title: t("series.alert.cleanup_confirm_title"),
+      message: t("series.alert.cleanup_confirm_msg"),
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        void executeCleanup();
+      },
+    });
   };
 
   const showIndexScrollbar = useCallback(() => {
@@ -525,6 +576,15 @@ export function LibraryPage() {
           onClose={() => setStatus(null)}
         />
       )}
+      <AlertModal
+        isOpen={confirmModal.isOpen}
+        type={confirmModal.type}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        showCancel
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
       <Header onMenuClick={() => setSidebarOpen(true)} />
       <Sidebar
         isOpen={sidebarOpen}
@@ -543,25 +603,47 @@ export function LibraryPage() {
           rightContent={
             library.type !== "SYSTEM" &&
             user?.role === "MASTER" && (
-              <button
-                onClick={handleScan}
-                disabled={isScanning}
-                className={styles.scanBtn}
-              >
-                {isScanning ? (
-                  <>
-                    <RefreshCw
-                      size={16}
-                      className={styles.spin}
-                    />{" "}
-                    {t("home.library.scan_in_progress")}
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw size={16} /> {t("home.library.scan")}
-                  </>
-                )}
-              </button>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <button
+                  onClick={handleCleanup}
+                  disabled={isScanning || isCleaning}
+                  className={styles.scanBtn}
+                  title={t("home.library.cleanup_tooltip")}
+                >
+                  {isCleaning ? (
+                    <>
+                      <RefreshCw
+                        size={16}
+                        className={styles.spin}
+                      />{" "}
+                      {t("home.library.cleanup")}
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={16} /> {t("home.library.cleanup")}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleScan}
+                  disabled={isScanning || isCleaning}
+                  className={styles.scanBtn}
+                >
+                  {isScanning ? (
+                    <>
+                      <RefreshCw
+                        size={16}
+                        className={styles.spin}
+                      />{" "}
+                      {t("home.library.scan_in_progress")}
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={16} /> {t("home.library.scan")}
+                    </>
+                  )}
+                </button>
+              </div>
             )
           }
         />

@@ -678,7 +678,12 @@
       "series_index_nav": "시리즈 인덱스, 총 {{count}}개 시리즈",
       "series_index_jump": "{{key}} 섹션으로 이동",
       "empty_series": "스캔된 시리즈가 없습니다",
-      "scan_now": "지금 스캔하기"
+      "scan_now": "지금 스캔하기",
+      "cleanup": "파일 정리",
+      "cleanup_tooltip": "모든 미독 챕터와 최근 3개의 읽은 챕터를 제외한 모든 읽은 챕터 파일 삭제",
+      "cleanup_started": "라이브러리 파일 정리를 시작합니다...",
+      "cleanup_completed": "라이브러리 파일 정리를 완료했습니다!",
+      "cleanup_failed": "라이브러리 파일 정리에 실패했습니다"
     }
   },
   "series": {
@@ -817,7 +822,7 @@
       "complete_success": "완독 처리되었습니다.",
       "complete_failed": "완독 처리에 실패했습니다.",
       "cleanup_confirm_title": "챕터 파일 정리",
-      "cleanup_confirm_msg": "이 볼륨의 파일을 정리하시겠습니까? 읽은 회차 및 최근 3개의 안 읽은 회차를 제외한 모든 회차의 파일이 디스크에서 완전히 삭제됩니다.",
+      "cleanup_confirm_msg": "파일을 정리하시겠습니까? 모든 미독 챕터와 최근 3개의 읽은 챕터는 유지되고, 그 외의 읽은 챕터 파일이 디스크에서 완전히 삭제됩니다.",
       "cleanup_success": "챕터 파일 {{count}}개를 정리했습니다.",
       "cleanup_failed": "챕터 파일 정리에 실패했습니다.",
       "like_failed": "좋아요 변경에 실패했습니다.",

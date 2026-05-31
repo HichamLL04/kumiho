@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -28,18 +29,35 @@ const (
 )
 
 type LibraryHandler struct {
-	libraryRepo *repository.LibraryRepository
-	authService *service.AuthService
-	scanner     *scanner.Scanner
-	appCtx      context.Context
+	libraryRepo           *repository.LibraryRepository
+	authService           *service.AuthService
+	scanner               *scanner.Scanner
+	appCtx                context.Context
+	seriesRepo            *repository.SeriesRepository
+	volumeRepo            *repository.VolumeRepository
+	chapterRepo           *repository.ChapterRepository
+	chapterCompletionRepo *repository.ChapterCompletionRepository
 }
 
-func NewLibraryHandler(appCtx context.Context, libraryRepo *repository.LibraryRepository, authService *service.AuthService, scanner *scanner.Scanner) *LibraryHandler {
+func NewLibraryHandler(
+	appCtx context.Context,
+	libraryRepo *repository.LibraryRepository,
+	authService *service.AuthService,
+	scanner *scanner.Scanner,
+	seriesRepo *repository.SeriesRepository,
+	volumeRepo *repository.VolumeRepository,
+	chapterRepo *repository.ChapterRepository,
+	chapterCompletionRepo *repository.ChapterCompletionRepository,
+) *LibraryHandler {
 	return &LibraryHandler{
-		libraryRepo: libraryRepo,
-		authService: authService,
-		scanner:     scanner,
-		appCtx:      appCtx,
+		libraryRepo:           libraryRepo,
+		authService:           authService,
+		scanner:               scanner,
+		appCtx:                appCtx,
+		seriesRepo:            seriesRepo,
+		volumeRepo:            volumeRepo,
+		chapterRepo:           chapterRepo,
+		chapterCompletionRepo: chapterCompletionRepo,
 	}
 }
 
@@ -1033,4 +1051,141 @@ func validateScanExcludes(excludes string) error {
 		}
 	}
 	return nil
+}
+
+// CleanupChapters deletes chapter files for all volumes in a library except for the last 3 unread chapters per volume.
+// POST /api/v1/libraries/:libraryId/cleanup-chapters
+func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
+	libraryID := c.Params("libraryId")
+	userID := middleware.GetUserID(c)
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// 1. Fetch library
+	library, err := h.libraryRepo.FindByID(nil, libraryID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch library",
+		})
+	}
+	if library == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "library not found",
+		})
+	}
+
+	// 2. Fetch all series in this library
+	seriesList, err := h.seriesRepo.FindByLibraryID(nil, libraryID, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch series for library",
+		})
+	}
+
+	totalDeleted := 0
+
+	// 3. Loop through series
+	for _, series := range seriesList {
+		// Fetch volumes for this series
+		volumes, err := h.volumeRepo.FindBySeriesID(nil, series.ID)
+		if err != nil {
+			log.Printf("Library cleanup: failed to fetch volumes for series %s: %v", series.ID, err)
+			continue
+		}
+
+		for _, volume := range volumes {
+			// Fetch chapters for this volume
+			chapters, err := h.chapterRepo.FindByVolumeID(nil, volume.ID)
+			if err != nil {
+				log.Printf("Library cleanup: failed to fetch chapters for volume %s: %v", volume.ID, err)
+				continue
+			}
+
+			// Fetch user's completed chapters
+			completedMap, err := h.chapterCompletionRepo.FindCompletedChapterIDs(nil, userID, volume.ID)
+			if err != nil {
+				log.Printf("Library cleanup: failed to fetch completed chapters for volume %s: %v", volume.ID, err)
+				continue
+			}
+
+			// Keep all unread chapters, and keep the last 3 read chapters.
+			var readChapters []model.Chapter
+			keepIDs := make(map[string]bool)
+			for _, ch := range chapters {
+				if !completedMap[ch.ID] {
+					keepIDs[ch.ID] = true
+				} else {
+					readChapters = append(readChapters, ch)
+				}
+			}
+
+			readLen := len(readChapters)
+			if readLen > 3 {
+				for i := readLen - 3; i < readLen; i++ {
+					keepIDs[readChapters[i].ID] = true
+				}
+			} else {
+				for _, ch := range readChapters {
+					keepIDs[ch.ID] = true
+				}
+			}
+
+			// Delete other chapters (both files and DB records)
+			tx, err := database.DB.BeginTx(ctx, nil)
+			if err != nil {
+				log.Printf("Library cleanup: failed to start tx for volume %s: %v", volume.ID, err)
+				continue
+			}
+
+			volumeDeletedCount := 0
+			failed := false
+			for _, ch := range chapters {
+				if keepIDs[ch.ID] {
+					continue
+				}
+
+				// Safety check to ensure we don't delete the whole volume or series folder
+				if ch.Path != "" && ch.Path != volume.Path && ch.Path != series.Path {
+					if removeErr := os.RemoveAll(ch.Path); removeErr != nil {
+						log.Printf("Library cleanup: Failed to delete chapter file %s: %v", ch.Path, removeErr)
+					}
+				}
+
+				// Delete from database
+				_, dbErr := tx.Exec(`DELETE FROM chapters WHERE id = ?`, ch.ID)
+				if dbErr != nil {
+					log.Printf("Library cleanup: Failed to delete chapter %s from DB: %v", ch.Title, dbErr)
+					_ = tx.Rollback()
+					failed = true
+					break
+				}
+				volumeDeletedCount++
+			}
+
+			if failed {
+				continue
+			}
+
+			// Update volume's chapter count
+			if _, countErr := tx.Exec(`UPDATE volumes SET chapter_count = (SELECT COUNT(*) FROM chapters WHERE volume_id = ?) WHERE id = ?`, volume.ID, volume.ID); countErr != nil {
+				log.Printf("Library cleanup: Failed to update chapter count for volume %s: %v", volume.ID, countErr)
+				_ = tx.Rollback()
+				continue
+			}
+
+			if err := tx.Commit(); err != nil {
+				log.Printf("Library cleanup: Failed to commit tx for volume %s: %v", volume.ID, err)
+				continue
+			}
+
+			totalDeleted += volumeDeletedCount
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"message":      fmt.Sprintf("Successfully deleted %d chapters across library", totalDeleted),
+		"deletedCount": totalDeleted,
+	})
 }

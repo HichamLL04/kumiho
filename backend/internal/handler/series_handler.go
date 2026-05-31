@@ -2160,24 +2160,24 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 		})
 	}
 
-	// 5. Identify unread chapters (since they are sorted by chapter_number ascending)
-	var unreadChapters []model.Chapter
+	// 5. Keep all unread chapters, and keep the last 3 read chapters.
+	var readChapters []model.Chapter
+	keepIDs := make(map[string]bool)
 	for _, ch := range chapters {
 		if !completedMap[ch.ID] {
-			unreadChapters = append(unreadChapters, ch)
+			keepIDs[ch.ID] = true
+		} else {
+			readChapters = append(readChapters, ch)
 		}
 	}
 
-	// Keep the last 3 unread chapters.
-	keepIDs := make(map[string]bool)
-	unreadLen := len(unreadChapters)
-	if unreadLen > 3 {
-		for i := unreadLen - 3; i < unreadLen; i++ {
-			keepIDs[unreadChapters[i].ID] = true
+	readLen := len(readChapters)
+	if readLen > 3 {
+		for i := readLen - 3; i < readLen; i++ {
+			keepIDs[readChapters[i].ID] = true
 		}
 	} else {
-		// Keep all unread chapters since we have 3 or fewer
-		for _, ch := range unreadChapters {
+		for _, ch := range readChapters {
 			keepIDs[ch.ID] = true
 		}
 	}

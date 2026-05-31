@@ -121,7 +121,7 @@ func main() {
 	// 핸들러 초기화
 	authHandler := handler.NewAuthHandler(authService, cfg, hub)
 	userHandler := handler.NewUserHandler(authService)
-	libraryHandler := handler.NewLibraryHandler(ctx, libraryRepo, authService, fileScanner)
+	libraryHandler := handler.NewLibraryHandler(ctx, libraryRepo, authService, fileScanner, seriesRepo, volumeRepo, chapterRepo, chapterCompletionRepo)
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
 	syncHandler := handler.NewSyncHandler(userSettingRepo)
 	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc, syncHandler)
@@ -260,6 +260,7 @@ func main() {
 	libraries.Post("/:id/scan", libraryHandler.Scan)
 	libraries.Post("/:id/scan/cancel", libraryHandler.CancelScan)
 	libraries.Delete("/:id", libraryHandler.Delete)
+	libraries.Post("/:id/cleanup-chapters", authMiddleware.MasterOnly(), libraryHandler.CleanupChapters)
 	libraries.Get("/:libraryId/series", seriesHandler.ListByLibrary)
 
 	// 시리즈

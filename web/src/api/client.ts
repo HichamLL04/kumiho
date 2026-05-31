@@ -205,6 +205,10 @@ export const libraryAPI = {
   delete: (id: string) => api.delete(`/libraries/${id}`),
   updateOrder: (ids: string[]) => api.put("/libraries/order", ids),
   getSeries: (libraryId: string) => api.get(`/libraries/${libraryId}/series`),
+  cleanupChapters: (id: string) =>
+    api
+      .post<{ deletedCount: number }>(`/libraries/${id}/cleanup-chapters`)
+      .then((res) => res.data),
 };
 
 // Series API

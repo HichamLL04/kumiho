@@ -678,7 +678,12 @@
       "series_index_nav": "Series index, {{count}} total series",
       "series_index_jump": "Jump to {{key}} section",
       "empty_series": "No series found",
-      "scan_now": "Scan Now"
+      "scan_now": "Scan Now",
+      "cleanup": "Clean Up Files",
+      "cleanup_tooltip": "Keep all unread chapters and the last 3 read chapters, deleting all other read chapters",
+      "cleanup_started": "Starting library cleanup...",
+      "cleanup_completed": "Successfully cleaned up library chapters!",
+      "cleanup_failed": "Failed to clean up library chapters"
     }
   },
   "series": {
@@ -817,7 +822,7 @@
       "complete_success": "Marked as read.",
       "complete_failed": "Failed to mark as read.",
       "cleanup_confirm_title": "Cleanup Chapters",
-      "cleanup_confirm_msg": "Are you sure you want to clean up files for this volume? All read chapters, and unread chapters except the last 3, will have their files deleted from disk.",
+      "cleanup_confirm_msg": "Are you sure you want to clean up files? All unread chapters and the last 3 read chapters will be kept, and all other read chapters will be deleted from disk.",
       "cleanup_success": "Successfully cleaned up {{count}} chapters.",
       "cleanup_failed": "Failed to clean up chapter files.",
       "like_failed": "Failed to update like status.",
