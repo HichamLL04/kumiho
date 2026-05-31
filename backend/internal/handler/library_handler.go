@@ -1056,7 +1056,7 @@ func validateScanExcludes(excludes string) error {
 // CleanupChapters deletes chapter files for all volumes in a library except for the last 3 unread chapters per volume.
 // POST /api/v1/libraries/:libraryId/cleanup-chapters
 func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
-	libraryID := c.Params("libraryId")
+	libraryID := c.Params("id")
 	userID := middleware.GetUserID(c)
 	ctx := c.UserContext()
 	if ctx == nil {
