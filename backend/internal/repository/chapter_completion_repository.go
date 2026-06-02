@@ -69,6 +69,34 @@ func (r *ChapterCompletionRepository) FindCompletedChapterIDs(db database.Querye
 	return result, nil
 }
 
+// FindCompletedChapterIDsBySeries 시리즈 내 완독된 챕터 ID 목록 조회
+func (r *ChapterCompletionRepository) FindCompletedChapterIDsBySeries(db database.Queryer, userID, seriesID string) (map[string]bool, error) {
+	db = database.GetQueryer(db)
+
+	rows, err := db.Query(
+		`SELECT cc.chapter_id 
+		 FROM chapter_completions cc
+		 JOIN chapters c ON cc.chapter_id = c.id
+		 JOIN volumes v ON c.volume_id = v.id
+		 WHERE cc.user_id = ? AND v.series_id = ?`,
+		userID, seriesID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]bool)
+	for rows.Next() {
+		var chapterID string
+		if err := rows.Scan(&chapterID); err != nil {
+			return nil, err
+		}
+		result[chapterID] = true
+	}
+	return result, nil
+}
+
 // FindAllCompletedByUser 사용자가 완독한 모든 챕터 ID 조회 (시리즈/볼륨 단위 없이 전체)
 // 성능 주의: 필요할 때만 사용
 func (r *ChapterCompletionRepository) FindAllCompletedByUser(db database.Queryer, userID string) (map[string]bool, error) {

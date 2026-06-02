@@ -2144,26 +2144,26 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 		})
 	}
 
-	// 3. Fetch chapters
-	chapters, err := h.chapterRepo.FindByVolumeID(nil, volume.ID)
+	// 3. Fetch all chapters of the series (sorted in reading order)
+	seriesChapters, err := h.chapterRepo.FindBySeriesID(nil, series.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to fetch chapters",
+			"error": "failed to fetch series chapters",
 		})
 	}
 
-	// 4. Fetch user's completed chapters
-	completedMap, err := h.chapterCompletionRepo.FindCompletedChapterIDs(nil, userID, volume.ID)
+	// 4. Fetch user's completed chapters for the entire series
+	completedMap, err := h.chapterCompletionRepo.FindCompletedChapterIDsBySeries(nil, userID, series.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to fetch completed chapters info",
+			"error": "failed to fetch series completed chapters info",
 		})
 	}
 
-	// 5. Keep all unread chapters, and keep the last 3 read chapters.
+	// 5. Keep all unread chapters, and keep the last 3 read chapters of the series.
 	var readChapters []model.Chapter
 	keepIDs := make(map[string]bool)
-	for _, ch := range chapters {
+	for _, ch := range seriesChapters {
 		if !completedMap[ch.ID] {
 			keepIDs[ch.ID] = true
 		} else {
@@ -2182,7 +2182,7 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 		}
 	}
 
-	// 6. Delete other chapters (both files and DB records)
+	// 6. Delete other chapters of the current volume (both files and DB records)
 	tx, err := database.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -2192,7 +2192,12 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 	defer func() { _ = tx.Rollback() }()
 
 	deletedCount := 0
-	for _, ch := range chapters {
+	for _, ch := range seriesChapters {
+		// Only clean up chapters belonging to the target volume
+		if ch.VolumeID != volume.ID {
+			continue
+		}
+
 		if keepIDs[ch.ID] {
 			continue
 		}

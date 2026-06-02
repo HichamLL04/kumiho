@@ -1088,100 +1088,105 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 
 	// 3. Loop through series
 	for _, series := range seriesList {
-		// Fetch volumes for this series
+		// Fetch all chapters for this series (sorted in reading order)
+		chapters, err := h.chapterRepo.FindBySeriesID(nil, series.ID)
+		if err != nil {
+			log.Printf("Library cleanup: failed to fetch chapters for series %s: %v", series.ID, err)
+			continue
+		}
+
+		// Fetch user's completed chapters for the entire series
+		completedMap, err := h.chapterCompletionRepo.FindCompletedChapterIDsBySeries(nil, userID, series.ID)
+		if err != nil {
+			log.Printf("Library cleanup: failed to fetch completed chapters for series %s: %v", series.ID, err)
+			continue
+		}
+
+		// Keep all unread chapters, and keep the last 3 read chapters of the series.
+		var readChapters []model.Chapter
+		keepIDs := make(map[string]bool)
+		for _, ch := range chapters {
+			if !completedMap[ch.ID] {
+				keepIDs[ch.ID] = true
+			} else {
+				readChapters = append(readChapters, ch)
+			}
+		}
+
+		readLen := len(readChapters)
+		if readLen > 3 {
+			for i := readLen - 3; i < readLen; i++ {
+				keepIDs[readChapters[i].ID] = true
+			}
+		} else {
+			for _, ch := range readChapters {
+				keepIDs[ch.ID] = true
+			}
+		}
+
+		// Fetch all volumes for this series to get their paths for the safety check
 		volumes, err := h.volumeRepo.FindBySeriesID(nil, series.ID)
 		if err != nil {
 			log.Printf("Library cleanup: failed to fetch volumes for series %s: %v", series.ID, err)
 			continue
 		}
 
-		for _, volume := range volumes {
-			// Fetch chapters for this volume
-			chapters, err := h.chapterRepo.FindByVolumeID(nil, volume.ID)
-			if err != nil {
-				log.Printf("Library cleanup: failed to fetch chapters for volume %s: %v", volume.ID, err)
-				continue
-			}
-
-			// Fetch user's completed chapters
-			completedMap, err := h.chapterCompletionRepo.FindCompletedChapterIDs(nil, userID, volume.ID)
-			if err != nil {
-				log.Printf("Library cleanup: failed to fetch completed chapters for volume %s: %v", volume.ID, err)
-				continue
-			}
-
-			// Keep all unread chapters, and keep the last 3 read chapters.
-			var readChapters []model.Chapter
-			keepIDs := make(map[string]bool)
-			for _, ch := range chapters {
-				if !completedMap[ch.ID] {
-					keepIDs[ch.ID] = true
-				} else {
-					readChapters = append(readChapters, ch)
-				}
-			}
-
-			readLen := len(readChapters)
-			if readLen > 3 {
-				for i := readLen - 3; i < readLen; i++ {
-					keepIDs[readChapters[i].ID] = true
-				}
-			} else {
-				for _, ch := range readChapters {
-					keepIDs[ch.ID] = true
-				}
-			}
-
-			// Delete other chapters (both files and DB records)
-			tx, err := database.DB.BeginTx(ctx, nil)
-			if err != nil {
-				log.Printf("Library cleanup: failed to start tx for volume %s: %v", volume.ID, err)
-				continue
-			}
-
-			volumeDeletedCount := 0
-			failed := false
-			for _, ch := range chapters {
-				if keepIDs[ch.ID] {
-					continue
-				}
-
-				// Safety check to ensure we don't delete the whole volume or series folder
-				if ch.Path != "" && ch.Path != volume.Path && ch.Path != series.Path {
-					if removeErr := os.RemoveAll(ch.Path); removeErr != nil {
-						log.Printf("Library cleanup: Failed to delete chapter file %s: %v", ch.Path, removeErr)
-					}
-				}
-
-				// Delete from database
-				_, dbErr := tx.Exec(`DELETE FROM chapters WHERE id = ?`, ch.ID)
-				if dbErr != nil {
-					log.Printf("Library cleanup: Failed to delete chapter %s from DB: %v", ch.Title, dbErr)
-					_ = tx.Rollback()
-					failed = true
-					break
-				}
-				volumeDeletedCount++
-			}
-
-			if failed {
-				continue
-			}
-
-			// Update volume's chapter count
-			if _, countErr := tx.Exec(`UPDATE volumes SET chapter_count = (SELECT COUNT(*) FROM chapters WHERE volume_id = ?) WHERE id = ?`, volume.ID, volume.ID); countErr != nil {
-				log.Printf("Library cleanup: Failed to update chapter count for volume %s: %v", volume.ID, countErr)
-				_ = tx.Rollback()
-				continue
-			}
-
-			if err := tx.Commit(); err != nil {
-				log.Printf("Library cleanup: Failed to commit tx for volume %s: %v", volume.ID, err)
-				continue
-			}
-
-			totalDeleted += volumeDeletedCount
+		protectedPaths := map[string]bool{
+			series.Path: true,
 		}
+		for _, vol := range volumes {
+			protectedPaths[vol.Path] = true
+		}
+
+		// Delete other chapters (both files and DB records)
+		tx, err := database.DB.BeginTx(ctx, nil)
+		if err != nil {
+			log.Printf("Library cleanup: failed to start tx for series %s: %v", series.ID, err)
+			continue
+		}
+
+		seriesDeletedCount := 0
+		failed := false
+		for _, ch := range chapters {
+			if keepIDs[ch.ID] {
+				continue
+			}
+
+			// Safety check to ensure we don't delete the whole volume or series folder
+			if ch.Path != "" && !protectedPaths[ch.Path] {
+				if removeErr := os.RemoveAll(ch.Path); removeErr != nil {
+					log.Printf("Library cleanup: Failed to delete chapter file %s: %v", ch.Path, removeErr)
+				}
+			}
+
+			// Delete from database
+			_, dbErr := tx.Exec(`DELETE FROM chapters WHERE id = ?`, ch.ID)
+			if dbErr != nil {
+				log.Printf("Library cleanup: Failed to delete chapter %s from DB: %v", ch.Title, dbErr)
+				_ = tx.Rollback()
+				failed = true
+				break
+			}
+			seriesDeletedCount++
+		}
+
+		if failed {
+			continue
+		}
+
+		// Update chapter count for all volumes in this series
+		if _, countErr := tx.Exec(`UPDATE volumes SET chapter_count = (SELECT COUNT(*) FROM chapters WHERE volume_id = volumes.id) WHERE series_id = ?`, series.ID); countErr != nil {
+			log.Printf("Library cleanup: Failed to update volume chapter counts for series %s: %v", series.ID, countErr)
+			_ = tx.Rollback()
+			continue
+		}
+
+		if err := tx.Commit(); err != nil {
+			log.Printf("Library cleanup: Failed to commit tx for series %s: %v", series.ID, err)
+			continue
+		}
+
+		totalDeleted += seriesDeletedCount
 	}
 
 	return c.JSON(fiber.Map{

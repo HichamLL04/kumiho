@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aha-hyeong/kumiho/backend/internal/config"
@@ -42,6 +43,11 @@ var (
 	htmlTagPattern            = regexp.MustCompile(`(?s)<[^>]*>`)
 	blockHTMLPattern          = regexp.MustCompile(`(?i)</?(p|div|br|li|ul|ol|h[1-6]|blockquote)[^>]*>`)
 	candidateVolumePattern    = regexp.MustCompile(`(?i)(?:^|[\s._:-])(?:vol(?:ume)?\.?\s*)?(\d{1,3})(?:$|[\s._:-])`)
+
+	anilistCache   = make(map[string]*sdktypes.MetadataResult)
+	anilistCacheMu sync.RWMutex
+	malCache       = make(map[string]*sdktypes.MetadataResult)
+	malCacheMu     sync.RWMutex
 )
 
 const lowConfidenceProviderOrderThreshold = 0.35
@@ -165,6 +171,13 @@ func parseExternalID(str string) (anilistID, malID string) {
 }
 
 func (s *MetadataService) fetchAniListCandidate(ctx context.Context, id string) (*sdktypes.MetadataResult, error) {
+	anilistCacheMu.RLock()
+	if cached, ok := anilistCache[id]; ok {
+		anilistCacheMu.RUnlock()
+		return cached, nil
+	}
+	anilistCacheMu.RUnlock()
+
 	var query = `
 	query ($id: Int) {
 		Media (id: $id, type: MANGA) {
@@ -371,10 +384,21 @@ func (s *MetadataService) fetchAniListCandidate(ctx context.Context, id string) 
 		res.Title = media.Title.Romaji
 	}
 
+	anilistCacheMu.Lock()
+	anilistCache[id] = res
+	anilistCacheMu.Unlock()
+
 	return res, nil
 }
 
 func (s *MetadataService) fetchMALCandidate(ctx context.Context, id string, clientID string) (*sdktypes.MetadataResult, error) {
+	malCacheMu.RLock()
+	if cached, ok := malCache[id]; ok {
+		malCacheMu.RUnlock()
+		return cached, nil
+	}
+	malCacheMu.RUnlock()
+
 	if clientID == "" {
 		return nil, fmt.Errorf("mal_client_id is not configured in user settings")
 	}
@@ -490,6 +514,10 @@ func (s *MetadataService) fetchMALCandidate(ctx context.Context, id string, clie
 	if res.OriginalTitle == "" {
 		res.OriginalTitle = media.Title
 	}
+
+	malCacheMu.Lock()
+	malCache[id] = res
+	malCacheMu.Unlock()
 
 	return res, nil
 }
@@ -636,8 +664,51 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 		targetAnilistID = queryAnilistID
 	}
 	if targetAnilistID != "" {
-		res, err := s.fetchAniListCandidate(ctx, targetAnilistID)
+		var res *sdktypes.MetadataResult
+		var err error
+		if targetAnilistID == dbAnilistID && series.Metadata != nil && series.Metadata.OriginalTitle != "" {
+			var authors []string
+			if series.Metadata.Authors != "" {
+				authors = strings.Split(series.Metadata.Authors, ", ")
+			}
+			var tags []string
+			if series.Metadata.Tags != "" {
+				tags = strings.Split(series.Metadata.Tags, ", ")
+			}
+			var originalTitles map[string]string
+			if series.Metadata.OriginalTitles != "" {
+				_ = json.Unmarshal([]byte(series.Metadata.OriginalTitles), &originalTitles)
+			}
+			res = &sdktypes.MetadataResult{
+				Source: sdktypes.SourceRef{
+					ID:   targetAnilistID,
+					Name: "AniList",
+				},
+				Title:          series.Title,
+				OriginalTitle:  series.Metadata.OriginalTitle,
+				OriginalTitles: originalTitles,
+				Authors:        authors,
+				Description:    series.Metadata.Description,
+				Tags:           tags,
+				PublicationDate: series.Metadata.PublishedAt,
+				Identifiers: map[string]string{
+					"anilist_id": targetAnilistID,
+				},
+			}
+			if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
+				res.Cover = &sdktypes.CoverInfo{
+					URL: util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, series.UpdatedAt),
+				}
+			}
+		} else {
+			res, err = s.fetchAniListCandidate(ctx, targetAnilistID)
+		}
+
 		if err == nil && res != nil {
+			coverURL := ""
+			if res.Cover != nil {
+				coverURL = res.Cover.URL
+			}
 			directCandidates = append(directCandidates, MetadataCandidate{
 				PluginID:   "anilist-direct",
 				PluginName: "AniList (Direct)",
@@ -647,7 +718,7 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 					OriginalTitle: res.OriginalTitle,
 					Authors:       res.Authors,
 					Description:   res.Description,
-					CoverURL:      res.Cover.URL,
+					CoverURL:      coverURL,
 					Score:         1.0,
 					Confidence:    1.0,
 					Reason:        "ID de AniList coincidente",
@@ -663,29 +734,74 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 		targetMalID = queryMalID
 	}
 	if targetMalID != "" {
-		var malClientID string
-		_ = database.DB.QueryRow("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mal_client_id'", userID).Scan(&malClientID)
-		if malClientID != "" {
-			res, err := s.fetchMALCandidate(ctx, targetMalID, malClientID)
-			if err == nil && res != nil {
-				directCandidates = append(directCandidates, MetadataCandidate{
-					PluginID:   "mal-direct",
-					PluginName: "MyAnimeList (Direct)",
-					Candidate: sdktypes.SearchCandidate{
-						Source:        res.Source,
-						Title:         res.Title,
-						OriginalTitle: res.OriginalTitle,
-						Authors:       res.Authors,
-						Description:   res.Description,
-						CoverURL:      res.Cover.URL,
-						Score:         1.0,
-						Confidence:    1.0,
-						Reason:        "ID de MyAnimeList coincidente",
-					},
-				})
-			} else if err != nil {
-				log.Printf("[SearchSeries] MAL direct fetch error for ID %s: %v", targetMalID, err)
+		var res *sdktypes.MetadataResult
+		var err error
+		if targetMalID == dbMalID && series.Metadata != nil && series.Metadata.OriginalTitle != "" {
+			var authors []string
+			if series.Metadata.Authors != "" {
+				authors = strings.Split(series.Metadata.Authors, ", ")
 			}
+			var tags []string
+			if series.Metadata.Tags != "" {
+				tags = strings.Split(series.Metadata.Tags, ", ")
+			}
+			var originalTitles map[string]string
+			if series.Metadata.OriginalTitles != "" {
+				_ = json.Unmarshal([]byte(series.Metadata.OriginalTitles), &originalTitles)
+			}
+			res = &sdktypes.MetadataResult{
+				Source: sdktypes.SourceRef{
+					ID:   targetMalID,
+					Name: "MyAnimeList",
+				},
+				Title:          series.Title,
+				OriginalTitle:  series.Metadata.OriginalTitle,
+				OriginalTitles: originalTitles,
+				Authors:        authors,
+				Description:    series.Metadata.Description,
+				Tags:           tags,
+				PublicationDate: series.Metadata.PublishedAt,
+				Identifiers: map[string]string{
+					"mal_id": targetMalID,
+				},
+			}
+			if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
+				res.Cover = &sdktypes.CoverInfo{
+					URL: util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, series.UpdatedAt),
+				}
+			}
+		} else {
+			var malClientID string
+			_ = database.DB.QueryRow("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mal_client_id'", userID).Scan(&malClientID)
+			if malClientID != "" {
+				res, err = s.fetchMALCandidate(ctx, targetMalID, malClientID)
+			} else {
+				err = errors.New("missing mal_client_id")
+			}
+		}
+
+		if err == nil && res != nil {
+			coverURL := ""
+			if res.Cover != nil {
+				coverURL = res.Cover.URL
+			}
+			directCandidates = append(directCandidates, MetadataCandidate{
+				PluginID:   "mal-direct",
+				PluginName: "MyAnimeList (Direct)",
+				Candidate: sdktypes.SearchCandidate{
+					Source:        res.Source,
+					Title:         res.Title,
+					OriginalTitle: res.OriginalTitle,
+					Authors:       res.Authors,
+					Description:   res.Description,
+					CoverURL:      coverURL,
+					Score:         1.0,
+					Confidence:    1.0,
+					Reason:        "ID de MyAnimeList coincidente",
+				},
+			})
+		} else if err != nil {
+			log.Printf("[SearchSeries] MAL direct fetch error for ID %s: %v", targetMalID, err)
 		}
 	}
 
@@ -733,6 +849,13 @@ func (s *MetadataService) FetchSeriesMetadata(ctx context.Context, seriesID stri
 	if series == nil {
 		return nil, ErrSeriesNotFound
 	}
+
+	var dbAnilistID, dbMalID string
+	if series.Metadata != nil {
+		dbAnilistID = strings.Trim(strings.TrimSpace(series.Metadata.AnilistID), `'"`)
+		dbMalID = strings.Trim(strings.TrimSpace(series.Metadata.MalID), `'"`)
+	}
+
 	if strings.TrimSpace(selection.PluginID) == "" {
 		return nil, errors.New("plugin_id is required")
 	}
@@ -742,7 +865,46 @@ func (s *MetadataService) FetchSeriesMetadata(ctx context.Context, seriesID stri
 
 	// ─── Direct ID fetch handlers ───
 	if selection.PluginID == "anilist-direct" {
-		aniRes, aniErr := s.fetchAniListCandidate(ctx, selection.Source.ID)
+		var aniRes *sdktypes.MetadataResult
+		var aniErr error
+		if selection.Source.ID == dbAnilistID && series.Metadata != nil && series.Metadata.OriginalTitle != "" {
+			var authors []string
+			if series.Metadata.Authors != "" {
+				authors = strings.Split(series.Metadata.Authors, ", ")
+			}
+			var tags []string
+			if series.Metadata.Tags != "" {
+				tags = strings.Split(series.Metadata.Tags, ", ")
+			}
+			var originalTitles map[string]string
+			if series.Metadata.OriginalTitles != "" {
+				_ = json.Unmarshal([]byte(series.Metadata.OriginalTitles), &originalTitles)
+			}
+			aniRes = &sdktypes.MetadataResult{
+				Source: sdktypes.SourceRef{
+					ID:   selection.Source.ID,
+					Name: "AniList",
+				},
+				Title:          series.Title,
+				OriginalTitle:  series.Metadata.OriginalTitle,
+				OriginalTitles: originalTitles,
+				Authors:        authors,
+				Description:    series.Metadata.Description,
+				Tags:           tags,
+				PublicationDate: series.Metadata.PublishedAt,
+				Identifiers: map[string]string{
+					"anilist_id": selection.Source.ID,
+				},
+			}
+			if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
+				aniRes.Cover = &sdktypes.CoverInfo{
+					URL: util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, series.UpdatedAt),
+				}
+			}
+		} else {
+			aniRes, aniErr = s.fetchAniListCandidate(ctx, selection.Source.ID)
+		}
+
 		if aniErr != nil {
 			return nil, aniErr
 		}
@@ -753,9 +915,48 @@ func (s *MetadataService) FetchSeriesMetadata(ctx context.Context, seriesID stri
 	}
 
 	if selection.PluginID == "mal-direct" {
-		var malClientID string
-		_ = database.DB.QueryRow("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mal_client_id'", userID).Scan(&malClientID)
-		malRes, malErr := s.fetchMALCandidate(ctx, selection.Source.ID, malClientID)
+		var malRes *sdktypes.MetadataResult
+		var malErr error
+		if selection.Source.ID == dbMalID && series.Metadata != nil && series.Metadata.OriginalTitle != "" {
+			var authors []string
+			if series.Metadata.Authors != "" {
+				authors = strings.Split(series.Metadata.Authors, ", ")
+			}
+			var tags []string
+			if series.Metadata.Tags != "" {
+				tags = strings.Split(series.Metadata.Tags, ", ")
+			}
+			var originalTitles map[string]string
+			if series.Metadata.OriginalTitles != "" {
+				_ = json.Unmarshal([]byte(series.Metadata.OriginalTitles), &originalTitles)
+			}
+			malRes = &sdktypes.MetadataResult{
+				Source: sdktypes.SourceRef{
+					ID:   selection.Source.ID,
+					Name: "MyAnimeList",
+				},
+				Title:          series.Title,
+				OriginalTitle:  series.Metadata.OriginalTitle,
+				OriginalTitles: originalTitles,
+				Authors:        authors,
+				Description:    series.Metadata.Description,
+				Tags:           tags,
+				PublicationDate: series.Metadata.PublishedAt,
+				Identifiers: map[string]string{
+					"mal_id": selection.Source.ID,
+				},
+			}
+			if series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
+				malRes.Cover = &sdktypes.CoverInfo{
+					URL: util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, series.UpdatedAt),
+				}
+			}
+		} else {
+			var malClientID string
+			_ = database.DB.QueryRow("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mal_client_id'", userID).Scan(&malClientID)
+			malRes, malErr = s.fetchMALCandidate(ctx, selection.Source.ID, malClientID)
+		}
+
 		if malErr != nil {
 			return nil, malErr
 		}
