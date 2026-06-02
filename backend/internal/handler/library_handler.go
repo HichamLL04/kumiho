@@ -1080,7 +1080,7 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 	// If none are online, we can immediately return an error.
 	anyPathOnline := false
 	for _, lp := range library.Paths {
-		if _, err := os.Stat(filepath.Clean(lp)); err == nil {
+		if _, statErr := os.Stat(filepath.Clean(lp)); statErr == nil {
 			anyPathOnline = true
 			break
 		}
