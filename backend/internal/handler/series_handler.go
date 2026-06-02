@@ -2144,6 +2144,34 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 		})
 	}
 
+	// Fetch library
+	library, err := h.libraryRepo.FindByID(nil, series.LibraryID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch library info for series",
+		})
+	}
+	if library == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "library not found for series",
+		})
+	}
+
+	// Check if at least one library path is online/accessible.
+	// If none are online, we can immediately return an error.
+	anyPathOnline := false
+	for _, lp := range library.Paths {
+		if _, err := os.Stat(filepath.Clean(lp)); err == nil {
+			anyPathOnline = true
+			break
+		}
+	}
+	if !anyPathOnline {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Library path is offline or inaccessible inside the container. Check your volume mounts.",
+		})
+	}
+
 	// 3. Fetch all chapters of the series (sorted in reading order)
 	seriesChapters, err := h.chapterRepo.FindBySeriesID(nil, series.ID)
 	if err != nil {
@@ -2204,9 +2232,19 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 
 		// Safety check to ensure we don't delete the whole volume or series folder
 		if ch.Path != "" && ch.Path != volume.Path && ch.Path != series.Path {
+			// Check if the path is online and under library
+			if _, pathErr := isPathOnlineAndUnderLibrary(ch.Path, library.Paths); pathErr != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": fmt.Sprintf("cannot delete chapter %s: %v", ch.Title, pathErr),
+				})
+			}
+
 			// Delete file/folder on disk
 			if removeErr := os.RemoveAll(ch.Path); removeErr != nil {
 				log.Printf("Failed to delete chapter file %s: %v", ch.Path, removeErr)
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": fmt.Sprintf("failed to delete chapter file %s from disk: %v", ch.Path, removeErr),
+				})
 			}
 		}
 

@@ -147,3 +147,72 @@ func TestIsDatabaseBusyError(t *testing.T) {
 		})
 	}
 }
+
+func TestIsPathOnlineAndUnderLibrary(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create directories to simulate online/offline paths
+	onlinePath := filepath.Join(tempDir, "online")
+	if err := os.Mkdir(onlinePath, 0755); err != nil {
+		t.Fatalf("failed to create directory: %v", err)
+	}
+
+	offlinePath := filepath.Join(tempDir, "offline") // Not created, so it's offline
+
+	tests := []struct {
+		name      string
+		chPath    string
+		libPaths  []string
+		wantPath  string
+		wantErr   bool
+	}{
+		{
+			name:     "valid subpath of online library path",
+			chPath:   filepath.Join(onlinePath, "manga", "chapter.cbz"),
+			libPaths: []string{onlinePath},
+			wantPath: onlinePath,
+			wantErr:  false,
+		},
+		{
+			name:     "chapter path equals online library path",
+			chPath:   onlinePath,
+			libPaths: []string{onlinePath},
+			wantPath: onlinePath,
+			wantErr:  false,
+		},
+		{
+			name:     "valid subpath of offline library path",
+			chPath:   filepath.Join(offlinePath, "manga", "chapter.cbz"),
+			libPaths: []string{offlinePath},
+			wantPath: offlinePath,
+			wantErr:  true,
+		},
+		{
+			name:     "chapter path under sibling directory (starts with prefix but not subpath)",
+			chPath:   filepath.Join(tempDir, "online-sibling", "chapter.cbz"),
+			libPaths: []string{onlinePath},
+			wantPath: "",
+			wantErr:  true,
+		},
+		{
+			name:     "chapter path matches none of the library paths",
+			chPath:   "/some/other/path/chapter.cbz",
+			libPaths: []string{onlinePath},
+			wantPath: "",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, err := isPathOnlineAndUnderLibrary(tt.chPath, tt.libPaths)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("isPathOnlineAndUnderLibrary() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if path != tt.wantPath {
+				t.Fatalf("isPathOnlineAndUnderLibrary() path = %q, want %q", path, tt.wantPath)
+			}
+		})
+	}
+}
+

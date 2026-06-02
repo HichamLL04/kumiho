@@ -1076,6 +1076,21 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 		})
 	}
 
+	// Check if at least one library path is online/accessible.
+	// If none are online, we can immediately return an error.
+	anyPathOnline := false
+	for _, lp := range library.Paths {
+		if _, err := os.Stat(filepath.Clean(lp)); err == nil {
+			anyPathOnline = true
+			break
+		}
+	}
+	if !anyPathOnline {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Library path is offline or inaccessible inside the container. Check your volume mounts.",
+		})
+	}
+
 	// 2. Fetch all series in this library
 	seriesList, err := h.seriesRepo.FindByLibraryID(nil, libraryID, userID)
 	if err != nil {
@@ -1154,8 +1169,19 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 
 			// Safety check to ensure we don't delete the whole volume or series folder
 			if ch.Path != "" && !protectedPaths[ch.Path] {
+				// Check if the path is online and under library
+				if _, pathErr := isPathOnlineAndUnderLibrary(ch.Path, library.Paths); pathErr != nil {
+					log.Printf("Library cleanup: Cannot delete chapter %s in series %s: %v", ch.Title, series.ID, pathErr)
+					_ = tx.Rollback()
+					failed = true
+					break
+				}
+
 				if removeErr := os.RemoveAll(ch.Path); removeErr != nil {
 					log.Printf("Library cleanup: Failed to delete chapter file %s: %v", ch.Path, removeErr)
+					_ = tx.Rollback()
+					failed = true
+					break
 				}
 			}
 
@@ -1193,4 +1219,25 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 		"message":      fmt.Sprintf("Successfully deleted %d chapters across library", totalDeleted),
 		"deletedCount": totalDeleted,
 	})
+}
+
+// isPathOnlineAndUnderLibrary checks if a chapter's path is located under one of the library's configured paths
+// and ensures that library path is currently online/accessible on disk.
+// Returns (matchingLibraryPath, error)
+func isPathOnlineAndUnderLibrary(chPath string, libPaths []string) (string, error) {
+	chClean := filepath.Clean(chPath)
+	for _, lp := range libPaths {
+		lpClean := filepath.Clean(lp)
+		// Check if chClean matches lpClean exactly or is a subpath of lpClean.
+		// To match subpath correctly, check if it starts with lpClean + Separator.
+		isMatch := chClean == lpClean || strings.HasPrefix(chClean, lpClean+string(filepath.Separator))
+		if isMatch {
+			// Check if the matched library path is online/accessible on disk
+			if _, err := os.Stat(lpClean); err != nil {
+				return lpClean, fmt.Errorf("library path is offline or inaccessible: %w", err)
+			}
+			return lpClean, nil
+		}
+	}
+	return "", fmt.Errorf("chapter path is not under any currently configured library paths")
 }
