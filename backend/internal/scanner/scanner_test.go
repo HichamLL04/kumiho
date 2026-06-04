@@ -1083,3 +1083,141 @@ func TestScannerRejectsScanWhileLibraryDeleting(t *testing.T) {
 		t.Fatalf("ScanLibrary() error = %v, want ErrLibraryDeleting", err)
 	}
 }
+
+func TestScanLibraryDetectsDeletedChapterEvenIfModTimeUnchanged(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "kumiho.db")
+	if err := database.Connect(dbPath); err != nil {
+		t.Fatalf("database.Connect() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("database.Close() error = %v", err)
+		}
+	})
+
+	dataDir := t.TempDir()
+	libraryPath := filepath.Join(t.TempDir(), "library")
+	seriesPath := filepath.Join(libraryPath, "테스트 시리즈")
+	volumePath := filepath.Join(seriesPath, "Volume 1")
+
+	if err := os.MkdirAll(volumePath, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(volumePath) error = %v", err)
+	}
+
+	chapter1Path := filepath.Join(volumePath, "Chapter 1.cbz")
+	chapter2Path := filepath.Join(volumePath, "Chapter 2.cbz")
+
+	writeTestZipArchive(t, chapter1Path, map[string][]byte{"001.png": tinyPNG})
+	writeTestZipArchive(t, chapter2Path, map[string][]byte{"001.png": tinyPNG})
+
+	libraryRepo := repository.NewLibraryRepository()
+	seriesRepo := repository.NewSeriesRepository()
+	volumeRepo := repository.NewVolumeRepository()
+	chapterRepo := repository.NewChapterRepository()
+
+	library := &model.Library{
+		Name:        "테스트 라이브러리",
+		Paths:       []string{libraryPath},
+		LibraryType: "book",
+	}
+	if err := libraryRepo.Create(nil, library); err != nil {
+		t.Fatalf("LibraryRepository.Create() error = %v", err)
+	}
+
+	s := NewScanner(
+		libraryRepo,
+		seriesRepo,
+		volumeRepo,
+		chapterRepo,
+		repository.NewPageRepository(),
+		repository.NewSettingRepository(),
+		&config.Config{DataDir: dataDir},
+	)
+
+	ctx := context.Background()
+	perf := scanPerfConfig{SeriesConcurrent: 1, VolumeConcurrent: 1, ImageConcurrent: 1}
+
+	// 1. Initial scan calling processSeries directly
+	emptySeriesMap := make(map[string]*model.Series)
+	_, err := s.processSeries(
+		ctx,
+		library.ID,
+		seriesPath,
+		"테스트 시리즈",
+		emptySeriesMap,
+		[]string{},
+		func(progress string) {},
+		perf,
+		"book",
+	)
+	if err != nil {
+		t.Fatalf("processSeries() initial error = %v", err)
+	}
+
+	seriesList, err := seriesRepo.FindByLibraryID(nil, library.ID, "")
+	if err != nil {
+		t.Fatalf("SeriesRepository.FindByLibraryID() error = %v", err)
+	}
+	if len(seriesList) != 1 {
+		t.Fatalf("len(seriesList) = %d, want 1", len(seriesList))
+	}
+
+	initialChapters, err := chapterRepo.FindBySeriesID(nil, seriesList[0].ID)
+	if err != nil {
+		t.Fatalf("ChapterRepository.FindBySeriesID() error = %v", err)
+	}
+	if len(initialChapters) != 2 {
+		t.Fatalf("len(initialChapters) = %d, want 2", len(initialChapters))
+	}
+
+	// Mock existingVol.UpdatedAt to be in the future, so normal modTime.After checks would skip the volume.
+	volumes, err := volumeRepo.FindBySeriesID(nil, seriesList[0].ID)
+	if err != nil {
+		t.Fatalf("VolumeRepository.FindBySeriesID() error = %v", err)
+	}
+	if len(volumes) != 1 {
+		t.Fatalf("len(volumes) = %d, want 1 (since Volume 1 is scanned as a volume directory)", len(volumes))
+	}
+
+	futureTime := time.Now().Add(24 * time.Hour)
+	_, touchErr := database.DB.Exec(`UPDATE volumes SET updated_at = ? WHERE id = ?`, futureTime, volumes[0].ID)
+	if touchErr != nil {
+		t.Fatalf("Failed to update volume updated_at: %v", touchErr)
+	}
+
+	// 2. Delete chapter 2 from disk
+	if err := os.Remove(chapter2Path); err != nil {
+		t.Fatalf("Failed to remove chapter2 from disk: %v", err)
+	}
+
+	// Run rescan
+	seriesMap := map[string]*model.Series{
+		seriesList[0].Path: &seriesList[0],
+	}
+	_, err = s.processSeries(
+		ctx,
+		library.ID,
+		seriesPath,
+		"테스트 시리즈",
+		seriesMap,
+		[]string{},
+		func(progress string) {},
+		perf,
+		"book",
+	)
+	if err != nil {
+		t.Fatalf("processSeries() rescan error = %v", err)
+	}
+
+	// 3. Confirm that chapter 2 was deleted from DB despite modTime check
+	remainingChapters, err := chapterRepo.FindBySeriesID(nil, seriesList[0].ID)
+	if err != nil {
+		t.Fatalf("ChapterRepository.FindBySeriesID() after rescan error = %v", err)
+	}
+	if len(remainingChapters) != 1 {
+		t.Fatalf("len(remainingChapters) = %d, want 1 (second chapter should be pruned)", len(remainingChapters))
+	}
+	if remainingChapters[0].Path != chapter1Path {
+		t.Fatalf("remaining chapter path = %q, want %q", remainingChapters[0].Path, chapter1Path)
+	}
+}

@@ -663,8 +663,17 @@ func (h *SyncHandler) doSyncSeriesProgress(userID, seriesID string) {
 	if anilistID != "" {
 		token := h.getSetting(userID, anilistTokenKey())
 		if token != "" {
-			log.Printf("[SyncSeriesProgress] Syncing to AniList: mediaID=%s, progress=%d, status=%s", anilistID, progress, status)
-			h.syncToAniList(token, anilistID, progress, status, minCompletedAt, maxCompletedAt)
+			aniKey := fmt.Sprintf("sync_last:anilist:%s", seriesID)
+			aniVal := fmt.Sprintf("%d:%s", progress, status)
+			lastAniVal := h.getSetting(userID, aniKey)
+			if lastAniVal != aniVal {
+				log.Printf("[SyncSeriesProgress] Syncing to AniList: mediaID=%s, progress=%d, status=%s", anilistID, progress, status)
+				if h.syncToAniList(token, anilistID, progress, status, minCompletedAt, maxCompletedAt) {
+					_ = h.setSetting(userID, aniKey, aniVal)
+				}
+			} else {
+				log.Printf("[SyncSeriesProgress] Skipping AniList sync: already at progress %d and status %s", progress, status)
+			}
 		} else {
 			log.Printf("[SyncSeriesProgress] AniList token not found for user %s", userID)
 		}
@@ -695,8 +704,17 @@ func (h *SyncHandler) doSyncSeriesProgress(userID, seriesID string) {
 			}
 
 			if accessToken != "" {
-				log.Printf("[SyncSeriesProgress] Syncing to MAL: malID=%s, progress=%d, status=%s", malID, progress, malStatus)
-				h.syncToMAL(accessToken, malID, progress, malStatus, minCompletedAt, maxCompletedAt)
+				malKey := fmt.Sprintf("sync_last:mal:%s", seriesID)
+				malVal := fmt.Sprintf("%d:%s", progress, malStatus)
+				lastMalVal := h.getSetting(userID, malKey)
+				if lastMalVal != malVal {
+					log.Printf("[SyncSeriesProgress] Syncing to MAL: malID=%s, progress=%d, status=%s", malID, progress, malStatus)
+					if h.syncToMAL(accessToken, malID, progress, malStatus, minCompletedAt, maxCompletedAt) {
+						_ = h.setSetting(userID, malKey, malVal)
+					}
+				} else {
+					log.Printf("[SyncSeriesProgress] Skipping MAL sync: already at progress %d and status %s", progress, malStatus)
+				}
 			}
 		} else {
 			log.Printf("[SyncSeriesProgress] MAL accessToken not found for user %s", userID)
@@ -704,11 +722,11 @@ func (h *SyncHandler) doSyncSeriesProgress(userID, seriesID string) {
 	}
 }
 
-func (h *SyncHandler) syncToAniList(token, mediaID string, progress int, status string, minTime, maxTime sql.NullTime) {
+func (h *SyncHandler) syncToAniList(token, mediaID string, progress int, status string, minTime, maxTime sql.NullTime) bool {
 	var mediaIDInt int
 	if _, err := fmt.Sscanf(mediaID, "%d", &mediaIDInt); err != nil {
 		log.Printf("[syncToAniList] Error parsing mediaID %s: %v", mediaID, err)
-		return
+		return false
 	}
 
 	vars := map[string]interface{}{
@@ -753,15 +771,28 @@ func (h *SyncHandler) syncToAniList(token, mediaID string, progress int, status 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		log.Printf("[syncToAniList] Network error calling AniList API: %v", err)
-		return
+		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	log.Printf("[syncToAniList] Response: Status=%s, Body=%s", resp.Status, string(bodyBytes))
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	var gqlResp struct {
+		Errors []interface{} `json:"errors"`
+	}
+	if err := json.Unmarshal(bodyBytes, &gqlResp); err == nil && len(gqlResp.Errors) > 0 {
+		return false
+	}
+
+	return true
 }
 
-func (h *SyncHandler) syncToMAL(accessToken, mangaID string, progress int, status string, minTime, maxTime sql.NullTime) {
+func (h *SyncHandler) syncToMAL(accessToken, mangaID string, progress int, status string, minTime, maxTime sql.NullTime) bool {
 	endpoint := fmt.Sprintf("https://api.myanimelist.net/v2/manga/%s/my_list_status", mangaID)
 
 	formData := url.Values{}
@@ -782,12 +813,14 @@ func (h *SyncHandler) syncToMAL(accessToken, mangaID string, progress int, statu
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		log.Printf("[syncToMAL] Network error calling MAL API: %v", err)
-		return
+		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	log.Printf("[syncToMAL] Response: Status=%s, Body=%s", resp.Status, string(bodyBytes))
+
+	return resp.StatusCode == http.StatusOK
 }
 
 func (h *SyncHandler) refreshMALToken(userID string) (string, string, int64, error) {

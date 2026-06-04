@@ -1150,7 +1150,11 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 			series.Path: true,
 		}
 		for _, vol := range volumes {
-			protectedPaths[vol.Path] = true
+			// Only protect volume path if it is a directory.
+			// Archive files (like .cbz) should be deleted when their chapters are cleaned up.
+			if info, err := os.Stat(vol.Path); err == nil && info.IsDir() {
+				protectedPaths[vol.Path] = true
+			}
 		}
 
 		// Delete other chapters (both files and DB records)

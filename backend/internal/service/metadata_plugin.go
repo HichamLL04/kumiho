@@ -666,7 +666,7 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 	if targetAnilistID != "" {
 		var res *sdktypes.MetadataResult
 		var err error
-		if targetAnilistID == dbAnilistID && series.Metadata != nil && series.Metadata.OriginalTitle != "" {
+		if targetAnilistID == dbAnilistID && series.Metadata != nil && (series.Metadata.OriginalTitle != "" || series.Metadata.Description != "" || series.Metadata.Authors != "" || series.Metadata.Tags != "") {
 			var authors []string
 			if series.Metadata.Authors != "" {
 				authors = strings.Split(series.Metadata.Authors, ", ")
@@ -736,7 +736,7 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 	if targetMalID != "" {
 		var res *sdktypes.MetadataResult
 		var err error
-		if targetMalID == dbMalID && series.Metadata != nil && series.Metadata.OriginalTitle != "" {
+		if targetMalID == dbMalID && series.Metadata != nil && (series.Metadata.OriginalTitle != "" || series.Metadata.Description != "" || series.Metadata.Authors != "" || series.Metadata.Tags != "") {
 			var authors []string
 			if series.Metadata.Authors != "" {
 				authors = strings.Split(series.Metadata.Authors, ", ")
@@ -867,7 +867,7 @@ func (s *MetadataService) FetchSeriesMetadata(ctx context.Context, seriesID stri
 	if selection.PluginID == "anilist-direct" {
 		var aniRes *sdktypes.MetadataResult
 		var aniErr error
-		if selection.Source.ID == dbAnilistID && series.Metadata != nil && series.Metadata.OriginalTitle != "" {
+		if selection.Source.ID == dbAnilistID && series.Metadata != nil && (series.Metadata.OriginalTitle != "" || series.Metadata.Description != "" || series.Metadata.Authors != "" || series.Metadata.Tags != "") {
 			var authors []string
 			if series.Metadata.Authors != "" {
 				authors = strings.Split(series.Metadata.Authors, ", ")
@@ -917,7 +917,7 @@ func (s *MetadataService) FetchSeriesMetadata(ctx context.Context, seriesID stri
 	if selection.PluginID == "mal-direct" {
 		var malRes *sdktypes.MetadataResult
 		var malErr error
-		if selection.Source.ID == dbMalID && series.Metadata != nil && series.Metadata.OriginalTitle != "" {
+		if selection.Source.ID == dbMalID && series.Metadata != nil && (series.Metadata.OriginalTitle != "" || series.Metadata.Description != "" || series.Metadata.Authors != "" || series.Metadata.Tags != "") {
 			var authors []string
 			if series.Metadata.Authors != "" {
 				authors = strings.Split(series.Metadata.Authors, ", ")

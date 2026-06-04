@@ -1944,7 +1944,24 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 								isPdf := !entry.IsDir() && strings.ToLower(filepath.Ext(entryPath)) == ".pdf"
 								hasThumbnail := existingVol.ThumbnailPath != nil && *existingVol.ThumbnailPath != ""
 
-								if !hasZeroPages && (!isPdf || hasThumbnail) {
+								// Check if all chapters still exist on disk.
+								// If any file is missing, we must force a scan to prune it.
+								allChaptersExist := true
+								if chaps, chapErr := s.chapterRepo.FindByVolumeID(nil, existingVol.ID); chapErr == nil {
+									for _, ch := range chaps {
+										if ch.Path != "" {
+											if _, statErr := os.Stat(ch.Path); statErr != nil && os.IsNotExist(statErr) {
+												allChaptersExist = false
+												break
+											}
+										}
+									}
+								} else {
+									log.Printf("[SCANNER] Error getting chapters for %s: %v. Forcing rescan.", j.name, chapErr)
+									allChaptersExist = false
+								}
+
+								if !hasZeroPages && (!isPdf || hasThumbnail) && allChaptersExist {
 									s.markExistingVolumeTreeProcessed(existingVol, existingSubVolMap, processedPaths, &mu)
 
 									// 변경되지 않음 & 챕터도 존재함 (& PDF면 썸네일도 있음)

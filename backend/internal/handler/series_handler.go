@@ -2231,7 +2231,16 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 		}
 
 		// Safety check to ensure we don't delete the whole volume or series folder
-		if ch.Path != "" && ch.Path != volume.Path && ch.Path != series.Path {
+		isProtected := ch.Path == series.Path
+		if !isProtected && ch.Path == volume.Path {
+			// Only protect volume path if it is a directory.
+			// Archive files (like .cbz) should be deleted when their chapters are cleaned up.
+			if info, err := os.Stat(volume.Path); err == nil && info.IsDir() {
+				isProtected = true
+			}
+		}
+
+		if ch.Path != "" && !isProtected {
 			// Check if the path is online and under library
 			if _, pathErr := isPathOnlineAndUnderLibrary(ch.Path, library.Paths); pathErr != nil {
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
