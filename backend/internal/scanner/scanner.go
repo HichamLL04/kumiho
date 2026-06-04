@@ -1947,7 +1947,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 								// Check if all chapters still exist on disk.
 								// If any file is missing, we must force a scan to prune it.
 								allChaptersExist := true
-								if chaps, chapErr := s.chapterRepo.FindByVolumeID(nil, existingVol.ID); chapErr == nil {
+								if chaps, findErr := s.chapterRepo.FindByVolumeID(nil, existingVol.ID); findErr == nil {
 									for _, ch := range chaps {
 										if ch.Path != "" {
 											if _, statErr := os.Stat(ch.Path); statErr != nil && os.IsNotExist(statErr) {
@@ -1957,7 +1957,7 @@ func (s *Scanner) scanSeriesContent(ctx context.Context, series *model.Series, e
 										}
 									}
 								} else {
-									log.Printf("[SCANNER] Error getting chapters for %s: %v. Forcing rescan.", j.name, chapErr)
+									log.Printf("[SCANNER] Error getting chapters for %s: %v. Forcing rescan.", j.name, findErr)
 									allChaptersExist = false
 								}
 

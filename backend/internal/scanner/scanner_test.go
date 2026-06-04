@@ -1186,8 +1186,8 @@ func TestScanLibraryDetectsDeletedChapterEvenIfModTimeUnchanged(t *testing.T) {
 	}
 
 	// 2. Delete chapter 2 from disk
-	if err := os.Remove(chapter2Path); err != nil {
-		t.Fatalf("Failed to remove chapter2 from disk: %v", err)
+	if rmErr := os.Remove(chapter2Path); rmErr != nil {
+		t.Fatalf("Failed to remove chapter2 from disk: %v", rmErr)
 	}
 
 	// Run rescan
