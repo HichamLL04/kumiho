@@ -241,23 +241,49 @@ func (s *MetadataService) fetchAniListCandidate(ctx context.Context, id string) 
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://graphql.anilist.co", bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	var resp *http.Response
+	maxRetries := 3
+	for i := 0; i < maxRetries; i++ {
+		req, reqErr := http.NewRequestWithContext(ctx, "POST", "https://graphql.anilist.co", bytes.NewBuffer(reqBody))
+		if reqErr != nil {
+			return nil, reqErr
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
 
-	resp, err := s.client.Do(req)
+		resp, err = s.client.Do(req)
+		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				log.Printf("[fetchAniListCandidate] Status %d on attempt %d: %s. Retrying...", resp.StatusCode, i+1, string(body))
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(1500 * time.Millisecond):
+				}
+				continue
+			}
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("anilist api error status %d: %s", resp.StatusCode, string(body))
+		}
+		if i < maxRetries-1 {
+			log.Printf("[fetchAniListCandidate] Network error on attempt %d: %v. Retrying...", i+1, err)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+				case <-time.After(1500 * time.Millisecond):
+				}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("anilist api error status %d: %s", resp.StatusCode, string(body))
-	}
 
 	var data struct {
 		Data struct {
@@ -404,22 +430,50 @@ func (s *MetadataService) fetchMALCandidate(ctx context.Context, id string, clie
 	}
 
 	urlStr := fmt.Sprintf("https://api.myanimelist.net/v2/manga/%s?fields=id,title,main_picture,alternative_titles,synopsis,start_date,end_date,status,genres,authors{first_name,last_name}", id)
-	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-MAL-CLIENT-ID", clientID)
 
-	resp, err := s.client.Do(req)
+	var resp *http.Response
+	var err error
+	maxRetries := 3
+	for i := 0; i < maxRetries; i++ {
+		req, reqErr := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+		if reqErr != nil {
+			return nil, reqErr
+		}
+		req.Header.Set("X-MAL-CLIENT-ID", clientID)
+
+		resp, err = s.client.Do(req)
+		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				log.Printf("[fetchMALCandidate] Status %d on attempt %d: %s. Retrying...", resp.StatusCode, i+1, string(body))
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(1500 * time.Millisecond):
+				}
+				continue
+			}
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("mal api error status %d: %s", resp.StatusCode, string(body))
+		}
+		if i < maxRetries-1 {
+			log.Printf("[fetchMALCandidate] Network error on attempt %d: %v. Retrying...", i+1, err)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+				case <-time.After(1500 * time.Millisecond):
+				}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("mal api error status %d: %s", resp.StatusCode, string(body))
-	}
 
 	var media struct {
 		ID          int    `json:"id"`
@@ -606,6 +660,7 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 
 	result := &MetadataSearchResult{Query: req}
 	activeCount := 0
+	var lastDirectErr error
 
 	for _, record := range records {
 		if record.State != sdkstate.Active || !hasCapability(record.Manifest, capability.MetadataSearch) {
@@ -726,6 +781,7 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 			})
 		} else if err != nil {
 			log.Printf("[SearchSeries] AniList direct fetch error for ID %s: %v", targetAnilistID, err)
+			lastDirectErr = err
 		}
 	}
 
@@ -802,6 +858,7 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 			})
 		} else if err != nil {
 			log.Printf("[SearchSeries] MAL direct fetch error for ID %s: %v", targetMalID, err)
+			lastDirectErr = err
 		}
 	}
 
@@ -810,6 +867,9 @@ func (s *MetadataService) SearchSeries(ctx context.Context, seriesID string, use
 	}
 
 	if activeCount == 0 && len(directCandidates) == 0 {
+		if lastDirectErr != nil {
+			return nil, lastDirectErr
+		}
 		return nil, ErrNoActiveMetadataPlugin
 	}
 
