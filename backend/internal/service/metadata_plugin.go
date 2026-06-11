@@ -250,6 +250,7 @@ func (s *MetadataService) fetchAniListCandidate(ctx context.Context, id string) 
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
+		req.Close = true
 
 		resp, err = s.client.Do(req)
 		if err == nil {
@@ -259,6 +260,7 @@ func (s *MetadataService) fetchAniListCandidate(ctx context.Context, id string) 
 			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
+				s.client.CloseIdleConnections()
 				log.Printf("[fetchAniListCandidate] Status %d on attempt %d: %s. Retrying...", resp.StatusCode, i+1, string(body))
 				select {
 				case <-ctx.Done():
@@ -273,11 +275,12 @@ func (s *MetadataService) fetchAniListCandidate(ctx context.Context, id string) 
 		}
 		if i < maxRetries-1 {
 			log.Printf("[fetchAniListCandidate] Network error on attempt %d: %v. Retrying...", i+1, err)
+			s.client.CloseIdleConnections()
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-				case <-time.After(1500 * time.Millisecond):
-				}
+			case <-time.After(1500 * time.Millisecond):
+			}
 		}
 	}
 	if err != nil {
@@ -440,6 +443,7 @@ func (s *MetadataService) fetchMALCandidate(ctx context.Context, id string, clie
 			return nil, reqErr
 		}
 		req.Header.Set("X-MAL-CLIENT-ID", clientID)
+		req.Close = true
 
 		resp, err = s.client.Do(req)
 		if err == nil {
@@ -449,6 +453,7 @@ func (s *MetadataService) fetchMALCandidate(ctx context.Context, id string, clie
 			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
+				s.client.CloseIdleConnections()
 				log.Printf("[fetchMALCandidate] Status %d on attempt %d: %s. Retrying...", resp.StatusCode, i+1, string(body))
 				select {
 				case <-ctx.Done():
@@ -463,11 +468,12 @@ func (s *MetadataService) fetchMALCandidate(ctx context.Context, id string, clie
 		}
 		if i < maxRetries-1 {
 			log.Printf("[fetchMALCandidate] Network error on attempt %d: %v. Retrying...", i+1, err)
+			s.client.CloseIdleConnections()
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-				case <-time.After(1500 * time.Millisecond):
-				}
+			case <-time.After(1500 * time.Millisecond):
+			}
 		}
 	}
 	if err != nil {
