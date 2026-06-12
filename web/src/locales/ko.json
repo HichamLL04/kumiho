@@ -772,6 +772,7 @@
     },
     "action": {
       "like": "좋아요",
+      "unlike": "좋아요 해제",
       "read_now": "바로 읽기",
       "listen_now": "바로 듣기",
       "continue": "이어보기",
@@ -808,6 +809,7 @@
       "download_series_confirm": "\"{{title}}\" 시리즈 전체를 다운로드하시겠습니까?\n파일 크기에 따라 시간이 걸릴 수 있습니다.",
       "download_volume_confirm": "\"{{title}}\"을(를) 다운로드하시겠습니까?",
       "download_failed": "다운로드 실패",
+      "load_failed": "시리즈를 불러오지 못했습니다.",
       "no_readable_volume": "읽을 수 있는 권이 없습니다.",
       "mark_complete_title": "완독 처리",
       "mark_complete_unit_msg": "이 볼륨을 완독 상태로 표시합니다. 계속하시겠습니까?",
