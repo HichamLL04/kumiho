@@ -19,6 +19,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-this-to-a-long-random-secret}
       - PLUGIN_SECRET_KEY=${PLUGIN_SECRET_KEY:-1234}
       - PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/kumiho-plugin/kumiho-plugin-registry/main/index.json
+      - GODEBUG=http2client=0
     restart: unless-stopped
 
 volumes:

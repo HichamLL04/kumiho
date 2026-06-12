@@ -261,13 +261,16 @@ func (s *MetadataService) fetchAniListCandidate(ctx context.Context, id string) 
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				s.client.CloseIdleConnections()
-				log.Printf("[fetchAniListCandidate] Status %d on attempt %d: %s. Retrying...", resp.StatusCode, i+1, string(body))
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(1500 * time.Millisecond):
+				if i < maxRetries-1 {
+					log.Printf("[fetchAniListCandidate] Status %d on attempt %d: %s. Retrying...", resp.StatusCode, i+1, string(body))
+					select {
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					case <-time.After(1500 * time.Millisecond):
+					}
+					continue
 				}
-				continue
+				return nil, fmt.Errorf("anilist api error status %d: %s", resp.StatusCode, string(body))
 			}
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
@@ -454,13 +457,16 @@ func (s *MetadataService) fetchMALCandidate(ctx context.Context, id string, clie
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				s.client.CloseIdleConnections()
-				log.Printf("[fetchMALCandidate] Status %d on attempt %d: %s. Retrying...", resp.StatusCode, i+1, string(body))
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(1500 * time.Millisecond):
+				if i < maxRetries-1 {
+					log.Printf("[fetchMALCandidate] Status %d on attempt %d: %s. Retrying...", resp.StatusCode, i+1, string(body))
+					select {
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					case <-time.After(1500 * time.Millisecond):
+					}
+					continue
 				}
-				continue
+				return nil, fmt.Errorf("mal api error status %d: %s", resp.StatusCode, string(body))
 			}
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
