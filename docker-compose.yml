@@ -2,7 +2,8 @@ version: "3.8"
 
 services:
   kumiho:
-    image: ghcr.io/hichamll04/kumiho:latest
+    build: .
+    image: kumiho:local
     container_name: kumiho
     ports:
       - "9999:9999"
