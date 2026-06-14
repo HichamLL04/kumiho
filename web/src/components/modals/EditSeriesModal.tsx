@@ -353,9 +353,10 @@ export function EditSeriesModal({ isOpen, onClose, series, onUpdate }: EditSerie
       
       onUpdate(refreshed.data);
       showAlert("success", "¡Metadatos importados y aplicados con éxito!");
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Sync direct ID failed:", error);
-      const serverError = (error as any).response?.data?.error;
+      const err = error as { response?: { data?: { error?: string } } };
+      const serverError = err.response?.data?.error;
       const errorMsg = serverError
         ? `Error al intentar importar metadatos desde el ID: ${serverError}`
         : "Error al intentar importar metadatos desde el ID.";
