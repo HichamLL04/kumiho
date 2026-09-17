@@ -31,6 +31,7 @@ type ProgressHandler struct {
 	completionRepo        *repository.VolumeCompletionRepository
 	chapterCompletionRepo *repository.ChapterCompletionRepository
 	sseHub                *sse.Hub
+	seriesEnrichSvc       *service.SeriesEnrichService
 	libraryRepo           *repository.LibraryRepository
 	settingRepo           repository.SettingRepository
 	syncHandler           *SyncHandler
