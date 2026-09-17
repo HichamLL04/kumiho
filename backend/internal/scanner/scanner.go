@@ -67,6 +67,11 @@ var (
 	reVolChapter = regexp.MustCompile(`(?i)(?:c|ch\.?|chapter|capitulo|capítulo|cap\.?)\s*(\d+)`)
 	reVolSuffix  = regexp.MustCompile(`(?:^|[\s\-_\[\(])(\d+)(?:$|[\s\-_\]\)])`)
 	rePrologue   = regexp.MustCompile(`(?i)(?:prologue|프롤로그)`)
+
+	// metadata.txt 파싱 정규식
+	reAnilistURL = regexp.MustCompile(`(?i)anilist\.co/(?:manga|anime)/(\d+)`)
+	reMalURL     = regexp.MustCompile(`(?i)myanimelist\.net/(?:manga|anime)/(\d+)`)
+	reDigitsOnly = regexp.MustCompile(`^\d+$`)
 )
 
 const manualOriginalTitleKey = "_manual_title"
@@ -1385,6 +1390,9 @@ func (s *Scanner) processArchiveAsSeries(
 		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
 			seriesChanged = true
 		}
+		if s.applyMetadataTxtToSeries(series, archivePath) {
+			seriesChanged = true
+		}
 		baseTitle := resolveSeriesTitleFromPath(archivePath, title)
 		if strings.TrimSpace(series.Title) != baseTitle {
 			series.Title = baseTitle
@@ -1459,6 +1467,7 @@ func (s *Scanner) processArchiveAsSeries(
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
+		s.applyMetadataTxtToSeries(series, archivePath)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(archivePath))
@@ -1587,6 +1596,9 @@ func (s *Scanner) processSeries(
 		if epubMeta != nil && s.applyEpubMetadataToSeries(series, epubMeta) {
 			seriesChanged = true
 		}
+		if s.applyMetadataTxtToSeries(series, seriesPath) {
+			seriesChanged = true
+		}
 		baseSeriesTitle := resolveSeriesTitleFromPath(seriesPath, seriesTitle)
 		if strings.TrimSpace(series.Title) != baseSeriesTitle {
 			series.Title = baseSeriesTitle
@@ -1622,6 +1634,7 @@ func (s *Scanner) processSeries(
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
+		s.applyMetadataTxtToSeries(series, seriesPath)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(seriesPath))
@@ -3285,6 +3298,122 @@ func (s *Scanner) applyEpubMetadataToSeries(series *model.Series, meta *util.Epu
 	}
 	if year := reYear.FindString(meta.Date); year != "" && strings.TrimSpace(series.Metadata.PublicationYear) != year {
 		series.Metadata.PublicationYear = year
+		changed = true
+	}
+
+	return changed
+}
+
+// applyMetadataTxtToSeries reads metadata.txt from the series directory and extracts AniList/MyAnimeList IDs
+func (s *Scanner) applyMetadataTxtToSeries(series *model.Series, seriesPath string) bool {
+	if series == nil {
+		return false
+	}
+
+	baseDir := seriesPath
+	if fi, err := os.Stat(seriesPath); err == nil && !fi.IsDir() {
+		baseDir = filepath.Dir(seriesPath)
+	}
+
+	metadataPath := filepath.Join(baseDir, "metadata.txt")
+	if _, err := os.Stat(metadataPath); err != nil {
+		// Case-insensitive fallback for Linux filesystems
+		entries, rErr := os.ReadDir(baseDir)
+		if rErr != nil {
+			return false
+		}
+		found := false
+		for _, e := range entries {
+			if !e.IsDir() && strings.EqualFold(e.Name(), "metadata.txt") {
+				metadataPath = filepath.Join(baseDir, e.Name())
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		return false
+	}
+
+	var anilistID string
+	var malID string
+	var metadataTitle string
+
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(parts[0]))
+		val := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "title":
+			if metadataTitle == "" {
+				metadataTitle = val
+			}
+		case "anilist id", "anilist_id", "anilist":
+			if anilistID == "" {
+				if reDigitsOnly.MatchString(val) {
+					anilistID = val
+				} else if m := reAnilistURL.FindStringSubmatch(val); len(m) > 1 {
+					anilistID = m[1]
+				}
+			}
+		case "anilist url":
+			if anilistID == "" {
+				if m := reAnilistURL.FindStringSubmatch(val); len(m) > 1 {
+					anilistID = m[1]
+				}
+			}
+		case "myanimelist id", "myanimelist_id", "myanimelist", "mal id", "mal_id", "mal":
+			if malID == "" {
+				if reDigitsOnly.MatchString(val) {
+					malID = val
+				} else if m := reMalURL.FindStringSubmatch(val); len(m) > 1 {
+					malID = m[1]
+				}
+			}
+		case "myanimelist url", "mal url":
+			if malID == "" {
+				if m := reMalURL.FindStringSubmatch(val); len(m) > 1 {
+					malID = m[1]
+				}
+			}
+		}
+	}
+
+	if anilistID == "" && malID == "" && metadataTitle == "" {
+		return false
+	}
+
+	if series.Metadata == nil {
+		series.Metadata = &model.SeriesMetadata{SeriesID: series.ID}
+	}
+
+	changed := false
+	if anilistID != "" && strings.TrimSpace(series.Metadata.AnilistID) != anilistID {
+		series.Metadata.AnilistID = anilistID
+		changed = true
+		log.Printf("[SCANNER] Read and applied AniList ID %s for series '%s' from metadata.txt", anilistID, series.Title)
+	}
+	if malID != "" && strings.TrimSpace(series.Metadata.MalID) != malID {
+		series.Metadata.MalID = malID
+		changed = true
+		log.Printf("[SCANNER] Read and applied MyAnimeList ID %s for series '%s' from metadata.txt", malID, series.Title)
+	}
+	if metadataTitle != "" && strings.TrimSpace(series.Metadata.OriginalTitle) == "" {
+		series.Metadata.OriginalTitle = metadataTitle
 		changed = true
 	}
 
