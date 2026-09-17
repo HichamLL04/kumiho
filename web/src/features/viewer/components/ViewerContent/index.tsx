@@ -42,6 +42,7 @@ interface ViewerContentProps {
   pageMetaMap?: Map<number, PageMeta>;
   isInitialScrolling?: boolean; // Boolean으로 회복
   estimatedPageHeights?: Map<number, number>;
+  viewStatus?: ViewStatus;
   onZoomChange?: (scale: number) => void;
   zoomScale?: number;
   /** 마지막 페이지에서 다음 챕터 이동 가능 여부 (다음 슬라이드 애니메이션 억제용) */

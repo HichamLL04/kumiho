@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { Play, Edit2, Heart, Shield, BookCheck, BookX, ChevronDown, Download, FileText, BookOpen, Trash2, CircleAlert } from "lucide-react";
 import type { Series, Volume, ReadingProgress, SeriesProgressSummary, SeriesCharacter, Library } from "../types/series";
 import { formatMissingNumberRanges, type NumberRange } from "../utils/missingNumbers";
