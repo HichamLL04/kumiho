@@ -99,6 +99,7 @@ export interface Volume {
   updated_at?: string;
   library_type?: LibraryType;
   first_chapter_id?: string;
+  is_bookmarked: boolean; // 부모 시리즈의 좋아요(북마크) 상태
 }
 
 export interface Chapter {
@@ -181,6 +182,9 @@ export interface UserSeriesSetting {
   epub_wheel_direction?: string;
   epub_keyboard_direction?: string;
   epub_click_direction?: string;
+  epub_font_size?: number;
+  epub_font_family?: string;
+  epub_line_height?: number;
   reading_direction?: string;
   wheel_direction?: string;
   swipe_direction?: string;

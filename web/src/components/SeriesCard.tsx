@@ -42,6 +42,7 @@ export interface SeriesCardProps {
   extensionBadgeText?: string | null;
   extensionBadgePlacement?: "thumbnail" | "meta";
   navigateTo?: string;
+  onBeforeNavigate?: () => void;
 }
 
 export function SeriesCard({
@@ -59,6 +60,7 @@ export function SeriesCard({
   extensionBadgeText = null,
   extensionBadgePlacement = "thumbnail",
   navigateTo,
+  onBeforeNavigate,
 }: SeriesCardProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -158,6 +160,8 @@ export function SeriesCard({
 
   const handleCardClick = (e: React.MouseEvent) => {
     if (e.defaultPrevented || window.getSelection()?.toString()) return;
+
+    onBeforeNavigate?.();
 
     if (navigateTo) {
       navigate(navigateTo);
@@ -427,7 +431,7 @@ export function SeriesCard({
         setAlertModal({
           isOpen: true,
           type: "error",
-          message: t("series.alert.load_failed"),
+          message: t("general.toast.load_failed"),
         });
       }
     } else {
@@ -440,12 +444,15 @@ export function SeriesCard({
     e.stopPropagation();
     setMenuOpen(false);
 
-    if (type !== "series") return;
+    // Kumiho 스키마상 좋아요(북마크)는 시리즈 단위로만 동작하므로, Volume 카드인 경우 부모 시리즈 ID를 타겟으로 토글함
+    const isVol = type === "volume";
+    const targetId = isVol ? (item as Volume).series_id : item.id;
+    if (!targetId) return;
 
-    const newValue = !(item as Series).is_bookmarked;
+    const newValue = !(item.is_bookmarked ?? false);
     try {
-      await seriesAPI.update(item.id, { is_bookmarked: newValue });
-      onStatusChange?.();
+      await seriesAPI.update(targetId, { is_bookmarked: newValue });
+      await Promise.resolve(onStatusChange?.());
     } catch (error) {
       console.error("Failed to toggle like on series card:", error);
       setAlertModal({ isOpen: true, type: "error", message: t("series.alert.like_failed") });
@@ -463,6 +470,7 @@ export function SeriesCard({
   const showThumbnailExtensionBadge =
     shouldShowExtensionBadge && extensionBadgePlacement === "thumbnail" && !!extensionBadge;
   const isAudioLayout = isAudiobook;
+  const showAudioIcon = isAudiobook || (type === "volume" && item.has_audio === true);
   const showOverlayProgress =
     progressStyle === "overlay" && displayProgress !== null && (displayProgress > 0 || forceShowProgress);
   const thumbnailSrc = useMemo(() => {
@@ -687,13 +695,13 @@ export function SeriesCard({
                   <Shield size={16} />
                   <span>{t("series.action.incognito")}</span>
                 </button>
-                {type === "series" && (
+                {(type === "series" || (type === "volume" && item.is_bookmarked !== undefined)) && (
                   <button
                     className={styles.seriesMenuItem}
                     onClick={handleToggleLike}
                   >
-                    <Heart size={16} fill={(item as Series).is_bookmarked ? "currentColor" : "none"} />
-                    <span>{(item as Series).is_bookmarked ? t("series.action.unlike") : t("series.action.like")}</span>
+                    <Heart size={16} fill={item.is_bookmarked ? "currentColor" : "none"} />
+                    <span>{item.is_bookmarked ? t("series.action.unlike") : t("series.action.like")}</span>
                   </button>
                 )}
                 {onDownload && (
@@ -732,15 +740,16 @@ export function SeriesCard({
         >
           {itemTitle}
         </h3>
-        {displaySubtitle || isAudioLayout || showMetaExtensionBadge ? (
+        {displaySubtitle || showAudioIcon || showMetaExtensionBadge ? (
           <div
-            className={`${styles.seriesMeta} ${!displaySubtitle && !isAudioLayout && showMetaExtensionBadge ? styles.seriesMetaOnlyBadge : ""}`}
+            className={`${styles.seriesMeta} ${!displaySubtitle && !showAudioIcon && showMetaExtensionBadge ? styles.seriesMetaOnlyBadge : ""}`}
           >
-            {(displaySubtitle || isAudioLayout) && (
+            {(displaySubtitle || showAudioIcon) && (
               <span className={styles.seriesMetaLeft}>
                 {displaySubtitle && <span>{displaySubtitle}</span>}
-                {isAudioLayout && (
+                {showAudioIcon && (
                   <Music
+                    data-testid="series-card-audio-icon"
                     size={14}
                     className={styles.audioIcon}
                     style={{ marginLeft: "4px", verticalAlign: "middle" }}

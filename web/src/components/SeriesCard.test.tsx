@@ -9,6 +9,7 @@ const { mocks } = vi.hoisted(() => {
   const volumeFindFirstChapterRecursivelyMock = vi.fn();
   const seriesGetProgressMock = vi.fn();
   const seriesGetChaptersMock = vi.fn();
+  const seriesUpdateMock = vi.fn();
   const setIncognitoMock = vi.fn();
 
   return {
@@ -19,6 +20,7 @@ const { mocks } = vi.hoisted(() => {
       volumeFindFirstChapterRecursivelyMock,
       seriesGetProgressMock,
       seriesGetChaptersMock,
+      seriesUpdateMock,
       setIncognitoMock,
     },
   };
@@ -47,6 +49,7 @@ vi.mock("../api/client", () => ({
   seriesAPI: {
     getProgress: (...args: unknown[]) => mocks.seriesGetProgressMock(...args),
     getChapters: (...args: unknown[]) => mocks.seriesGetChaptersMock(...args),
+    update: (...args: unknown[]) => mocks.seriesUpdateMock(...args),
   },
   chapterAPI: {
     markComplete: vi.fn(),
@@ -100,6 +103,7 @@ describe("SeriesCard audiobook bootstrap guard", () => {
           library_type: "book",
           chapter_count: 10,
           created_at: "2026-03-21T00:00:00Z",
+          is_bookmarked: false,
         }}
       />,
     );
@@ -161,6 +165,7 @@ describe("SeriesCard audiobook bootstrap guard", () => {
           chapter_count: 8,
           created_at: "2026-03-21T00:00:00Z",
           updated_at: "2026-03-21T00:00:00Z",
+          is_bookmarked: false,
         }}
       />,
     );
@@ -169,6 +174,70 @@ describe("SeriesCard audiobook bootstrap guard", () => {
     expect(images.length).toBe(1);
     expect(container.querySelector('img[aria-hidden="true"]')).toBeNull();
     expect(images[0]).toHaveAttribute("alt", "볼륨 2");
+  });
+
+  it("오디오북 시리즈는 메타 영역에 음표 아이콘을 유지한다", () => {
+    const { queryByTestId } = render(
+      <SeriesCard
+        type="series"
+        item={{
+          id: "series-audio-icon",
+          library_id: "library-1",
+          title: "오디오북 시리즈",
+          path: "/audio/series",
+          library_type: "audiobook",
+          has_audio: true,
+          created_at: "2026-03-21T00:00:00Z",
+          updated_at: "2026-03-21T00:00:00Z",
+        }}
+      />,
+    );
+
+    expect(queryByTestId("series-card-audio-icon")).not.toBeNull();
+  });
+
+  it("일반 도서 볼륨은 has_audio=true 이면 음표 아이콘을 표시한다", () => {
+    const { queryByTestId } = render(
+      <SeriesCard
+        type="volume"
+        item={{
+          id: "volume-audio-icon",
+          series_id: "series-1",
+          title: "배경음 볼륨",
+          volume_number: 3,
+          path: "/books/volume-3.zip",
+          has_audio: true,
+          library_type: "book",
+          chapter_count: 6,
+          created_at: "2026-03-21T00:00:00Z",
+          updated_at: "2026-03-21T00:00:00Z",
+          is_bookmarked: false,
+        }}
+      />,
+    );
+
+    expect(queryByTestId("series-card-audio-icon")).not.toBeNull();
+  });
+
+  it("일반 시리즈는 has_audio=true 여도 음표 아이콘을 표시하지 않는다", () => {
+    const { queryByTestId } = render(
+      <SeriesCard
+        type="series"
+        item={{
+          id: "series-book-audio",
+          library_id: "library-1",
+          title: "배경음 포함 시리즈",
+          path: "/books/series-audio",
+          library_type: "book",
+          has_audio: true,
+          chapter_count: 12,
+          created_at: "2026-03-21T00:00:00Z",
+          updated_at: "2026-03-21T00:00:00Z",
+        }}
+      />,
+    );
+
+    expect(queryByTestId("series-card-audio-icon")).toBeNull();
   });
 
   it("시리즈 display_unit이 volume이면 볼륨 개수를 우선 표시한다", () => {
@@ -213,6 +282,7 @@ describe("SeriesCard navigateTo", () => {
           library_type: "book",
           chapter_count: 5,
           created_at: "2026-03-21T00:00:00Z",
+          is_bookmarked: false,
         }}
         navigateTo="/series/series-3"
       />,
@@ -222,5 +292,75 @@ describe("SeriesCard navigateTo", () => {
     fireEvent.click(card!);
 
     expect(mocks.navigateMock).toHaveBeenCalledWith("/series/series-3");
+  });
+});
+
+describe("SeriesCard Bookmark / Like behavior", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("volume 타입 카드에 is_bookmarked가 제공되면 좋아요 토글 메뉴가 노출된다", async () => {
+    render(
+      <SeriesCard
+        type="volume"
+        item={{
+          id: "volume-like",
+          series_id: "series-parent",
+          title: "좋아요 볼륨",
+          volume_number: 1,
+          path: "/books/volume-like.zip",
+          library_type: "book",
+          chapter_count: 5,
+          created_at: "2026-03-21T00:00:00Z",
+          is_bookmarked: false,
+        }}
+      />,
+    );
+
+    // 메뉴 열기
+    fireEvent.click(screen.getByTitle("series.card.menu_tooltip"));
+
+    // 좋아요(like) 버튼이 노출되는지 확인
+    const likeButton = screen.getByText("series.action.like");
+    expect(likeButton).toBeInTheDocument();
+
+    // 클릭 시 seriesAPI.update 가 series_id와 함께 호출되는지 확인
+    fireEvent.click(likeButton);
+    expect(mocks.seriesUpdateMock).toHaveBeenCalledWith("series-parent", {
+      is_bookmarked: true,
+    });
+  });
+
+  it("volume 타입 카드가 이미 좋아요 상태(is_bookmarked=true)이면 해제 메뉴가 노출되고 클릭 시 해제 API를 호출한다", async () => {
+    render(
+      <SeriesCard
+        type="volume"
+        item={{
+          id: "volume-like",
+          series_id: "series-parent",
+          title: "좋아요 볼륨",
+          volume_number: 1,
+          path: "/books/volume-like.zip",
+          library_type: "book",
+          chapter_count: 5,
+          created_at: "2026-03-21T00:00:00Z",
+          is_bookmarked: true,
+        }}
+      />,
+    );
+
+    // 메뉴 열기
+    fireEvent.click(screen.getByTitle("series.card.menu_tooltip"));
+
+    // 좋아요 취소(unlike) 버튼이 노출되는지 확인
+    const unlikeButton = screen.getByText("series.action.unlike");
+    expect(unlikeButton).toBeInTheDocument();
+
+    // 클릭 시 seriesAPI.update 가 series_id와 함께 호출되는지 확인
+    fireEvent.click(unlikeButton);
+    expect(mocks.seriesUpdateMock).toHaveBeenCalledWith("series-parent", {
+      is_bookmarked: false,
+    });
   });
 });

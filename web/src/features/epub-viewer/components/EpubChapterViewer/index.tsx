@@ -36,6 +36,7 @@ import {
 import { getWheelNavigationAction } from "./wheelNavigation";
 import { EPUB_SCROLLED_PULL_THRESHOLD } from "./constants";
 import { getScrolledPullCompletionAction } from "./scrolledPull";
+import { isFullscreenToggleShortcut } from "../../../../utils/fullscreen";
 
 export type { EpubRenderLayout } from "../../utils/layoutMode";
 
@@ -92,6 +93,7 @@ interface EpubChapterViewerProps {
     atEnd?: boolean;
   }) => void;
   onViewerClick?: () => void;
+  onToggleFullscreen?: () => void;
   onInitializationComplete?: () => void;
   onPageNext?: () => void;
   onPagePrev?: () => void;
@@ -134,6 +136,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       onTOCLoad,
       onLocationChange,
       onViewerClick,
+      onToggleFullscreen,
       onInitializationComplete,
       onPageNext,
       onPagePrev,
@@ -156,6 +159,7 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
 
     // 최신 콜백을 ref로 유지 (stale closure 방지)
     const onViewerClickRef = useRef(onViewerClick);
+    const onToggleFullscreenRef = useRef(onToggleFullscreen);
     const onLocationChangeRef = useRef(onLocationChange);
     const onReadyRef = useRef(onReady);
     const onTOCLoadRef = useRef(onTOCLoad);
@@ -207,6 +211,9 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
     useEffect(() => {
       onViewerClickRef.current = onViewerClick;
     }, [onViewerClick]);
+    useEffect(() => {
+      onToggleFullscreenRef.current = onToggleFullscreen;
+    }, [onToggleFullscreen]);
     useEffect(() => {
       onLocationChangeRef.current = onLocationChange;
     }, [onLocationChange]);
@@ -796,11 +803,19 @@ const EpubChapterViewer = forwardRef<EpubChapterViewerHandles, EpubChapterViewer
       };
 
       const keydownHandler = (event: KeyboardEvent) => {
+        if (isFullscreenToggleShortcut(event)) {
+          event.preventDefault();
+          event.stopPropagation();
+          onToggleFullscreenRef.current?.();
+          return;
+        }
+
         const currentSettings = settingsRef.current;
         const target = event.target as HTMLElement | null;
         const tagName = target?.tagName?.toLowerCase();
         if (tagName === "input" || tagName === "textarea" || tagName === "select" || Boolean(target?.isContentEditable))
           return;
+
         if (currentSettings.flow === "scrolled") return;
 
         const nextArrowKey = currentSettings.keyboardDirection === "right" ? "ArrowRight" : "ArrowLeft";

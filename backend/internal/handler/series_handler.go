@@ -53,6 +53,16 @@ func (h *SeriesHandler) assignVolumeThumbnailURL(volume *model.Volume) {
 	volume.ThumbnailURL = &url
 }
 
+// enrichVolumeBookmark 볼륨에 부모 시리즈의 북마크 상태를 전파
+func (h *SeriesHandler) enrichVolumeBookmark(volume *model.Volume, userID string) {
+	if volume == nil {
+		return
+	}
+	if series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID); err == nil && series != nil {
+		volume.IsBookmarked = series.IsBookmarked
+	}
+}
+
 func NewSeriesHandler(
 	seriesRepo *repository.SeriesRepository,
 	seriesCharacterRepo *repository.SeriesCharacterRepository,
@@ -512,6 +522,9 @@ func (h *SeriesHandler) UpdateVolume(c *fiber.Ctx) error {
 		})
 	}
 
+	userID := middleware.GetUserID(c)
+	h.enrichVolumeBookmark(volume, userID)
+
 	// 썸네일 URL 설정 (응답용)
 	h.assignVolumeThumbnailURL(volume)
 
@@ -632,6 +645,9 @@ func (h *SeriesHandler) UploadVolumeThumbnail(c *fiber.Ctx) error {
 			"error": "failed to update volume thumbnail path",
 		})
 	}
+
+	userID := middleware.GetUserID(c)
+	h.enrichVolumeBookmark(volume, userID)
 
 	// 썸네일 URL 업데이트
 	h.assignVolumeThumbnailURL(volume)
@@ -757,6 +773,9 @@ func (h *SeriesHandler) UploadVolumeThumbnailFromURL(c *fiber.Ctx) error {
 		})
 	}
 
+	userID := middleware.GetUserID(c)
+	h.enrichVolumeBookmark(volume, userID)
+
 	h.assignVolumeThumbnailURL(volume)
 
 	return c.JSON(volume)
@@ -803,6 +822,9 @@ func (h *SeriesHandler) DeleteVolumeThumbnail(c *fiber.Ctx) error {
 			"error": "failed to update volume",
 		})
 	}
+
+	userID := middleware.GetUserID(c)
+	h.enrichVolumeBookmark(volume, userID)
 
 	h.assignVolumeThumbnailURL(volume)
 
@@ -1196,6 +1218,9 @@ func (h *SeriesHandler) ListVolumes(c *fiber.Ctx) error {
 	for i := range volumes {
 		vID := volumes[i].ID
 		volumes[i].LibraryType = libraryType
+		if series != nil {
+			volumes[i].IsBookmarked = series.IsBookmarked
+		}
 
 		// 하위 볼륨 개수 조회 (볼륨 썸네일/플레이스홀더 fallback 판단에도 사용)
 		if subVolCount, err := h.volumeRepo.CountByParentID(nil, vID); err == nil {
@@ -1271,6 +1296,7 @@ func (h *SeriesHandler) GetVolume(c *fiber.Ctx) error {
 	} else if series != nil {
 		volume.LibraryType = series.LibraryType
 	}
+	h.enrichVolumeBookmark(volume, userID)
 
 	// 실제로 제공 가능한 경우에만 썸네일 URL 설정
 	h.assignVolumeThumbnailURL(volume)
@@ -1738,6 +1764,15 @@ func (h *SeriesHandler) UpdateViewerSettings(c *fiber.Ctx) error {
 	if req.EpubClickDirection != nil && *req.EpubClickDirection != "" && !h.isValidSetting("viewer_epub_click_direction", *req.EpubClickDirection) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_click_direction"})
 	}
+	if req.EpubFontSize != nil && (*req.EpubFontSize < 50 || *req.EpubFontSize > 150) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_font_size"})
+	}
+	if req.EpubFontFamily != nil && *req.EpubFontFamily != "" && *req.EpubFontFamily != "original" && *req.EpubFontFamily != "serif" && *req.EpubFontFamily != "sans-serif" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_font_family"})
+	}
+	if req.EpubLineHeight != nil && (*req.EpubLineHeight < 0.75 || *req.EpubLineHeight > 1.25) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid epub_line_height"})
+	}
 	if req.ReadingDirection != nil && *req.ReadingDirection != "" && !h.isValidSetting("viewer_reading_direction", *req.ReadingDirection) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid reading_direction"})
 	}
@@ -1821,7 +1856,7 @@ func (h *SeriesHandler) applySeriesDisplayTitle(series *model.Series, library *m
 
 	displayTitle := strings.TrimSpace(series.Title)
 	if library != nil && library.OriginalTitleOverride {
-		if resolved := scanner.ResolveSeriesTitleFromOriginalTitle(series.Path, "", series.Metadata, true, locale); resolved != "" {
+		if resolved := scanner.ResolveSeriesTitleFromOriginalTitle(series.Path, series.Title, series.Metadata, true, locale); resolved != "" {
 			displayTitle = resolved
 		}
 	}

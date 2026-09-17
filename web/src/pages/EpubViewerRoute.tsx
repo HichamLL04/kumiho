@@ -4,11 +4,15 @@ import { useTranslation } from "react-i18next";
 import {
   normalizeEpubLineHeightScale,
   useEpubViewerStore,
+  EPUB_FONT_SIZE_DEFAULT,
   type EpubFontFamily,
   type EpubFlow,
   type EpubRenderMode,
+  type EpubViewerSettings,
 } from "../stores/epubViewerStore";
 import { enterFullscreen, exitFullscreen, isFullscreen as isDocumentFullscreen } from "../utils/fullscreen";
+import { isMobile } from "../utils/device";
+import { getValidNumber } from "../utils/number";
 import { startChapterSwitching } from "../stores/fullscreenSwitchStore";
 import type { UseChapterLoaderReturn } from "../features/viewer/hooks/useChapterLoader";
 import { EpubViewer } from "./EpubViewer";
@@ -26,6 +30,7 @@ import {
 import { usePreventBrowserZoom } from "../features/viewer/hooks/usePreventBrowserZoom";
 import { useViewerSync } from "../hooks/useViewerSync";
 import { buildViewerRouteState } from "../utils/viewerRouteState";
+import { rememberViewerReturnFocus } from "../utils/returnFocus";
 
 interface EpubViewerRouteProps {
   loaderData: UseChapterLoaderReturn;
@@ -127,6 +132,11 @@ function getGeneratedTextProgressRatio(
   return null;
 }
 
+const TXT_DEFAULTS = {
+  theme: "dark" as const,
+  fontFamily: "sans-serif" as const,
+};
+
 export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   const { chapterId: routeChapterId } = useParams<{ chapterId: string }>();
   const { t } = useTranslation();
@@ -169,6 +179,9 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setFullscreen,
 
     reset,
+    setCurrentSeriesId,
+    hideUI,
+    showUI,
     setFontSize,
     setFontFamily,
     setLineHeight,
@@ -352,18 +365,26 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   }, [chapterId, reset, scheduleObjectUrlRevoke, setCurrentCFI, setGlobalProgress, shouldOpenLastPage]);
 
   // EPUB 뷰어 사용자 설정 로드
+  const chapterPath = chapter?.path ?? "";
+
   useEffect(() => {
-    if (!chapterId) return;
+    if (!chapterId || loaderData.isLoading) return;
     let cancelled = false;
     setEpubSettingsLoaded(false);
 
     const loadEpubSettings = async () => {
       try {
+        // 시리즈 ID 설정 (이후 사용자 설정 변경 시 시리즈별로 추적)
+        setCurrentSeriesId(seriesId || null);
+
         const userSettings = await settingAPI.list();
         if (cancelled) return;
+        const isMobileDevice = isMobile();
+        const fontSizeKey = isMobileDevice ? "epub_font_size_mobile" : "epub_font_size";
+        const lineHeightKey = isMobileDevice ? "epub_line_height_mobile" : "epub_line_height";
         const globalRenderMode = userSettings.epub_render_mode;
-        const fontSize = Number(userSettings.epub_font_size);
-        const lineHeight = Number(userSettings.epub_line_height);
+        const fontSize = getValidNumber(userSettings[fontSizeKey] ?? userSettings.epub_font_size);
+        const lineHeight = getValidNumber(userSettings[lineHeightKey] ?? userSettings.epub_line_height);
         const fontFamily = userSettings.epub_font_family;
         const theme = userSettings.epub_theme;
         const flow = userSettings.epub_flow;
@@ -385,16 +406,9 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         } = {};
         let seriesSettings: Partial<UserSeriesSetting> = {};
 
-        if (Number.isFinite(fontSize) && fontSize >= 50 && fontSize <= 150) {
-          setFontSize(fontSize);
-        }
-        const normalizedLineHeight = normalizeEpubLineHeightScale(lineHeight);
-        if (normalizedLineHeight != null) {
-          setLineHeight(normalizedLineHeight);
-        }
-        if (fontFamily === "original" || fontFamily === "serif" || fontFamily === "sans-serif") {
-          setFontFamily(fontFamily);
-        }
+        // TXT 파일 여부 확인 (TXT 전용 기본값 적용용)
+        const isTextFile = chapterPath.toLowerCase().endsWith(".txt");
+
         if (seriesId) {
           try {
             const seriesRes = await seriesAPI.get(seriesId);
@@ -420,31 +434,47 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
         }
 
         const effectiveRenderMode =
-          seriesSettings.epub_render_mode ||
-          libraryDefaults.default_epub_render_mode ||
-          globalRenderMode ||
-          "auto";
+          seriesSettings.epub_render_mode || libraryDefaults.default_epub_render_mode || globalRenderMode || "auto";
         if (effectiveRenderMode === "auto" || effectiveRenderMode === "book" || effectiveRenderMode === "comic") {
           setRenderMode(effectiveRenderMode);
         }
 
         const effectiveTheme =
-          seriesSettings.epub_theme || libraryDefaults.default_epub_theme || theme || "light";
+          seriesSettings.epub_theme ||
+          libraryDefaults.default_epub_theme ||
+          theme ||
+          (isTextFile ? TXT_DEFAULTS.theme : "light");
         if (effectiveTheme === "light" || effectiveTheme === "dark" || effectiveTheme === "sepia") {
           setTheme(effectiveTheme);
         }
 
-        const effectiveFlow =
-          seriesSettings.epub_flow || flow || "paginated";
+        const effectiveFontSize = seriesSettings.epub_font_size || fontSize || EPUB_FONT_SIZE_DEFAULT;
+        if (Number.isFinite(effectiveFontSize) && effectiveFontSize >= 50 && effectiveFontSize <= 150) {
+          setFontSize(effectiveFontSize);
+        }
+
+        const rawLineHeight = seriesSettings.epub_line_height || lineHeight;
+        const normalizedLineHeight = normalizeEpubLineHeightScale(rawLineHeight);
+        if (normalizedLineHeight != null) {
+          setLineHeight(normalizedLineHeight);
+        }
+
+        const effectiveFontFamily =
+          seriesSettings.epub_font_family || fontFamily || (isTextFile ? TXT_DEFAULTS.fontFamily : "original");
+        if (
+          effectiveFontFamily === "original" ||
+          effectiveFontFamily === "serif" ||
+          effectiveFontFamily === "sans-serif"
+        ) {
+          setFontFamily(effectiveFontFamily);
+        }
+
+        const effectiveFlow = seriesSettings.epub_flow || flow || "paginated";
         if (effectiveFlow === "paginated" || effectiveFlow === "scrolled") {
           setFlow(effectiveFlow);
         }
 
-        const effectiveSpread =
-          seriesSettings.epub_spread ||
-          libraryDefaults.default_epub_spread ||
-          spread ||
-          "auto";
+        const effectiveSpread = seriesSettings.epub_spread || libraryDefaults.default_epub_spread || spread || "auto";
         if (effectiveSpread === "auto" || effectiveSpread === "none") {
           setSpread(effectiveSpread);
         }
@@ -499,7 +529,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     };
   }, [
     chapterId,
+    chapterPath,
     seriesId,
+    loaderData.isLoading,
+    setCurrentSeriesId,
     setFontFamily,
     setFontSize,
     setLineHeight,
@@ -511,6 +544,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setKeyboardDirection,
     setClickDirection,
   ]);
+
+  // 뷰어 종료 시 시리즈 ID 초기화
+  useEffect(() => {
+    return () => {
+      setCurrentSeriesId(null);
+    };
+  }, [setCurrentSeriesId]);
 
   // 전체화면 브라우저 이벤트 동기화
   useEffect(() => {
@@ -553,10 +593,10 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     if (uiTimerRef.current) clearTimeout(uiTimerRef.current);
     if (!isSettingsOpen && !isInteractingRef.current) {
       uiTimerRef.current = window.setTimeout(() => {
-        useEpubViewerStore.getState().hideUI();
+        hideUI();
       }, 3000);
     }
-  }, [isSettingsOpen]);
+  }, [isSettingsOpen, hideUI]);
 
   const handleInteractionStart = useCallback(() => {
     isInteractingRef.current = true;
@@ -570,25 +610,24 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
       const elapsed = now - uiShownTimeRef.current;
       // UI_HIDE_DELAY (2000ms 또는 3000ms 등) 이상 이미 노출된 상태에서 호버가 끝났다면 즉시 숨김
       if (elapsed >= 3000) {
-        useEpubViewerStore.getState().hideUI();
+        hideUI();
       } else {
         resetUITimer();
       }
     }
-  }, [isUIVisible, resetUITimer]);
+  }, [isUIVisible, resetUITimer, hideUI]);
 
   // 클릭 시 UI 토글
   const toggleUIWithTimer = useCallback(() => {
-    const state = useEpubViewerStore.getState();
-    if (state.isUIVisible) {
+    if (isUIVisible) {
       if (uiTimerRef.current) clearTimeout(uiTimerRef.current);
-      state.hideUI();
+      hideUI();
     } else {
-      state.showUI();
+      showUI();
       uiShownTimeRef.current = Date.now();
       resetUITimer();
     }
-  }, [resetUITimer]);
+  }, [isUIVisible, resetUITimer, hideUI, showUI]);
 
   const handleViewerClick = useCallback(() => {
     toggleUIWithTimer();
@@ -837,50 +876,90 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
     setToc(loadedTOC);
   }, []);
 
-  const handleFontSizeChange = useCallback(
-    (size: number) => {
-      setFontSize(size);
-      void settingAPI.update("epub_font_size", { value: String(size) }).catch((error) => {
-        console.warn("[EpubViewerRoute] Failed to save epub_font_size:", error);
+  const runOptimisticUpdate = useCallback(
+    <K extends keyof EpubViewerSettings>(
+      key: K,
+      value: EpubViewerSettings[K],
+      setter: (v: EpubViewerSettings[K]) => void,
+      apiCall: () => Promise<unknown>,
+    ) => {
+      // 스토어에서 직접 최신값을 읽어 useCallback 의존성을 안정화한다
+      const store = useEpubViewerStore.getState();
+      const prev = store.settings[key];
+      const snapshotSeriesId = store.currentSeriesId;
+
+      setter(value);
+
+      apiCall().catch((error) => {
+        console.warn(`[EpubViewerRoute] Failed to save ${key}, rolling back:`, error);
+
+        const currentStore = useEpubViewerStore.getState();
+
+        if (snapshotSeriesId) {
+          // Revert seriesSettings[snapshotSeriesId] if it hasn't been changed to a newer value
+          const seriesConf = currentStore.seriesSettings[snapshotSeriesId];
+          if (seriesConf && seriesConf[key] === value) {
+            currentStore.updateSeriesSetting(snapshotSeriesId, { [key]: prev });
+          }
+
+          // Revert active settings in the viewer if the user is still on the same series
+          // and the current setting value hasn't been changed to a newer value
+          if (currentStore.currentSeriesId === snapshotSeriesId && currentStore.settings[key] === value) {
+            setter(prev);
+          }
+        } else {
+          // Global settings rollback: revert only if the active setting matches the optimistic value
+          if (currentStore.settings[key] === value) {
+            setter(prev);
+          }
+        }
       });
     },
-    [setFontSize],
+    [],
+  );
+
+  const handleFontSizeChange = useCallback(
+    (size: number) => {
+      runOptimisticUpdate("fontSize", size, setFontSize, () =>
+        !seriesId
+          ? settingAPI.update(isMobile() ? "epub_font_size_mobile" : "epub_font_size", { value: String(size) })
+          : seriesAPI.updateViewerSettings(seriesId, { epub_font_size: size }),
+      );
+    },
+    [seriesId, setFontSize, runOptimisticUpdate],
   );
 
   const handleFontFamilyChange = useCallback(
     (family: EpubFontFamily) => {
-      setFontFamily(family);
-      void settingAPI.update("epub_font_family", { value: family }).catch((error) => {
-        console.warn("[EpubViewerRoute] Failed to save epub_font_family:", error);
-      });
+      runOptimisticUpdate("fontFamily", family, setFontFamily, () =>
+        !seriesId
+          ? settingAPI.update("epub_font_family", { value: family })
+          : seriesAPI.updateViewerSettings(seriesId, { epub_font_family: family }),
+      );
     },
-    [setFontFamily],
+    [seriesId, setFontFamily, runOptimisticUpdate],
   );
 
   const handleLineHeightChange = useCallback(
     (height: number) => {
-      setLineHeight(height);
-      void settingAPI.update("epub_line_height", { value: String(height) }).catch((error) => {
-        console.warn("[EpubViewerRoute] Failed to save epub_line_height:", error);
-      });
+      runOptimisticUpdate("lineHeight", height, setLineHeight, () =>
+        !seriesId
+          ? settingAPI.update(isMobile() ? "epub_line_height_mobile" : "epub_line_height", { value: String(height) })
+          : seriesAPI.updateViewerSettings(seriesId, { epub_line_height: height }),
+      );
     },
-    [setLineHeight],
+    [seriesId, setLineHeight, runOptimisticUpdate],
   );
 
   const handleThemeChange = useCallback(
-    (theme: "light" | "dark" | "sepia") => {
-      setTheme(theme);
-      if (!seriesId) {
-        void settingAPI.update("epub_theme", { value: theme }).catch((error) => {
-          console.warn("[EpubViewerRoute] Failed to save global epub_theme:", error);
-        });
-        return;
-      }
-      void seriesAPI.updateViewerSettings(seriesId, { epub_theme: theme }).catch((error) => {
-        console.warn("[EpubViewerRoute] Failed to save series epub_theme:", error);
-      });
+    (themeVal: "light" | "dark" | "sepia") => {
+      runOptimisticUpdate("theme", themeVal, setTheme, () =>
+        !seriesId
+          ? settingAPI.update("epub_theme", { value: themeVal })
+          : seriesAPI.updateViewerSettings(seriesId, { epub_theme: themeVal }),
+      );
     },
-    [seriesId, setTheme],
+    [seriesId, setTheme, runOptimisticUpdate],
   );
 
   const handleSpreadChange = useCallback(
@@ -980,12 +1059,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   );
 
   const handleBack = useCallback(() => {
+    rememberViewerReturnFocus(viewerFrom, seriesId, volumeId);
     if (viewerFrom) {
       navigate(viewerFrom, { replace: true });
     } else {
       navigate(-1);
     }
-  }, [navigate, viewerFrom]);
+  }, [navigate, viewerFrom, seriesId, volumeId]);
 
   const handleReachedSeriesEnd = useCallback(() => {
     if (isAdjacentResolved) {
@@ -1014,12 +1094,13 @@ export function EpubViewerRoute({ loaderData }: EpubViewerRouteProps) {
   }, [prevChapterId, navigate, viewerFrom, routeIsIncognito]);
 
   const handleTerminatedConfirm = useCallback(() => {
+    rememberViewerReturnFocus(viewerFrom, seriesId, volumeId);
     if (viewerFrom) {
       navigate(viewerFrom, { replace: true });
       return;
     }
     navigate("/");
-  }, [navigate, viewerFrom]);
+  }, [navigate, viewerFrom, seriesId, volumeId]);
 
   const handleToggleFullscreen = useCallback(() => {
     try {

@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 45
+const latestMigrationVersion = 47
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -430,6 +430,9 @@ func Migrate() error {
 		epub_wheel_direction TEXT,
 		epub_keyboard_direction TEXT,
 		epub_click_direction TEXT,
+		epub_font_size INTEGER,
+		epub_font_family TEXT,
+		epub_line_height REAL,
 		reading_direction TEXT,
 		wheel_direction TEXT,
 		swipe_direction TEXT,
@@ -632,6 +635,8 @@ func Migrate() error {
 		{43, "시리즈 콘텐츠 업데이트 시간 컬럼 추가", migrateSeriesLastContentUpdatedAt},
 		{44, "시리즈 메타데이터 AniList 및 MAL ID 컬럼 추가", migrateSeriesMetadataExternalIDs},
 		{45, "시리즈 메타데이터 챕터 portada 생성 설정 추가", migrateSeriesMetadataGenerateChapterCovers},
+		{46, "EPUB 줄간격 절대값에서 배율(scale)로 변환", migrateEpubLineHeightToScale},
+		{47, "EPUB 폰트 관련 설정 시리즈별 설정 컬럼 추가", migrateEpubFontSeriesSettings},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -2027,4 +2032,42 @@ func migrateSeriesMetadataExternalIDs() error {
 // #45 migrateSeriesMetadataGenerateChapterCovers 시리즈 메타데이터 챕터 portada 생성 설정 추가
 func migrateSeriesMetadataGenerateChapterCovers() error {
 	return addColumn("series_metadata", "generate_chapter_covers", "BOOLEAN NOT NULL DEFAULT 0")
+}
+
+// #46 migrateEpubLineHeightToScale converts legacy absolute line-heights (> 1.25 ~ 2.0) to scale (0.75 ~ 1.25)
+func migrateEpubLineHeightToScale() error {
+	// Update user_settings
+	if _, err := DB.Exec(`
+		UPDATE user_settings
+		SET value = CAST(ROUND(CAST(value AS REAL) / 1.6, 2) AS TEXT)
+		WHERE key IN ('epub_line_height', 'epub_line_height_mobile')
+		  AND CAST(value AS REAL) > 1.25
+		  AND CAST(value AS REAL) <= 2.0
+	`); err != nil {
+		return fmt.Errorf("migrate user_settings epub_line_height: %w", err)
+	}
+
+	// Update server_settings
+	if _, err := DB.Exec(`
+		UPDATE server_settings
+		SET value = CAST(ROUND(CAST(value AS REAL) / 1.6, 2) AS TEXT)
+		WHERE key IN ('epub_line_height', 'epub_line_height_mobile')
+		  AND CAST(value AS REAL) > 1.25
+		  AND CAST(value AS REAL) <= 2.0
+	`); err != nil {
+		return fmt.Errorf("migrate server_settings epub_line_height: %w", err)
+	}
+
+	return nil
+}
+
+// #47 migrateEpubFontSeriesSettings adds epub_font_size, epub_font_family, epub_line_height columns to user_series_settings
+func migrateEpubFontSeriesSettings() error {
+	if err := addColumn("user_series_settings", "epub_font_size", "INTEGER"); err != nil {
+		return err
+	}
+	if err := addColumn("user_series_settings", "epub_font_family", "TEXT"); err != nil {
+		return err
+	}
+	return addColumn("user_series_settings", "epub_line_height", "REAL")
 }
