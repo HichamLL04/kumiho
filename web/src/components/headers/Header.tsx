@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { LogOut, Menu, Settings, ChevronDown, User, Search, X, ChevronRight, FileText } from "lucide-react";
+import { LogOut, Menu, Settings, ChevronDown, User, Search, X, ChevronRight, FileText, RefreshCw } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { pluginAPI, seriesAPI, systemAPI } from "../../api/client";
 import { useSSE } from "../../hooks/useSSE";
@@ -405,6 +405,16 @@ export function Header({ onMenuClick }: HeaderProps) {
                 className={styles.dropdownItem}
               >
                 <Settings size={16} /> {t("header.settings")}
+              </button>
+
+              <button
+                onClick={() => {
+                  navigate("/settings?tab=sync");
+                  setDropdownOpen(false);
+                }}
+                className={styles.dropdownItem}
+              >
+                <RefreshCw size={16} /> Sincronización (AniList / MAL)
               </button>
 
               <button

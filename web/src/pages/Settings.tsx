@@ -156,7 +156,7 @@ export function SettingsPage() {
                   }}
                 >
                   <Icon size={18} />
-                  <span>{t(tab.label)}</span>
+                  <span>{tab.id === "sync" ? "Sincronización" : t(tab.label)}</span>
                   {tab.id === "system" && hasSystemUpdate && (
                     <UpdateBadge
                       className={styles.navUpdateBadge}

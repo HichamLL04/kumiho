@@ -1,4 +1,4 @@
-﻿package scanner
+package scanner
 
 import (
 	"os"
@@ -121,6 +121,50 @@ MyAnimeList URL: https://myanimelist.net/manga/2`
 		}
 		if series.Metadata.AnilistID != "99999" {
 			t.Errorf("expected AnilistID 99999, got %s", series.Metadata.AnilistID)
+		}
+	})
+
+	t.Run("series_metadata.txt file name supported", func(t *testing.T) {
+		tempDir := t.TempDir()
+		content := `Title: Jujutsu Kaisen
+AniList ID: 101517
+MyAnimeList ID: 113138`
+		if err := os.WriteFile(filepath.Join(tempDir, "series_metadata.txt"), []byte(content), 0644); err != nil {
+			t.Fatalf("failed to write series_metadata.txt: %v", err)
+		}
+
+		series := &model.Series{
+			Title: "Jujutsu Kaisen",
+			Path:  tempDir,
+		}
+
+		changed := s.applyMetadataTxtToSeries(series, tempDir)
+		if !changed {
+			t.Errorf("expected changed=true, got false")
+		}
+		if series.Metadata.AnilistID != "101517" {
+			t.Errorf("expected AnilistID 101517, got %s", series.Metadata.AnilistID)
+		}
+		if series.Metadata.MalID != "113138" {
+			t.Errorf("expected MalID 113138, got %s", series.Metadata.MalID)
+		}
+	})
+
+	t.Run("metadata files excluded from isArchive", func(t *testing.T) {
+		if isArchive("metadata.txt") {
+			t.Errorf("expected isArchive(metadata.txt) = false")
+		}
+		if isArchive("series_metadata.txt") {
+			t.Errorf("expected isArchive(series_metadata.txt) = false")
+		}
+		if isArchive("series_metadata.json") {
+			t.Errorf("expected isArchive(series_metadata.json) = false")
+		}
+		if !isArchive("chapter01.cbz") {
+			t.Errorf("expected isArchive(chapter01.cbz) = true")
+		}
+		if !isArchive("real_book.txt") {
+			t.Errorf("expected isArchive(real_book.txt) = true")
 		}
 	})
 }

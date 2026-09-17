@@ -3014,8 +3014,33 @@ func isImage(filename string) bool {
 	return imageExtensions[ext]
 }
 
+// isMetadataOrSystemFile checks if a file is a metadata descriptor or system file that should never be scanned as a media/archive
+func isMetadataOrSystemFile(filename string) bool {
+	base := strings.ToLower(filepath.Base(filename))
+	if strings.HasPrefix(base, ".") {
+		return true
+	}
+	switch base {
+	case "metadata.txt", "series_metadata.txt", "series_metadata.json", "metadata.json",
+		"series.json", "comicinfo.xml", "info.txt", "description.txt", "desc.txt",
+		"summary.txt", "tags.txt", "readme.txt", "details.txt":
+		return true
+	}
+	if strings.HasSuffix(base, ".txt") || strings.HasSuffix(base, ".json") || strings.HasSuffix(base, ".xml") {
+		if strings.Contains(base, "metadata") || strings.Contains(base, "meta") ||
+			strings.Contains(base, "anilist") || strings.Contains(base, "myanimelist") ||
+			strings.Contains(base, "info") {
+			return true
+		}
+	}
+	return false
+}
+
 // isArchive 아카이브 파일 여부 확인
 func isArchive(filename string) bool {
+	if isMetadataOrSystemFile(filename) {
+		return false
+	}
 	ext := strings.ToLower(filepath.Ext(filename))
 	return archiveExtensions[ext]
 }
@@ -3315,24 +3340,38 @@ func (s *Scanner) applyMetadataTxtToSeries(series *model.Series, seriesPath stri
 		baseDir = filepath.Dir(seriesPath)
 	}
 
-	metadataPath := filepath.Join(baseDir, "metadata.txt")
-	if _, err := os.Stat(metadataPath); err != nil {
+	candidateNames := []string{"metadata.txt", "series_metadata.txt"}
+	var metadataPath string
+	for _, name := range candidateNames {
+		p := filepath.Join(baseDir, name)
+		if _, err := os.Stat(p); err == nil {
+			metadataPath = p
+			break
+		}
+	}
+	if metadataPath == "" {
 		// Case-insensitive fallback for Linux filesystems
 		entries, rErr := os.ReadDir(baseDir)
 		if rErr != nil {
 			return false
 		}
-		found := false
 		for _, e := range entries {
-			if !e.IsDir() && strings.EqualFold(e.Name(), "metadata.txt") {
-				metadataPath = filepath.Join(baseDir, e.Name())
-				found = true
+			if e.IsDir() {
+				continue
+			}
+			for _, name := range candidateNames {
+				if strings.EqualFold(e.Name(), name) {
+					metadataPath = filepath.Join(baseDir, e.Name())
+					break
+				}
+			}
+			if metadataPath != "" {
 				break
 			}
 		}
-		if !found {
-			return false
-		}
+	}
+	if metadataPath == "" {
+		return false
 	}
 
 	data, err := os.ReadFile(metadataPath)
