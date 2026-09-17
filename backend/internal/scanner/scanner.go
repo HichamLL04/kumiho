@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/md5"
 	"database/sql"
@@ -9,10 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
+	"html"
+	"io"
 	"io/fs"
 	"log"
 	"math"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -3454,6 +3457,565 @@ func (s *Scanner) applyMetadataTxtToSeries(series *model.Series, seriesPath stri
 	if metadataTitle != "" && strings.TrimSpace(series.Metadata.OriginalTitle) == "" {
 		series.Metadata.OriginalTitle = metadataTitle
 		changed = true
+	}
+
+	// Rich metadata fetch from AniList / MAL (description, authors, genres, status, cover)
+	// CRITICAL: series.Title is NEVER overwritten
+	if s.fetchAndApplyExternalMetadata(series, series.Metadata.AnilistID, series.Metadata.MalID) {
+		changed = true
+	}
+
+	return changed
+}
+
+var (
+	reHTMLTags   = regexp.MustCompile(`<[^>]*>`)
+	reHTMLBreaks = regexp.MustCompile(`(?i)<br\s*/?>`)
+)
+
+func cleanHTMLText(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	s = reHTMLBreaks.ReplaceAllString(s, "\n")
+	s = reHTMLTags.ReplaceAllString(s, "")
+	s = html.UnescapeString(s)
+
+	lines := strings.Split(s, "\n")
+	var cleaned []string
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if l != "" {
+			cleaned = append(cleaned, l)
+		}
+	}
+	return strings.Join(cleaned, "\n\n")
+}
+
+func (s *Scanner) downloadCoverThumbnail(seriesPath, rawURL string) (string, error) {
+	if s.config == nil || s.config.DataDir == "" || rawURL == "" {
+		return "", nil
+	}
+	thumbnailsDir := filepath.Join(s.config.DataDir, "thumbnails", "series")
+	if err := os.MkdirAll(thumbnailsDir, 0755); err != nil {
+		return "", err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Kumiho/0.17.0)")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status code %d", resp.StatusCode)
+	}
+
+	ext := ".jpg"
+	ct := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(ct, "png") {
+		ext = ".png"
+	} else if strings.Contains(ct, "webp") {
+		ext = ".webp"
+	}
+
+	hash := md5.Sum([]byte(seriesPath))
+	hashString := hex.EncodeToString(hash[:])
+	targetPath := filepath.Join(thumbnailsDir, hashString+ext)
+
+	outFile, err := os.Create(targetPath)
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := io.Copy(outFile, io.LimitReader(resp.Body, 10*1024*1024)); err != nil {
+		_ = outFile.Close()
+		_ = os.Remove(targetPath)
+		return "", err
+	}
+	if err := outFile.Close(); err != nil {
+		_ = os.Remove(targetPath)
+		return "", err
+	}
+
+	return targetPath, nil
+}
+
+func (s *Scanner) fetchAndApplyExternalMetadata(series *model.Series, anilistID, malID string) bool {
+	if series == nil || series.Metadata == nil {
+		return false
+	}
+	anilistID = strings.TrimSpace(anilistID)
+	malID = strings.TrimSpace(malID)
+	if anilistID == "" && malID == "" {
+		return false
+	}
+
+	needsFetch := series.Description == "" || series.Metadata.Description == "" ||
+		series.Metadata.Authors == "" || series.Metadata.Tags == "" ||
+		series.ThumbnailPath == nil || *series.ThumbnailPath == ""
+	if !needsFetch {
+		return false
+	}
+
+	changed := false
+	if anilistID != "" {
+		if s.fetchAndApplyAniList(series, anilistID) {
+			changed = true
+		}
+	}
+
+	if malID != "" && (series.Description == "" || series.Metadata.Description == "" || series.Metadata.Authors == "") {
+		if s.fetchAndApplyMAL(series, malID) {
+			changed = true
+		}
+	}
+
+	return changed
+}
+
+func (s *Scanner) fetchAndApplyAniList(series *model.Series, anilistID string) bool {
+	idInt, err := strconv.Atoi(anilistID)
+	if err != nil {
+		return false
+	}
+
+	query := `query ($id: Int) {
+		Media (id: $id, type: MANGA) {
+			id
+			title {
+				romaji
+				english
+				native
+			}
+			description
+			status
+			startDate {
+				year
+				month
+				day
+			}
+			genres
+			staff {
+				edges {
+					role
+					node {
+						name {
+							full
+						}
+					}
+				}
+			}
+			coverImage {
+				extraLarge
+				large
+			}
+		}
+	}`
+
+	reqBody, err := json.Marshal(map[string]interface{}{
+		"query": query,
+		"variables": map[string]interface{}{
+			"id": idInt,
+		},
+	})
+	if err != nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://graphql.anilist.co", bytes.NewBuffer(reqBody))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Kumiho/0.17.0")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[SCANNER] AniList request error for ID %s: %v", anilistID, err)
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[SCANNER] AniList returned HTTP %d for ID %s", resp.StatusCode, anilistID)
+		return false
+	}
+
+	var aniResp struct {
+		Data struct {
+			Media struct {
+				ID    int `json:"id"`
+				Title struct {
+					Romaji  string `json:"romaji"`
+					English string `json:"english"`
+					Native  string `json:"native"`
+				} `json:"title"`
+				Description string `json:"description"`
+				Status      string `json:"status"`
+				StartDate   struct {
+					Year  int `json:"year"`
+					Month int `json:"month"`
+					Day   int `json:"day"`
+				} `json:"startDate"`
+				Genres []string `json:"genres"`
+				Staff  struct {
+					Edges []struct {
+						Role string `json:"role"`
+						Node struct {
+							Name struct {
+								Full string `json:"full"`
+							} `json:"name"`
+						} `json:"node"`
+					} `json:"edges"`
+				} `json:"staff"`
+				CoverImage struct {
+					ExtraLarge string `json:"extraLarge"`
+					Large      string `json:"large"`
+				} `json:"coverImage"`
+			} `json:"Media"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&aniResp); err != nil {
+		log.Printf("[SCANNER] Failed to decode AniList response for ID %s: %v", anilistID, err)
+		return false
+	}
+
+	media := aniResp.Data.Media
+	if media.ID == 0 {
+		return false
+	}
+
+	changed := false
+
+	// 1. Description
+	cleanDesc := cleanHTMLText(media.Description)
+	if cleanDesc != "" && (series.Description == "" || series.Metadata.Description == "") {
+		series.Description = cleanDesc
+		series.Metadata.Description = cleanDesc
+		changed = true
+	}
+
+	// 2. Authors
+	if series.Metadata.Authors == "" && len(media.Staff.Edges) > 0 {
+		var authors []string
+		seenAuthors := make(map[string]bool)
+		for _, edge := range media.Staff.Edges {
+			name := strings.TrimSpace(edge.Node.Name.Full)
+			if name != "" && !seenAuthors[name] {
+				seenAuthors[name] = true
+				authors = append(authors, name)
+			}
+		}
+		if len(authors) > 0 {
+			series.Metadata.Authors = strings.Join(authors, ", ")
+			changed = true
+		}
+	}
+
+	// 3. Genres / Tags
+	if series.Metadata.Tags == "" && len(media.Genres) > 0 {
+		series.Metadata.Tags = strings.Join(media.Genres, ", ")
+		changed = true
+	}
+
+	// 4. Status
+	if media.Status != "" {
+		newStatus := series.Metadata.Status
+		switch strings.ToUpper(media.Status) {
+		case "FINISHED":
+			newStatus = "COMPLETED"
+		case "RELEASING":
+			newStatus = "ONGOING"
+		case "CANCELLED", "HIATUS":
+			newStatus = "HIATUS"
+		}
+		if newStatus != "" && series.Metadata.Status != newStatus {
+			series.Metadata.Status = newStatus
+			changed = true
+		}
+	}
+
+	// 5. Published Date / Year
+	if media.StartDate.Year > 0 {
+		yearStr := strconv.Itoa(media.StartDate.Year)
+		if series.Metadata.PublicationYear == "" {
+			series.Metadata.PublicationYear = yearStr
+			changed = true
+		}
+		if series.Metadata.PublishedAt == "" {
+			if media.StartDate.Month > 0 && media.StartDate.Day > 0 {
+				series.Metadata.PublishedAt = fmt.Sprintf("%04d-%02d-%02d", media.StartDate.Year, media.StartDate.Month, media.StartDate.Day)
+			} else if media.StartDate.Month > 0 {
+				series.Metadata.PublishedAt = fmt.Sprintf("%04d-%02d", media.StartDate.Year, media.StartDate.Month)
+			} else {
+				series.Metadata.PublishedAt = yearStr
+			}
+			changed = true
+		}
+	}
+
+	// 6. Original Titles (en, ja, ko)
+	origMap := make(map[string]string)
+	if media.Title.English != "" {
+		origMap["en"] = media.Title.English
+	}
+	if media.Title.Native != "" {
+		origMap["ja"] = media.Title.Native
+	}
+	if media.Title.Romaji != "" {
+		origMap["ko"] = media.Title.Romaji
+	}
+	if len(origMap) > 0 && series.Metadata.OriginalTitles == "" {
+		if b, err := json.Marshal(origMap); err == nil {
+			series.Metadata.OriginalTitles = string(b)
+			changed = true
+		}
+	}
+	if series.Metadata.OriginalTitle == "" {
+		if media.Title.Native != "" {
+			series.Metadata.OriginalTitle = media.Title.Native
+			changed = true
+		} else if media.Title.Romaji != "" {
+			series.Metadata.OriginalTitle = media.Title.Romaji
+			changed = true
+		}
+	}
+
+	// 7. Cover / Thumbnail (download if missing)
+	coverURL := media.CoverImage.ExtraLarge
+	if coverURL == "" {
+		coverURL = media.CoverImage.Large
+	}
+	if coverURL != "" && (series.ThumbnailPath == nil || *series.ThumbnailPath == "") && s.config != nil && s.config.DataDir != "" {
+		if newThumb, err := s.downloadCoverThumbnail(series.Path, coverURL); err == nil && newThumb != "" {
+			series.ThumbnailPath = &newThumb
+			url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
+			series.ThumbnailURL = &url
+			changed = true
+			log.Printf("[SCANNER] Downloaded AniList cover for series '%s': %s", series.Title, newThumb)
+		}
+	}
+
+	// NOTE: series.Title is deliberately untouched ("nunca sobreescribas el titulo")
+
+	return changed
+}
+
+func (s *Scanner) fetchAndApplyMAL(series *model.Series, malID string) bool {
+	var clientID string
+	if database.DB != nil {
+		_ = database.DB.QueryRow("SELECT value FROM user_settings WHERE key = 'mal_client_id' AND value != '' LIMIT 1").Scan(&clientID)
+	}
+
+	var reqURL string
+	var reqHeaderKey, reqHeaderVal string
+	if clientID != "" {
+		reqURL = fmt.Sprintf("https://api.myanimelist.net/v2/manga/%s?fields=id,title,main_picture,alternative_titles,synopsis,start_date,end_date,status,genres,authors{first_name,last_name}", malID)
+		reqHeaderKey = "X-MAL-CLIENT-ID"
+		reqHeaderVal = clientID
+	} else {
+		reqURL = fmt.Sprintf("https://api.jikan.moe/v4/manga/%s", malID)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return false
+	}
+	if reqHeaderKey != "" {
+		req.Header.Set(reqHeaderKey, reqHeaderVal)
+	}
+	req.Header.Set("User-Agent", "Kumiho/0.17.0")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	changed := false
+
+	if clientID != "" {
+		var malResp struct {
+			ID          int    `json:"id"`
+			Title       string `json:"title"`
+			Synopsis    string `json:"synopsis"`
+			Status      string `json:"status"`
+			StartDate   string `json:"start_date"`
+			MainPicture struct {
+				Large  string `json:"large"`
+				Medium string `json:"medium"`
+			} `json:"main_picture"`
+			AlternativeTitles struct {
+				Synonyms []string `json:"synonyms"`
+				En       string   `json:"en"`
+				Ja       string   `json:"ja"`
+			} `json:"alternative_titles"`
+			Genres []struct {
+				Name string `json:"name"`
+			} `json:"genres"`
+			Authors []struct {
+				Node struct {
+					FirstName string `json:"first_name"`
+					LastName  string `json:"last_name"`
+				} `json:"node"`
+			} `json:"authors"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&malResp); err == nil && malResp.ID != 0 {
+			cleanDesc := cleanHTMLText(malResp.Synopsis)
+			if cleanDesc != "" && (series.Description == "" || series.Metadata.Description == "") {
+				series.Description = cleanDesc
+				series.Metadata.Description = cleanDesc
+				changed = true
+			}
+			if series.Metadata.Authors == "" && len(malResp.Authors) > 0 {
+				var authList []string
+				for _, a := range malResp.Authors {
+					name := strings.TrimSpace(a.Node.FirstName + " " + a.Node.LastName)
+					if name != "" {
+						authList = append(authList, name)
+					}
+				}
+				if len(authList) > 0 {
+					series.Metadata.Authors = strings.Join(authList, ", ")
+					changed = true
+				}
+			}
+			if series.Metadata.Tags == "" && len(malResp.Genres) > 0 {
+				var tags []string
+				for _, g := range malResp.Genres {
+					if g.Name != "" {
+						tags = append(tags, g.Name)
+					}
+				}
+				if len(tags) > 0 {
+					series.Metadata.Tags = strings.Join(tags, ", ")
+					changed = true
+				}
+			}
+			if series.Metadata.OriginalTitle == "" && malResp.AlternativeTitles.Ja != "" {
+				series.Metadata.OriginalTitle = malResp.AlternativeTitles.Ja
+				changed = true
+			}
+			coverURL := malResp.MainPicture.Large
+			if coverURL == "" {
+				coverURL = malResp.MainPicture.Medium
+			}
+			if coverURL != "" && (series.ThumbnailPath == nil || *series.ThumbnailPath == "") && s.config != nil && s.config.DataDir != "" {
+				if newThumb, err := s.downloadCoverThumbnail(series.Path, coverURL); err == nil && newThumb != "" {
+					series.ThumbnailPath = &newThumb
+					url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
+					series.ThumbnailURL = &url
+					changed = true
+				}
+			}
+		}
+	} else {
+		var jikanResp struct {
+			Data struct {
+				MalID    int    `json:"mal_id"`
+				Title    string `json:"title"`
+				Synopsis string `json:"synopsis"`
+				Status   string `json:"status"`
+				Images   struct {
+					Jpg struct {
+						LargeImageURL string `json:"large_image_url"`
+						ImageURL      string `json:"image_url"`
+					} `json:"jpg"`
+				} `json:"images"`
+				Titles []struct {
+					Type  string `json:"type"`
+					Title string `json:"title"`
+				} `json:"titles"`
+				Genres []struct {
+					Name string `json:"name"`
+				} `json:"genres"`
+				Authors []struct {
+					Name string `json:"name"`
+				} `json:"authors"`
+				Published struct {
+					From string `json:"from"`
+				} `json:"published"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&jikanResp); err == nil && jikanResp.Data.MalID != 0 {
+			cleanDesc := cleanHTMLText(jikanResp.Data.Synopsis)
+			if cleanDesc != "" && (series.Description == "" || series.Metadata.Description == "") {
+				series.Description = cleanDesc
+				series.Metadata.Description = cleanDesc
+				changed = true
+			}
+			if series.Metadata.Authors == "" && len(jikanResp.Data.Authors) > 0 {
+				var authList []string
+				for _, a := range jikanResp.Data.Authors {
+					if a.Name != "" {
+						authList = append(authList, a.Name)
+					}
+				}
+				if len(authList) > 0 {
+					series.Metadata.Authors = strings.Join(authList, ", ")
+					changed = true
+				}
+			}
+			if series.Metadata.Tags == "" && len(jikanResp.Data.Genres) > 0 {
+				var tags []string
+				for _, g := range jikanResp.Data.Genres {
+					if g.Name != "" {
+						tags = append(tags, g.Name)
+					}
+				}
+				if len(tags) > 0 {
+					series.Metadata.Tags = strings.Join(tags, ", ")
+					changed = true
+				}
+			}
+			if series.Metadata.OriginalTitle == "" {
+				for _, t := range jikanResp.Data.Titles {
+					if t.Type == "Japanese" && t.Title != "" {
+						series.Metadata.OriginalTitle = t.Title
+						changed = true
+						break
+					}
+				}
+			}
+			coverURL := jikanResp.Data.Images.Jpg.LargeImageURL
+			if coverURL == "" {
+				coverURL = jikanResp.Data.Images.Jpg.ImageURL
+			}
+			if coverURL != "" && (series.ThumbnailPath == nil || *series.ThumbnailPath == "") && s.config != nil && s.config.DataDir != "" {
+				if newThumb, err := s.downloadCoverThumbnail(series.Path, coverURL); err == nil && newThumb != "" {
+					series.ThumbnailPath = &newThumb
+					url := util.BuildSeriesThumbnailURL(series.ID, series.ThumbnailPath, time.Now())
+					series.ThumbnailURL = &url
+					changed = true
+				}
+			}
+		}
 	}
 
 	return changed
