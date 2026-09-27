@@ -207,4 +207,5 @@ export interface Library {
   is_visible?: boolean;
   scan_excludes?: string;
   original_title_override?: boolean;
+  exclude_from_home?: boolean;
 }

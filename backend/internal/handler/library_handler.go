@@ -77,6 +77,7 @@ type CreateLibraryRequest struct {
 	LibraryType                  string   `json:"library_type"`
 	ScanExcludes                 string   `json:"scan_excludes"`
 	OriginalTitleOverride        bool     `json:"original_title_override"`
+	ExcludeFromHome              bool     `json:"exclude_from_home"`
 }
 
 func normalizeLibraryType(value string) (string, bool) {
@@ -408,6 +409,7 @@ func (h *LibraryHandler) Create(c *fiber.Ctx) error {
 		LibraryType:            libraryType,
 		ScanExcludes:           req.ScanExcludes,
 		OriginalTitleOverride:  req.OriginalTitleOverride,
+		ExcludeFromHome:        req.ExcludeFromHome,
 	}
 
 	if err := h.libraryRepo.Create(nil, library); err != nil {
@@ -703,6 +705,7 @@ type UpdateLibraryRequest struct {
 	IsVisible                    *bool     `json:"is_visible"` // Optional, pointer to distinguish false vs missing
 	ScanExcludes                 *string   `json:"scan_excludes"`
 	OriginalTitleOverride        *bool     `json:"original_title_override"`
+	ExcludeFromHome              *bool     `json:"exclude_from_home"`
 }
 
 // Update 라이브러리 수정
@@ -750,6 +753,9 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		}
 		if req.IsVisible != nil {
 			library.IsVisible = *req.IsVisible
+		}
+		if req.ExcludeFromHome != nil {
+			library.ExcludeFromHome = *req.ExcludeFromHome
 		}
 	} else {
 		// 일반 라이브러리 수정
@@ -903,6 +909,9 @@ func (h *LibraryHandler) Update(c *fiber.Ctx) error {
 		}
 		if req.IsVisible != nil {
 			pendingLibrary.IsVisible = *req.IsVisible
+		}
+		if req.ExcludeFromHome != nil {
+			pendingLibrary.ExcludeFromHome = *req.ExcludeFromHome
 		}
 		if req.ScanExcludes != nil {
 			if *req.ScanExcludes != "" {

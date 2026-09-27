@@ -717,6 +717,8 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 		// 3. 디스크에 없는 DB 시리즈 삭제
 		for path, series := range existingMap {
 			if !processedPaths[path] {
+				histRepo := repository.NewSeriesHistoryRepository()
+				_ = histRepo.SaveSnapshotFromSeries(nil, series.ID)
 				if err := s.seriesRepo.Delete(nil, series.ID); err != nil {
 					result.Errors = append(result.Errors, err.Error())
 				}
@@ -1503,6 +1505,7 @@ func (s *Scanner) processArchiveAsSeries(
 			}
 		}
 
+		s.restoreSeriesHistory(series)
 		if cErr := s.seriesRepo.Create(tx, series); cErr != nil {
 			return nil, cErr
 		}
@@ -1529,6 +1532,11 @@ func (s *Scanner) processArchiveAsSeries(
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
+	s.restoreReadingProgressFromHistory(series)
+	s.saveSeriesMetadataFile(series)
+	histRepo := repository.NewSeriesHistoryRepository()
+	_ = histRepo.SaveSnapshotFromSeries(nil, series.ID)
 
 	result.VolumeCount = saveRes.VolumeCount
 	result.ChapterCount = saveRes.ChapterCount
@@ -1602,6 +1610,9 @@ func (s *Scanner) processSeries(
 		if s.applyMetadataTxtToSeries(series, seriesPath) {
 			seriesChanged = true
 		}
+		if s.restoreSeriesHistory(series) {
+			seriesChanged = true
+		}
 		baseSeriesTitle := resolveSeriesTitleFromPath(seriesPath, seriesTitle)
 		if strings.TrimSpace(series.Title) != baseSeriesTitle {
 			series.Title = baseSeriesTitle
@@ -1638,6 +1649,7 @@ func (s *Scanner) processSeries(
 			s.applyEpubMetadataToSeries(series, epubMeta)
 		}
 		s.applyMetadataTxtToSeries(series, seriesPath)
+		s.restoreSeriesHistory(series)
 
 		// 해시 기반 썸네일 확인 및 연결
 		hash := md5.Sum([]byte(seriesPath))
@@ -1682,7 +1694,14 @@ func (s *Scanner) processSeries(
 		}
 	}
 
-	return s.scanSeriesContent(ctx, series, excludePatterns, updateProgress, perf, libraryType)
+	scanRes, scanErr := s.scanSeriesContent(ctx, series, excludePatterns, updateProgress, perf, libraryType)
+	if scanErr == nil {
+		s.restoreReadingProgressFromHistory(series)
+		s.saveSeriesMetadataFile(series)
+		histRepo := repository.NewSeriesHistoryRepository()
+		_ = histRepo.SaveSnapshotFromSeries(nil, series.ID)
+	}
+	return scanRes, scanErr
 }
 
 // scanSeriesContent 시리즈 내용 스캔 (볼륨, 챕터) - Incremental Scan 적용
@@ -3466,6 +3485,226 @@ func (s *Scanner) applyMetadataTxtToSeries(series *model.Series, seriesPath stri
 	}
 
 	return changed
+}
+
+// restoreSeriesHistory checks series_history to restore AniList ID, MAL ID, description, authors, tags, cover etc.
+func (s *Scanner) restoreSeriesHistory(series *model.Series) bool {
+	if series == nil {
+		return false
+	}
+	anilistID := ""
+	malID := ""
+	if series.Metadata != nil {
+		anilistID = series.Metadata.AnilistID
+		malID = series.Metadata.MalID
+	}
+	histRepo := repository.NewSeriesHistoryRepository()
+	match, err := histRepo.FindMatch(nil, anilistID, malID, series.Path, series.Title)
+	if err != nil || match == nil {
+		return false
+	}
+
+	if series.Metadata == nil {
+		series.Metadata = &model.SeriesMetadata{SeriesID: series.ID}
+	}
+
+	restored := false
+	if series.Metadata.AnilistID == "" && match.AnilistID != "" {
+		series.Metadata.AnilistID = match.AnilistID
+		restored = true
+	}
+	if series.Metadata.MalID == "" && match.MalID != "" {
+		series.Metadata.MalID = match.MalID
+		restored = true
+	}
+	if series.Metadata.OriginalTitle == "" && match.OriginalTitle != "" {
+		series.Metadata.OriginalTitle = match.OriginalTitle
+		restored = true
+	}
+	if series.Metadata.OriginalTitles == "" && match.OriginalTitles != "" {
+		series.Metadata.OriginalTitles = match.OriginalTitles
+		restored = true
+	}
+	if series.Metadata.Description == "" && match.Description != "" {
+		series.Metadata.Description = match.Description
+		restored = true
+	}
+	if series.Metadata.Authors == "" && match.Authors != "" {
+		series.Metadata.Authors = match.Authors
+		restored = true
+	}
+	if series.Metadata.Tags == "" && match.Tags != "" {
+		series.Metadata.Tags = match.Tags
+		restored = true
+	}
+	if (series.Metadata.Status == "" || series.Metadata.Status == "ONGOING") && match.Status != "" {
+		series.Metadata.Status = match.Status
+		restored = true
+	}
+	if series.Metadata.PublicationYear == "" && match.PublicationYear != "" {
+		series.Metadata.PublicationYear = match.PublicationYear
+		restored = true
+	}
+	if series.Metadata.PublishedAt == "" && match.PublishedAt != "" {
+		series.Metadata.PublishedAt = match.PublishedAt
+		restored = true
+	}
+	if series.Metadata.Publisher == "" && match.Publisher != "" {
+		series.Metadata.Publisher = match.Publisher
+		restored = true
+	}
+	if (series.ThumbnailPath == nil || *series.ThumbnailPath == "") && match.ThumbnailPath != "" {
+		if _, err := os.Stat(match.ThumbnailPath); err == nil {
+			series.ThumbnailPath = &match.ThumbnailPath
+			restored = true
+		}
+	}
+
+	if restored {
+		log.Printf("[SCANNER] Restored persistent metadata from series_history for '%s'", series.Title)
+	}
+	return restored
+}
+
+// restoreReadingProgressFromHistory restores completed chapters and reading position from series_history
+func (s *Scanner) restoreReadingProgressFromHistory(series *model.Series) {
+	if series == nil || series.ID == "" {
+		return
+	}
+	anilistID := ""
+	malID := ""
+	if series.Metadata != nil {
+		anilistID = series.Metadata.AnilistID
+		malID = series.Metadata.MalID
+	}
+	histRepo := repository.NewSeriesHistoryRepository()
+	match, err := histRepo.FindMatch(nil, anilistID, malID, series.Path, series.Title)
+	if err != nil || match == nil {
+		return
+	}
+
+	var readNums []float64
+	if match.ReadChaptersJSON != "" && match.ReadChaptersJSON != "[]" {
+		_ = json.Unmarshal([]byte(match.ReadChaptersJSON), &readNums)
+	}
+	if match.LastReadChapterNum > 0 {
+		hasLastRead := false
+		for _, n := range readNums {
+			if n == match.LastReadChapterNum {
+				hasLastRead = true
+				break
+			}
+		}
+		if !hasLastRead {
+			readNums = append(readNums, match.LastReadChapterNum)
+		}
+	}
+
+	if len(readNums) == 0 && match.LastReadChapterNum <= 0 {
+		return
+	}
+
+	targetUserID := match.UserID
+	if targetUserID == "" {
+		_ = database.DB.QueryRow(`SELECT id FROM users ORDER BY created_at ASC LIMIT 1`).Scan(&targetUserID)
+	}
+	if targetUserID == "" {
+		return
+	}
+
+	chapters, err := s.chapterRepo.FindBySeriesID(nil, series.ID)
+	if err != nil || len(chapters) == 0 {
+		return
+	}
+
+	readNumMap := make(map[float64]bool, len(readNums))
+	for _, n := range readNums {
+		readNumMap[n] = true
+	}
+
+	restoredCompletions := 0
+	for _, ch := range chapters {
+		if readNumMap[float64(ch.ChapterNumber)] {
+			completionID := uuid.New().String()
+			_, _ = database.DB.Exec(`
+				INSERT OR IGNORE INTO chapter_completions (id, user_id, chapter_id, completed_at)
+				VALUES (?, ?, ?, datetime('now'))
+			`, completionID, targetUserID, ch.ID)
+			restoredCompletions++
+		}
+		if match.LastReadChapterNum > 0 && float64(ch.ChapterNumber) == match.LastReadChapterNum {
+			progressID := uuid.New().String()
+			_, _ = database.DB.Exec(`
+				INSERT OR IGNORE INTO reading_progress (
+					id, user_id, series_id, volume_id, chapter_id,
+					current_page, total_pages, progress_percent, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, 100.0, datetime('now'))
+			`, progressID, targetUserID, series.ID, ch.VolumeID, ch.ID, ch.PageCount, ch.PageCount)
+		}
+	}
+
+	if restoredCompletions > 0 || match.LastReadChapterNum > 0 {
+		log.Printf("[SCANNER] Restored %d chapter completions and reading progress for series '%s'", restoredCompletions, series.Title)
+	}
+}
+
+// saveSeriesMetadataFile saves or updates metadata.txt and cover.jpg in the series folder
+func (s *Scanner) saveSeriesMetadataFile(series *model.Series) {
+	if series == nil || series.Path == "" {
+		return
+	}
+	baseDir := series.Path
+	if fi, err := os.Stat(series.Path); err == nil && !fi.IsDir() {
+		baseDir = filepath.Dir(series.Path)
+	}
+
+	// 1. cover.jpg 저장 (디렉토리인 경우)
+	if fi, err := os.Stat(baseDir); err == nil && fi.IsDir() && series.ThumbnailPath != nil && *series.ThumbnailPath != "" {
+		coverPath := filepath.Join(baseDir, "cover.jpg")
+		if _, err := os.Stat(coverPath); os.IsNotExist(err) {
+			if srcData, err := os.ReadFile(*series.ThumbnailPath); err == nil && len(srcData) > 0 {
+				_ = os.WriteFile(coverPath, srcData, 0644)
+			}
+		}
+	}
+
+	// 2. metadata.txt 작성 (AniList ID, MAL ID 등 보존)
+	if series.Metadata == nil || (series.Metadata.AnilistID == "" && series.Metadata.MalID == "") {
+		return
+	}
+
+	metaPath := filepath.Join(baseDir, "metadata.txt")
+	existingContent := ""
+	if data, err := os.ReadFile(metaPath); err == nil {
+		existingContent = string(data)
+	}
+
+	// AniList/MAL ID가 metadata.txt에 이미 포함되어 있지 않은 경우에만 기록
+	needsWrite := false
+	if series.Metadata.AnilistID != "" && !strings.Contains(existingContent, series.Metadata.AnilistID) {
+		needsWrite = true
+	}
+	if series.Metadata.MalID != "" && !strings.Contains(existingContent, series.Metadata.MalID) {
+		needsWrite = true
+	}
+
+	if needsWrite {
+		var sb strings.Builder
+		if existingContent != "" {
+			sb.WriteString(strings.TrimRight(existingContent, "\r\n"))
+			sb.WriteString("\n")
+		}
+		if series.Metadata.OriginalTitle != "" && !strings.Contains(existingContent, "Original Title:") {
+			sb.WriteString(fmt.Sprintf("Original Title: %s\n", series.Metadata.OriginalTitle))
+		}
+		if series.Metadata.AnilistID != "" && !strings.Contains(existingContent, series.Metadata.AnilistID) {
+			sb.WriteString(fmt.Sprintf("AniList ID: %s\n", series.Metadata.AnilistID))
+		}
+		if series.Metadata.MalID != "" && !strings.Contains(existingContent, series.Metadata.MalID) {
+			sb.WriteString(fmt.Sprintf("MyAnimeList ID: %s\n", series.Metadata.MalID))
+		}
+		_ = os.WriteFile(metaPath, []byte(sb.String()), 0644)
+	}
 }
 
 var (

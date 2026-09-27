@@ -75,7 +75,7 @@ func Close() error {
 // 마이그레이션 버전 관리
 // ============================================================
 
-const latestMigrationVersion = 47
+const latestMigrationVersion = 49
 
 // getMigrationVersion server_settings에서 현재 마이그레이션 버전 조회
 func getMigrationVersion() int {
@@ -254,6 +254,7 @@ func Migrate() error {
 		type TEXT DEFAULT 'LOCAL',
 		library_type TEXT DEFAULT 'book', -- "book", "audiobook", "comic", "novel"
 		is_visible BOOLEAN DEFAULT 1,
+		exclude_from_home BOOLEAN DEFAULT 0,
 		default_view_mode TEXT DEFAULT 'single',
 		default_read_direction TEXT DEFAULT 'ltr',
 		default_page_transition TEXT DEFAULT 'slide',
@@ -322,6 +323,34 @@ func Migrate() error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_series_characters_series_order ON series_characters(series_id, sort_order);
 	CREATE INDEX IF NOT EXISTS idx_series_characters_series_norm ON series_characters(series_id, normalized_name);
+
+	-- 시리즈 영구 기억 및 진행도 히스토리
+	CREATE TABLE IF NOT EXISTS series_history (
+		id TEXT PRIMARY KEY,
+		library_id TEXT DEFAULT '',
+		title TEXT NOT NULL,
+		original_title TEXT DEFAULT '',
+		original_titles TEXT DEFAULT '',
+		path TEXT DEFAULT '',
+		anilist_id TEXT DEFAULT '',
+		mal_id TEXT DEFAULT '',
+		description TEXT DEFAULT '',
+		authors TEXT DEFAULT '',
+		tags TEXT DEFAULT '',
+		status TEXT DEFAULT '',
+		publication_year TEXT DEFAULT '',
+		published_at TEXT DEFAULT '',
+		publisher TEXT DEFAULT '',
+		thumbnail_path TEXT DEFAULT '',
+		last_read_chapter_num REAL DEFAULT 0,
+		read_chapters_json TEXT DEFAULT '[]',
+		user_id TEXT DEFAULT '',
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_series_history_title ON series_history(title);
+	CREATE INDEX IF NOT EXISTS idx_series_history_path ON series_history(path);
+	CREATE INDEX IF NOT EXISTS idx_series_history_anilist ON series_history(anilist_id);
+	CREATE INDEX IF NOT EXISTS idx_series_history_mal ON series_history(mal_id);
 
 	-- 볼륨 (권/시즌)
 	CREATE TABLE IF NOT EXISTS volumes (
@@ -637,6 +666,8 @@ func Migrate() error {
 		{45, "시리즈 메타데이터 챕터 portada 생성 설정 추가", migrateSeriesMetadataGenerateChapterCovers},
 		{46, "EPUB 줄간격 절대값에서 배율(scale)로 변환", migrateEpubLineHeightToScale},
 		{47, "EPUB 폰트 관련 설정 시리즈별 설정 컬럼 추가", migrateEpubFontSeriesSettings},
+		{48, "라이브러리 홈 화면 제외 컬럼 추가", migrateLibraryExcludeFromHome},
+		{49, "시리즈 영구 기억 및 진행도 히스토리 테이블 추가", migrateSeriesHistory},
 	}
 
 	// 필요한 마이그레이션만 실행
@@ -2070,4 +2101,54 @@ func migrateEpubFontSeriesSettings() error {
 		return err
 	}
 	return addColumn("user_series_settings", "epub_line_height", "REAL")
+}
+
+// #48 migrateLibraryExcludeFromHome libraries 테이블에 exclude_from_home 컬럼 추가
+func migrateLibraryExcludeFromHome() error {
+	return addColumn("libraries", "exclude_from_home", "BOOLEAN DEFAULT 0")
+}
+
+// #49 migrateSeriesHistory series_history 테이블 추가
+func migrateSeriesHistory() error {
+	if _, err := DB.Exec(`
+		CREATE TABLE IF NOT EXISTS series_history (
+			id TEXT PRIMARY KEY,
+			library_id TEXT DEFAULT '',
+			title TEXT NOT NULL,
+			original_title TEXT DEFAULT '',
+			original_titles TEXT DEFAULT '',
+			path TEXT DEFAULT '',
+			anilist_id TEXT DEFAULT '',
+			mal_id TEXT DEFAULT '',
+			description TEXT DEFAULT '',
+			authors TEXT DEFAULT '',
+			tags TEXT DEFAULT '',
+			status TEXT DEFAULT '',
+			publication_year TEXT DEFAULT '',
+			published_at TEXT DEFAULT '',
+			publisher TEXT DEFAULT '',
+			thumbnail_path TEXT DEFAULT '',
+			last_read_chapter_num REAL DEFAULT 0,
+			read_chapters_json TEXT DEFAULT '[]',
+			user_id TEXT DEFAULT '',
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`); err != nil {
+		return fmt.Errorf("create series_history table: %w", err)
+	}
+
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_series_history_title ON series_history(title)`); err != nil {
+		return fmt.Errorf("create index series_history(title): %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_series_history_path ON series_history(path)`); err != nil {
+		return fmt.Errorf("create index series_history(path): %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_series_history_anilist ON series_history(anilist_id)`); err != nil {
+		return fmt.Errorf("create index series_history(anilist_id): %w", err)
+	}
+	if _, err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_series_history_mal ON series_history(mal_id)`); err != nil {
+		return fmt.Errorf("create index series_history(mal_id): %w", err)
+	}
+
+	return nil
 }

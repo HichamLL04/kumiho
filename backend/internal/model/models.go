@@ -47,6 +47,7 @@ type Library struct {
 	Type                   string     `json:"type" db:"type"`                         // "LOCAL", "SYSTEM"
 	LibraryType            string     `json:"library_type" db:"library_type"`         // "book", "audiobook"
 	IsVisible              bool       `json:"is_visible" db:"is_visible"`
+	ExcludeFromHome        bool       `json:"exclude_from_home" db:"exclude_from_home"`
 	ScanExcludes           string     `json:"scan_excludes" db:"scan_excludes"`                     // comma-separated patterns
 	OriginalTitleOverride  bool       `json:"original_title_override" db:"original_title_override"` // 원제 덮어쓰기 옵션
 }
@@ -97,6 +98,30 @@ type SeriesMetadata struct {
 	AnilistID             string `json:"anilist_id" db:"anilist_id"`
 	MalID                 string `json:"mal_id" db:"mal_id"`
 	GenerateChapterCovers bool   `json:"generate_chapter_covers" db:"generate_chapter_covers"`
+}
+
+// SeriesHistory 삭제/재다운로드 대비 시리즈 영구 기억 및 진행도 모델
+type SeriesHistory struct {
+	ID                 string    `json:"id" db:"id"`
+	LibraryID          string    `json:"library_id" db:"library_id"`
+	Title              string    `json:"title" db:"title"`
+	OriginalTitle      string    `json:"original_title" db:"original_title"`
+	OriginalTitles     string    `json:"original_titles" db:"original_titles"`
+	Path               string    `json:"path" db:"path"`
+	AnilistID          string    `json:"anilist_id" db:"anilist_id"`
+	MalID              string    `json:"mal_id" db:"mal_id"`
+	Description        string    `json:"description" db:"description"`
+	Authors            string    `json:"authors" db:"authors"`
+	Tags               string    `json:"tags" db:"tags"`
+	Status             string    `json:"status" db:"status"`
+	PublicationYear    string    `json:"publication_year" db:"publication_year"`
+	PublishedAt        string    `json:"published_at" db:"published_at"`
+	Publisher          string    `json:"publisher" db:"publisher"`
+	ThumbnailPath      string    `json:"thumbnail_path" db:"thumbnail_path"`
+	LastReadChapterNum float64   `json:"last_read_chapter_num" db:"last_read_chapter_num"`
+	ReadChaptersJSON   string    `json:"read_chapters_json" db:"read_chapters_json"`
+	UserID             string    `json:"user_id" db:"user_id"`
+	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // SeriesCharacter 시리즈 등장인물 모델

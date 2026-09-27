@@ -114,8 +114,8 @@ export function HomePage() {
         // 라이브러리 목록이 업데이트된 후, 최신 상태를 스토어에서 직접 가져옴
         const currentLibraries = useLibraryStore.getState().libraries;
 
-        // SYSTEM 라이브러리(좋아요 등)는 제외하고 실제 로컬 라이브러리만 순회
-        const localLibraries = currentLibraries.filter((lib) => lib.type !== "SYSTEM");
+        // SYSTEM 라이브러리(좋아요 등) 및 홈 제외 라이브러리는 제외하고 실제 로컬 라이브러리만 순회
+        const localLibraries = currentLibraries.filter((lib) => lib.type !== "SYSTEM" && !lib.exclude_from_home);
         let seriesForExtension: Series[] = likedSeriesList;
 
         if (localLibraries.length > 0) {

@@ -531,6 +531,13 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 	// 자동 완독 처리
 	h.markCompleteIfLastPage(userID, req.VolumeID, req.ChapterID, req.CurrentPage, req.TotalPages, req.CurrentTime, req.Duration)
 
+	if chapter != nil {
+		go func(uid, sid string, cnum float64) {
+			histRepo := repository.NewSeriesHistoryRepository()
+			_ = histRepo.RecordProgress(nil, uid, sid, cnum)
+		}(userID, seriesID, float64(chapter.ChapterNumber))
+	}
+
 	return c.JSON(fiber.Map{
 		"message":  "progress updated",
 		"progress": progress,
@@ -1168,9 +1175,16 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 		log.Printf("[GetRecentProgress] failed to batch fetch first volumes for series: %v", err)
 	}
 
-	result := make([]ProgressWithSeries, len(progressList))
-	for i, p := range progressList {
-		result[i] = ProgressWithSeries{
+	result := make([]ProgressWithSeries, 0, len(progressList))
+	for _, p := range progressList {
+		series := seriesMap[p.SeriesID]
+		if series != nil {
+			if library := libraryMap[series.LibraryID]; library != nil && library.ExcludeFromHome {
+				continue
+			}
+		}
+
+		item := ProgressWithSeries{
 			RecentEnrichedProgress: p,
 			SeriesTitle:            p.SeriesTitle,
 			VolumeTitle:            p.VolumeTitle,
@@ -1178,7 +1192,6 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 			LibraryType:            p.LibraryType,
 		}
 
-		series := seriesMap[p.SeriesID]
 		if series != nil {
 			// DisplayTitle 계산 (OriginalTitleOverride 설정 기반)
 			displayTitle := strings.TrimSpace(series.Title)
@@ -1188,10 +1201,10 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 				}
 			}
 
-			result[i].SeriesTitle = series.Title
-			result[i].SeriesDisplayTitle = displayTitle
-			result[i].LibraryType = series.LibraryType
-			result[i].SeriesIsBookmarked = series.IsBookmarked
+			item.SeriesTitle = series.Title
+			item.SeriesDisplayTitle = displayTitle
+			item.LibraryType = series.LibraryType
+			item.SeriesIsBookmarked = series.IsBookmarked
 
 			// HasAudio는 volume 기준으로 결정하되, volume이 없으면 series 기준
 			hasAudio := p.HasAudio || series.LibraryType == "audiobook"
@@ -1217,8 +1230,8 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 			// 챕터 정보 설정
 			if p.ChapterID != nil {
 				if c := chaptersMap[*p.ChapterID]; c != nil {
-					result[i].ChapterNumber = c.ChapterNumber
-					result[i].ChapterTitle = c.Title
+					item.ChapterNumber = c.ChapterNumber
+					item.ChapterTitle = c.Title
 				}
 			}
 
@@ -1231,43 +1244,44 @@ func (h *ProgressHandler) GetRecentProgress(c *fiber.Ctx) error {
 			// 볼륨 정보 및 볼륨 썸네일 설정
 			if targetVolumeID != "" {
 				if volume := volumesMap[targetVolumeID]; volume != nil {
-					result[i].VolumeID = &volume.ID
-					result[i].VolumeNumber = volume.VolumeNumber
-					result[i].VolumeUnit = volume.Unit
-					result[i].VolumeTitle = volume.Title
-					result[i].VolumeChapterCount = volumeChapterCounts[volume.ID]
+					item.VolumeID = &volume.ID
+					item.VolumeNumber = volume.VolumeNumber
+					item.VolumeUnit = volume.Unit
+					item.VolumeTitle = volume.Title
+					item.VolumeChapterCount = volumeChapterCounts[volume.ID]
 					// volume이 있으면 volume의 hasAudio 우선 적용
 					hasAudio = volume.HasAudio || series.LibraryType == "audiobook"
 
 					if volume.ThumbnailPath != nil && *volume.ThumbnailPath != "" {
 						url := util.BuildVolumeThumbnailURL(volume.ID, volume.ThumbnailPath, volume.UpdatedAt)
-						result[i].ThumbnailURL = &url
+						item.ThumbnailURL = &url
 					} else {
 						if pageID := volumeFirstPageIDs[volume.ID]; pageID != "" {
 							url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-							result[i].ThumbnailURL = &url
+							item.ThumbnailURL = &url
 						}
 					}
 				}
 			}
 
 			// 최종 HasAudio 적용
-			result[i].HasAudio = hasAudio
+			item.HasAudio = hasAudio
 
 			// 썸네일 fallback
-			if result[i].ThumbnailURL == nil || *result[i].ThumbnailURL == "" {
+			if item.ThumbnailURL == nil || *item.ThumbnailURL == "" {
 				// 1. 이미 보정된 시리즈 썸네일이 있으면 사용
 				if series.ThumbnailURL != nil && *series.ThumbnailURL != "" {
-					result[i].ThumbnailURL = series.ThumbnailURL
+					item.ThumbnailURL = series.ThumbnailURL
 				} else {
 					// 2. 없으면 첫 번째 페이지 이미지 시도
 					if pageID := seriesFirstPageIDs[series.ID]; pageID != "" {
 						url := fmt.Sprintf("/api/v1/pages/%s/image?width=400", pageID)
-						result[i].ThumbnailURL = &url
+						item.ThumbnailURL = &url
 					}
 				}
 			}
 		}
+		result = append(result, item)
 	}
 
 	return c.JSON(fiber.Map{
@@ -2319,6 +2333,13 @@ func (h *ProgressHandler) MarkChapterComplete(c *fiber.Ctx) error {
 
 	if h.syncHandler != nil {
 		go h.syncHandler.SyncSeriesProgress(userID, seriesID)
+	}
+
+	if seriesID != "" {
+		go func(uid, sid string, cnum float64) {
+			histRepo := repository.NewSeriesHistoryRepository()
+			_ = histRepo.RecordProgress(nil, uid, sid, cnum)
+		}(userID, seriesID, float64(chapter.ChapterNumber))
 	}
 
 	return c.JSON(fiber.Map{

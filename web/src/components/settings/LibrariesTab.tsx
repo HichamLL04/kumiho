@@ -341,6 +341,18 @@ function SortableLibraryItem({
                     placeholder={t("settings.libraries.item.edit.excludes_placeholder")}
                   />
                 </div>
+                <div className={styles.flexOne} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+                  <input
+                    type="checkbox"
+                    id={`exclude-home-${lib.id}`}
+                    checked={editingLibrary.exclude_from_home || false}
+                    onChange={(e) => setEditingLibrary({ ...editingLibrary, exclude_from_home: e.target.checked })}
+                    style={{ width: "1rem", height: "1rem", cursor: "pointer" }}
+                  />
+                  <label htmlFor={`exclude-home-${lib.id}`} className={styles.fieldLabel} style={{ cursor: "pointer", marginBottom: 0 }}>
+                    {t("settings.libraries.exclude_from_home_label", "Excluir de la página de inicio")}
+                  </label>
+                </div>
               </>
             )}
             {isSystem && (
@@ -413,6 +425,7 @@ export function LibrariesTab() {
     default_epub_spread: string;
     library_type: LibraryType;
     scan_excludes: string;
+    exclude_from_home?: boolean;
   }>({
     name: "",
     paths: [],
@@ -422,6 +435,7 @@ export function LibrariesTab() {
     default_epub_spread: "none",
     library_type: "comic",
     scan_excludes: "",
+    exclude_from_home: false,
   });
 
   // 디렉토리 브라우저 모달 상태
@@ -567,6 +581,7 @@ export function LibrariesTab() {
         default_epub_spread: "none",
         library_type: "comic",
         scan_excludes: "",
+        exclude_from_home: false,
       });
       fetchLibraries();
     } catch (error: unknown) {
@@ -987,6 +1002,22 @@ export function LibrariesTab() {
                         value={newLibrary.scan_excludes}
                         onChange={(e) => setNewLibrary({ ...newLibrary, scan_excludes: e.target.value })}
                         className={commonStyles.settingsInput}
+                      />
+                    </div>
+                  </div>
+                  <div className={commonStyles.settingsItem}>
+                    <div className={commonStyles.itemInfo}>
+                      <label>{t("settings.libraries.exclude_from_home_label", "Excluir de la página de inicio")}</label>
+                      <p className={styles.multilineHelp}>
+                        {t("settings.libraries.exclude_from_home_desc", "No mostrar en 'Series actualizadas' ni 'Continuar leyendo' de la página de inicio.")}
+                      </p>
+                    </div>
+                    <div className={commonStyles.itemControl}>
+                      <input
+                        type="checkbox"
+                        checked={newLibrary.exclude_from_home || false}
+                        onChange={(e) => setNewLibrary({ ...newLibrary, exclude_from_home: e.target.checked })}
+                        style={{ width: "1.2rem", height: "1.2rem", cursor: "pointer" }}
                       />
                     </div>
                   </div>
