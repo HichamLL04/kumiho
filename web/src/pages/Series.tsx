@@ -146,7 +146,10 @@ export function SeriesPage() {
       // 1. 핵심 데이터(시리즈, 볼륨, 진행도) 병렬 페칭
       const [seriesRes, volumesRes, progressRes] = await Promise.all([
         api.get(`/series/${id}`),
-        api.get(`/series/${id}/volumes?parent_id=root`),
+        api.get(`/series/${id}/volumes?parent_id=root`).catch((err) => {
+          console.warn("Failed to load root volumes:", err);
+          return { data: { volumes: [] } };
+        }),
         api.get(`/series/${id}/progress`).catch(() => ({ data: null })),
       ]);
 

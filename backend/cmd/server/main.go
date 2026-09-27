@@ -145,8 +145,9 @@ func main() {
 
 	// Fiber 앱 생성
 	app := fiber.New(fiber.Config{
-		AppName:   "Kumiho API " + version.Version,
-		BodyLimit: 50 * 1024 * 1024, // 50MB
+		AppName:        "Kumiho API " + version.Version,
+		BodyLimit:      50 * 1024 * 1024, // 50MB
+		ReadBufferSize: 32 * 1024,        // 32KB (HTTP 431 Request Header Fields Too Large 방지)
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
