@@ -2207,10 +2207,14 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 
 	log.Printf("[CLEANUP] Volume %s in series %q (%s): %d total chapters, %d completed in series", volumeID, series.Title, series.ID, len(seriesChapters), len(completedMap))
 
-	// 5. Keep all unread chapters, and keep the last 3 read chapters of the series.
+	// 5. Keep all unread chapters, and always keep the last 3 read chapters of the volume.
 	var readChapters []model.Chapter
 	keepIDs := make(map[string]bool)
 	for _, ch := range seriesChapters {
+		if ch.VolumeID != volume.ID {
+			keepIDs[ch.ID] = true
+			continue
+		}
 		if !completedMap[ch.ID] {
 			keepIDs[ch.ID] = true
 		} else {
@@ -2218,16 +2222,21 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 		}
 	}
 
-	hasUnread := len(readChapters) < len(seriesChapters)
-	if hasUnread && len(readChapters) > 3 {
-		for i := len(readChapters) - 3; i < len(readChapters); i++ {
+	readLen := len(readChapters)
+	if readLen > 3 {
+		// Always preserve the last 3 read chapters
+		for i := readLen - 3; i < readLen; i++ {
 			keepIDs[readChapters[i].ID] = true
 		}
-	} else if hasUnread {
+	} else {
+		// If 3 or fewer read chapters, preserve all of them (delete nothing)
 		for _, ch := range readChapters {
 			keepIDs[ch.ID] = true
 		}
 	}
+
+	log.Printf("[CLEANUP] Volume %s in series %q: %d read chapters in volume -> %d kept (always preserving last 3 read)",
+		volumeID, series.Title, readLen, len(keepIDs))
 
 	// Protected paths
 	protectedPaths := map[string]bool{}
@@ -2363,16 +2372,21 @@ func (h *SeriesHandler) CleanupSeriesChapters(c *fiber.Ctx) error {
 		}
 	}
 
-	hasUnread := len(readChapters) < len(chapters)
-	if hasUnread && len(readChapters) > 3 {
-		for i := len(readChapters) - 3; i < len(readChapters); i++ {
+	readLen := len(readChapters)
+	if readLen > 3 {
+		// Always preserve the last 3 read chapters
+		for i := readLen - 3; i < readLen; i++ {
 			keepIDs[readChapters[i].ID] = true
 		}
-	} else if hasUnread {
+	} else {
+		// If 3 or fewer read chapters, preserve all of them (delete nothing)
 		for _, ch := range readChapters {
 			keepIDs[ch.ID] = true
 		}
 	}
+
+	log.Printf("[CLEANUP] Series %q (%s): %d total chapters (%d read, %d unread) -> %d chapters kept (always preserving last 3 read), deleting %d",
+		series.Title, series.ID, len(chapters), readLen, len(chapters)-readLen, len(keepIDs), len(chapters)-len(keepIDs))
 
 	// Protected paths
 	volumes, err := h.volumeRepo.FindBySeriesID(nil, series.ID)

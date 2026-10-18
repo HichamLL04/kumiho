@@ -1202,23 +1202,21 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 			} else {
 				readChapters = append(readChapters, ch)
 			}
-		}
-
-		hasUnread := len(readChapters) < len(chapters)
-		if hasUnread && len(readChapters) > 3 {
-			// Keep the last 3 read chapters for reading context
-			for i := len(readChapters) - 3; i < len(readChapters); i++ {
+		readLen := len(readChapters)
+		if readLen > 3 {
+			// Always preserve the last 3 read chapters
+			for i := readLen - 3; i < readLen; i++ {
 				keepIDs[readChapters[i].ID] = true
 			}
-		} else if hasUnread {
-			// If 3 or fewer read chapters and unread remain, keep them
+		} else {
+			// If 3 or fewer read chapters, preserve all of them (delete nothing)
 			for _, ch := range readChapters {
 				keepIDs[ch.ID] = true
 			}
-		} else {
-			// All chapters in the series have been read!
-			// Delete all 100% read chapters to free up full disk space.
 		}
+
+		log.Printf("[CLEANUP] Series %q (%s): %d total chapters (%d read, %d unread) -> %d chapters kept (always preserving last 3 read), deleting %d",
+			series.Title, series.ID, len(chapters), readLen, len(chapters)-readLen, len(keepIDs), len(chapters)-len(keepIDs))
 
 		// Fetch all volumes for this series to get their paths for the safety check
 		volumes, err := h.volumeRepo.FindBySeriesID(nil, series.ID)
