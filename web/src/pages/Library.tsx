@@ -237,12 +237,23 @@ export function LibraryPage() {
       setStatus({ type: "info", message: t("home.library.cleanup_started") });
     }, 0);
     try {
-      await libraryAPI.cleanupChapters(id);
+      const res = await libraryAPI.cleanupChapters(id);
       await loadData();
       triggerRefresh();
       setStatus(null);
       setTimeout(() => {
-        setStatus({ type: "success", message: t("home.library.cleanup_completed") });
+        const count = res?.deletedCount ?? 0;
+        if (count > 0) {
+          setStatus({
+            type: "success",
+            message: `${t("home.library.cleanup_completed")} (${count})`,
+          });
+        } else {
+          setStatus({
+            type: "info",
+            message: `${t("home.library.cleanup_completed")} (0)`,
+          });
+        }
       }, 0);
     } catch (error) {
       console.error("Cleanup failed:", error);

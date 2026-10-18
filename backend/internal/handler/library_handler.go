@@ -1062,7 +1062,83 @@ func validateScanExcludes(excludes string) error {
 	return nil
 }
 
-// CleanupChapters deletes chapter files for all volumes in a library except for the last 3 unread chapters per volume.
+// isSafeChapterPathForDeletion validates if a chapter file is safe to delete from disk.
+// Returns:
+//   cleanPath: normalized absolute/clean path
+//   shouldDeleteFromDisk: true if the file exists on disk and is safe to remove
+//   err: non-nil if path violates safety (e.g. root, library root, series root)
+func isSafeChapterPathForDeletion(chPath, seriesPath string, libPaths []string) (string, bool, error) {
+	trimmed := strings.TrimSpace(chPath)
+	if trimmed == "" {
+		return "", false, nil
+	}
+
+	cleanCh := filepath.Clean(filepath.FromSlash(trimmed))
+
+	// System root safety checks
+	if cleanCh == "/" || cleanCh == "\\" || cleanCh == "." || filepath.Dir(cleanCh) == cleanCh {
+		return cleanCh, false, fmt.Errorf("refusing to delete root or top-level path: %s", cleanCh)
+	}
+
+	// Never delete the series directory itself
+	if strings.TrimSpace(seriesPath) != "" {
+		cleanSeries := filepath.Clean(filepath.FromSlash(seriesPath))
+		if cleanCh == cleanSeries {
+			return cleanCh, false, fmt.Errorf("refusing to delete series directory: %s", cleanCh)
+		}
+	}
+
+	// Never delete any library root directory
+	for _, lp := range libPaths {
+		if strings.TrimSpace(lp) == "" {
+			continue
+		}
+		cleanLp := filepath.Clean(filepath.FromSlash(lp))
+		if cleanCh == cleanLp {
+			return cleanCh, false, fmt.Errorf("refusing to delete library root directory: %s", cleanCh)
+		}
+	}
+
+	// Check if the file exists on disk
+	_, err := os.Stat(cleanCh)
+	if os.IsNotExist(err) {
+		// File does not exist on disk: safe to clean up from DB, no disk deletion needed
+		return cleanCh, false, nil
+	}
+	if err != nil {
+		// e.g. permission error accessing path
+		return cleanCh, false, fmt.Errorf("cannot stat path %s: %w", cleanCh, err)
+	}
+
+	// Verify that it is under the series path OR under one of the library paths
+	isUnderAllowedRoot := false
+	if strings.TrimSpace(seriesPath) != "" {
+		cleanSeries := filepath.Clean(filepath.FromSlash(seriesPath))
+		if strings.HasPrefix(cleanCh, cleanSeries+string(filepath.Separator)) {
+			isUnderAllowedRoot = true
+		}
+	}
+	if !isUnderAllowedRoot {
+		for _, lp := range libPaths {
+			if strings.TrimSpace(lp) == "" {
+				continue
+			}
+			cleanLp := filepath.Clean(filepath.FromSlash(lp))
+			if strings.HasPrefix(cleanCh, cleanLp+string(filepath.Separator)) {
+				isUnderAllowedRoot = true
+				break
+			}
+		}
+	}
+
+	if !isUnderAllowedRoot {
+		return cleanCh, false, fmt.Errorf("path %s is not located under series or library paths", cleanCh)
+	}
+
+	return cleanCh, true, nil
+}
+
+// CleanupChapters deletes chapter files for all volumes in a library except for unread chapters and recent read chapters.
 // POST /api/v1/libraries/:libraryId/cleanup-chapters
 func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 	libraryID := c.Params("id")
@@ -1072,9 +1148,12 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 		ctx = context.Background()
 	}
 
+	log.Printf("[CLEANUP] Request received to clean up library %s by user %s", libraryID, userID)
+
 	// 1. Fetch library
 	library, err := h.libraryRepo.FindByID(nil, libraryID)
 	if err != nil {
+		log.Printf("[CLEANUP] Failed to fetch library %s: %v", libraryID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch library",
 		})
@@ -1085,24 +1164,10 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check if at least one library path is online/accessible.
-	// If none are online, we can immediately return an error.
-	anyPathOnline := false
-	for _, lp := range library.Paths {
-		if _, statErr := os.Stat(filepath.Clean(lp)); statErr == nil {
-			anyPathOnline = true
-			break
-		}
-	}
-	if !anyPathOnline {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Library path is offline or inaccessible inside the container. Check your volume mounts.",
-		})
-	}
-
 	// 2. Fetch all series in this library
 	seriesList, err := h.seriesRepo.FindByLibraryID(nil, libraryID, userID)
 	if err != nil {
+		log.Printf("[CLEANUP] Failed to fetch series for library %s: %v", libraryID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch series for library",
 		})
@@ -1115,18 +1180,20 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 		// Fetch all chapters for this series (sorted in reading order)
 		chapters, err := h.chapterRepo.FindBySeriesID(nil, series.ID)
 		if err != nil {
-			log.Printf("Library cleanup: failed to fetch chapters for series %s: %v", series.ID, err)
+			log.Printf("[CLEANUP] Series %q (%s): failed to fetch chapters: %v", series.Title, series.ID, err)
 			continue
 		}
 
 		// Fetch user's completed chapters for the entire series
 		completedMap, err := h.chapterCompletionRepo.FindCompletedChapterIDsBySeries(nil, userID, series.ID)
 		if err != nil {
-			log.Printf("Library cleanup: failed to fetch completed chapters for series %s: %v", series.ID, err)
+			log.Printf("[CLEANUP] Series %q (%s): failed to fetch completed chapters: %v", series.Title, series.ID, err)
 			continue
 		}
 
-		// Keep all unread chapters, and keep the last 3 read chapters of the series.
+		log.Printf("[CLEANUP] Series %q (%s): %d total chapters, %d completed chapters found", series.Title, series.ID, len(chapters), len(completedMap))
+
+		// Categorize chapters into read and unread
 		var readChapters []model.Chapter
 		keepIDs := make(map[string]bool)
 		for _, ch := range chapters {
@@ -1137,120 +1204,100 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 			}
 		}
 
-		readLen := len(readChapters)
-		if readLen > 3 {
-			for i := readLen - 3; i < readLen; i++ {
+		hasUnread := len(readChapters) < len(chapters)
+		if hasUnread && len(readChapters) > 3 {
+			// Keep the last 3 read chapters for reading context
+			for i := len(readChapters) - 3; i < len(readChapters); i++ {
 				keepIDs[readChapters[i].ID] = true
 			}
-		} else {
+		} else if hasUnread {
+			// If 3 or fewer read chapters and unread remain, keep them
 			for _, ch := range readChapters {
 				keepIDs[ch.ID] = true
 			}
+		} else {
+			// All chapters in the series have been read!
+			// Delete all 100% read chapters to free up full disk space.
 		}
 
 		// Fetch all volumes for this series to get their paths for the safety check
 		volumes, err := h.volumeRepo.FindBySeriesID(nil, series.ID)
 		if err != nil {
-			log.Printf("Library cleanup: failed to fetch volumes for series %s: %v", series.ID, err)
+			log.Printf("[CLEANUP] Series %q (%s): failed to fetch volumes: %v", series.Title, series.ID, err)
 			continue
 		}
 
-		protectedPaths := map[string]bool{
-			series.Path: true,
+		protectedPaths := map[string]bool{}
+		if series.Path != "" {
+			protectedPaths[filepath.Clean(filepath.FromSlash(series.Path))] = true
 		}
 		for _, vol := range volumes {
-			// Only protect volume path if it is a directory.
-			// Archive files (like .cbz) should be deleted when their chapters are cleaned up.
-			if info, statErr := os.Stat(vol.Path); statErr == nil && info.IsDir() {
-				protectedPaths[vol.Path] = true
+			if vol.Path == "" {
+				continue
+			}
+			cleanVolPath := filepath.Clean(filepath.FromSlash(vol.Path))
+			if info, statErr := os.Stat(cleanVolPath); statErr == nil && info.IsDir() {
+				protectedPaths[cleanVolPath] = true
 			}
 		}
 
-		// Delete other chapters (both files and DB records)
 		tx, err := database.DB.BeginTx(ctx, nil)
 		if err != nil {
-			log.Printf("Library cleanup: failed to start tx for series %s: %v", series.ID, err)
+			log.Printf("[CLEANUP] Series %q (%s): failed to start tx: %v", series.Title, series.ID, err)
 			continue
 		}
 
 		seriesDeletedCount := 0
-		failed := false
 		for _, ch := range chapters {
 			if keepIDs[ch.ID] {
 				continue
 			}
 
-			// Safety check to ensure we don't delete the whole volume or series folder
-			if ch.Path != "" && !protectedPaths[ch.Path] {
-				// Check if the path is online and under library
-				if _, pathErr := isPathOnlineAndUnderLibrary(ch.Path, library.Paths); pathErr != nil {
-					log.Printf("Library cleanup: Cannot delete chapter %s in series %s: %v", ch.Title, series.ID, pathErr)
-					_ = tx.Rollback()
-					failed = true
-					break
-				}
-
-				if removeErr := os.RemoveAll(ch.Path); removeErr != nil {
-					log.Printf("Library cleanup: Failed to delete chapter file %s: %v", ch.Path, removeErr)
-					_ = tx.Rollback()
-					failed = true
-					break
+			cleanPath, shouldDeleteFile, pathErr := isSafeChapterPathForDeletion(ch.Path, series.Path, library.Paths)
+			if pathErr != nil {
+				log.Printf("[CLEANUP] Warning: Skipping disk deletion for chapter %q (path: %s): %v", ch.Title, ch.Path, pathErr)
+			} else if shouldDeleteFile && !protectedPaths[cleanPath] {
+				if removeErr := os.RemoveAll(cleanPath); removeErr != nil {
+					log.Printf("[CLEANUP] Warning: Failed to delete chapter file %s: %v", cleanPath, removeErr)
+				} else {
+					log.Printf("[CLEANUP] Deleted chapter file: %s", cleanPath)
 				}
 			}
 
 			// Delete from database
 			_, dbErr := tx.Exec(`DELETE FROM chapters WHERE id = ?`, ch.ID)
 			if dbErr != nil {
-				log.Printf("Library cleanup: Failed to delete chapter %s from DB: %v", ch.Title, dbErr)
-				_ = tx.Rollback()
-				failed = true
-				break
+				log.Printf("[CLEANUP] Failed to delete chapter %q (%s) from DB: %v", ch.Title, ch.ID, dbErr)
+				continue
 			}
 			seriesDeletedCount++
 		}
 
-		if failed {
-			continue
-		}
+		if seriesDeletedCount > 0 {
+			// Clean up any empty volumes without children
+			_, _ = tx.Exec(`DELETE FROM volumes WHERE series_id = ? AND (SELECT COUNT(*) FROM chapters WHERE volume_id = volumes.id) = 0 AND id NOT IN (SELECT DISTINCT parent_id FROM volumes WHERE parent_id IS NOT NULL)`, series.ID)
 
-		// Update chapter count for all volumes in this series
-		if _, countErr := tx.Exec(`UPDATE volumes SET chapter_count = (SELECT COUNT(*) FROM chapters WHERE volume_id = volumes.id) WHERE series_id = ?`, series.ID); countErr != nil {
-			log.Printf("Library cleanup: Failed to update volume chapter counts for series %s: %v", series.ID, countErr)
+			// Update volume chapter counts
+			if _, countErr := tx.Exec(`UPDATE volumes SET chapter_count = (SELECT COUNT(*) FROM chapters WHERE volume_id = volumes.id) WHERE series_id = ?`, series.ID); countErr != nil {
+				log.Printf("[CLEANUP] Series %q: failed to update volume chapter counts: %v", series.Title, countErr)
+			}
+
+			if err := tx.Commit(); err != nil {
+				log.Printf("[CLEANUP] Series %q: failed to commit tx: %v", series.Title, err)
+				continue
+			}
+
+			totalDeleted += seriesDeletedCount
+			log.Printf("[CLEANUP] Successfully cleaned up %d chapters in series %q", seriesDeletedCount, series.Title)
+		} else {
 			_ = tx.Rollback()
-			continue
 		}
-
-		if err := tx.Commit(); err != nil {
-			log.Printf("Library cleanup: Failed to commit tx for series %s: %v", series.ID, err)
-			continue
-		}
-
-		totalDeleted += seriesDeletedCount
 	}
+
+	log.Printf("[CLEANUP] Finished library cleanup for %s (%s). Total deleted: %d chapters", library.Name, libraryID, totalDeleted)
 
 	return c.JSON(fiber.Map{
 		"message":      fmt.Sprintf("Successfully deleted %d chapters across library", totalDeleted),
 		"deletedCount": totalDeleted,
 	})
-}
-
-// isPathOnlineAndUnderLibrary checks if a chapter's path is located under one of the library's configured paths
-// and ensures that library path is currently online/accessible on disk.
-// Returns (matchingLibraryPath, error)
-func isPathOnlineAndUnderLibrary(chPath string, libPaths []string) (string, error) {
-	chClean := filepath.Clean(chPath)
-	for _, lp := range libPaths {
-		lpClean := filepath.Clean(lp)
-		// Check if chClean matches lpClean exactly or is a subpath of lpClean.
-		// To match subpath correctly, check if it starts with lpClean + Separator.
-		isMatch := chClean == lpClean || strings.HasPrefix(chClean, lpClean+string(filepath.Separator))
-		if isMatch {
-			// Check if the matched library path is online/accessible on disk
-			if _, err := os.Stat(lpClean); err != nil {
-				return lpClean, fmt.Errorf("library path is offline or inaccessible: %w", err)
-			}
-			return lpClean, nil
-		}
-	}
-	return "", fmt.Errorf("chapter path is not under any currently configured library paths")
 }

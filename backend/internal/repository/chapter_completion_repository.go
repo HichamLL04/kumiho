@@ -50,8 +50,24 @@ func (r *ChapterCompletionRepository) FindCompletedChapterIDs(db database.Querye
 		`SELECT cc.chapter_id 
 		 FROM chapter_completions cc
 		 JOIN chapters c ON cc.chapter_id = c.id
-		 WHERE cc.user_id = ? AND c.volume_id = ?`,
-		userID, volumeID,
+		 WHERE (cc.user_id = ? OR ? = '' OR EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND u.role = 'MASTER'))
+		   AND c.volume_id = ?
+		 UNION
+		 SELECT rp.chapter_id
+		 FROM reading_progress rp
+		 JOIN chapters c ON rp.chapter_id = c.id
+		 WHERE (rp.user_id = ? OR ? = '' OR EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND u.role = 'MASTER'))
+		   AND c.volume_id = ?
+		   AND (rp.progress_percent >= 90 OR rp.progress_percent >= 0.9 OR (rp.total_pages > 0 AND rp.current_page >= rp.total_pages))
+		 UNION
+		 SELECT c.id
+		 FROM chapters c
+		 JOIN volume_completions vc ON c.volume_id = vc.volume_id
+		 WHERE (vc.user_id = ? OR ? = '' OR EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND u.role = 'MASTER'))
+		   AND c.volume_id = ?`,
+		userID, userID, userID, volumeID,
+		userID, userID, userID, volumeID,
+		userID, userID, userID, volumeID,
 	)
 	if err != nil {
 		return nil, err
@@ -78,8 +94,26 @@ func (r *ChapterCompletionRepository) FindCompletedChapterIDsBySeries(db databas
 		 FROM chapter_completions cc
 		 JOIN chapters c ON cc.chapter_id = c.id
 		 JOIN volumes v ON c.volume_id = v.id
-		 WHERE cc.user_id = ? AND v.series_id = ?`,
-		userID, seriesID,
+		 WHERE (cc.user_id = ? OR ? = '' OR EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND u.role = 'MASTER'))
+		   AND v.series_id = ?
+		 UNION
+		 SELECT rp.chapter_id
+		 FROM reading_progress rp
+		 JOIN chapters c ON rp.chapter_id = c.id
+		 JOIN volumes v ON c.volume_id = v.id
+		 WHERE (rp.user_id = ? OR ? = '' OR EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND u.role = 'MASTER'))
+		   AND v.series_id = ?
+		   AND (rp.progress_percent >= 90 OR rp.progress_percent >= 0.9 OR (rp.total_pages > 0 AND rp.current_page >= rp.total_pages))
+		 UNION
+		 SELECT c.id
+		 FROM chapters c
+		 JOIN volumes v ON c.volume_id = v.id
+		 JOIN volume_completions vc ON v.id = vc.volume_id
+		 WHERE (vc.user_id = ? OR ? = '' OR EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND u.role = 'MASTER'))
+		   AND v.series_id = ?`,
+		userID, userID, userID, seriesID,
+		userID, userID, userID, seriesID,
+		userID, userID, userID, seriesID,
 	)
 	if err != nil {
 		return nil, err
@@ -103,8 +137,18 @@ func (r *ChapterCompletionRepository) FindAllCompletedByUser(db database.Queryer
 	db = database.GetQueryer(db)
 
 	rows, err := db.Query(
-		`SELECT chapter_id FROM chapter_completions WHERE user_id = ?`,
-		userID,
+		`SELECT chapter_id FROM chapter_completions WHERE user_id = ? OR ? = ''
+		 UNION
+		 SELECT rp.chapter_id FROM reading_progress rp
+		 WHERE (rp.user_id = ? OR ? = '')
+		   AND (rp.progress_percent >= 90 OR rp.progress_percent >= 0.9 OR (rp.total_pages > 0 AND rp.current_page >= rp.total_pages))
+		 UNION
+		 SELECT c.id FROM chapters c
+		 JOIN volume_completions vc ON c.volume_id = vc.volume_id
+		 WHERE vc.user_id = ? OR ? = ''`,
+		userID, userID,
+		userID, userID,
+		userID, userID,
 	)
 	if err != nil {
 		return nil, err

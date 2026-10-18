@@ -287,13 +287,20 @@ export function SeriesInfoCard({
     });
   };
 
-  // 볼륨 챕터 정리 실행
+  // 볼륨 / 시리즈 챕터 정리 실행
   const executeCleanupChapters = async () => {
-    if (isProcessing || !volume) return;
+    if (isProcessing) return;
     setIsProcessing(true);
     try {
-      const res = await volumeAPI.cleanupChapters(volume.id);
-      onAlert?.(t("series.alert.cleanup_success", { count: res.deletedCount }), "success");
+      let deletedCount = 0;
+      if (isVolumeType && volume) {
+        const res = await volumeAPI.cleanupChapters(volume.id);
+        deletedCount = res.deletedCount;
+      } else if (series) {
+        const res = await seriesAPI.cleanupChapters(series.id);
+        deletedCount = res.deletedCount;
+      }
+      onAlert?.(t("series.alert.cleanup_success", { count: deletedCount }), "success");
       onRefresh?.();
     } catch (error) {
       console.error("Failed to clean up chapters:", error);
@@ -727,7 +734,7 @@ export function SeriesInfoCard({
           >
             <BookX size={18} /> {t("series.action.mark_unread")}
           </button>
-          {isVolumeType && isAdmin && (
+          {isAdmin && (
             <button
               className={`${styles.btnAction} ${styles.btnSecondary}`}
               onClick={handleCleanupChapters}

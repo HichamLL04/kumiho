@@ -278,6 +278,10 @@ export const seriesAPI = {
   markPreviousComplete: (seriesId: string, volumeId: string) =>
     api.post(`/series/${seriesId}/volumes/${volumeId}/complete-previous`),
   resetProgress: (seriesId: string) => api.delete(`/series/${seriesId}/progress`),
+  cleanupChapters: (seriesId: string) =>
+    api
+      .post<{ message: string; deletedCount: number }>(`/series/${seriesId}/cleanup-chapters`)
+      .then((res) => res.data),
   // 시리즈 검색
   search: (query: string) => api.get<{ series: Series[] }>(`/series/search?q=${encodeURIComponent(query)}`),
   // 확장자 배치 조회

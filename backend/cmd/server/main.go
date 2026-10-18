@@ -297,6 +297,7 @@ func main() {
 	series.Post("/:seriesId/volumes/:volumeId/complete-previous", progressHandler.MarkPreviousVolumesComplete)
 	series.Post("/:seriesId/chapters/:chapterId/complete-previous", progressHandler.MarkPreviousChaptersComplete)
 	series.Delete("/:seriesId/progress", progressHandler.ResetSeriesProgress)
+	series.Post("/:seriesId/cleanup-chapters", authMiddleware.MasterOnly(), seriesHandler.CleanupSeriesChapters)
 	series.Post("/:id/thumbnail", seriesHandler.UploadThumbnail)
 	series.Post("/:id/thumbnail/url", seriesHandler.DownloadThumbnail)
 	series.Delete("/:id/thumbnail", seriesHandler.DeleteThumbnail)
