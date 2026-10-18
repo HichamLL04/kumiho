@@ -1202,6 +1202,8 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 			} else {
 				readChapters = append(readChapters, ch)
 			}
+		}
+
 		readLen := len(readChapters)
 		if readLen > 3 {
 			// Always preserve the last 3 read chapters
