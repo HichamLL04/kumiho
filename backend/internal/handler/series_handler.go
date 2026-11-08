@@ -2,9 +2,11 @@ package handler
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1424,6 +1426,68 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(chapter)
+}
+
+// DeleteChapter 챕터 삭제 및 Mangafy 연동
+// DELETE /api/v1/chapters/:id
+func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	chapter, err := h.chapterRepo.FindByID(nil, id)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to fetch chapter",
+		})
+	}
+	if chapter == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "chapter not found",
+		})
+	}
+
+	// 1. Mangafy API 호출
+	mangafyURL := os.Getenv("MANGAFY_URL")
+	if mangafyURL == "" {
+		mangafyURL = "http://mangafy:4000"
+	}
+
+	var seriesTitle string
+	volume, _ := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if volume != nil {
+		series, _ := h.seriesRepo.FindByID(nil, volume.SeriesID)
+		if series != nil {
+			seriesTitle = series.Title
+		}
+	}
+
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"path":           chapter.Path,
+		"manga_title":    seriesTitle,
+		"chapter_number": chapter.ChapterNumber,
+	})
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, reqErr := client.Post(strings.TrimRight(mangafyURL, "/")+"/api/chapters/delete", "application/json", bytes.NewBuffer(reqBody))
+	if reqErr == nil && resp != nil {
+		resp.Body.Close()
+	}
+
+	// 2. 로컬 파일 삭제 (존재하는 경우)
+	if chapter.Path != "" {
+		_ = os.Remove(chapter.Path)
+	}
+
+	// 3. Kumiho DB에서 삭제
+	if err := h.chapterRepo.Delete(nil, id); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to delete chapter",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"deleted": true,
+		"id":      id,
+	})
 }
 
 // GetViewerInitData 뷰어 초기화 데이터 통합 조회

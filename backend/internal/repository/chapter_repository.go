@@ -337,3 +337,10 @@ func (r *ChapterRepository) CountByVolumeIDs(db database.Queryer, volumeIDs []st
 	}
 	return results, nil
 }
+
+// Delete 챕터 삭제
+func (r *ChapterRepository) Delete(db database.Queryer, id string) error {
+	db = database.GetQueryer(db)
+	_, err := db.Exec(`DELETE FROM chapters WHERE id = ?`, id)
+	return err
+}

@@ -279,6 +279,19 @@
   color: var(--text-muted);
 }
 
+.deleteMenuItem {
+  color: #ef4444;
+}
+
+.deleteMenuItem svg {
+  color: #ef4444 !important;
+}
+
+.deleteMenuItem:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #f87171 !important;
+}
+
 .emptyState {
   text-align: center;
   padding: 3rem;

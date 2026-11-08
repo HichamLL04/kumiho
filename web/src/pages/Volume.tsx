@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
-import { Check, CheckCircle, Folder, FileText, Music, MoreVertical, EyeOff, Download } from "lucide-react";
+import { Check, CheckCircle, Folder, FileText, Music, MoreVertical, EyeOff, Download, Trash2 } from "lucide-react";
 import { Header } from "../components/headers/Header";
 import { SubHeader } from "../components/headers/SubHeader";
 import { Sidebar } from "../components/Sidebar";
@@ -190,6 +190,37 @@ export function VolumePage() {
         } catch (err) {
           console.error(err);
           setAlertModal({ isOpen: true, type: "error", message: t("series.alert.reset_failed") });
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteChapter = (chapter: Chapter) => {
+    setActiveMenuChapterId(null);
+    setAlertModal({
+      isOpen: true,
+      type: "warning",
+      message: t("series.alert.delete_chapter_msg", {
+        defaultValue: `¿Estás seguro de que deseas eliminar este capítulo? Se borrará el archivo de disco y se registrará en Mangafy.`,
+        title: chapter.title || `Capítulo ${chapter.chapter_number}`
+      }),
+      onConfirm: async () => {
+        try {
+          setIsUpdating(true);
+          await chapterAPI.delete(chapter.id);
+          await loadData();
+          closeAlert();
+        } catch (err) {
+          console.error("Failed to delete chapter:", err);
+          setAlertModal({
+            isOpen: true,
+            type: "error",
+            message: t("series.alert.delete_chapter_failed", {
+              defaultValue: "Error al eliminar el capítulo"
+            })
+          });
         } finally {
           setIsUpdating(false);
         }
@@ -622,6 +653,17 @@ export function VolumePage() {
                                 <span>{t("series.action.download")}</span>
                               </button>
                             )}
+
+                            <button
+                              className={`${styles.chapterMenuItem} ${styles.deleteMenuItem}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteChapter(chapter);
+                              }}
+                            >
+                              <Trash2 size={16} />
+                              <span>{t("common.delete") || "Eliminar"}</span>
+                            </button>
                           </div>
                         )}
                       </div>

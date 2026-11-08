@@ -435,6 +435,8 @@ export const chapterAPI = {
   markPreviousComplete: (seriesId: string, chapterId: string) =>
     api.post(`/series/${seriesId}/chapters/${chapterId}/complete-previous`),
   deleteProgress: (chapterId: string) => api.delete(`/chapters/${chapterId}/progress`),
+  delete: (chapterId: string) =>
+    api.delete<{ deleted: boolean; id: string }>(`/chapters/${chapterId}`).then((res) => res.data),
   getBGM: (chapterId: string) => api.get<{ exists: boolean; url?: string }>(`/chapters/${chapterId}/bgm`),
   getAudioUrl: (chapterId: string) => `${API_BASE_URL}/chapters/${chapterId}/audio`,
 };
