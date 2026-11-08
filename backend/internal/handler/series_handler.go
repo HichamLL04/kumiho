@@ -1446,11 +1446,6 @@ func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
 	}
 
 	// 1. Mangafy API 호출
-	mangafyURL := os.Getenv("MANGAFY_URL")
-	if mangafyURL == "" {
-		mangafyURL = "http://mangafy:4000"
-	}
-
 	var seriesTitle string
 	volume, _ := h.volumeRepo.FindByID(nil, chapter.VolumeID)
 	if volume != nil {
@@ -1466,10 +1461,46 @@ func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
 		"chapter_number": chapter.ChapterNumber,
 	})
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, reqErr := client.Post(strings.TrimRight(mangafyURL, "/")+"/api/chapters/delete", "application/json", bytes.NewBuffer(reqBody))
-	if reqErr == nil && resp != nil {
-		resp.Body.Close()
+	envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("MANGAFY_URL")), "/")
+	rawCandidates := []string{}
+	if envURL != "" {
+		rawCandidates = append(rawCandidates, envURL)
+	}
+	rawCandidates = append(rawCandidates,
+		"http://host.docker.internal:4000",
+		"http://mangafy:4000",
+		"http://172.17.0.1:4000",
+		"http://localhost:4000",
+	)
+
+	seenURL := make(map[string]bool)
+	candidates := make([]string, 0, len(rawCandidates))
+	for _, u := range rawCandidates {
+		if !seenURL[u] {
+			seenURL[u] = true
+			candidates = append(candidates, u)
+		}
+	}
+
+	client := &http.Client{Timeout: 4 * time.Second}
+	notified := false
+	for _, baseURL := range candidates {
+		targetURL := baseURL + "/api/chapters/delete"
+		log.Printf("[Mangafy] Notifying Mangafy at %s (series: '%s', ch: %v, path: %s)", targetURL, seriesTitle, chapter.ChapterNumber, chapter.Path)
+		resp, reqErr := client.Post(targetURL, "application/json", bytes.NewBuffer(reqBody))
+		if reqErr == nil && resp != nil {
+			log.Printf("[Mangafy] Mangafy response from %s: HTTP %d", targetURL, resp.StatusCode)
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+				notified = true
+				break
+			}
+		} else if reqErr != nil {
+			log.Printf("[Mangafy] Attempt failed for %s: %v", targetURL, reqErr)
+		}
+	}
+	if !notified {
+		log.Printf("[Mangafy] Warning: Could not reach Mangafy at any candidate URL, proceeding with local deletion.")
 	}
 
 	// 2. 로컬 파일 삭제 (존재하는 경우)

@@ -9,6 +9,8 @@ services:
       - kumiho_config:/app/config
       - kumiho_data:/app/data
       - /mnt:/mnt
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - TZ=Asia/Seoul
       - PORT=9999
@@ -18,7 +20,7 @@ services:
       - PLUGIN_SECRET_KEY=${PLUGIN_SECRET_KEY:-1234}
       - PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/kumiho-plugin/kumiho-plugin-registry/main/index.json
       - GODEBUG=http2client=0
-      - MANGAFY_URL=${MANGAFY_URL:-http://mangafy:4000}
+      - MANGAFY_URL=${MANGAFY_URL:-http://host.docker.internal:4000}
     restart: unless-stopped
 
 volumes:
