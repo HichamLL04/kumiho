@@ -323,6 +323,7 @@ func main() {
 	chapters.Patch("/:chapterId/epub-progress", progressHandler.UpdateEpubProgress)
 	chapters.Post("/:chapterId/complete", progressHandler.MarkChapterComplete)
 	chapters.Delete("/:chapterId/progress", progressHandler.ResetChapterProgress)
+	chapters.Delete("/:id", seriesHandler.DeleteChapter)
 	chapters.Get("/:id/thumbnail", func(c *fiber.Ctx) error {
 		c.Locals("type", "chapters")
 		return imageHandler.GetThumbnail(c)
