@@ -1429,49 +1429,7 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 }
 
 func (h *SeriesHandler) notifyMangafy(seriesTitle string, chapterNumber interface{}, path string) {
-	reqBody, _ := json.Marshal(map[string]interface{}{
-		"path":           path,
-		"manga_title":    seriesTitle,
-		"chapter_number": chapterNumber,
-	})
-
-	envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("MANGAFY_URL")), "/")
-	rawCandidates := []string{}
-	if envURL != "" {
-		rawCandidates = append(rawCandidates, envURL)
-	}
-	rawCandidates = append(rawCandidates,
-		"http://host.docker.internal:4000",
-		"http://mangafy:4000",
-		"http://172.22.0.1:4000",
-		"http://172.17.0.1:4000",
-		"http://localhost:4000",
-	)
-
-	seenURL := make(map[string]bool)
-	candidates := make([]string, 0, len(rawCandidates))
-	for _, u := range rawCandidates {
-		if !seenURL[u] {
-			seenURL[u] = true
-			candidates = append(candidates, u)
-		}
-	}
-
-	client := &http.Client{Timeout: 3 * time.Second}
-	for _, baseURL := range candidates {
-		targetURL := baseURL + "/api/chapters/delete"
-		log.Printf("[Mangafy] Sending chapter delete to %s for '%s' ch.%v (path: %s)", targetURL, seriesTitle, chapterNumber, path)
-		resp, reqErr := client.Post(targetURL, "application/json", bytes.NewBuffer(reqBody))
-		if reqErr == nil && resp != nil {
-			log.Printf("[Mangafy] Mangafy response from %s: HTTP %d", targetURL, resp.StatusCode)
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-				return
-			}
-		} else if reqErr != nil {
-			log.Printf("[Mangafy] Attempt failed for %s: %v", targetURL, reqErr)
-		}
-	}
+	notifyMangafy(seriesTitle, chapterNumber, path)
 }
 
 // DeleteChapter 챕터 삭제 및 Mangafy 연동
@@ -1560,19 +1518,29 @@ func (h *SeriesHandler) DeleteVolume(c *fiber.Ctx) error {
 
 	// 2. Mangafy API 호출 및 챕터 파일 삭제
 	if len(chapters) > 0 {
+		var mangafyItems []MangafyChapterRef
 		for _, ch := range chapters {
 			targetPath := ch.Path
 			if targetPath == "" {
 				targetPath = volume.Path
 			}
-			h.notifyMangafy(seriesTitle, ch.ChapterNumber, targetPath)
+			if targetPath != "" || ch.ChapterNumber != nil {
+				mangafyItems = append(mangafyItems, MangafyChapterRef{
+					Path:          targetPath,
+					MangaTitle:    seriesTitle,
+					ChapterNumber: ch.ChapterNumber,
+				})
+			}
 			if targetPath != "" {
 				if rErr := os.Remove(targetPath); rErr != nil && !os.IsNotExist(rErr) {
-					log.Printf("[DeleteVolume] Local file removal failed for %s: %v", targetPath, rErr)
+					log.Printf("[DeleteVolume] Local file removal failed for %s locally: %v", targetPath, rErr)
 				} else {
 					log.Printf("[DeleteVolume] Local file removed: %s", targetPath)
 				}
 			}
+		}
+		if len(mangafyItems) > 0 {
+			notifyMangafyBatch(mangafyItems)
 		}
 	} else {
 		h.notifyMangafy(seriesTitle, volume.VolumeNumber, volume.Path)
@@ -2437,6 +2405,7 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 	defer func() { _ = tx.Rollback() }()
 
 	deletedCount := 0
+	var mangafyItems []MangafyChapterRef
 	for _, ch := range seriesChapters {
 		if ch.VolumeID != volume.ID {
 			continue
@@ -2446,11 +2415,15 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 		}
 
 		cleanPath, shouldDeleteFile, pathErr := isSafeChapterPathForDeletion(ch.Path, series.Path, library.Paths)
+		targetPath := cleanPath
+		if targetPath == "" {
+			targetPath = ch.Path
+		}
 		if pathErr != nil {
 			log.Printf("[CLEANUP] Warning: Skipping disk deletion for chapter %q (path: %s): %v", ch.Title, ch.Path, pathErr)
 		} else if shouldDeleteFile && !protectedPaths[cleanPath] {
 			if removeErr := os.RemoveAll(cleanPath); removeErr != nil {
-				log.Printf("[CLEANUP] Warning: Failed to delete chapter file %s: %v", cleanPath, removeErr)
+				log.Printf("[CLEANUP] Warning: Failed to delete chapter file %s locally (%v), relying on Mangafy root delete", cleanPath, removeErr)
 			} else {
 				log.Printf("[CLEANUP] Deleted chapter file: %s", cleanPath)
 			}
@@ -2461,8 +2434,18 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 			log.Printf("[CLEANUP] Failed to delete chapter %q (%s) from DB: %v", ch.Title, ch.ID, dbErr)
 			continue
 		}
-		h.notifyMangafy(series.Title, ch.ChapterNumber, cleanPath)
 		deletedCount++
+		if targetPath != "" || ch.ChapterNumber != nil {
+			mangafyItems = append(mangafyItems, MangafyChapterRef{
+				Path:          targetPath,
+				MangaTitle:    series.Title,
+				ChapterNumber: ch.ChapterNumber,
+			})
+		}
+	}
+
+	if len(mangafyItems) > 0 {
+		notifyMangafyBatch(mangafyItems)
 	}
 
 	if deletedCount > 0 {
@@ -2595,17 +2578,22 @@ func (h *SeriesHandler) CleanupSeriesChapters(c *fiber.Ctx) error {
 	defer func() { _ = tx.Rollback() }()
 
 	deletedCount := 0
+	var mangafyItems []MangafyChapterRef
 	for _, ch := range chapters {
 		if keepIDs[ch.ID] {
 			continue
 		}
 
 		cleanPath, shouldDeleteFile, pathErr := isSafeChapterPathForDeletion(ch.Path, series.Path, library.Paths)
+		targetPath := cleanPath
+		if targetPath == "" {
+			targetPath = ch.Path
+		}
 		if pathErr != nil {
 			log.Printf("[CLEANUP] Warning: Skipping disk deletion for chapter %q (path: %s): %v", ch.Title, ch.Path, pathErr)
 		} else if shouldDeleteFile && !protectedPaths[cleanPath] {
 			if removeErr := os.RemoveAll(cleanPath); removeErr != nil {
-				log.Printf("[CLEANUP] Warning: Failed to delete chapter file %s: %v", cleanPath, removeErr)
+				log.Printf("[CLEANUP] Warning: Failed to delete chapter file %s locally (%v), relying on Mangafy root delete", cleanPath, removeErr)
 			} else {
 				log.Printf("[CLEANUP] Deleted chapter file: %s", cleanPath)
 			}
@@ -2616,8 +2604,18 @@ func (h *SeriesHandler) CleanupSeriesChapters(c *fiber.Ctx) error {
 			log.Printf("[CLEANUP] Failed to delete chapter %q (%s) from DB: %v", ch.Title, ch.ID, dbErr)
 			continue
 		}
-		h.notifyMangafy(series.Title, ch.ChapterNumber, cleanPath)
 		deletedCount++
+		if targetPath != "" || ch.ChapterNumber != nil {
+			mangafyItems = append(mangafyItems, MangafyChapterRef{
+				Path:          targetPath,
+				MangaTitle:    series.Title,
+				ChapterNumber: ch.ChapterNumber,
+			})
+		}
+	}
+
+	if len(mangafyItems) > 0 {
+		notifyMangafyBatch(mangafyItems)
 	}
 
 	if deletedCount > 0 {
