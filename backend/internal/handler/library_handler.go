@@ -1277,13 +1277,11 @@ func (h *LibraryHandler) CleanupChapters(c *fiber.Ctx) error {
 				continue
 			}
 			seriesDeletedCount++
-			if targetPath != "" || ch.ChapterNumber != nil {
-				seriesMangafyItems = append(seriesMangafyItems, MangafyChapterRef{
-					Path:          targetPath,
-					MangaTitle:    series.Title,
-					ChapterNumber: ch.ChapterNumber,
-				})
-			}
+			seriesMangafyItems = append(seriesMangafyItems, MangafyChapterRef{
+				Path:          targetPath,
+				MangaTitle:    series.Title,
+				ChapterNumber: ch.ChapterNumber,
+			})
 		}
 
 		if len(seriesMangafyItems) > 0 {

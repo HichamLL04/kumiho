@@ -2,11 +2,9 @@ package handler
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1524,13 +1522,11 @@ func (h *SeriesHandler) DeleteVolume(c *fiber.Ctx) error {
 			if targetPath == "" {
 				targetPath = volume.Path
 			}
-			if targetPath != "" || ch.ChapterNumber != nil {
-				mangafyItems = append(mangafyItems, MangafyChapterRef{
-					Path:          targetPath,
-					MangaTitle:    seriesTitle,
-					ChapterNumber: ch.ChapterNumber,
-				})
-			}
+			mangafyItems = append(mangafyItems, MangafyChapterRef{
+				Path:          targetPath,
+				MangaTitle:    seriesTitle,
+				ChapterNumber: ch.ChapterNumber,
+			})
 			if targetPath != "" {
 				if rErr := os.Remove(targetPath); rErr != nil && !os.IsNotExist(rErr) {
 					log.Printf("[DeleteVolume] Local file removal failed for %s locally: %v", targetPath, rErr)
@@ -2435,13 +2431,11 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 			continue
 		}
 		deletedCount++
-		if targetPath != "" || ch.ChapterNumber != nil {
-			mangafyItems = append(mangafyItems, MangafyChapterRef{
-				Path:          targetPath,
-				MangaTitle:    series.Title,
-				ChapterNumber: ch.ChapterNumber,
-			})
-		}
+		mangafyItems = append(mangafyItems, MangafyChapterRef{
+			Path:          targetPath,
+			MangaTitle:    series.Title,
+			ChapterNumber: ch.ChapterNumber,
+		})
 	}
 
 	if len(mangafyItems) > 0 {
@@ -2605,13 +2599,11 @@ func (h *SeriesHandler) CleanupSeriesChapters(c *fiber.Ctx) error {
 			continue
 		}
 		deletedCount++
-		if targetPath != "" || ch.ChapterNumber != nil {
-			mangafyItems = append(mangafyItems, MangafyChapterRef{
-				Path:          targetPath,
-				MangaTitle:    series.Title,
-				ChapterNumber: ch.ChapterNumber,
-			})
-		}
+		mangafyItems = append(mangafyItems, MangafyChapterRef{
+			Path:          targetPath,
+			MangaTitle:    series.Title,
+			ChapterNumber: ch.ChapterNumber,
+		})
 	}
 
 	if len(mangafyItems) > 0 {
