@@ -8,7 +8,7 @@ services:
     volumes:
       - kumiho_config:/app/config
       - kumiho_data:/app/data
-      - ./books:/books
+      - /mnt:/mnt
     environment:
       - TZ=Asia/Seoul
       - PORT=9999
