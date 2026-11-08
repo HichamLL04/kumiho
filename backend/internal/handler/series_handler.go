@@ -1443,6 +1443,7 @@ func (h *SeriesHandler) notifyMangafy(seriesTitle string, chapterNumber interfac
 	rawCandidates = append(rawCandidates,
 		"http://host.docker.internal:4000",
 		"http://mangafy:4000",
+		"http://172.22.0.1:4000",
 		"http://172.17.0.1:4000",
 		"http://localhost:4000",
 	)
@@ -1477,14 +1478,17 @@ func (h *SeriesHandler) notifyMangafy(seriesTitle string, chapterNumber interfac
 // DELETE /api/v1/chapters/:id
 func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
 	id := c.Params("id")
+	log.Printf("[DeleteChapter] Delete request received for chapter ID: %s", id)
 
 	chapter, err := h.chapterRepo.FindByID(nil, id)
 	if err != nil {
+		log.Printf("[DeleteChapter] Failed to fetch chapter %s: %v", id, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to fetch chapter",
 		})
 	}
 	if chapter == nil {
+		log.Printf("[DeleteChapter] Chapter %s not found", id)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "chapter not found",
 		})
@@ -1500,20 +1504,31 @@ func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
 		}
 	}
 
-	h.notifyMangafy(seriesTitle, chapter.ChapterNumber, chapter.Path)
+	targetPath := chapter.Path
+	if targetPath == "" && volume != nil {
+		targetPath = volume.Path
+	}
+
+	h.notifyMangafy(seriesTitle, chapter.ChapterNumber, targetPath)
 
 	// 2. 로컬 파일 삭제 (존재하는 경우)
-	if chapter.Path != "" {
-		_ = os.Remove(chapter.Path)
+	if targetPath != "" {
+		if rErr := os.Remove(targetPath); rErr != nil && !os.IsNotExist(rErr) {
+			log.Printf("[DeleteChapter] Warning: Local removal failed for %s: %v", targetPath, rErr)
+		} else {
+			log.Printf("[DeleteChapter] Local file removed: %s", targetPath)
+		}
 	}
 
 	// 3. Kumiho DB에서 삭제
 	if err := h.chapterRepo.Delete(nil, id); err != nil {
+		log.Printf("[DeleteChapter] DB delete failed for %s: %v", id, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to delete chapter",
 		})
 	}
 
+	log.Printf("[DeleteChapter] Chapter %s deleted successfully", id)
 	return c.JSON(fiber.Map{
 		"deleted": true,
 		"id":      id,
@@ -1524,9 +1539,11 @@ func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
 // DELETE /api/v1/volumes/:id
 func (h *SeriesHandler) DeleteVolume(c *fiber.Ctx) error {
 	id := c.Params("id")
+	log.Printf("[DeleteVolume] Delete request received for volume ID: %s", id)
 
 	volume, err := h.volumeRepo.FindByID(nil, id)
 	if err != nil || volume == nil {
+		log.Printf("[DeleteVolume] Volume %s not found (err: %v)", id, err)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "volume not found",
 		})
@@ -1544,9 +1561,17 @@ func (h *SeriesHandler) DeleteVolume(c *fiber.Ctx) error {
 	// 2. Mangafy API 호출 및 챕터 파일 삭제
 	if len(chapters) > 0 {
 		for _, ch := range chapters {
-			h.notifyMangafy(seriesTitle, ch.ChapterNumber, ch.Path)
-			if ch.Path != "" {
-				_ = os.Remove(ch.Path)
+			targetPath := ch.Path
+			if targetPath == "" {
+				targetPath = volume.Path
+			}
+			h.notifyMangafy(seriesTitle, ch.ChapterNumber, targetPath)
+			if targetPath != "" {
+				if rErr := os.Remove(targetPath); rErr != nil && !os.IsNotExist(rErr) {
+					log.Printf("[DeleteVolume] Local file removal failed for %s: %v", targetPath, rErr)
+				} else {
+					log.Printf("[DeleteVolume] Local file removed: %s", targetPath)
+				}
 			}
 		}
 	} else {
@@ -1555,16 +1580,22 @@ func (h *SeriesHandler) DeleteVolume(c *fiber.Ctx) error {
 
 	// 3. 로컬 볼륨 파일/디렉토리 삭제
 	if volume.Path != "" {
-		_ = os.RemoveAll(volume.Path)
+		if rErr := os.RemoveAll(volume.Path); rErr != nil && !os.IsNotExist(rErr) {
+			log.Printf("[DeleteVolume] Local volume path removal failed for %s: %v", volume.Path, rErr)
+		} else {
+			log.Printf("[DeleteVolume] Local volume path removed: %s", volume.Path)
+		}
 	}
 
 	// 4. Kumiho DB에서 볼륨 삭제 (외래키 cascade로 챕터/페이지도 함께 삭제)
 	if err := h.volumeRepo.Delete(nil, id); err != nil {
+		log.Printf("[DeleteVolume] DB delete failed for volume %s: %v", id, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to delete volume",
 		})
 	}
 
+	log.Printf("[DeleteVolume] Volume %s deleted successfully", id)
 	return c.JSON(fiber.Map{
 		"deleted": true,
 		"id":      id,
