@@ -14,6 +14,7 @@ import {
   FileText,
   Edit2,
   Heart,
+  Trash2,
 } from "lucide-react";
 import { volumeAPI, seriesAPI, chapterAPI } from "../api/client";
 import { getAuthenticatedImageUrl } from "../utils/image";
@@ -459,6 +460,39 @@ export function SeriesCard({
     }
   };
 
+  const handleDeleteVolume = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(false);
+    setAlertModal({
+      isOpen: true,
+      type: "warning",
+      message: t("series.alert.delete_volume_msg", {
+        defaultValue: `¿Estás seguro de que deseas eliminar "${itemTitle}"? Se borrará el archivo de disco y se registrará en Mangafy.`,
+        title: itemTitle,
+      }),
+      onConfirm: async () => {
+        try {
+          setIsUpdating(true);
+          await volumeAPI.delete(item.id);
+          await Promise.resolve(onStatusChange?.());
+          closeAlert();
+        } catch (err) {
+          console.error("Failed to delete volume:", err);
+          setAlertModal({
+            isOpen: true,
+            type: "error",
+            message: t("series.alert.delete_volume_failed", {
+              defaultValue: "Error al eliminar el volumen",
+            }),
+          });
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
+  };
+
   const showMenu = true;
   const shouldShowExtensionBadge = showExtensionBadge ?? type === "volume";
   const extensionBadge = shouldShowExtensionBadge
@@ -725,6 +759,15 @@ export function SeriesCard({
                   >
                     <Edit2 size={16} />
                     <span>{t("series.action.edit")}</span>
+                  </button>
+                )}
+                {type === "volume" && (
+                  <button
+                    className={`${styles.seriesMenuItem} ${styles.deleteMenuItem || ""}`}
+                    onClick={handleDeleteVolume}
+                  >
+                    <Trash2 size={16} />
+                    <span>{t("common.delete") || "Eliminar"}</span>
                   </button>
                 )}
               </div>

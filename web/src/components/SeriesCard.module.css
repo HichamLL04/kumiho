@@ -468,3 +468,11 @@
     opacity: 1;
   }
 }
+
+.deleteMenuItem {
+  color: var(--color-danger, #ef4444) !important;
+}
+.deleteMenuItem:hover {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  color: var(--color-danger, #ef4444) !important;
+}

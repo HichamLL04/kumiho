@@ -1428,6 +1428,51 @@ func (h *SeriesHandler) GetChapter(c *fiber.Ctx) error {
 	return c.JSON(chapter)
 }
 
+func (h *SeriesHandler) notifyMangafy(seriesTitle string, chapterNumber interface{}, path string) {
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"path":           path,
+		"manga_title":    seriesTitle,
+		"chapter_number": chapterNumber,
+	})
+
+	envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("MANGAFY_URL")), "/")
+	rawCandidates := []string{}
+	if envURL != "" {
+		rawCandidates = append(rawCandidates, envURL)
+	}
+	rawCandidates = append(rawCandidates,
+		"http://host.docker.internal:4000",
+		"http://mangafy:4000",
+		"http://172.17.0.1:4000",
+		"http://localhost:4000",
+	)
+
+	seenURL := make(map[string]bool)
+	candidates := make([]string, 0, len(rawCandidates))
+	for _, u := range rawCandidates {
+		if !seenURL[u] {
+			seenURL[u] = true
+			candidates = append(candidates, u)
+		}
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	for _, baseURL := range candidates {
+		targetURL := baseURL + "/api/chapters/delete"
+		log.Printf("[Mangafy] Sending chapter delete to %s for '%s' ch.%v (path: %s)", targetURL, seriesTitle, chapterNumber, path)
+		resp, reqErr := client.Post(targetURL, "application/json", bytes.NewBuffer(reqBody))
+		if reqErr == nil && resp != nil {
+			log.Printf("[Mangafy] Mangafy response from %s: HTTP %d", targetURL, resp.StatusCode)
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+				return
+			}
+		} else if reqErr != nil {
+			log.Printf("[Mangafy] Attempt failed for %s: %v", targetURL, reqErr)
+		}
+	}
+}
+
 // DeleteChapter 챕터 삭제 및 Mangafy 연동
 // DELETE /api/v1/chapters/:id
 func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
@@ -1455,53 +1500,7 @@ func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
 		}
 	}
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
-		"path":           chapter.Path,
-		"manga_title":    seriesTitle,
-		"chapter_number": chapter.ChapterNumber,
-	})
-
-	envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("MANGAFY_URL")), "/")
-	rawCandidates := []string{}
-	if envURL != "" {
-		rawCandidates = append(rawCandidates, envURL)
-	}
-	rawCandidates = append(rawCandidates,
-		"http://host.docker.internal:4000",
-		"http://mangafy:4000",
-		"http://172.17.0.1:4000",
-		"http://localhost:4000",
-	)
-
-	seenURL := make(map[string]bool)
-	candidates := make([]string, 0, len(rawCandidates))
-	for _, u := range rawCandidates {
-		if !seenURL[u] {
-			seenURL[u] = true
-			candidates = append(candidates, u)
-		}
-	}
-
-	client := &http.Client{Timeout: 4 * time.Second}
-	notified := false
-	for _, baseURL := range candidates {
-		targetURL := baseURL + "/api/chapters/delete"
-		log.Printf("[Mangafy] Notifying Mangafy at %s (series: '%s', ch: %v, path: %s)", targetURL, seriesTitle, chapter.ChapterNumber, chapter.Path)
-		resp, reqErr := client.Post(targetURL, "application/json", bytes.NewBuffer(reqBody))
-		if reqErr == nil && resp != nil {
-			log.Printf("[Mangafy] Mangafy response from %s: HTTP %d", targetURL, resp.StatusCode)
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-				notified = true
-				break
-			}
-		} else if reqErr != nil {
-			log.Printf("[Mangafy] Attempt failed for %s: %v", targetURL, reqErr)
-		}
-	}
-	if !notified {
-		log.Printf("[Mangafy] Warning: Could not reach Mangafy at any candidate URL, proceeding with local deletion.")
-	}
+	h.notifyMangafy(seriesTitle, chapter.ChapterNumber, chapter.Path)
 
 	// 2. 로컬 파일 삭제 (존재하는 경우)
 	if chapter.Path != "" {
@@ -1512,6 +1511,57 @@ func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
 	if err := h.chapterRepo.Delete(nil, id); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to delete chapter",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"deleted": true,
+		"id":      id,
+	})
+}
+
+// DeleteVolume 볼륨(및 하위 챕터) 삭제 및 Mangafy 연동
+// DELETE /api/v1/volumes/:id
+func (h *SeriesHandler) DeleteVolume(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	volume, err := h.volumeRepo.FindByID(nil, id)
+	if err != nil || volume == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "volume not found",
+		})
+	}
+
+	series, _ := h.seriesRepo.FindByID(nil, volume.SeriesID, "")
+	seriesTitle := ""
+	if series != nil {
+		seriesTitle = series.Title
+	}
+
+	// 1. 하위 챕터들 조회
+	chapters, _ := h.chapterRepo.FindByVolumeID(nil, id)
+
+	// 2. Mangafy API 호출 및 챕터 파일 삭제
+	if len(chapters) > 0 {
+		for _, ch := range chapters {
+			h.notifyMangafy(seriesTitle, ch.ChapterNumber, ch.Path)
+			if ch.Path != "" {
+				_ = os.Remove(ch.Path)
+			}
+		}
+	} else {
+		h.notifyMangafy(seriesTitle, volume.VolumeNumber, volume.Path)
+	}
+
+	// 3. 로컬 볼륨 파일/디렉토리 삭제
+	if volume.Path != "" {
+		_ = os.RemoveAll(volume.Path)
+	}
+
+	// 4. Kumiho DB에서 볼륨 삭제 (외래키 cascade로 챕터/페이지도 함께 삭제)
+	if err := h.volumeRepo.Delete(nil, id); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to delete volume",
 		})
 	}
 
@@ -2380,6 +2430,7 @@ func (h *SeriesHandler) CleanupChapters(c *fiber.Ctx) error {
 			log.Printf("[CLEANUP] Failed to delete chapter %q (%s) from DB: %v", ch.Title, ch.ID, dbErr)
 			continue
 		}
+		h.notifyMangafy(series.Title, ch.ChapterNumber, cleanPath)
 		deletedCount++
 	}
 
@@ -2534,6 +2585,7 @@ func (h *SeriesHandler) CleanupSeriesChapters(c *fiber.Ctx) error {
 			log.Printf("[CLEANUP] Failed to delete chapter %q (%s) from DB: %v", ch.Title, ch.ID, dbErr)
 			continue
 		}
+		h.notifyMangafy(series.Title, ch.ChapterNumber, cleanPath)
 		deletedCount++
 	}
 
