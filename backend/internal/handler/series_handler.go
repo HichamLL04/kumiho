@@ -1454,7 +1454,7 @@ func (h *SeriesHandler) DeleteChapter(c *fiber.Ctx) error {
 	var seriesTitle string
 	volume, _ := h.volumeRepo.FindByID(nil, chapter.VolumeID)
 	if volume != nil {
-		series, _ := h.seriesRepo.FindByID(nil, volume.SeriesID)
+		series, _ := h.seriesRepo.FindByID(nil, volume.SeriesID, "")
 		if series != nil {
 			seriesTitle = series.Title
 		}
