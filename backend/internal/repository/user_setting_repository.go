@@ -13,6 +13,16 @@ type UserSettingRepository interface {
 	GetByUser(q database.Queryer, userID string) ([]model.UserSetting, error)
 	Update(q database.Queryer, userID, key, value string) error
 	GetByKey(q database.Queryer, userID, key string) (*model.UserSetting, error)
+	Delete(q database.Queryer, userID, key string) error
+}
+
+func (r *userSettingRepository) Delete(q database.Queryer, userID, key string) error {
+	q = database.GetQueryer(q)
+	_, err := q.Exec(`DELETE FROM user_settings WHERE user_id = ? AND key = ?`, userID, key)
+	if err != nil {
+		return fmt.Errorf("failed to delete user setting: %w", err)
+	}
+	return nil
 }
 
 type userSettingRepository struct{}

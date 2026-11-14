@@ -96,7 +96,8 @@
       "system": "System",
       "account": "Account",
       "statistics": "Statistics",
-      "metadata": "Metadata"
+      "metadata": "Metadata",
+      "dango": "Dango Sync"
     },
     "metadata": {
       "title": "Metadata Management",

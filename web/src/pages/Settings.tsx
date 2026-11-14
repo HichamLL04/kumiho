@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle, Database } from "lucide-react";
+import { Library, Users, Server, User, Settings, Monitor, BarChart3, Puzzle, Database, Link2 } from "lucide-react";
 import { pluginAPI, systemAPI } from "../api/client";
 import { UpdateBadge } from "../components/common/UpdateBadge";
 import { Header } from "../components/headers/Header";
@@ -17,6 +17,7 @@ import { AccountTab } from "../components/settings/AccountTab";
 import { StatisticsTab } from "../components/settings/StatisticsTab";
 import { PluginsTab } from "../components/settings/PluginsTab";
 import { MetadataTab } from "../components/settings/MetadataTab";
+import { DangoIntegrationTab } from "../components/settings/DangoIntegrationTab";
 import styles from "./Settings.module.css";
 
 // 설정 탭 타입
@@ -29,7 +30,8 @@ type SettingsTab =
   | "users"
   | "plugins"
   | "system"
-  | "account";
+  | "account"
+  | "dango";
 
 // 탭 정보
 const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: boolean }[] = [
@@ -42,6 +44,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Library; adminOnly?: 
   { id: "plugins", label: "settings.tabs.plugins", icon: Puzzle, adminOnly: true },
   { id: "system", label: "settings.tabs.system", icon: Server, adminOnly: true },
   { id: "account", label: "settings.tabs.account", icon: User },
+  { id: "dango", label: "settings.tabs.dango", icon: Link2 },
 ];
 
 export function SettingsPage() {
@@ -113,6 +116,8 @@ export function SettingsPage() {
         return <SystemTab />;
       case "account":
         return <AccountTab />;
+      case "dango":
+        return <DangoIntegrationTab />;
       default:
         return null;
     }

@@ -309,6 +309,11 @@ func (s *PluginSecretService) encrypt(value string) (string, error) {
 	return base64.StdEncoding.EncodeToString(payload), nil
 }
 
+// EncryptValue encrypts a secret for storage by other first-party integrations.
+func (s *PluginSecretService) EncryptValue(value string) (string, error) {
+	return s.encrypt(value)
+}
+
 func (s *PluginSecretService) decrypt(valueEncrypted string) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(valueEncrypted)
 	if err != nil {
@@ -334,6 +339,11 @@ func (s *PluginSecretService) decrypt(valueEncrypted string) (string, error) {
 		return "", fmt.Errorf("decrypt secret: %w", err)
 	}
 	return string(plaintext), nil
+}
+
+// DecryptValue decrypts a secret previously encrypted by this service.
+func (s *PluginSecretService) DecryptValue(valueEncrypted string) (string, error) {
+	return s.decrypt(valueEncrypted)
 }
 
 func (s *PluginSecretService) secretKey() []byte {

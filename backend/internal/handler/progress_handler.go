@@ -120,6 +120,7 @@ func (h *ProgressHandler) publishChapterCompleted(userID, chapterID string) {
 			VolumeID: volume.ID, VolumeNumber: volume.VolumeNumber,
 		},
 	}
+	event.Identifiers = service.ReadCatalogIdentifiers(series.Path)
 	if series.Metadata != nil {
 		event.Series.Metadata = map[string]string{
 			"original_title":   series.Metadata.OriginalTitle,

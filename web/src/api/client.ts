@@ -488,6 +488,13 @@ export const settingAPI = {
     api.put(`/settings/${key}`, data).then((res) => res.data),
 };
 
+export const dangoIntegrationAPI = {
+  get: () => api.get<{ endpoint: string; token_configured: boolean }>("/integrations/dango").then((res) => res.data),
+  save: (data: { endpoint: string; api_key?: string }) =>
+    api.put<{ endpoint: string; token_configured: boolean }>("/integrations/dango", data).then((res) => res.data),
+  revoke: () => api.delete("/integrations/dango").then((res) => res.data),
+};
+
 // Download API
 export const downloadAPI = {
   getSeriesUrl: (id: string) => `${API_BASE_URL}/download/series/${id}`,

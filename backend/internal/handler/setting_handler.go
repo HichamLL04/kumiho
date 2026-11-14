@@ -106,6 +106,9 @@ func (h *SettingHandler) ListSettings(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "사용자 설정을 조회할 수 없습니다"})
 		}
 		for _, s := range userSettings {
+			if s.Key == "integration_dango_token_encrypted" {
+				continue
+			}
 			settingsMap[s.Key] = s.Value
 		}
 	}

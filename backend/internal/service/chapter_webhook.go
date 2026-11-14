@@ -10,6 +10,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +47,128 @@ type WebhookChapter struct {
 	Title        string `json:"title"`
 	VolumeID     string `json:"volume_id"`
 	VolumeNumber int    `json:"volume_number"`
+}
+
+var catalogIDPattern = regexp.MustCompile(`(?i)/(?:manga|anime)/(\d+)`)
+
+// ReadCatalogIdentifiers reads catalog IDs from the common sidecar files next
+// to a series. metadata.json takes precedence and metadata.txt fills gaps.
+func ReadCatalogIdentifiers(seriesPath string) map[string]string {
+	baseDir := seriesPath
+	if info, err := os.Stat(seriesPath); err == nil && !info.IsDir() {
+		baseDir = filepath.Dir(seriesPath)
+	}
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return nil
+	}
+	paths := map[string]string{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		switch strings.ToLower(entry.Name()) {
+		case "metadata.json":
+			paths["json"] = filepath.Join(baseDir, entry.Name())
+		case "metadata.txt", "series_metadata.txt":
+			if paths["text"] == "" {
+				paths["text"] = filepath.Join(baseDir, entry.Name())
+			}
+		}
+	}
+	identifiers := make(map[string]string, 2)
+	if path := paths["json"]; path != "" {
+		if data, readErr := os.ReadFile(path); readErr == nil {
+			var values map[string]json.RawMessage
+			if json.Unmarshal(data, &values) == nil {
+				for key, names := range map[string][]string{
+					"anilist_id": {"anilist_id", "anilist"},
+					"mal_id":     {"mal_id", "myanimelist_id", "myanimelist"},
+				} {
+					for _, name := range names {
+						if raw := values[name]; len(raw) > 0 {
+							var value string
+							if json.Unmarshal(raw, &value) != nil {
+								value = strings.Trim(string(raw), `"`)
+							}
+							if value = catalogID(value, key); value != "" {
+								identifiers[key] = value
+								break
+							}
+						}
+					}
+					if identifiers[key] == "" {
+						urlKey := "anilist_url"
+						if key == "mal_id" {
+							urlKey = "mal_url"
+						}
+						if raw := values[urlKey]; len(raw) > 0 {
+							var value string
+							_ = json.Unmarshal(raw, &value)
+							if value = catalogID(value, key); value != "" {
+								identifiers[key] = value
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if path := paths["text"]; path != "" {
+		if data, readErr := os.ReadFile(path); readErr == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				key := strings.ToLower(strings.TrimSpace(parts[0]))
+				value := strings.TrimSpace(parts[1])
+				if identifiers["anilist_id"] == "" && (key == "anilist" || key == "anilist_id" || key == "anilist id" || key == "anilist url") {
+					identifiers["anilist_id"] = catalogID(value, "anilist_id")
+				}
+				if identifiers["mal_id"] == "" && (key == "mal" || key == "mal_id" || key == "mal id" || key == "mal url" || key == "myanimelist" || key == "myanimelist id" || key == "myanimelist url") {
+					identifiers["mal_id"] = catalogID(value, "mal_id")
+				}
+			}
+		}
+	}
+	if identifiers["anilist_id"] == "" {
+		delete(identifiers, "anilist_id")
+	}
+	if identifiers["mal_id"] == "" {
+		delete(identifiers, "mal_id")
+	}
+	if len(identifiers) == 0 {
+		return nil
+	}
+	return identifiers
+}
+
+func catalogID(value, key string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.Trim(value, "0123456789") == "" {
+		return value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if key == "anilist_id" && host != "anilist.co" && !strings.HasSuffix(host, ".anilist.co") {
+		return ""
+	}
+	if key == "mal_id" && host != "myanimelist.net" && !strings.HasSuffix(host, ".myanimelist.net") {
+		return ""
+	}
+	if match := catalogIDPattern.FindStringSubmatch(parsed.Path); len(match) > 1 {
+		if _, err := strconv.Atoi(match[1]); err == nil {
+			return match[1]
+		}
+	}
+	return ""
 }
 
 type ChapterWebhookPublisher interface {

@@ -124,7 +124,12 @@ func main() {
 	libraryHandler := handler.NewLibraryHandler(ctx, libraryRepo, authService, fileScanner)
 	imageHandler := handler.NewImageHandler(pageRepo, chapterRepo, volumeRepo, seriesRepo, authService, cfg)
 	progressHandler := handler.NewProgressHandler(progressRepo, viewerSessionRepo, seriesRepo, authService, volumeRepo, chapterRepo, completionRepo, chapterCompletionRepo, hub, seriesEnrichSvc, libraryRepo, settingRepo)
-	progressHandler.SetChapterWebhookPublisher(service.NewChapterWebhookService(cfg))
+	dangoReadingService := service.NewDangoReadingService(userSettingRepo, pluginSecretSvc)
+	progressHandler.SetChapterWebhookPublisher(service.CompositeChapterWebhookPublisher{
+		service.NewChapterWebhookService(cfg),
+		dangoReadingService,
+	})
+	dangoIntegrationHandler := handler.NewDangoIntegrationHandler(dangoReadingService)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, seriesCharacterRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, userSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
@@ -199,6 +204,10 @@ func main() {
 
 	// === 인증 필요 라우트 ===
 	protected := v1.Group("", authMiddleware.Protected())
+	dangoIntegration := protected.Group("/integrations/dango")
+	dangoIntegration.Get("", dangoIntegrationHandler.Get)
+	dangoIntegration.Put("", dangoIntegrationHandler.Save)
+	dangoIntegration.Delete("", dangoIntegrationHandler.Revoke)
 
 	// 사용자 관리 (MASTER only)
 	users := protected.Group("/users")
