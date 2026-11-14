@@ -29,4 +29,6 @@ The request uses `Authorization: Bearer <personal Dango API key>`. It does not i
 
 On a series metadata panel, **Import from Dango** sends the sidecar AniList/MAL IDs (or its title as a community-mapping fallback) to Dango's `POST /api/v1/catalog/resolve` endpoint. Kumiho applies the returned cover, description, genres, dates, and catalog-title variants through its regular metadata storage, downloading the cover into Kumiho's thumbnail storage.
 
+Library scans also enqueue series that have AniList or MAL IDs in their sidecars. Kumiho processes these lookups in one background worker instead of creating a request per series. Dango controls the shared queue and AniList request pacing across every connected user and plugin, and rejects excess requests with HTTP 429 and `Retry-After` when its bounded queue is full. The scan response includes `catalog_metadata_queued`, and successful imports are marked so later scans do not request the same catalog identity again.
+
 Kumiho treats the local `metadata.json` title as its display preference: `clean_title` takes precedence over `title`. The catalog title returned by Dango is stored as an alternate/original title and does not replace that local display title. Dango itself returns catalog data and does not impose a display-title choice on clients.

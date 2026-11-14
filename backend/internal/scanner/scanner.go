@@ -104,13 +104,14 @@ func scanProgressDetail(entryName, path string) string {
 }
 
 type Scanner struct {
-	libraryRepo *repository.LibraryRepository
-	seriesRepo  *repository.SeriesRepository
-	volumeRepo  *repository.VolumeRepository
-	chapterRepo *repository.ChapterRepository
-	pageRepo    *repository.PageRepository
-	settingRepo repository.SettingRepository
-	config      *config.Config // Config 의존성 추가
+	libraryRepo             *repository.LibraryRepository
+	seriesRepo              *repository.SeriesRepository
+	volumeRepo              *repository.VolumeRepository
+	chapterRepo             *repository.ChapterRepository
+	pageRepo                *repository.PageRepository
+	settingRepo             repository.SettingRepository
+	config                  *config.Config // Config 의존성 추가
+	catalogMetadataEnqueuer func(context.Context, string) int
 
 	// 동시성 제어
 	semaphore         chan struct{}
@@ -431,12 +432,19 @@ func NewScanner(
 
 // ScanResult 스캔 결과
 type ScanResult struct {
-	SeriesCount  int      `json:"series_count"`
-	VolumeCount  int      `json:"volume_count"`
-	ChapterCount int      `json:"chapter_count"`
-	PageCount    int      `json:"page_count"`
-	Warnings     []string `json:"warnings,omitempty"`
-	Errors       []string `json:"errors,omitempty"`
+	SeriesCount           int      `json:"series_count"`
+	VolumeCount           int      `json:"volume_count"`
+	ChapterCount          int      `json:"chapter_count"`
+	PageCount             int      `json:"page_count"`
+	CatalogMetadataQueued int      `json:"catalog_metadata_queued,omitempty"`
+	Warnings              []string `json:"warnings,omitempty"`
+	Errors                []string `json:"errors,omitempty"`
+}
+
+// SetCatalogMetadataEnqueuer schedules sidecar-backed metadata imports after
+// every successful scan, including scheduled and filesystem-triggered scans.
+func (s *Scanner) SetCatalogMetadataEnqueuer(enqueuer func(context.Context, string) int) {
+	s.catalogMetadataEnqueuer = enqueuer
 }
 
 // DTOs for Two-Phase Scanning (Analyze -> Save)
@@ -730,6 +738,9 @@ func (s *Scanner) ScanLibrary(ctx context.Context, library *model.Library) (resu
 	if updateErr := s.libraryRepo.UpdateScanStatus(nil, library.ID, status, summary); updateErr != nil {
 		log.Printf("Failed to update final scan status for library %s: %v", library.ID, updateErr)
 		result.Errors = append(result.Errors, updateErr.Error())
+	}
+	if s.catalogMetadataEnqueuer != nil {
+		result.CatalogMetadataQueued = s.catalogMetadataEnqueuer(scanCtx, library.ID)
 	}
 
 	return result, nil

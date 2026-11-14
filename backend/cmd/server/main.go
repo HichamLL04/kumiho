@@ -20,6 +20,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/frontend"
 	"github.com/aha-hyeong/kumiho/backend/internal/handler"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
+	"github.com/aha-hyeong/kumiho/backend/internal/model"
 	pluginengine "github.com/aha-hyeong/kumiho/backend/internal/plugin"
 	binaryruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime/binary"
 	serviceruntime "github.com/aha-hyeong/kumiho/backend/internal/plugin/runtime/service"
@@ -129,7 +130,20 @@ func main() {
 		service.NewChapterWebhookService(cfg),
 		dangoReadingService,
 	})
-	dangoIntegrationHandler := handler.NewDangoIntegrationHandler(dangoReadingService, metadataSvc, seriesRepo)
+	dangoIntegrationHandler := handler.NewDangoIntegrationHandler(ctx, dangoReadingService, metadataSvc, seriesRepo)
+	fileScanner.SetCatalogMetadataEnqueuer(func(scanCtx context.Context, libraryID string) int {
+		users, usersErr := userRepo.FindAll(nil)
+		if usersErr != nil {
+			log.Printf("Could not load Kumiho users for Dango metadata queue: %v", usersErr)
+			return 0
+		}
+		for _, user := range users {
+			if user.Role == model.RoleMaster && dangoIntegrationHandler.IsConfigured(user.ID) {
+				return dangoIntegrationHandler.EnqueueLibraryMetadata(scanCtx, user.ID, libraryID)
+			}
+		}
+		return 0
+	})
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, seriesCharacterRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, userSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)

@@ -156,7 +156,15 @@ func (s *DangoReadingService) FetchCatalogMetadata(ctx context.Context, userID, 
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Content-Type", "application/json")
-	response, err := s.client.Do(request)
+	client := s.client
+	if client == nil {
+		client = &http.Client{}
+	}
+	clientCopy := *client
+	if clientCopy.Timeout < 2*time.Minute {
+		clientCopy.Timeout = 2 * time.Minute
+	}
+	response, err := clientCopy.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("request Dango catalog metadata: %w", err)
 	}
