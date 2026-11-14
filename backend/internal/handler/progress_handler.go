@@ -91,8 +91,29 @@ func (h *ProgressHandler) markChapterCompleted(db database.Queryer, userID, chap
 
 func (h *ProgressHandler) publishChapterCompleted(userID, chapterID string) {
 	if h.chapterWebhook == nil {
+		log.Printf("[chapter-webhook] completion detected but no publisher is configured user=%s chapter=%s", userID, chapterID)
 		return
 	}
+	go h.deliverChapterCompleted(userID, chapterID)
+}
+
+func (h *ProgressHandler) publishCompletedChapters(userID string, chapterIDs []string) {
+	if len(chapterIDs) == 0 {
+		return
+	}
+	if h.chapterWebhook == nil {
+		log.Printf("[chapter-webhook] %d bulk completions detected but no publisher is configured user=%s", len(chapterIDs), userID)
+		return
+	}
+	log.Printf("[chapter-webhook] publishing %d completed chapters user=%s", len(chapterIDs), userID)
+	go func() {
+		for _, chapterID := range chapterIDs {
+			h.deliverChapterCompleted(userID, chapterID)
+		}
+	}()
+}
+
+func (h *ProgressHandler) deliverChapterCompleted(userID, chapterID string) {
 	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
 	if err != nil || chapter == nil {
 		log.Printf("[chapter-webhook] cannot load completed chapter %q: %v", chapterID, err)
@@ -130,13 +151,33 @@ func (h *ProgressHandler) publishChapterCompleted(userID, chapterID string) {
 			"isbn":             series.Metadata.ISBN,
 		}
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
-		if err := h.chapterWebhook.Publish(ctx, event); err != nil {
-			log.Printf("[chapter-webhook] delivery failed event=%s user=%s series=%s chapter=%s: %v", event.ID, userID, series.ID, chapter.ID, err)
+	log.Printf("[chapter-webhook] completion detected user=%s series=%q chapter=%s number=%g", userID, series.Title, chapter.ID, chapter.ChapterNumber)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	if err := h.chapterWebhook.Publish(ctx, event); err != nil {
+		log.Printf("[chapter-webhook] delivery failed event=%s user=%s series=%s chapter=%s: %v", event.ID, userID, series.ID, chapter.ID, err)
+	}
+}
+
+func chapterIDsFromTransaction(tx *sql.Tx, query string, args ...any) ([]string, error) {
+	rows, err := tx.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var chapterIDs []string
+	for rows.Next() {
+		var chapterID string
+		if err := rows.Scan(&chapterID); err != nil {
+			return nil, err
 		}
-	}()
+		chapterIDs = append(chapterIDs, chapterID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return chapterIDs, nil
 }
 
 // UpdateProgressRequest 진행도 업데이트 요청
@@ -1541,6 +1582,17 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now()
+	chapterIDs, err := chapterIDsFromTransaction(tx, `
+		WITH RECURSIVE descendant_volumes(id) AS (
+			SELECT id FROM volumes WHERE id = ?
+			UNION ALL
+			SELECT v.id FROM volumes v JOIN descendant_volumes dv ON v.parent_id = dv.id
+		)
+		SELECT c.id FROM chapters c JOIN descendant_volumes dv ON c.volume_id = dv.id
+	`, volumeID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list completed chapters"})
+	}
 
 	// 1. 재귀적 CTE를 사용하여 모든 하위 볼륨 ID 목록 가져오기
 	// 2. 해당되는 모든 챕터의 진행도를 100%로 업데이트 (이미 존재하는 레코드)
@@ -1635,6 +1687,7 @@ func (h *ProgressHandler) MarkVolumeComplete(c *fiber.Ctx) error {
 			"error": "failed to commit transaction",
 		})
 	}
+	h.publishCompletedChapters(userID, chapterIDs)
 
 	return c.JSON(fiber.Map{
 		"message": "volume and descendants marked as complete",
@@ -1833,6 +1886,14 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now()
+	chapterIDs, err := chapterIDsFromTransaction(tx, `
+		SELECT c.id FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		WHERE v.series_id = ? AND v.volume_number < ?
+	`, seriesID, baseVolume.VolumeNumber)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list previous chapters"})
+	}
 
 	// 1. 기준 볼륨보다 번호가 작은 모든 볼륨들의 ID 목록 가져오기 (같은 시리즈 내)
 	// 2. 해당되는 모든 챕터의 진행도를 100%로 업데이트
@@ -1908,6 +1969,7 @@ func (h *ProgressHandler) MarkPreviousVolumesComplete(c *fiber.Ctx) error {
 			"error": "failed to commit transaction",
 		})
 	}
+	h.publishCompletedChapters(userID, chapterIDs)
 
 	return c.JSON(fiber.Map{
 		"message": "previous volumes marked as complete",
@@ -2002,6 +2064,16 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now()
+	chapterIDs, err := chapterIDsFromTransaction(tx, `
+		SELECT c.id FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		WHERE v.series_id = ? AND (
+			v.volume_number < ? OR (v.volume_number = ? AND c.chapter_number < ?)
+		)
+	`, seriesID, baseVolume.VolumeNumber, baseVolume.VolumeNumber, baseChapter.ChapterNumber)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list previous chapters"})
+	}
 
 	// 1. 기준 챕터보다 이전인 모든 챕터들의 진행도를 100%로 업데이트
 	// 이전 권의 모든 챕터 + 현재 권의 이전 챕터들
@@ -2084,6 +2156,7 @@ func (h *ProgressHandler) MarkPreviousChaptersComplete(c *fiber.Ctx) error {
 			"error": "failed to commit transaction",
 		})
 	}
+	h.publishCompletedChapters(userID, chapterIDs)
 
 	return c.JSON(fiber.Map{
 		"message": "previous chapters marked as complete",
@@ -2151,6 +2224,14 @@ func (h *ProgressHandler) MarkSeriesComplete(c *fiber.Ctx) error {
 	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now()
+	chapterIDs, err := chapterIDsFromTransaction(tx, `
+		SELECT c.id FROM chapters c
+		JOIN volumes v ON c.volume_id = v.id
+		WHERE v.series_id = ?
+	`, seriesID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list series chapters"})
+	}
 
 	// 1. 기존 진행도 업데이트 (벌크)
 	_, err = tx.Exec(`
@@ -2219,6 +2300,7 @@ func (h *ProgressHandler) MarkSeriesComplete(c *fiber.Ctx) error {
 			"error": "failed to commit transaction",
 		})
 	}
+	h.publishCompletedChapters(userID, chapterIDs)
 
 	return c.JSON(fiber.Map{
 		"message": "series marked as complete",

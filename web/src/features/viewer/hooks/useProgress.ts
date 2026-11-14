@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useRef } from "react";
 import type { RefObject } from "react";
 import { useLocation } from "react-router-dom";
-import { seriesAPI, volumeAPI } from "../../../api/client";
+import { chapterAPI, seriesAPI, volumeAPI } from "../../../api/client";
 import { PROGRESS_SAVE_INTERVAL } from "../utils/constants";
 import { API_BASE_URL } from "../utils/imageUrl";
 import type { Chapter, ViewStatus } from "../types";
@@ -50,6 +50,7 @@ export function useProgress({
   viewerContentRef,
 }: UseProgressParams): UseProgressReturn {
   const volumeCompletedRef = useRef(false);
+  const chapterCompletedRef = useRef(false);
   const lastSaveTimeRef = useRef<number>(0);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasNavigatedRef = useRef(false);
@@ -64,6 +65,7 @@ export function useProgress({
   // 챕터가 변경되면 완료 상태, 네비게이션 상태 초기화
   useEffect(() => {
     volumeCompletedRef.current = false;
+    chapterCompletedRef.current = false;
     hasNavigatedRef.current = false;
     initialPageSettledRef.current = false;
   }, [chapterId]);
@@ -152,6 +154,41 @@ export function useProgress({
   ]);
 
   const isSavingRef = useRef(false);
+
+  // Mark the chapter explicitly when the reader reaches its last page. Progress
+  // saves are throttled and can be interrupted when the reader navigates away.
+  useEffect(() => {
+    if (
+      isLoading ||
+      isSecretSession ||
+      viewStatus !== "ready" ||
+      isInitialScrollingRef.current ||
+      !chapterId ||
+      !chapter ||
+      chapter.id !== chapterId ||
+      totalPages <= 0 ||
+      currentPage !== totalPages ||
+      !hasNavigatedRef.current ||
+      chapterCompletedRef.current
+    ) {
+      return;
+    }
+
+    chapterCompletedRef.current = true;
+    void chapterAPI.markComplete(chapterId).catch((error) => {
+      chapterCompletedRef.current = false;
+      console.error("Failed to mark chapter complete at end of reading:", error);
+    });
+  }, [
+    chapter,
+    chapterId,
+    currentPage,
+    isInitialScrollingRef,
+    isLoading,
+    isSecretSession,
+    totalPages,
+    viewStatus,
+  ]);
 
   // 진행도 즉시 저장
   const saveProgress = useCallback(async () => {

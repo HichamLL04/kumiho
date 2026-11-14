@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -223,6 +224,7 @@ func (s *DangoReadingService) Publish(ctx context.Context, event ChapterComplete
 		return fmt.Errorf("load Dango API key: %w", err)
 	}
 	if endpoint == "" || encrypted == "" {
+		log.Printf("[DANGO WEBHOOK] Skipped chapter.completed delivery: endpoint or API key is not configured for user %s", event.UserID)
 		return nil
 	}
 	token, err := s.secrets.DecryptValue(encrypted)
@@ -230,6 +232,7 @@ func (s *DangoReadingService) Publish(ctx context.Context, event ChapterComplete
 		return fmt.Errorf("decrypt Dango API key: %w", err)
 	}
 	chapter := float64(event.Chapter.Number)
+	log.Printf("[DANGO WEBHOOK] Sending chapter.completed: user=%s series=%q chapter=%g delivery=%s", event.UserID, event.Series.Title, chapter, event.ID)
 	payload := struct {
 		Title       string            `json:"title"`
 		MediaType   string            `json:"media_type"`
@@ -268,6 +271,7 @@ func (s *DangoReadingService) Publish(ctx context.Context, event ChapterComplete
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 			_ = response.Body.Close()
 			if response.StatusCode >= 200 && response.StatusCode < 300 {
+				log.Printf("[DANGO WEBHOOK] Dango accepted chapter.completed: user=%s series=%q chapter=%g delivery=%s http=%d", event.UserID, event.Series.Title, chapter, event.ID, response.StatusCode)
 				return nil
 			}
 			err = fmt.Errorf("Dango returned HTTP %d", response.StatusCode)
