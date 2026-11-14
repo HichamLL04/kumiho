@@ -5,9 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: kumiho
+    container_name: ${KUMIHO_CONTAINER_NAME:-kumiho}
     ports:
-      - "9999:9999"
+      - "${KUMIHO_HOST_PORT:-9999}:9999"
     volumes:
       - ./config:/app/config
       - ./data:/app/data
