@@ -687,6 +687,8 @@
       "title": "Metadata Search",
       "desc": "Search and apply metadata candidates for the current series.",
       "search": "Search Candidates",
+      "dango_import": "Import from Dango",
+      "dango_import_hint": "Resolve the sidecar's AniList or MAL ID through your Dango connection.",
       "fetch": "Fetch Selected Candidate",
       "apply": "Apply To Series",
       "candidates": "Candidates",
@@ -715,7 +717,9 @@
         "apply_success_with_character_sync": "Applied {{count}} fields and synced {{characters}} character changes.",
         "apply_success_with_character_warning": "Applied {{count}} fields, but character sync failed. Please retry.",
         "apply_no_changes": "No metadata changes to apply.",
-        "apply_failed": "Failed to apply metadata."
+        "apply_failed": "Failed to apply metadata.",
+        "dango_success": "Imported metadata from Dango ({{count}} fields updated).",
+        "dango_failed": "Failed to import metadata from Dango."
       }
     },
     "characters": {

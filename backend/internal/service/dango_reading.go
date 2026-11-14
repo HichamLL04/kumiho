@@ -30,6 +30,35 @@ type DangoReadingStatus struct {
 	TokenConfigured bool   `json:"token_configured"`
 }
 
+type DangoCatalogMetadataResponse struct {
+	Found    bool `json:"found"`
+	Metadata struct {
+		AniListID   int      `json:"anilist_id"`
+		MALID       *int     `json:"mal_id"`
+		MediaType   string   `json:"media_type"`
+		Status      string   `json:"status"`
+		Description string   `json:"description"`
+		Genres      []string `json:"genres"`
+		SeasonYear  *int     `json:"season_year"`
+		StartDate   struct {
+			Year  *int `json:"year"`
+			Month *int `json:"month"`
+			Day   *int `json:"day"`
+		} `json:"start_date"`
+		Title struct {
+			Romaji  string  `json:"romaji"`
+			English *string `json:"english"`
+			Native  *string `json:"native"`
+		} `json:"catalog_title"`
+		Cover struct {
+			ExtraLarge *string `json:"extra_large"`
+			Large      *string `json:"large"`
+			Medium     *string `json:"medium"`
+		} `json:"cover"`
+		CatalogURL string `json:"catalog_url"`
+	} `json:"metadata"`
+}
+
 type DangoReadingService struct {
 	settings repository.UserSettingRepository
 	secrets  SecretCodec
@@ -90,6 +119,87 @@ func (s *DangoReadingService) Revoke(userID string) error {
 		return err
 	}
 	return s.settings.Delete(nil, userID, dangoEndpointSetting)
+}
+
+func (s *DangoReadingService) FetchCatalogMetadata(ctx context.Context, userID, title, mediaType string, identifiers map[string]string) (*DangoCatalogMetadataResponse, error) {
+	if s == nil || strings.TrimSpace(userID) == "" {
+		return nil, fmt.Errorf("Dango integration is unavailable")
+	}
+	endpoint, err := s.settingValue(userID, dangoEndpointSetting)
+	if err != nil {
+		return nil, fmt.Errorf("load Dango endpoint: %w", err)
+	}
+	encrypted, err := s.settingValue(userID, dangoTokenSetting)
+	if err != nil {
+		return nil, fmt.Errorf("load Dango API key: %w", err)
+	}
+	if endpoint == "" || encrypted == "" {
+		return nil, fmt.Errorf("Dango endpoint and API key must be configured")
+	}
+	token, err := s.secrets.DecryptValue(encrypted)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt Dango API key: %w", err)
+	}
+	catalogURL, err := dangoCatalogResolveURL(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	body, err := json.Marshal(map[string]any{
+		"title": title, "media_type": mediaType, "identifiers": identifiers,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encode Dango metadata request: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, catalogURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create Dango metadata request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := s.client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("request Dango catalog metadata: %w", err)
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(response.Body, 2*1024*1024+1))
+	if err != nil {
+		return nil, fmt.Errorf("read Dango metadata response: %w", err)
+	}
+	if len(data) == 0 || len(data) > 2*1024*1024 {
+		return nil, fmt.Errorf("Dango metadata response is empty or too large")
+	}
+	if response.StatusCode == http.StatusNotFound {
+		var notFound DangoCatalogMetadataResponse
+		_ = json.Unmarshal(data, &notFound)
+		return &notFound, nil
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fmt.Errorf("Dango catalog returned HTTP %d", response.StatusCode)
+	}
+	var result DangoCatalogMetadataResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("decode Dango metadata response: %w", err)
+	}
+	return &result, nil
+}
+
+func dangoCatalogResolveURL(endpoint string) (string, error) {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(endpoint))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", fmt.Errorf("configured Dango webhook endpoint is invalid")
+	}
+	for _, suffix := range []string{
+		"/api/v1/webhook/reading", "/api/v1/webhooks/reading", "/api/v1/scrobble/reading", "/api/v1/scrobble",
+	} {
+		if strings.HasSuffix(parsed.Path, suffix) {
+			parsed.Path = strings.TrimSuffix(parsed.Path, suffix) + "/api/v1/catalog/resolve"
+			parsed.RawPath = ""
+			parsed.RawQuery = ""
+			parsed.Fragment = ""
+			return parsed.String(), nil
+		}
+	}
+	return "", fmt.Errorf("Dango endpoint must end with a reading webhook path")
 }
 
 func (s *DangoReadingService) Publish(ctx context.Context, event ChapterCompletedWebhookEvent) error {

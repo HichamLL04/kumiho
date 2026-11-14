@@ -493,6 +493,8 @@ export const dangoIntegrationAPI = {
   save: (data: { endpoint: string; api_key?: string }) =>
     api.put<{ endpoint: string; token_configured: boolean }>("/integrations/dango", data).then((res) => res.data),
   revoke: () => api.delete("/integrations/dango").then((res) => res.data),
+  applySeriesMetadata: (seriesId: string) =>
+    api.post<MetadataApplyResponse>(`/integrations/dango/series/${seriesId}/metadata`).then((res) => res.data),
 };
 
 // Download API

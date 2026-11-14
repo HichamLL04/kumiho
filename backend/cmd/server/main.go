@@ -129,7 +129,7 @@ func main() {
 		service.NewChapterWebhookService(cfg),
 		dangoReadingService,
 	})
-	dangoIntegrationHandler := handler.NewDangoIntegrationHandler(dangoReadingService)
+	dangoIntegrationHandler := handler.NewDangoIntegrationHandler(dangoReadingService, metadataSvc, seriesRepo)
 	settingHandler := handler.NewSettingHandler(settingRepo, userSettingRepo, fileScanner)
 	seriesHandler := handler.NewSeriesHandler(seriesRepo, seriesCharacterRepo, libraryRepo, authService, volumeRepo, chapterRepo, pageRepo, completionRepo, chapterCompletionRepo, userSeriesSettingRepo, userSettingRepo, progressRepo, settingRepo, cfg, seriesEnrichSvc)
 	downloadHandler := handler.NewDownloadHandler(authService, seriesRepo, volumeRepo, chapterRepo)
@@ -208,6 +208,7 @@ func main() {
 	dangoIntegration.Get("", dangoIntegrationHandler.Get)
 	dangoIntegration.Put("", dangoIntegrationHandler.Save)
 	dangoIntegration.Delete("", dangoIntegrationHandler.Revoke)
+	dangoIntegration.Post("/series/:id/metadata", dangoIntegrationHandler.ApplySeriesMetadata)
 
 	// 사용자 관리 (MASTER only)
 	users := protected.Group("/users")

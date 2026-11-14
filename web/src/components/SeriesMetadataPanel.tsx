@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, Loader2, Search, Sparkles } from "lucide-react";
-import { seriesAPI } from "../api/client";
+import { dangoIntegrationAPI, seriesAPI } from "../api/client";
 import type { Series } from "../types/series";
 import type { MetadataCandidateItem, MetadataFetchResponse, MetadataResult, MetadataSearchResult } from "../types/plugin";
 import { orderedOriginalTitles } from "../utils/originalTitles";
@@ -36,7 +36,7 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
     language === "unknown" ? t("common.unknown") : t(`settings.general.language.${language}`);
   const [searchResult, setSearchResult] = useState<MetadataSearchResult | null>(null);
   const [fetched, setFetched] = useState<MetadataFetchResponse | null>(null);
-  const [busy, setBusy] = useState<"search" | "fetch" | "apply" | null>(null);
+  const [busy, setBusy] = useState<"search" | "fetch" | "apply" | "dango" | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [status, setStatus] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [searchTitle, setSearchTitle] = useState("");
@@ -145,6 +145,21 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
     }
   };
 
+  const handleDangoImport = async () => {
+    setBusy("dango");
+    try {
+      const response = await dangoIntegrationAPI.applySeriesMetadata(series.id);
+      onApplied(response);
+      setStatus({ type: "success", message: t("series.metadata.toast.dango_success", { count: response.updated_fields.length }) });
+    } catch (error: unknown) {
+      console.error("Failed to import metadata from Dango:", error);
+      const err = error as { response?: { data?: { error?: string } } };
+      setStatus({ type: "error", message: err.response?.data?.error || t("series.metadata.toast.dango_failed") });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const handleApplyFieldToggle = (field: ApplyFieldKey) => {
     setApplyFields((prev) => ({ ...prev, [field]: !prev[field] }));
   };
@@ -166,6 +181,16 @@ export function SeriesMetadataPanel({ series, onApplied, onFetched, onCharacters
           <p>{t("series.metadata.desc")}</p>
         </div>
         <div className={styles.metadataSearchControls}>
+          <button
+            type="button"
+            className={`${commonStyles.settingsSelect} ${styles.metadataSearchButton}`}
+            onClick={() => void handleDangoImport()}
+            disabled={busy !== null}
+            title={t("series.metadata.dango_import_hint")}
+          >
+            {busy === "dango" ? <Loader2 size={14} className={commonStyles.loadingSpinner} /> : <Database size={14} />}
+            <span>{t("series.metadata.dango_import")}</span>
+          </button>
           <input
             className={styles.metadataSearchInput}
             value={searchTitle}

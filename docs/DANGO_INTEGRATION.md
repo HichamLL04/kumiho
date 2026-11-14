@@ -24,3 +24,9 @@ When a chapter is newly marked complete, Kumiho sends Dango a request equivalent
 `volume` and `identifiers` are optional. Kumiho reads AniList and MyAnimeList IDs from `metadata.json` and `metadata.txt` (or `series_metadata.txt`) beside the series folder. It accepts IDs or catalog URLs and fills missing IDs from the text file if the JSON file only has one catalog ID. Dango's community mapping can then resolve the supplied AniList or MAL identity to the other connected tracker.
 
 The request uses `Authorization: Bearer <personal Dango API key>`. It does not include Kumiho user IDs or allow the JSON body to select a Dango account.
+
+## Import catalog metadata from Dango
+
+On a series metadata panel, **Import from Dango** sends the sidecar AniList/MAL IDs (or its title as a community-mapping fallback) to Dango's `POST /api/v1/catalog/resolve` endpoint. Kumiho applies the returned cover, description, genres, dates, and catalog-title variants through its regular metadata storage, downloading the cover into Kumiho's thumbnail storage.
+
+Kumiho treats the local `metadata.json` title as its display preference: `clean_title` takes precedence over `title`. The catalog title returned by Dango is stored as an alternate/original title and does not replace that local display title. Dango itself returns catalog data and does not impose a display-title choice on clients.

@@ -544,6 +544,10 @@ func (s *MetadataService) assignSeriesDisplayTitle(series *model.Series) {
 	}
 
 	displayTitle := strings.TrimSpace(series.Title)
+	if preferredTitle := util.ReadCatalogPreferredTitle(series.Path); preferredTitle != "" {
+		series.DisplayTitle = preferredTitle
+		return
+	}
 	library, err := s.libraryRepo.FindByID(nil, series.LibraryID)
 	if err == nil && library != nil && library.OriginalTitleOverride {
 		locale := repository.PreferredOriginalTitleLocale(s.settingRepo)

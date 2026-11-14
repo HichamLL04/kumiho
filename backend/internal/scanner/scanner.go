@@ -1378,6 +1378,9 @@ func (s *Scanner) processArchiveAsSeries(
 			seriesChanged = true
 		}
 		baseTitle := resolveSeriesTitleFromPath(archivePath, title)
+		if preferredTitle := util.ReadCatalogPreferredTitle(archivePath); preferredTitle != "" {
+			baseTitle = preferredTitle
+		}
 		if strings.TrimSpace(series.Title) != baseTitle {
 			series.Title = baseTitle
 			seriesChanged = true
@@ -1469,6 +1472,9 @@ func (s *Scanner) processArchiveAsSeries(
 		}
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
+		}
+		if preferredTitle := util.ReadCatalogPreferredTitle(archivePath); preferredTitle != "" {
+			series.Title = preferredTitle
 		}
 
 		// 해시 기반 썸네일 확인 및 연결
@@ -1599,6 +1605,9 @@ func (s *Scanner) processSeries(
 			seriesChanged = true
 		}
 		baseSeriesTitle := resolveSeriesTitleFromPath(seriesPath, seriesTitle)
+		if preferredTitle := util.ReadCatalogPreferredTitle(seriesPath); preferredTitle != "" {
+			baseSeriesTitle = preferredTitle
+		}
 		if strings.TrimSpace(series.Title) != baseSeriesTitle {
 			series.Title = baseSeriesTitle
 			seriesChanged = true
@@ -1632,6 +1641,9 @@ func (s *Scanner) processSeries(
 		}
 		if epubMeta != nil {
 			s.applyEpubMetadataToSeries(series, epubMeta)
+		}
+		if preferredTitle := util.ReadCatalogPreferredTitle(seriesPath); preferredTitle != "" {
+			series.Title = preferredTitle
 		}
 
 		// 해시 기반 썸네일 확인 및 연결
