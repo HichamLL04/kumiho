@@ -127,7 +127,13 @@ func (h *DangoIntegrationHandler) importSeriesMetadata(ctx context.Context, user
 	if catalog == nil || !catalog.Found {
 		return nil, fmt.Errorf("Dango could not resolve catalog metadata from the sidecar IDs or title")
 	}
-	applied, err := h.metadataSvc.ApplySeriesMetadata(ctx, series.ID, userID, dangoMetadataResult(catalog))
+	result := dangoMetadataResult(catalog)
+	// Keep Kumiho's selected artwork; AniList manga covers are promotional
+	// composites and may include the title and catalog graphics.
+	if series.ThumbnailPath != nil && strings.TrimSpace(*series.ThumbnailPath) != "" {
+		result.Cover = nil
+	}
+	applied, err := h.metadataSvc.ApplySeriesMetadata(ctx, series.ID, userID, result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply Dango metadata: %w", err)
 	}

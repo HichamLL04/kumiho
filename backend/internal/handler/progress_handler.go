@@ -129,6 +129,17 @@ func (h *ProgressHandler) deliverChapterCompleted(userID, chapterID string) {
 		log.Printf("[chapter-webhook] cannot load series for completed chapter %q: %v", chapterID, err)
 		return
 	}
+	chapterNumber := chapter.ChapterNumber
+	volumeNumber := volume.VolumeNumber
+	if strings.EqualFold(strings.TrimSpace(volume.Unit), "chapter") {
+		// Some libraries model each numbered manga chapter as a top-level
+		// volume containing one chapter numbered 1. Send the series-level number
+		// from that container, and do not mislabel it as a book volume.
+		if volume.VolumeNumber > 0 {
+			chapterNumber = volume.VolumeNumber
+		}
+		volumeNumber = 0
+	}
 	event := service.ChapterCompletedWebhookEvent{
 		ID:         uuid.NewString(),
 		Version:    1,
@@ -137,8 +148,8 @@ func (h *ProgressHandler) deliverChapterCompleted(userID, chapterID string) {
 		UserID:     userID,
 		Series:     service.WebhookSeries{ID: series.ID, Title: series.Title},
 		Chapter: service.WebhookChapter{
-			ID: chapter.ID, Number: chapter.ChapterNumber, Title: chapter.Title,
-			VolumeID: volume.ID, VolumeNumber: volume.VolumeNumber,
+			ID: chapter.ID, Number: chapterNumber, Title: chapter.Title,
+			VolumeID: volume.ID, VolumeNumber: volumeNumber,
 		},
 	}
 	event.Identifiers = service.ReadCatalogIdentifiers(series.Path)
@@ -151,7 +162,7 @@ func (h *ProgressHandler) deliverChapterCompleted(userID, chapterID string) {
 			"isbn":             series.Metadata.ISBN,
 		}
 	}
-	log.Printf("[chapter-webhook] completion detected user=%s series=%q chapter=%s number=%g", userID, series.Title, chapter.ID, chapter.ChapterNumber)
+	log.Printf("[chapter-webhook] completion detected user=%s series=%q chapter=%s number=%d volume=%d", userID, series.Title, chapter.ID, chapterNumber, volumeNumber)
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if err := h.chapterWebhook.Publish(ctx, event); err != nil {
@@ -2425,7 +2436,7 @@ func (h *ProgressHandler) MarkChapterComplete(c *fiber.Ctx) error {
 	}
 
 	// 2. 챕터 완독 기록 추가
-	newlyCompleted, err := h.markChapterCompleted(tx, userID, chapterID)
+	_, err = h.markChapterCompleted(tx, userID, chapterID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to mark chapter complete",
@@ -2445,9 +2456,9 @@ func (h *ProgressHandler) MarkChapterComplete(c *fiber.Ctx) error {
 			"error": "failed to commit transaction",
 		})
 	}
-	if newlyCompleted {
-		h.publishChapterCompleted(userID, chapterID)
-	}
+	// This endpoint is also the explicit replay path for a chapter whose
+	// completion was recorded before the Dango integration was configured.
+	h.publishChapterCompleted(userID, chapterID)
 
 	return c.JSON(fiber.Map{
 		"message": "chapter marked as complete",
