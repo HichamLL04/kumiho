@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/aha-hyeong/kumiho/backend/internal/service"
 	"github.com/aha-hyeong/kumiho/backend/internal/sse"
 	"github.com/aha-hyeong/kumiho/backend/internal/util"
+	"github.com/google/uuid"
 )
 
 type ProgressHandler struct {
@@ -34,6 +36,7 @@ type ProgressHandler struct {
 	seriesEnrichSvc       *service.SeriesEnrichService
 	libraryRepo           *repository.LibraryRepository
 	settingRepo           repository.SettingRepository
+	chapterWebhook        service.ChapterWebhookPublisher
 }
 
 const completionThresholdPercent = 100.0
@@ -72,6 +75,67 @@ func NewProgressHandler(
 		libraryRepo:           libraryRepo,
 		settingRepo:           settingRepo,
 	}
+}
+
+func (h *ProgressHandler) SetChapterWebhookPublisher(publisher service.ChapterWebhookPublisher) {
+	h.chapterWebhook = publisher
+}
+
+func (h *ProgressHandler) markChapterCompleted(db database.Queryer, userID, chapterID string) (bool, error) {
+	wasCompleted, checkErr := h.chapterCompletionRepo.IsCompleted(db, userID, chapterID)
+	if err := h.chapterCompletionRepo.MarkComplete(db, userID, chapterID); err != nil {
+		return false, err
+	}
+	return checkErr != nil || !wasCompleted, nil
+}
+
+func (h *ProgressHandler) publishChapterCompleted(userID, chapterID string) {
+	if h.chapterWebhook == nil {
+		return
+	}
+	chapter, err := h.chapterRepo.FindByID(nil, chapterID)
+	if err != nil || chapter == nil {
+		log.Printf("[chapter-webhook] cannot load completed chapter %q: %v", chapterID, err)
+		return
+	}
+	volume, err := h.volumeRepo.FindByID(nil, chapter.VolumeID)
+	if err != nil || volume == nil {
+		log.Printf("[chapter-webhook] cannot load volume for completed chapter %q: %v", chapterID, err)
+		return
+	}
+	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
+	if err != nil || series == nil {
+		log.Printf("[chapter-webhook] cannot load series for completed chapter %q: %v", chapterID, err)
+		return
+	}
+	event := service.ChapterCompletedWebhookEvent{
+		ID:         uuid.NewString(),
+		Version:    1,
+		Type:       "chapter.completed",
+		OccurredAt: time.Now().UTC(),
+		UserID:     userID,
+		Series:     service.WebhookSeries{ID: series.ID, Title: series.Title},
+		Chapter: service.WebhookChapter{
+			ID: chapter.ID, Number: chapter.ChapterNumber, Title: chapter.Title,
+			VolumeID: volume.ID, VolumeNumber: volume.VolumeNumber,
+		},
+	}
+	if series.Metadata != nil {
+		event.Series.Metadata = map[string]string{
+			"original_title":   series.Metadata.OriginalTitle,
+			"original_titles":  series.Metadata.OriginalTitles,
+			"publication_year": series.Metadata.PublicationYear,
+			"publisher":        series.Metadata.Publisher,
+			"isbn":             series.Metadata.ISBN,
+		}
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		if err := h.chapterWebhook.Publish(ctx, event); err != nil {
+			log.Printf("[chapter-webhook] delivery failed event=%s user=%s series=%s chapter=%s: %v", event.ID, userID, series.ID, chapter.ID, err)
+		}
+	}()
 }
 
 // UpdateProgressRequest 진행도 업데이트 요청
@@ -517,8 +581,11 @@ func (h *ProgressHandler) UpdateProgress(c *fiber.Ctx) error {
 	}
 
 	if isChapterComplete {
-		if err := h.chapterCompletionRepo.MarkComplete(nil, userID, *req.ChapterID); err != nil {
+		newlyCompleted, err := h.markChapterCompleted(nil, userID, *req.ChapterID)
+		if err != nil {
 			log.Printf("Failed to mark chapter %s as complete: %v", *req.ChapterID, err)
+		} else if newlyCompleted {
+			h.publishChapterCompleted(userID, *req.ChapterID)
 		}
 	}
 
@@ -629,8 +696,11 @@ func (h *ProgressHandler) UpdateEpubProgress(c *fiber.Ctx) error {
 	h.removeCompletionIfIncomplete(userID, &volumeID, currentPage, totalPages, nil, nil)
 
 	if currentPage >= totalPages && progressPercent >= completionThresholdPercent {
-		if err := h.chapterCompletionRepo.MarkComplete(nil, userID, chapterID); err != nil {
+		newlyCompleted, err := h.markChapterCompleted(nil, userID, chapterID)
+		if err != nil {
 			log.Printf("Failed to mark chapter %s as complete: %v", chapterID, err)
+		} else if newlyCompleted {
+			h.publishChapterCompleted(userID, chapterID)
 		}
 	}
 
@@ -740,8 +810,11 @@ func (h *ProgressHandler) UpdateProgressWSReplacement(c *fiber.Ctx) error {
 
 	// 챕터 완독 처리 (마지막 페이지 도달 시)
 	if req.CurrentPage >= totalPages && totalPages > 0 {
-		if err := h.chapterCompletionRepo.MarkComplete(nil, userID, req.ChapterID); err != nil {
+		newlyCompleted, err := h.markChapterCompleted(nil, userID, req.ChapterID)
+		if err != nil {
 			log.Printf("Failed to mark chapter %s as complete: %v", req.ChapterID, err)
+		} else if newlyCompleted {
+			h.publishChapterCompleted(userID, req.ChapterID)
 		}
 	}
 
@@ -2269,7 +2342,8 @@ func (h *ProgressHandler) MarkChapterComplete(c *fiber.Ctx) error {
 	}
 
 	// 2. 챕터 완독 기록 추가
-	if err := h.chapterCompletionRepo.MarkComplete(tx, userID, chapterID); err != nil {
+	newlyCompleted, err := h.markChapterCompleted(tx, userID, chapterID)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to mark chapter complete",
 		})
@@ -2287,6 +2361,9 @@ func (h *ProgressHandler) MarkChapterComplete(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to commit transaction",
 		})
+	}
+	if newlyCompleted {
+		h.publishChapterCompleted(userID, chapterID)
 	}
 
 	return c.JSON(fiber.Map{

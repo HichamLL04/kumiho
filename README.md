@@ -29,6 +29,8 @@
 > A `PLUGIN_SECRET_KEY` environment variable has been added to encrypt plugin credentials (API keys, tokens, etc.).
 >
 > If not set, a key is auto-generated and saved to `data/.plugin_secret_key`. The server will start without any configuration, but **without the original generated key file, stored plugin credentials cannot be decrypted**. For reliable operation, it is recommended to set `PLUGIN_SECRET_KEY` explicitly in your environment.
+
+> **Outgoing chapter webhooks**: Set `WEBHOOK_URL` to receive signed `chapter.completed` events. Configure `WEBHOOK_SECRET` to enable HMAC-SHA256 signatures. See [docs/WEBHOOKS.md](docs/WEBHOOKS.md) for the payload and verification procedure.
 >
 > **v0.10.x Docker update**: Docker base images were changed for CGO/native-library compatibility. Please re-pull the image and recreate the container when updating.
 >
