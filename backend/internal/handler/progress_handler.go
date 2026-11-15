@@ -12,6 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/aha-hyeong/kumiho/backend/internal/chapterlabel"
 	"github.com/aha-hyeong/kumiho/backend/internal/database"
 	"github.com/aha-hyeong/kumiho/backend/internal/middleware"
 	"github.com/aha-hyeong/kumiho/backend/internal/model"
@@ -127,6 +128,10 @@ func (h *ProgressHandler) deliverChapterCompleted(userID, chapterID string) {
 	series, err := h.seriesRepo.FindByID(nil, volume.SeriesID, userID)
 	if err != nil || series == nil {
 		log.Printf("[chapter-webhook] cannot load series for completed chapter %q: %v", chapterID, err)
+		return
+	}
+	if chapterlabel.IsFractional(chapter.Title, chapter.Path, volume.Title, volume.Path, volume.Unit) {
+		log.Printf("[chapter-webhook] skipping fractional chapter user=%s series=%q chapter=%q volume=%q", userID, series.Title, chapter.Title, volume.Title)
 		return
 	}
 	chapterNumber := chapter.ChapterNumber
