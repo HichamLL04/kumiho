@@ -130,10 +130,6 @@ func (h *ProgressHandler) deliverChapterCompleted(userID, chapterID string) {
 		log.Printf("[chapter-webhook] cannot load series for completed chapter %q: %v", chapterID, err)
 		return
 	}
-	if chapterlabel.IsFractional(chapter.Title, chapter.Path, volume.Title, volume.Path, volume.Unit) {
-		log.Printf("[chapter-webhook] skipping fractional chapter user=%s series=%q chapter=%q volume=%q", userID, series.Title, chapter.Title, volume.Title)
-		return
-	}
 	chapterNumber := chapter.ChapterNumber
 	volumeNumber := volume.VolumeNumber
 	if strings.EqualFold(strings.TrimSpace(volume.Unit), "chapter") {
@@ -144,6 +140,9 @@ func (h *ProgressHandler) deliverChapterCompleted(userID, chapterID string) {
 			chapterNumber = volume.VolumeNumber
 		}
 		volumeNumber = 0
+	}
+	if truncated, ok := chapterlabel.TruncatedNumber(chapter.Title, chapter.Path, volume.Title, volume.Path, volume.Unit); ok {
+		chapterNumber = truncated
 	}
 	event := service.ChapterCompletedWebhookEvent{
 		ID:         uuid.NewString(),

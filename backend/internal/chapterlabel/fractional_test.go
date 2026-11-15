@@ -19,6 +19,10 @@ func TestIsFractional(t *testing.T) {
 			if got := IsFractional(tc.chapterTitle, tc.chapterPath, tc.volumeTitle, tc.volumePath, tc.unit); got != tc.want {
 				t.Fatalf("IsFractional() = %t, want %t", got, tc.want)
 			}
+			number, ok := TruncatedNumber(tc.chapterTitle, tc.chapterPath, tc.volumeTitle, tc.volumePath, tc.unit)
+			if ok != tc.want || (ok && number != 27 && tc.name != "version in ordinary book title") {
+				t.Fatalf("TruncatedNumber() = %d, %t", number, ok)
+			}
 		})
 	}
 }
